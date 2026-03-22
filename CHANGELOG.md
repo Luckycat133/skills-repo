@@ -21,5 +21,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docs/agent-skills-setup/` — development notes, roadmap, release checklist, and ideas
 - MIT License, CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md
 
-[Unreleased]: https://github.com/lobster/skills-repo/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/lobster/skills-repo/releases/tag/v0.1.0
+[Unreleased]: https://github.com/Luckycat133/skills-repo/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/Luckycat133/skills-repo/releases/tag/v0.1.0
