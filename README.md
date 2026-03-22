@@ -1,8 +1,10 @@
 # Skills Repository
 
-Reusable AI agent skills, with a local-first authoring workflow and a path to public release.
+AI agent skills with a local-first authoring workflow and a practical path to public release.
 
-## Structure
+AI agent skills 仓库，采用本地优先的编写流程，并保留清晰的公开发布路径。
+
+## Structure / 结构
 
 ```text
 skills-repo/
@@ -14,27 +16,38 @@ skills-repo/
     └── agent-skills-setup/
 ```
 
-## Conventions
+## Conventions / 约定
 
 - `skills/` stores publishable skill folders.
-- `docs/` stores development notes, release plans, and maintenance checklists.
+- `skills/` 用于存放可发布的 skill 目录。
+- `docs/` stores development notes, release plans, validation notes, and maintenance checklists.
+- `docs/` 用于存放开发笔记、发布方案、验证记录和维护清单。
 - Antigravity remains the authoring source of truth unless explicitly changed.
-- Import changes into this repository before preparing a public release.
+- 除非明确变更，否则始终以 Antigravity 作为技能内容的事实来源。
+- Import or sync changes into this repository before preparing a public release.
+- 在准备公开发布前，先把变更导入或同步到本仓库。
 
-## Current Skill
+## Current Skill / 当前技能
 
-- `agent-skills-setup`: multi-agent skill installation, synchronization, and publishing workflow.
+- `agent-skills-setup`: multi-agent skill installation, synchronization, OpenClaw automation, and publishing workflow.
+- `agent-skills-setup`：面向多代理环境的技能安装、同步、OpenClaw 自动化配置与发布工作流。
 
-## Development Workflow
+## Development Workflow / 开发流程
 
 1. Edit the source skill in Antigravity.
-2. Import or sync the updated skill into this repository.
-3. Refine release docs under `docs/`.
-4. Publish the repository when the skill and metadata are ready.
+2. 在 Antigravity 中修改源技能。
+3. Import or sync the updated skill into this repository.
+4. 将更新后的技能导入或同步到本仓库。
+5. Refine release docs under `docs/agent-skills-setup/`.
+6. 在 `docs/agent-skills-setup/` 下完善发布文档和验证材料。
+7. Publish the repository when the skill, metadata, and validation results are ready.
+8. 当技能、元数据和验证结果准备就绪后再进行发布。
 
-## Importing Skills
+## Importing Skills / 导入技能
 
 Use the bundled import script:
+
+使用内置导入脚本：
 
 ```bash
 bash scripts/import-agent-skill.sh \
@@ -42,18 +55,36 @@ bash scripts/import-agent-skill.sh \
     agent-skills-setup
 ```
 
-## Open Source Metadata
+## Open Source Metadata / 开源元数据
 
 - License: MIT
+- License：MIT
 - Contributions: see `CONTRIBUTING.md`
+- 贡献方式：见 `CONTRIBUTING.md`
 - Security reporting: see `SECURITY.md`
+- 安全报告：见 `SECURITY.md`
 - Community expectations: see `CODE_OF_CONDUCT.md`
+- 社区行为规范：见 `CODE_OF_CONDUCT.md`
 
-## Publishing
+## Publishing / 发布
 
-This repository is designed to support both:
+This repository is designed to support both private local development and public distribution.
 
-- private local development
-- public release through GitHub and ecosystems such as `skills.sh`
+本仓库同时支持私有本地开发和公开分发。
 
-Before publishing, review the files under `docs/agent-skills-setup/` and make sure the repository does not contain private environment assumptions.
+Current distribution lanes:
+
+当前建议的分发路径：
+
+- GitHub repository as the canonical public source.
+- 以 GitHub 仓库作为公开主源。
+- ClawHub for OpenClaw-native publishing and versioned updates.
+- 使用 ClawHub 进行 OpenClaw 原生发布和版本化更新。
+- `skills.sh` for cross-agent discovery.
+- 使用 `skills.sh` 提升跨代理生态的可发现性。
+- `github/awesome-copilot` for curated Copilot visibility.
+- 使用 `github/awesome-copilot` 获取 Copilot 社区的精选曝光。
+
+Before publishing, review the files under `docs/agent-skills-setup/` and confirm the repository contains no private paths, local secrets, or machine-specific assumptions.
+
+发布前，请先审阅 `docs/agent-skills-setup/` 下的文档，并确认仓库中不包含私有路径、本地密钥或特定机器假设。

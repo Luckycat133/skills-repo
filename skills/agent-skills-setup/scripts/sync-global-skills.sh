@@ -2,19 +2,20 @@
 
 set -euo pipefail
 
-SOURCE_DIR="${HOME}/.gemini/antigravity/skills"
-CLAUDE_DIR="${HOME}/.claude/skills"
-CODEX_DIR="${HOME}/.codex/skills"
-COPILOT_DIR="${HOME}/.copilot-skills"
-TRAE_DIR="${HOME}/.trae/skills"
-TRAE_CN_DIR="${HOME}/.trae-cn/skills"
+SOURCE_DIR="${AGENT_SKILLS_SOURCE_DIR:-${HOME}/.gemini/antigravity/skills}"
+CLAUDE_DIR="${AGENT_SKILLS_CLAUDE_DIR:-${HOME}/.claude/skills}"
+CODEX_DIR="${AGENT_SKILLS_CODEX_DIR:-${HOME}/.codex/skills}"
+COPILOT_DIR="${AGENT_SKILLS_COPILOT_DIR:-${HOME}/.copilot-skills}"
+OPENCLAW_DIR="${AGENT_SKILLS_OPENCLAW_DIR:-${HOME}/.openclaw/skills}"
+TRAE_DIR="${AGENT_SKILLS_TRAE_DIR:-${HOME}/.trae/skills}"
+TRAE_CN_DIR="${AGENT_SKILLS_TRAE_CN_DIR:-${HOME}/.trae-cn/skills}"
 
 DRY_RUN=0
-TARGETS_RAW="claude,codex,copilot,trae,trae-cn"
+TARGETS_RAW="claude,codex,copilot,openclaw,trae,trae-cn"
 
 usage() {
     cat <<'EOF'
-Usage: sync-global-skills.sh [--dry-run] [--targets claude,codex,copilot,trae,trae-cn]
+Usage: sync-global-skills.sh [--dry-run] [--targets claude,codex,copilot,openclaw,trae,trae-cn]
 
 Mirrors Antigravity global skills into supported IDE global skill directories.
 Antigravity is treated as the source of truth.
@@ -86,7 +87,7 @@ ensure_targets_valid() {
 
     for item in "${TARGETS[@]}"; do
         case "$item" in
-            claude|codex|copilot|trae|trae-cn)
+            claude|codex|copilot|openclaw|trae|trae-cn)
                 ;;
             *)
                 echo "ERROR: Unsupported target: $item" >&2
@@ -218,6 +219,11 @@ if contains_target trae-cn; then
     rsync_mirror "$SOURCE_DIR" "$TRAE_CN_DIR"
 fi
 
+if contains_target openclaw; then
+    mkdir -p "$OPENCLAW_DIR"
+    rsync_mirror "$SOURCE_DIR" "$OPENCLAW_DIR"
+fi
+
 if contains_target copilot; then
     sync_copilot
 fi
@@ -237,6 +243,10 @@ if [[ $DRY_RUN -eq 0 ]]; then
 
     if contains_target trae-cn; then
         verify_directory_inventory "$SOURCE_DIR" "$TRAE_CN_DIR" "Trae CN" && verify_shared_directories "$TRAE_CN_DIR" "Trae CN" || VERIFY_FAILED=1
+    fi
+
+    if contains_target openclaw; then
+        verify_directory_inventory "$SOURCE_DIR" "$OPENCLAW_DIR" "OpenClaw" && verify_shared_directories "$OPENCLAW_DIR" "OpenClaw" || VERIFY_FAILED=1
     fi
 
     if contains_target copilot; then

@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-SOURCE_ROOT="${HOME}/.gemini/antigravity/skills"
+SOURCE_ROOT="${AGENT_SKILLS_SOURCE_DIR:-${HOME}/.gemini/antigravity/skills}"
 TEMPLATE_PATH="${SOURCE_ROOT}/agent-skills-setup/assets/public-repo-readme-template.md"
 SKILL_NAME=""
 OUTPUT_DIR=""
