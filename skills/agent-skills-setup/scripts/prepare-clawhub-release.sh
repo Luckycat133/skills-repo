@@ -3,6 +3,7 @@
 set -euo pipefail
 
 SKILL_DIR=""
+SKILL_DIR_ABS=""
 SLUG=""
 DISPLAY_NAME=""
 VERSION=""
@@ -97,6 +98,12 @@ done
 [[ -d "$SKILL_DIR" ]] || die "Skill directory not found: $SKILL_DIR"
 [[ -f "$SKILL_DIR/SKILL.md" ]] || die "Missing SKILL.md in $SKILL_DIR"
 
+if command_exists realpath; then
+    SKILL_DIR_ABS="$(realpath "$SKILL_DIR")"
+else
+    SKILL_DIR_ABS="$(cd "$SKILL_DIR" && pwd)"
+fi
+
 if [[ -n "$CHANGELOG_FILE" ]]; then
     [[ -f "$CHANGELOG_FILE" ]] || die "Changelog file not found: $CHANGELOG_FILE"
     CHANGELOG_TEXT="$(cat "$CHANGELOG_FILE")"
@@ -114,13 +121,13 @@ if ! clawhub whoami >/dev/null 2>&1; then
     echo "WARN: Not logged in to ClawHub. Run 'clawhub login' before using --publish." >&2
 fi
 
-PUBLISH_CMD=(clawhub publish "$SKILL_DIR" --slug "$SLUG" --name "$DISPLAY_NAME" --version "$VERSION" --tags "$TAGS")
+PUBLISH_CMD=(clawhub publish "$SKILL_DIR_ABS" --slug "$SLUG" --name "$DISPLAY_NAME" --version "$VERSION" --tags "$TAGS")
 
 if [[ -n "$CHANGELOG_TEXT" ]]; then
     PUBLISH_CMD+=(--changelog "$CHANGELOG_TEXT")
 fi
 
-echo "Validated skill folder: $SKILL_DIR"
+echo "Validated skill folder: $SKILL_DIR_ABS"
 echo "Suggested publish command:"
 printf '%q ' "${PUBLISH_CMD[@]}"
 printf '\n'
