@@ -39,9 +39,9 @@ bash skills/agent-skills-setup/scripts/prepare-clawhub-release.sh \
     --skill-dir skills/agent-skills-setup \
     --slug agent-skills-setup \
     --name "Agent Skills Setup" \
-    --version 0.2.0 \
+    --version 0.3.0 \
     --tags latest,setup,skills,openclaw \
-    --changelog "Add OpenClaw support, bilingual docs, release guidance, and publishing helpers."
+    --changelog "Add cross-IDE capability migration scripts, strict validation gates, staging-first rollout defaults, and expanded mainstream IDE coverage."
 ```
 
 Publish immediately after validation:
@@ -53,9 +53,9 @@ bash skills/agent-skills-setup/scripts/prepare-clawhub-release.sh \
     --skill-dir skills/agent-skills-setup \
     --slug agent-skills-setup \
     --name "Agent Skills Setup" \
-    --version 0.2.0 \
+    --version 0.3.0 \
     --tags latest,setup,skills,openclaw \
-    --changelog "Add OpenClaw support, bilingual docs, release guidance, and publishing helpers." \
+    --changelog "Add cross-IDE capability migration scripts, strict validation gates, staging-first rollout defaults, and expanded mainstream IDE coverage." \
     --publish
 ```
 
