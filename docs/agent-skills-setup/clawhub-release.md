@@ -11,7 +11,7 @@ Español: Este documento resume el flujo exacto y los metadatos recomendados par
 ## Quick Summary / 快速摘要
 
 | Language | One-line Guidance |
-|---|---|
+| --- | --- |
 | English | Validate first, publish second, inspect third. |
 | 中文 | 先校验，再发布，最后检查发布结果。 |
 | 日本語 | 先に検証し、その後公開し、最後に公開結果を確認します。 |
