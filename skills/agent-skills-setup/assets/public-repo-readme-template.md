@@ -1,8 +1,33 @@
 # {{SKILL_NAME}}
 
+[![GitHub](https://img.shields.io/badge/GitHub-{{REPO_NAME}}-181717?logo=github)](https://github.com/{{REPO_NAME}})
+[![License](https://img.shields.io/badge/License-MIT-0b7285.svg)](LICENSE)
+
 Reusable multi-agent skill for Antigravity, Claude Code, OpenAI Codex, GitHub Copilot, Trae, OpenClaw, and related tooling.
 
 面向 Antigravity、Claude Code、OpenAI Codex、GitHub Copilot、Trae、OpenClaw 及相关工具链的可复用多代理 skill。
+
+日本語: Antigravity を起点に、OpenClaw を含む複数のエージェントへ展開できる再利用可能な skill です。
+
+Español: Skill reutilizable para varios agentes, diseñado para distribuirse desde Antigravity hacia OpenClaw y otros entornos.
+
+## At A Glance
+
+| Language | Summary |
+|---|---|
+| English | A publishable skill repository template with install guidance and multi-agent compatibility notes. |
+| 中文 | 一个可直接公开发布的 skill 仓库模板，附带安装说明和多代理兼容提示。 |
+| 日本語 | インストール手順とマルチエージェント対応情報を含む、公開向け skill リポジトリの雛形です。 |
+| Español | Plantilla de repositorio publicable para skills, con instalación y notas de compatibilidad multiagente. |
+
+## Table Of Contents
+
+- [What It Does](#what-it-does)
+- [Supported Agents](#supported-agents)
+- [Repository Layout](#repository-layout)
+- [Install](#install)
+- [Example Prompts](#example-prompts)
+- [Notes](#notes)
 
 ## What It Does
 

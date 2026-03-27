@@ -4,6 +4,19 @@ This document explains the exact release flow for publishing `agent-skills-setup
 
 这份文档给出把 `agent-skills-setup` 发布到 ClawHub 的精确流程。
 
+日本語: `agent-skills-setup` を ClawHub に公開するための最短手順と推奨メタデータをまとめています。
+
+Español: Este documento resume el flujo exacto y los metadatos recomendados para publicar `agent-skills-setup` en ClawHub.
+
+## Quick Summary / 快速摘要
+
+| Language | One-line Guidance |
+|---|---|
+| English | Validate first, publish second, inspect third. |
+| 中文 | 先校验，再发布，最后检查发布结果。 |
+| 日本語 | 先に検証し、その後公開し、最後に公開結果を確認します。 |
+| Español | Primero valida, después publica y al final inspecciona el resultado. |
+
 ## Preconditions / 前置条件
 
 - `clawhub` is installed.
@@ -57,6 +70,14 @@ bash skills/agent-skills-setup/scripts/prepare-clawhub-release.sh \
 - Suggested tags: `latest,setup,skills,openclaw,cross-ide`
 - 建议标签：`latest,setup,skills,openclaw,cross-ide`
 
+Suggested short description for registry pages:
+
+建议用于注册表页面的一句话简介：
+
+`A cross-agent skills setup workflow for Antigravity, OpenClaw, Copilot, Codex, Claude Code, and Trae.`
+
+`一个面向 Antigravity、OpenClaw、Copilot、Codex、Claude Code 和 Trae 的跨代理 skill 配置工作流。`
+
 ## Post-Publish Checklist / 发布后检查项
 
 1. Run `clawhub inspect agent-skills-setup`.
@@ -67,3 +88,22 @@ bash skills/agent-skills-setup/scripts/prepare-clawhub-release.sh \
 6. 如合适，可使用发布账号为技能点星。
 7. Add the ClawHub URL to the GitHub README and release notes.
 8. 把 ClawHub 页面链接加入 GitHub README 和 Release 说明。
+
+## Login Troubleshooting / 登录故障排查
+
+If `clawhub login` opens the browser but the CLI ends with `fetch failed`, treat it as a callback failure rather than a permission denial.
+
+如果 `clawhub login` 已经打开浏览器，但 CLI 最后报 `fetch failed`，应把它视为本地回调失败，而不是账号权限问题。
+
+Recommended recovery steps:
+
+建议的恢复步骤：
+
+1. Retry `clawhub login` from the same terminal session.
+2. 在同一个终端会话中重新执行 `clawhub login`。
+3. Temporarily disable VPN, proxy rewriting, or local firewall rules that may block `127.0.0.1` callback traffic.
+4. 临时关闭可能拦截 `127.0.0.1` 回调的 VPN、代理改写或本机防火墙规则。
+5. If browser login still fails, use a token-based path if available: `clawhub login --token <token>`.
+6. 如果浏览器登录持续失败，改用 token 登录：`clawhub login --token <token>`。
+7. Verify with `clawhub whoami` before running publish commands.
+8. 在执行发布命令前，先用 `clawhub whoami` 确认登录成功。

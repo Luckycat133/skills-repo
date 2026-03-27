@@ -4,6 +4,10 @@
 
 This folder collects planning, validation, release, and iteration material for `agent-skills-setup`.
 
+日本語: このフォルダには、`agent-skills-setup` の計画、検証、公開準備、改善メモをまとめます。
+
+Español: Esta carpeta reúne la planificación, validación, publicación e iteración continua de `agent-skills-setup`.
+
 ## Purpose / 目的
 
 - track future improvements and OpenClaw follow-up work

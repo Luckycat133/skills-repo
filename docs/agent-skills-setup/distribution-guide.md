@@ -4,6 +4,19 @@ This document turns the publishing research into an execution plan.
 
 这份文档把发布调研结果整理成可执行的落地方案。
 
+日本語: このドキュメントは、GitHub・ClawHub・skills.sh・Awesome Copilot への公開導線を実行可能な手順に整理したものです。
+
+Español: Este documento convierte la investigación de distribución en un plan ejecutable para GitHub, ClawHub, skills.sh y Awesome Copilot.
+
+## Language Snapshots / 多语言摘要
+
+| Language | Release Focus |
+|---|---|
+| English | Publish from a clean GitHub source, then amplify through ClawHub, skills.sh, and curated directories. |
+| 中文 | 先从干净的 GitHub 主源发布，再通过 ClawHub、skills.sh 和精选目录放大曝光。 |
+| 日本語 | まず GitHub を正本として公開し、その後 ClawHub や skills.sh で発見性を高めます。 |
+| Español | Publica primero en GitHub como fuente canónica y después amplía el alcance con ClawHub y skills.sh. |
+
 ## Goal / 目标
 
 - publish the skill in a way that users can install it reliably
@@ -28,6 +41,19 @@ This document turns the publishing research into an execution plan.
 | ClawHub | OpenClaw 原生注册表 | 提供搜索、安装、更新、语义发现和版本历史 | skill 目录、版本号、标签、changelog |
 | `skills.sh` | 跨代理曝光渠道 | 提供排行榜和多代理安装入口 | 公开仓库结构、可安装布局、强 README |
 | `github/awesome-copilot` | 精选目录曝光 | 提供 Copilot 用户可见度和公信力 | 高信号 skill、验证结果、提交到 `staged` 的 PR |
+
+Visual rule of thumb:
+
+视觉化理解：
+
+- GitHub is the canonical home.
+- GitHub 是唯一主源。
+- ClawHub is the OpenClaw-native marketplace and updater.
+- ClawHub 是 OpenClaw 原生市场和更新入口。
+- `skills.sh` is the discovery amplifier.
+- `skills.sh` 是曝光放大器。
+- `github/awesome-copilot` is the curated endorsement lane.
+- `github/awesome-copilot` 是精选背书渠道。
 
 ## Recommended Release Order / 推荐发布顺序
 

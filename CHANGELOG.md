@@ -30,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - OpenClaw 辅助脚本现已支持 `--skip-doctor`，便于非侵入式执行。
 - Module and release docs now include bilingual Chinese and English guidance.
 - 模块文档和发布文档现已提供中英双语内容。
+- Public-facing docs now include additional Japanese and Spanish summaries plus improved layout and navigation.
+- 面向公开发布的文档现已增加日语和西语摘要，并改进了版式与导航结构。
 
 ## [0.1.0] - 2026-03-22
 
