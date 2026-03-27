@@ -4,9 +4,9 @@
 [![License](https://img.shields.io/badge/License-MIT-0b7285.svg)](LICENSE)
 [![OpenClaw Ready](https://img.shields.io/badge/OpenClaw-Ready-1f7a8c)](skills/agent-skills-setup/references/openclaw.md)
 
-AI agent skills with a local-first authoring workflow and a practical path to public release.
+AI Assistant Capabilities (formerly skills) with a local-first authoring workflow and a practical path to public release.
 
-AI agent skills 仓库，采用本地优先的编写流程，并保留清晰的公开发布路径。
+AI Assistant Capabilities（原 skills）仓库，采用本地优先的编写流程，并保留清晰的公开发布路径。
 
 日本語: このリポジトリは、Antigravity を編集元として保ちながら、OpenClaw を含む複数のエージェント環境へ skill を同期・公開するためのワークフローを提供します。
 
@@ -17,7 +17,7 @@ Español: Este repositorio ofrece un flujo de trabajo para crear, sincronizar y 
 - [Quick Summary / 快速说明](#quick-summary--快速说明)
 - [Structure / 结构](#structure--结构)
 - [Conventions / 约定](#conventions--约定)
-- [Current Skill / 当前技能](#current-skill--当前技能)
+- [Current Capability Module / 当前能力模块](#current-capability-module--当前能力模块)
 - [Development Workflow / 开发流程](#development-workflow--开发流程)
 - [Importing Skills / 导入技能](#importing-skills--导入技能)
 - [Open Source Metadata / 开源元数据](#open-source-metadata--开源元数据)
@@ -26,7 +26,7 @@ Español: Este repositorio ofrece un flujo de trabajo para crear, sincronizar y 
 ## Quick Summary / 快速说明
 
 | Language | Summary |
-|---|---|
+| --- | --- |
 | English | Build and release reusable agent skills with a local-first workflow, OpenClaw automation, and public distribution guidance. |
 | 中文 | 以本地优先方式构建和发布可复用 agent skills，包含 OpenClaw 自动化和公开分发指南。 |
 | 日本語 | ローカル優先の開発フローで skill を管理し、OpenClaw 自動化と公開配布まで一貫して扱います。 |
@@ -55,10 +55,18 @@ skills-repo/
 - Import or sync changes into this repository before preparing a public release.
 - 在准备公开发布前，先把变更导入或同步到本仓库。
 
-## Current Skill / 当前技能
+## Current Capability Module / 当前能力模块
 
-- `agent-skills-setup`: multi-agent skill installation, synchronization, OpenClaw automation, and publishing workflow.
-- `agent-skills-setup`：面向多代理环境的技能安装、同步、OpenClaw 自动化配置与发布工作流。
+- `agent-skills-setup`: multi-agent capability installation, synchronization, OpenClaw automation, and publishing workflow.
+- `agent-skills-setup`：面向多代理环境的能力模块安装、同步、OpenClaw 自动化配置与发布工作流。
+
+Cross-IDE migration scope now includes capabilities, prompts, configurations, rules, and workflows.
+
+当前跨 IDE 迁移范围已扩展为 capabilities、prompts、configurations、rules 和 workflows。
+
+Covered mainstream IDE ecosystems now include Copilot, Cursor, Windsurf, JetBrains, Claude Code, Codex, OpenClaw, Trae, and Trae CN.
+
+当前已覆盖的主流 IDE 生态包括 Copilot、Cursor、Windsurf、JetBrains、Claude Code、Codex、OpenClaw、Trae 和 Trae CN。
 
 ## Development Workflow / 开发流程
 

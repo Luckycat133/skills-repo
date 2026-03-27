@@ -1,8 +1,8 @@
-# Publishing Skills Publicly / 公开发布技能
+# Publishing AI Assistant Capabilities Publicly / 公开发布 AI Assistant Capabilities
 
-This guide covers realistic ways to publish a custom skill so other people can discover and install it.
+This guide covers realistic ways to publish custom AI Assistant Capabilities (formerly skills) so other people can discover and install them.
 
-这份指南说明如何把一个自定义 skill 以现实可行的方式发布出去，让其他人能够发现、安装和更新它。
+这份指南说明如何把自定义 AI Assistant Capabilities（原 skills）以现实可行的方式发布出去，让其他人能够发现、安装和更新它。
 
 ## 1. Short Answer / 简短结论
 

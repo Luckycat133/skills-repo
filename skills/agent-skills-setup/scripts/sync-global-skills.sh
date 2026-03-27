@@ -17,7 +17,7 @@ usage() {
     cat <<'EOF'
 Usage: sync-global-skills.sh [--dry-run] [--targets claude,codex,copilot,openclaw,trae,trae-cn]
 
-Mirrors Antigravity global skills into supported IDE global skill directories.
+Mirrors Antigravity global capabilities (skills) into supported IDE global skill directories.
 Antigravity is treated as the source of truth.
 
 Options:

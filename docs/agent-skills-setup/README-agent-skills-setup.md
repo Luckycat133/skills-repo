@@ -14,8 +14,8 @@ Español: Esta carpeta reúne la planificación, validación, publicación e ite
 - 跟踪后续改进项和 OpenClaw 相关演进
 - capture publishing and distribution decisions
 - 记录发布与分发决策
-- keep development notes separate from publishable skill files
-- 将开发过程文档与可发布 skill 文件分离
+- keep development notes separate from publishable capability files
+- 将开发过程文档与可发布 capability 文件分离
 - preserve validation notes, including machine-safe testing guidance
 - 保留验证记录，包括“本机安全测试”相关说明
 
@@ -31,6 +31,8 @@ Español: Esta carpeta reúne la planificación, validación, publicación e ite
 - `distribution-guide.md`：发布、市场渠道和曝光计划
 - `clawhub-release.md`: exact ClawHub release commands and metadata
 - `clawhub-release.md`：ClawHub 发布命令和元数据说明
+- `cross-ide-capabilities-migration.md`: full migration playbook across capabilities, prompts, configurations, rules, and workflows
+- `cross-ide-capabilities-migration.md`：覆盖 capabilities、prompts、configurations、rules、workflows 的跨 IDE 迁移总指南
 
 ## Current Workflow / 当前流程
 
