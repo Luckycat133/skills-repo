@@ -1,11 +1,181 @@
 ---
 name: agent-skills-setup
-description: "Standardized instructions for installing, structuring, and configuring custom skills for Antigravity, Claude Code, OpenAI Codex, VS Code Copilot, Trae, and Trae CN. Use when creating or migrating skills between agents, or setting up global and project-level skill directories."
+description: "Standardized instructions for installing, structuring, and configuring custom skills for AI-powered IDEs and editors. Supports: Antigravity, Claude Code, OpenAI Codex, VS Code Copilot, Cursor, Windsurf, JetBrains, OpenClaw, Trae, Trae CN, VS Code, Zed, Neovim, Emacs, Continue.dev, Aider, Roo Code, Cline, Amazon Q. Use when creating or migrating skills between agents, setting up global and project-level skill directories, or performing smart IDE migration with reporting."
 ---
 
 # Agent Skills Setup Guide
 
 This skill provides standardized instructions on how to install, structure, and configure custom skills for various AI agents. It covers directory paths, file requirements, and triggering mechanisms for global and project scopes.
+
+## 🚀 Quick Start: IDE Migration Workflow
+
+**When user mentions IDE migration, follow this workflow:**
+
+### Step 1: Ask for Migration Details
+
+Ask the user:
+1. **Source IDE**: Which IDE are you migrating FROM?
+2. **Target IDE**: Which IDE are you migrating TO?
+3. **Content Types**: What to migrate? (skills, rules, prompts, mcp, config, project) - default: all available
+
+**Supported IDEs:**
+- `antigravity`, `claude`, `codex`, `copilot`, `cursor`, `windsurf`
+- `jetbrains`, `openclaw`, `trae`, `trae-cn`
+- `vscode`, `zed`, `neovim`, `emacs`
+- `continue`, `aider`, `roo-code`, `cline`, `amazon-q`
+
+**If the IDE is not in the list, follow the "Handling Unknown IDEs" section below.**
+
+### Step 2: Preview Migration (Dry Run)
+
+Always run dry-run first:
+
+```bash
+bash <skill-path>/scripts/smart-ide-migration.sh \
+    --source <source-ide> \
+    --target <target-ide> \
+    --dry-run
+```
+
+**Skill path varies by current IDE:**
+- Trae CN: `~/.trae-cn/skills/agent-skills-setup`
+- Trae: `~/.trae/skills/agent-skills-setup`
+- Claude Code: `~/.claude/skills/agent-skills-setup`
+- Antigravity: `~/.gemini/antigravity/skills/agent-skills-setup`
+- OpenClaw: `~/.openclaw/skills/agent-skills-setup`
+
+### Step 3: Execute Migration
+
+After user confirms the preview:
+
+```bash
+bash <skill-path>/scripts/smart-ide-migration.sh \
+    --source <source-ide> \
+    --target <target-ide> \
+    --report ~/migration-report.txt
+```
+
+### Step 4: Post-Migration Steps
+
+Inform user about manual steps based on target IDE:
+- **VS Code Copilot**: Update settings.json to reference migrated skills
+- **Cursor/Windsurf**: Review .cursorrules/.windsurfrules files
+- **OpenClaw**: Update openclaw.json and run `openclaw doctor`
+- **Trae**: Restart IDE and verify in Skills Center
+- **Codex**: Add agents/openai.yaml for UI visibility
+
+### Supported IDEs
+
+| IDE | Identifier | Global Path |
+|-----|------------|-------------|
+| Antigravity | `antigravity` | `~/.gemini/antigravity/` |
+| Claude Code | `claude` | `~/.claude/` |
+| OpenAI Codex CLI | `codex` | `~/.codex/` |
+| VS Code Copilot | `copilot` | `~/.vscode/extensions/` |
+| Cursor | `cursor` | `~/.cursor/` |
+| Windsurf | `windsurf` | `~/.windsurf/` |
+| JetBrains IDEs | `jetbrains` | `~/.idea/` |
+| OpenClaw | `openclaw` | `~/.openclaw/` |
+| Trae (International) | `trae` | `~/.trae/` |
+| Trae CN (China) | `trae-cn` | `~/.trae-cn/` |
+| VS Code | `vscode` | `~/.vscode/` |
+| Zed | `zed` | `~/.config/zed/` |
+| Neovim | `neovim` | `~/.config/nvim/` |
+| Emacs | `emacs` | `~/.emacs.d/` |
+| Continue.dev | `continue` | `~/.continue/` |
+| Aider | `aider` | `~/.aider/` |
+| Roo Code | `roo-code` | `~/.roo/` |
+| Cline | `cline` | `~/.cline/` |
+| Amazon Q Developer | `amazon-q` | `~/.aws/amazon-q/` |
+| Sourcegraph Cody | `cody` | `~/.vscode/extensions/` |
+| Codeium | `codeium` | `~/.vscode/extensions/` |
+| Tabnine | `tabnine` | `~/.vscode/extensions/` |
+| Replit AI | `replit` | `~/.replit/` |
+| PearAI | `pearai` | `~/.pearai/` |
+| Supermaven | `supermaven` | `~/.supermaven/` |
+| Pieces | `pieces` | `~/.pieces/` |
+| Blackbox AI | `blackbox` | `~/.vscode/extensions/` |
+
+### Supported CLI Tools
+
+| CLI Tool | Identifier | Global Path | Rules File |
+|----------|------------|-------------|------------|
+| Gemini CLI | `gemini-cli` | `~/.gemini/` | `GEMINI.md` |
+| Goose CLI | `goose-cli` | `~/.config/goose/` | `GOOSE.md` |
+| OpenCode | `opencode` | `~/.config/opencode/` | `OPENCODE.md` |
+| Kilocode | `kilocode` | `~/.kilocode/` | `KILOCODE.md` |
+| Kimi AI CLI | `kimiai` | `~/.kimi/` | `KIMI.md` |
+
+### 🔍 Handling Unknown IDEs
+
+**When user mentions an IDE not in the supported list, AI should:**
+
+1. **Search for information** about the IDE's AI assistant configuration:
+   - Official documentation
+   - GitHub repository
+   - Community forums
+
+2. **Identify key configuration paths:**
+   - Global config directory (usually in `~/.<ide-name>/` or `~/.config/<ide-name>/`)
+   - Project-level config files (usually `.<ide-name>/` in project root)
+   - Rules/instructions file format
+   - MCP server configuration (if supported)
+
+3. **Ask the user to confirm findings:**
+   ```
+   "I found that [IDE name] uses the following paths for AI configuration:
+   - Global: [path]
+   - Project: [path]
+   - Rules file: [filename]
+   
+   Is this correct? Would you like me to proceed with migration using these paths?"
+   ```
+
+4. **If unable to find information, ask user:**
+   ```
+   "I couldn't find detailed configuration information for [IDE name].
+   Could you help me by providing:
+   1. Where does this IDE store its AI assistant configuration?
+   2. Does it support custom rules/instructions files?
+   3. Does it support MCP servers?
+   ```
+
+5. **After gathering information, proceed with migration:**
+   - Use the discovered paths
+   - Document the new IDE for future reference
+
+### Content Types to Migrate
+
+| Type | Description | Example Paths |
+|------|-------------|---------------|
+| `skills` | Skills and capabilities (SKILL.md files) | `~/.trae-cn/skills/` → `~/.claude/skills/` |
+| `rules` | Coding rules and instructions | `.cursorrules` → `.windsurfrules` |
+| `prompts` | Custom prompts and prompt templates | `.cursor/prompts/` → `.windsurf/prompts/` |
+| `mcp` | MCP server configurations | `~/.trae-cn/mcps/` |
+| `config` | IDE configuration files | `argv.json`, `settings.json` |
+| `project` | Project-level configurations | `.trae/skills/` → `.claude/skills/` |
+
+### Migration Example
+
+```
+User: "Help me migrate from Trae CN to Claude Code"
+
+AI Response:
+1. Ask: "I'll help you migrate from Trae CN to Claude Code. What content would you like to migrate?"
+   - Options: skills, rules, prompts, mcp, config, project (default: all)
+   
+2. Run dry-run:
+   bash ~/.trae-cn/skills/agent-skills-setup/scripts/smart-ide-migration.sh \
+       --source trae-cn --target claude --dry-run
+       
+3. Show preview and ask for confirmation
+
+4. Execute migration:
+   bash ~/.trae-cn/skills/agent-skills-setup/scripts/smart-ide-migration.sh \
+       --source trae-cn --target claude --report ~/migration-report.txt
+       
+5. Show report and remind user to restart Claude Code session
+```
 
 ## 0. Source of Truth Rule
 
@@ -160,7 +330,132 @@ bash ~/.gemini/antigravity/skills/agent-skills-setup/scripts/prepare-clawhub-rel
     --tags latest,setup,openclaw
 ```
 
-## 7. Migrating Skills Between Agents
+## 7. Smart IDE Migration
+
+The Smart IDE Migration system provides intelligent migration between any supported IDE environments. You specify the source and target IDEs, and the tool handles the migration with real-time progress feedback and comprehensive reporting.
+
+### 7.1 Supported IDEs
+
+| IDE | Identifier | Global Path |
+|-----|------------|-------------|
+| Antigravity | `antigravity` | `~/.gemini/antigravity/skills/` |
+| Claude Code | `claude` | `~/.claude/skills/` |
+| OpenAI Codex | `codex` | `~/.codex/skills/` |
+| VS Code Copilot | `copilot` | `~/.copilot-skills/` |
+| Cursor | `cursor` | `~/.cursor/` |
+| Windsurf | `windsurf` | `~/.windsurf/` |
+| JetBrains IDEs | `jetbrains` | `~/.idea/` |
+| OpenClaw | `openclaw` | `~/.openclaw/skills/` |
+| Trae (International) | `trae` | `~/.trae/skills/` |
+| Trae CN (China) | `trae-cn` | `~/.trae-cn/skills/` |
+
+### 7.2 Basic Usage
+
+```bash
+bash ~/.gemini/antigravity/skills/agent-skills-setup/scripts/smart-ide-migration.sh \
+    --source <source-ide> \
+    --target <target-ide>
+```
+
+**Required Parameters:**
+- `--source <ide>`: The IDE to migrate FROM
+- `--target <ide>`: The IDE to migrate TO
+
+### 7.3 Migration Options
+
+| Option | Description |
+|--------|-------------|
+| `--source <ide>` | Source IDE (required) |
+| `--target <ide>` | Target IDE for migration (required) |
+| `--workspace <dir>` | Workspace root directory (default: current directory) |
+| `--objects <list>` | Objects to migrate, comma-separated (default: auto-detect) |
+| `--strategy <mode>` | Migration strategy: skip, overwrite, backup (default: backup) |
+| `--report <file>` | Save migration report to file |
+| `--dry-run` | Preview changes without modifying files |
+
+### 7.4 Migration Content Types
+
+The following content types can be migrated:
+
+| Type | Description | Notes |
+|------|-------------|-------|
+| `skills` | Skills and capabilities (SKILL.md files) | Global skills directory |
+| `rules` | Coding rules and instructions | `.cursorrules`, `.windsurfrules`, etc. |
+| `prompts` | Custom prompts and prompt templates | Project-level prompts |
+| `mcp` | MCP server configurations | IDE-specific MCP settings |
+| `config` | IDE configuration files | Settings and preferences |
+| `project` | Project-level configurations | `.trae/skills`, `.claude/skills`, etc. |
+
+### 7.5 Migration Strategies
+
+| Strategy | Behavior |
+|----------|----------|
+| `backup` | Create timestamped backup before overwriting (default) |
+| `overwrite` | Replace existing files without backup |
+| `skip` | Skip existing files, only copy new ones |
+
+### 7.6 Example Workflows
+
+#### Migrate All Content from Trae CN to Claude Code
+
+```bash
+bash ~/.gemini/antigravity/skills/agent-skills-setup/scripts/smart-ide-migration.sh \
+    --source trae-cn \
+    --target claude
+```
+
+#### Preview Migration (Dry Run)
+
+```bash
+bash ~/.gemini/antigravity/skills/agent-skills-setup/scripts/smart-ide-migration.sh \
+    --source trae-cn \
+    --target claude \
+    --dry-run
+```
+
+#### Migrate Only Skills and Rules
+
+```bash
+bash ~/.gemini/antigravity/skills/agent-skills-setup/scripts/smart-ide-migration.sh \
+    --source cursor \
+    --target windsurf \
+    --objects skills,rules
+```
+
+#### Migrate with Custom Workspace
+
+```bash
+bash ~/.gemini/antigravity/skills/agent-skills-setup/scripts/smart-ide-migration.sh \
+    --source trae-cn \
+    --target copilot \
+    --workspace /path/to/project \
+    --report ~/migration-report.txt
+```
+
+### 7.7 Post-Migration Steps
+
+After migration, the report will indicate any manual steps required:
+
+- **VS Code Copilot**: Update `settings.json` to reference migrated skills
+- **Cursor/Windsurf**: Review `.cursorrules` or `.windsurfrules` files
+- **OpenClaw**: Update `openclaw.json` and run `openclaw doctor`
+- **Trae**: Restart IDE and verify in Skills Center
+- **Codex**: Add `agents/openai.yaml` for UI visibility
+
+### 7.8 Content Type Mapping by IDE
+
+Different IDEs use different names and locations for similar content:
+
+| Content Type | Antigravity | Claude Code | Trae/Trae CN | VS Code Copilot | Cursor | Windsurf |
+|-------------|-------------|-------------|--------------|-----------------|--------|----------|
+| **Skills** | `~/.gemini/antigravity/skills/` | `~/.claude/skills/` | `~/.trae/skills/` | `~/.copilot-skills/*.md` | `~/.cursor/` | `~/.windsurf/` |
+| **Project Skills** | `.agents/skills/` | `.claude/skills/` | `./.trae/skills/` | `.github/copilot-instructions.md` | `.cursor/` | `.windsurf/` |
+| **Rules** | - | - | - | `.github/instructions/` | `.cursorrules` | `.windsurfrules` |
+| **Prompts** | - | - | - | `.github/prompts/` | `.cursor/prompts/` | `.windsurf/prompts/` |
+| **MCP Servers** | - | - | `~/.trae-cn/mcps/` | settings.json | - | - |
+| **Agent Config** | - | - | `argv.json` | settings.json | - | - |
+
+## 8. Migrating Skills Between Agents (Legacy)
 
 ### From Antigravity to All Other Agents
 
@@ -221,7 +516,7 @@ for dir in ~/.trae-cn/skills/*/; do
 done
 ```
 
-## 8. Configuration Priority (All Agents)
+## 9. Configuration Priority (All Agents)
 
 | Priority | Level | Description |
 |----------|-------|-------------|
@@ -230,7 +525,7 @@ done
 | 3 | Global/User | `~/.openclaw/skills/`, `~/.trae/skills/`, `~/.gemini/antigravity/skills/`, settings.json |
 | 4 (Base) | Bundled | OpenClaw bundled skills and any other agent-managed built-ins |
 
-## 9. Quick Migration Commands
+## 10. Quick Migration Commands
 
 ### One-command migration to all agents
 
@@ -264,7 +559,7 @@ done
 echo "Migration complete! Don't forget to update VS Code settings.json"
 ```
 
-## 10. Operational Notes
+## 11. Operational Notes
 
 - Prefer `rsync -a --delete` over ad hoc copy loops when exact mirror behavior is required.
 - Avoid destructive cleanup commands when a mirror sync can express the same intent more safely.
@@ -273,7 +568,7 @@ echo "Migration complete! Don't forget to update VS Code settings.json"
 - For OpenClaw multi-agent setups, remember that shared skills live in `~/.openclaw/skills/` while per-agent overrides live under each agent workspace `skills/` directory.
 - OpenClaw skill env injection from `skills.entries.*.env` only applies to host runs; sandboxed agents need matching `agents.defaults.sandbox.docker.env` or `agents.list[].sandbox.docker.env` when a skill must execute inside the sandbox.
 
-## 11. Public Release Workflow
+## 12. Public Release Workflow
 
 If the goal is to publish a skill so more people can find and install it:
 
@@ -297,7 +592,7 @@ bash ~/.gemini/antigravity/skills/agent-skills-setup/scripts/export-public-skill
 
 The export helper copies the selected skill into a publishable repository layout and generates a starter `README.md`.
 
-## 12. Publishability Criteria
+## 13. Publishability Criteria
 
 Before publishing a skill publicly, verify that it:
 
