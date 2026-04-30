@@ -26,9 +26,9 @@ Configure Model Context Protocol (MCP) servers across popular AI-powered IDEs.
 | [Claude Code](#claude-code) | Anthropic | Full | `~/.claude.json` | 2025-03 |
 | [Cursor](#cursor) | Cursor | Full | `~/.cursor/mcp.json` | 2025-03 |
 | [JetBrains AI](#jetbrains-ai) | JetBrains | Full | `~/.jetbrains.mcp.json` | 2025-03 |
-| [Trae](#trae) | ByteDance | Full | `.trae/mcp.json` | 2025-03 |
-| [Trae CN](#trae-cn) | ByteDance | Full | `.trae/mcp.json` | 2025-03 |
-| [antigravity](#antigravity) | **Google** | Full | `.antigravity/mcp.json` | 2025-03 |
+| [Trae](#trae) | ByteDance | Full | `~/.cursor/mcp.json` (全局) / `.trae/mcp.json` (项目) | 2025-03 |
+| [Trae CN](#trae-cn) | ByteDance | Full | `~/.cursor/mcp.json` (全局) / `.trae/mcp.json` (项目) | 2025-03 |
+| [antigravity](#antigravity) | Google | Full | `~/.gemini/antigravity/mcp_config.json` | 2025-03 |
 | [Windsurf](#windsurf) | Codeium | Full | `.windsurf/mcp.json` | 2025-03 |
 | [Zed](#zed) | Zed | Full | `~/.config/zed/mcp.json` | 2025-03 |
 | [Helix](#helix) | Helix | Full | `~/.config/helix/MCP.toml` | 2025-03 |
@@ -67,10 +67,8 @@ Configure Model Context Protocol (MCP) servers across popular AI-powered IDEs.
 
 ### Recommended: uvx
 
-uvx is faster and safer than npx:
-
 ```bash
-# Install uv if needed
+# Install uv
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Run MCP servers with uvx
@@ -83,80 +81,16 @@ uvx mcp-server-package --key value
 npx -y mcp-server-package --key value
 ```
 
-### Python venv
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install mcp-server-package
-```
-
 ---
 
-## Trae
+## Trae / Trae CN
 
 **Developer:** ByteDance
-**Path:** `.trae/mcp.json`
 
-### Config Format
-
-```json
-{
-  "mcpServers": {
-    "server-name": {
-      "command": "uvx",
-      "args": ["mcp-server-package"]
-    }
-  }
-}
-```
-
-### Trae v1.3.0+
-
-Added Agent Mode with enhanced MCP support.
-
----
-
-## Trae CN
-
-**Developer:** ByteDance
-**Path:** `.trae/mcp.json` (same as Trae)
-
-### 区别
-
-| 特性 | Trae | Trae CN |
-|------|------|---------|
-| 语言 | English | 简体中文 |
-| 默认模型 | Claude/GPT | Claude/通义/DeepSeek |
-| 区域 | 全球 | 中国大陆 |
-| 模型来源 | OpenAI/Anthropic | OpenAI/阿里/DeepSeek |
-| MCP配置 | 相同 | 相同 |
-
----
-
-## antigravity
-
-**Developer:** Google
-**Path:** `.antigravity/mcp.json`
-
-### 简介
-
-Google Antigravity 是 Google 推出的 AI 优先 IDE，基于 Gemini 大模型，支持 MCP 协议扩展。
-
-### Config Format
-
-```json
-{
-  "mcpServers": {
-    "server-name": {
-      "command": "uvx",
-      "args": ["mcp-server-package"]
-    }
-  }
-}
-```
-
-### Example: GitHub MCP
+| 配置类型 | 路径 |
+|---------|------|
+| 全局配置 | `~/.cursor/mcp.json` |
+| 项目配置 | `.trae/mcp.json` |
 
 ```json
 {
@@ -172,168 +106,154 @@ Google Antigravity 是 Google 推出的 AI 优先 IDE，基于 Gemini 大模型�
 }
 ```
 
-### antigravity 特性
-
-| 特性 | 说明 |
-|------|------|
-| 主模型 | Gemini 3.1 Pro |
-| Agent Mode | Agent Manager |
-| 代码补全 | Tab autocomplete |
-| 命令 | Natural language code commands |
-
 ---
 
-## Windsurf
+## antigravity
 
-**Developer:** Codeium
-**Path:** `.windsurf/mcp.json`
+**Developer:** Google
 
----
+| 配置类型 | 路径 |
+|---------|------|
+| 全局配置 | `~/.gemini/antigravity/mcp_config.json` |
 
-## Zed
-
-**Developer:** Zed
-**Path:** `~/.config/zed/mcp.json`
+```json
+{
+  "mcpServers": {
+    "github": {
+      "command": "uvx",
+      "args": ["@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "your-token"
+      }
+    }
+  }
+}
+```
 
 ---
 
 ## Claude Code
 
-**Developer:** Anthropic
 **Path:** `~/.claude.json`
 
 ---
 
 ## Cursor
 
-**Developer:** Cursor
 **Path:** `~/.cursor/mcp.json`
 
 ---
 
 ## JetBrains AI
 
-**Developer:** JetBrains
 **Path:** `~/.jetbrains.mcp.json`
 
-Supported: IntelliJ IDEA, PyCharm, WebStorm, PhpStorm, RubyMine, GoLand, CLion, Rider, DataSpell, DataGrip
+---
+
+## Windsurf
+
+**Path:** `.windsurf/mcp.json`
 
 ---
 
-## Gemini CLI
+## Zed
 
-**Developer:** Google
-**Path:** `~/.gemini/settings.json`
-
----
-
-## Codex
-
-**Developer:** OpenAI
-**Path:** `~/.codex/settings.json`
+**Path:** `~/.config/zed/mcp.json`
 
 ---
 
 ## Helix
 
-**Developer:** Helix
 **Path:** `~/.config/helix/MCP.toml`
-
-```toml
-[server.server-name]
-command = "uvx"
-args = ["mcp-server-package"]
-```
 
 ---
 
 ## Lapce
 
-**Developer:** Lapce
 **Path:** `~/.config/lapce/mcp.toml`
 
 ---
 
 ## Sublime Merge
 
-**Developer:** Sublime HQ
 **Path:** `Packages/User/mcp.json`
 
 ---
 
 ## Nova
 
-**Developer:** Panic
 **Path:** `~/Library/Application Support/Nova/extensions/mcp-servers.json`
 
 ---
 
 ## Forge
 
-**Developer:** Forge
 **Path:** `.forge/mcp.json`
 
 ---
 
 ## BBEdit
 
-**Developer:** Bare Bones
-**Partial support** via extension.
+Partial support via extension.
 
 ---
 
 ## GitHub Codespaces
 
-**Developer:** GitHub
 **Path:** `.devcontainer.json`
 
 ---
 
 ## StackBlitz
 
-**Developer:** StackBlitz
-**Partial** - via WebContainer extension.
+Partial - via WebContainer extension.
 
 ---
 
 ## Gitpod
 
-**Developer:** Gitpod
 **Path:** `.gitpod.yml`
 
 ---
 
 ## Replit
 
-**Developer:** Replit
-**Configuration:** Via Secrets panel.
+Configuration via Secrets panel.
 
 ---
 
 ## CodeSandbox
 
-**Developer:** CodeSandbox
-**Partial** - via extension.
+Partial - via extension.
 
 ---
 
 ## VS Code + Copilot
 
-**Developer:** Microsoft
 **Path:** `.vscode/mcp.json` (Insiders) or via Continue/Cline extensions.
 
 ---
 
 ## Amazon Q
 
-**Developer:** AWS
 **Path:** `.amazonq/mcp.json`
+
+---
+
+## Gemini CLI
+
+**Path:** `~/.gemini/settings.json`
+
+---
+
+## Codex
+
+**Path:** `~/.codex/settings.json`
 
 ---
 
 ## Zulip
 
-**Developer:** Zulip
 Via webhook integration.
 
 ---
@@ -342,15 +262,9 @@ Via webhook integration.
 
 ### Server Not Starting
 
-1. Check config syntax (JSON/TOML)
-2. Verify `uvx` or `npx` is installed
-3. Test command manually: `uvx mcp-server-package`
-
-### Permission Denied
-
-```bash
-chmod +x /path/to/mcp-server
-```
+1. Check config syntax
+2. Verify `uvx` is installed
+3. Test: `uvx mcp-server-package`
 
 ---
 
