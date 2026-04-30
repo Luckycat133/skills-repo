@@ -27,32 +27,45 @@ Configure Claude Code with MCP servers and settings.
 | File | Purpose |
 |------|---------|
 | `~/.claude.json` | User-level MCP and settings |
-| `~/.claude/settings.json` | Alternative location (may work) |
 | `.claude/settings.json` | Project-level settings |
 | `.claude.json` | Project-level MCP config |
 
 **Warning**: Claude Code and Claude Desktop use **different** config files!
 
+## Setup Methods
+
+### Method 1: CLI (Recommended)
+
+```bash
+# Add MCP server
+claude mcp add <name> <command> <args>
+
+# List MCP servers
+claude mcp list
+
+# Remove MCP server
+claude mcp remove <name>
+```
+
+### Method 2: Manual Edit
+
+Create/edit `~/.claude.json` and add MCP servers under `mcpServers` key.
+
 ## Common Mistakes
 
 - ❌ `~/.claude/.claude.json` (wrong path)
 - ❌ `~/.claude/mcp.json` (wrong filename)
+- ❌ Using Claude Desktop config with Claude Code (different files)
 - ✅ `~/.claude.json` (correct)
-
-## Setup Steps
-
-1. Create/edit `~/.claude.json`
-2. Add MCP servers under `mcpServers` key
-3. Restart Claude Code
 
 ## Verification
 
 ```bash
-# Check Claude Code version
-claude --version
+# Check MCP servers
+claude mcp list
 
-# Test MCP connection
-claude /mcp
+# Or check Claude Code version
+claude --version
 ```
 
 ## Permissions
@@ -60,4 +73,4 @@ claude /mcp
 Claude Code prompts for MCP tool permissions. Approve in:
 - First-use prompt
 - Settings > MCP Servers
-- Project-specific `.claude.json` for scoped access
+- Project-specific config for scoped access
