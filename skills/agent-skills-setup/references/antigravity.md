@@ -4,7 +4,7 @@ Configure MCP servers in Google Antigravity IDE.
 
 ## Config Path
 
-`.antigravity/mcp.json`
+`~/.gemini/antigravity/mcp_config.json`
 
 ## 简介
 
@@ -43,15 +43,21 @@ Google Antigravity 是 Google 推出的 AI 优先 IDE，基于 Gemini 大模型�
 
 1. Create config directory:
 ```bash
-mkdir -p .antigravity
+mkdir -p ~/.gemini/antigravity
 ```
 
 2. Create MCP config:
 ```bash
-nano .antigravity/mcp.json
+nano ~/.gemini/antigravity/mcp_config.json
 ```
 
 3. Restart Antigravity
+
+## UI 配置方式
+
+1. 点击 MCP Store 中的 "Manage MCP Servers"
+2. 点击 "View raw config"
+3. 修改 `mcp_config.json`
 
 ## antigravity 特性
 
@@ -64,43 +70,19 @@ nano .antigravity/mcp.json
 | 代码补全 | Tab autocomplete |
 | 命令 | Natural language code commands |
 
-## 内置模型
-
-| 模型 | 来源 | 适用场景 |
-|------|------|----------|
-| Gemini 3.1 Pro | Google | 主模型 |
-| Claude | Anthropic | 备选 |
-| GPT-4 | OpenAI | 备选 |
-
 ## 与 Trae 的区别
 
 | 特性 | antigravity | Trae |
 |------|-------------|------|
-| 开发商 | **Google** | 字节跳动 |
+| 开发商 | Google | ByteDance |
 | 主模型 | Gemini | Claude/GPT |
-| 平台 | Google | Electron |
-| Agent | Agent Manager | 内置 |
+| 全局配置 | `~/.gemini/antigravity/mcp_config.json` | `~/.cursor/mcp.json` |
+| 项目配置 | 不支持 | `.trae/mcp.json` |
 
 ## Troubleshooting
 
 ### MCP 服务器不启动
 
-1. 检查 JSON 语法: `cat .antigravity/mcp.json | python -m json.tool`
+1. 检查 JSON 语法: `cat ~/.gemini/antigravity/mcp_config.json | python -m json.tool`
 2. 确保 uvx 已安装: `uvx --version`
-3. 手动测试命令
-
-### 连接超时
-
-增加 timeout 配置:
-
-```json
-{
-  "mcpServers": {
-    "server-name": {
-      "command": "uvx",
-      "args": ["mcp-server-package"],
-      "timeout": 60
-    }
-  }
-}
-```
+3. 重启 Antigravity

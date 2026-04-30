@@ -1,10 +1,13 @@
 # Trae CN MCP Setup
 
-Configure MCP servers in Trae CN (字节跳动AI代码编辑器国际版).
+Configure MCP servers in Trae CN.
 
-## Config Path
+## Config Paths
 
-`.trae/mcp.json` (project-level)
+| 类型 | 路径 |
+|------|------|
+| **全局配置** | `~/.cursor/mcp.json` |
+| **项目配置** | `.trae/mcp.json` |
 
 ## 与 Trae 的区别
 
@@ -13,7 +16,6 @@ Configure MCP servers in Trae CN (字节跳动AI代码编辑器国际版).
 | 语言 | English | 简体中文 |
 | 默认模型 | Claude/GPT | Claude/通义/DeepSeek |
 | 区域 | 全球 | 中国大陆 |
-| 模型来源 | OpenAI/Anthropic | OpenAI/阿里/DeepSeek |
 | MCP配置 | 相同 | 相同 |
 
 ## Config Format
@@ -30,6 +32,24 @@ Configure MCP servers in Trae CN (字节跳动AI代码编辑器国际版).
 ```
 
 ## Example: Complete GitHub + Filesystem MCP
+
+### 全局配置 (~/.cursor/mcp.json)
+
+```json
+{
+  "mcpServers": {
+    "github": {
+      "command": "uvx",
+      "args": ["@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "your-token"
+      }
+    }
+  }
+}
+```
+
+### 项目配置 (.trae/mcp.json)
 
 ```json
 {
@@ -51,17 +71,23 @@ Configure MCP servers in Trae CN (字节跳动AI代码编辑器国际版).
 
 ## Setup Steps
 
-1. Create `.trae` folder in project root:
+### 全局配置
+
 ```bash
-mkdir -p .trae
+mkdir -p ~ && nano ~/.cursor/mcp.json
 ```
 
-2. Create MCP config:
+### 项目配置
+
 ```bash
-nano .trae/mcp.json
+mkdir -p .trae && nano .trae/mcp.json
 ```
 
-3. Restart Trae CN
+## UI 配置方式
+
+1. 点击右上角 Settings 图标
+2. 左侧导航选择 MCP
+3. 添加/管理 MCP 服务器
 
 ## 内置模型 (Trae CN)
 
@@ -73,28 +99,13 @@ nano .trae/mcp.json
 | DeepSeek Chat | DeepSeek | 高性价比 |
 | Gemini Pro | Google | 多模态 |
 
-## Trae CN 特性
-
-- 基于 Electron 平台
-- AI 驱动的代码补全
-- 智能代码审查
-- MCP 协议支持
-- 内置终端
-- Git 集成
-- 多语言支持
-
 ## 与 antigravity 对比
 
 | 特性 | Trae/Trae CN | antigravity |
 |------|-------------|-------------|
-| 开发商 | 字节跳动 | Google |
-| 主模型 | Claude/GPT/通义 | Gemini |
-| 平台 | Electron | Google |
-
-## 版本历史
-
-- **v1.0**: 初始版本
-- **v1.3.0**: Agent Mode + 增强 MCP 支持
+| 开发商 | ByteDance | Google |
+| 全局配置 | `~/.cursor/mcp.json` | `~/.gemini/antigravity/mcp_config.json` |
+| 项目配置 | `.trae/mcp.json` | 不支持 |
 
 ## Troubleshooting
 
