@@ -1,45 +1,63 @@
-# Claude Code Skills Configuration
+# Claude Code Configuration
 
-Claude Code (CLI) uses a robust skill system to extend the base model's capabilities with procedural knowledge and custom tools.
+Configure Claude Code with MCP servers and settings.
 
-## 1. Global vs Project Skills
+## Configuration File Locations
 
-### Global Skills (User Wide)
+### Primary Config (Important!)
 
-Stored in the user's home directory. Useful for "superpower" skills available everywhere.
+**MCP servers and settings go in `~/.claude.json`**
 
-- **Path**: `~/.claude/skills/`
-
-### Project Skills (Repository Specific)
-
-Stored in the project root. Essential for project-specific business logic, schemas, and workflows.
-
-- **Path**: `<project-root>/.claude/skills/`
-
-## 2. Configuration & Hierarchy
-
-- **Precedence**: Project-level skills override global skills with the same name.
-- **Triggering**: Managed via the `SKILL.md` frontmatter.
-- **Structure**: Uses the standard standard skill structure (SKILL.md, scripts/, references/, assets/).
-
-## 3. Installation Workflow
-
-1. Create a subdirectory under the appropriate skills path.
-2. Add a `SKILL.md` file with a descriptive name and trigger description in the frontmatter.
-3. Reload or restart Claude Code session to pick up new skills.
-
-## 4. Best Practices
-
-- Keep `SKILL.md` concise.
-- Move large schemas or documentation into `references/`.
-- Use `scripts/` for deterministic logic.
-
-## 5. Sync From Antigravity
-
-If Claude Code should stay aligned with Antigravity global skills, run:
-
-```bash
-~/.gemini/antigravity/skills/agent-skills-setup/scripts/sync-global-skills.sh --targets claude
+```json
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_TOKEN": "your_token"
+      }
+    }
+  }
+}
 ```
 
-For a full multi-IDE sync, omit `--targets`.
+### Other Config Files
+
+| File | Purpose |
+|------|---------|
+| `~/.claude.json` | User-level MCP and settings |
+| `~/.claude/settings.json` | Alternative location (may work) |
+| `.claude/settings.json` | Project-level settings |
+| `.claude.json` | Project-level MCP config |
+
+**Warning**: Claude Code and Claude Desktop use **different** config files!
+
+## Common Mistakes
+
+- ❌ `~/.claude/.claude.json` (wrong path)
+- ❌ `~/.claude/mcp.json` (wrong filename)
+- ✅ `~/.claude.json` (correct)
+
+## Setup Steps
+
+1. Create/edit `~/.claude.json`
+2. Add MCP servers under `mcpServers` key
+3. Restart Claude Code
+
+## Verification
+
+```bash
+# Check Claude Code version
+claude --version
+
+# Test MCP connection
+claude /mcp
+```
+
+## Permissions
+
+Claude Code prompts for MCP tool permissions. Approve in:
+- First-use prompt
+- Settings > MCP Servers
+- Project-specific `.claude.json` for scoped access
