@@ -12,10 +12,6 @@ triggers:
 
 Comprehensive guide for configuring AI IDEs with skills from `Luckycat133/skills-repo`.
 
-## Overview
-
-This skill helps you configure various AI-powered IDEs to use skills from your centralized skills repository. Skills enable AI assistants to follow specialized workflows, use specific tools, and maintain consistent patterns across different IDEs and sessions.
-
 ## Supported IDEs
 
 | IDE | Support Level | MCP | Skills |
@@ -31,24 +27,16 @@ This skill helps you configure various AI-powered IDEs to use skills from your c
 | Codex | ⭐⭐⭐ | CLI | Limited |
 | OpenClaw | ⭐⭐⭐⭐⭐ | Custom | Full |
 
-## Quick Setup (All IDEs)
+## Quick Setup
 
 ### Step 1: Get Your GitHub Token
 
-Generate a Personal Access Token:
 1. Go to https://github.com/settings/tokens
 2. Generate new token (classic)
 3. Required scopes: `repo`, `workflow`
 4. Copy the token
 
-### Step 2: Install Prerequisites
-
-```bash
-# Node.js (for npx)
-node --version  # >= 18
-```
-
-### Step 3: Configure MCP
+### Step 2: Configure MCP
 
 Add to your IDE's MCP configuration:
 
@@ -74,7 +62,7 @@ Configuration file locations:
 - **Continue**: `~/.continue/config.json`
 - **JetBrains**: `.jetbrains.mcp.json`
 
-### Step 4: Verify Connection
+### Step 3: Verify Connection
 
 ```bash
 # Test GitHub MCP
@@ -106,28 +94,6 @@ curl -H "Authorization: token $GITHUB_TOKEN" \
 | `skill_view` | Load skill content |
 | `skill_list` | List available skills |
 
-## References (IDE-Specific Guides)
-
-| Guide | Description |
-|-------|-------------|
-| [Claude Code](references/claude-code.md) | Primary IDE with full ACP support |
-| [Trae](references/trae.md) | Chinese-friendly IDE with MCP support |
-| [Cursor](references/cursor.md) | AI-first code editor |
-| [Continue](references/continue.md) | Open-source AI assistant |
-| [VSCode Copilot](references/vscode-copilot.md) | Microsoft Copilot integration |
-| [JetBrains AI](references/jetbrains-ai.md) | IntelliJ/PyCharm AI Assistant |
-| [Amazon Q](references/amazon-q.md) | AWS integrated AI assistant |
-| [Gemini Code Assist](references/gemini-code-assist.md) | Google Cloud AI assistant |
-| [Codex](references/codex.md) | OpenAI's CLI assistant |
-| [OpenClaw](references/openclaw.md) | Custom IDE integration |
-
-## Additional Resources
-
-| Resource | Description |
-|----------|-------------|
-| [IDE Migration](references/ide-migration.md) | Migrate skills between IDEs |
-| [Publishing](references/publishing.md) | How to publish skills |
-
 ## Verification
 
 After setup, verify in your IDE:
@@ -154,11 +120,6 @@ Search for repositories with "python" in name
 - Restart IDE after config changes
 - Clear MCP cache: `rm -rf ~/.claude/mcp*`
 - Check network connectivity
-
-### Skill Loading Issues
-- Verify `skills-repo` is accessible
-- Check skill format (SKILL.md with YAML frontmatter)
-- Ensure skill name matches trigger
 
 ## Related Skills
 
