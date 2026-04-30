@@ -1,6 +1,6 @@
 # antigravity MCP Setup
 
-Configure MCP servers in antigravity (字节跳动AI代码编辑器).
+Configure MCP servers in Google Antigravity IDE.
 
 ## Config Path
 
@@ -8,7 +8,7 @@ Configure MCP servers in antigravity (字节跳动AI代码编辑器).
 
 ## 简介
 
-antigravity 是字节跳动推出的 AI 代码编辑器，基于 IntelliJ 平台开发，深度集成豆包大模型，支持 MCP 协议扩展。
+Google Antigravity 是 Google 推出的 AI 优先 IDE，基于 Gemini 大模型，支持 MCP 协议扩展。
 
 ## Config Format
 
@@ -34,10 +34,6 @@ antigravity 是字节跳动推出的 AI 代码编辑器，基于 IntelliJ 平台
       "env": {
         "GITHUB_PERSONAL_ACCESS_TOKEN": "your-token"
       }
-    },
-    "filesystem": {
-      "command": "uvx",
-      "args": ["@modelcontextprotocol/server-filesystem", "/path/to/project"]
     }
   }
 }
@@ -55,37 +51,35 @@ mkdir -p .antigravity
 nano .antigravity/mcp.json
 ```
 
-3. Restart antigravity
+3. Restart Antigravity
 
 ## antigravity 特性
 
 | 特性 | 说明 |
 |------|------|
-| 平台 | 基于 IntelliJ |
-| AI 模型 | 豆包大模型 + Claude/GPT |
+| 开发商 | Google |
+| 主模型 | Gemini 3.1 Pro |
 | MCP 支持 | 完整支持 |
-| 代码补全 | 智能上下文感知 |
-| 代码审查 | AI 驱动 |
-| 多语言 | 中英双语 |
+| Agent Mode | Agent Manager |
+| 代码补全 | Tab autocomplete |
+| 命令 | Natural language code commands |
 
 ## 内置模型
 
 | 模型 | 来源 | 适用场景 |
 |------|------|----------|
-| 豆包 | 字节跳动 | 日常编码 |
-| Claude | Anthropic | 复杂任务 |
-| GPT-4 | OpenAI | 通用任务 |
-| 通义 | 阿里云 | 中文场景 |
-| DeepSeek | DeepSeek | 高性价比 |
+| Gemini 3.1 Pro | Google | 主模型 |
+| Claude | Anthropic | 备选 |
+| GPT-4 | OpenAI | 备选 |
 
-## 与 Trae/Trae CN 的区别
+## 与 Trae 的区别
 
-| 特性 | antigravity | Trae | Trae CN |
-|------|-------------|------|---------|
-| 开发商 | 字节跳动 | 字节跳动 | 字节跳动 |
-| 平台 | IntelliJ | Electron | Electron |
-| 主模型 | 豆包 | Claude/GPT | 通义/DeepSeek |
-| 定位 | 专业IDE | AI协作 | 中国市场 |
+| 特性 | antigravity | Trae |
+|------|-------------|------|
+| 开发商 | **Google** | 字节跳动 |
+| 主模型 | Gemini | Claude/GPT |
+| 平台 | Google | Electron |
+| Agent | Agent Manager | 内置 |
 
 ## Troubleshooting
 
