@@ -1,55 +1,48 @@
 # Sublime Merge MCP Setup
 
-Configure MCP servers in Sublime Merge.
+## MCP Support Status
 
-## Config Path
+**Sublime Merge 没有原生 MCP 支持。**
 
-`Packages/User/mcp.json`
+## Official Statement
 
-## Finding Your Packages Directory
+> "Currently, Sublime Merge does not have a plugin API, nor a built-in package manager."
+> — Sublime Merge Documentation
 
-1. Open Sublime Merge
-2. Preferences > Browse Packages
-3. Note the path (usually `~/.config/sublime-merge/Packages` on Linux)
+## Alternative: MCPServer Package
 
-## Config Format
+Sublime Merge 可以通过 Sublime Text 的 MCPServer 插件间接支持 MCP：
 
-```json
-{
-  "mcpServers": {
-    "server-name": {
-      "command": "uvx",
-      "args": ["mcp-server-package"]
-    }
-  }
-}
-```
+### For Sublime Text (not Merge)
 
-## Example: GitHub MCP
+1. 安装 Package Control
+2. 安装 MCPServer 包
+3. 配置 MCP 服务器
 
-```json
-{
-  "mcpServers": {
-    "github": {
-      "command": "uvx",
-      "args": ["@modelcontextprotocol/server-github"],
-      "env": {
-        "GITHUB_PERSONAL_ACCESS_TOKEN": "your-token"
-      }
-    }
-  }
-}
-```
+### Package Control
 
-## Setup Steps
+https://packagecontrol.io/packages/MCPServer
 
-1. Open Sublime Merge
-2. Preferences > Browse Packages
-3. Navigate to `User` folder
-4. Create/edit `mcp.json`
+## Alternative: Git GUI with MCP Support
 
-## Use Cases
+如果需要 Git GUI + MCP 支持:
 
-- Enhanced git history analysis
-- AI-powered commit message suggestions
+| Tool | MCP Support | Notes |
+|------|-------------|-------|
+| **Fork** | Via extension | macOS/Windows |
+| **GitKraken** | Via integration | Cross-platform |
+| **SourceTree** | ❌ | No MCP support |
+| **SmartGit** | ❌ | No MCP support |
+
+## Use Cases for Git GUI + MCP
+
+- AI-powered commit analysis
+- Code review suggestions
 - Repository insights
+
+## Recommendation
+
+对于 MCP + Git 功能，建议:
+1. 使用支持 MCP 的代码编辑器 (Cursor, Zed, Claude Code)
+2. 使用命令行 Git 配合 MCP 服务器
+3. 使用专门的 Git 分析 MCP 服务器

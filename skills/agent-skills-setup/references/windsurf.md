@@ -4,7 +4,10 @@ Configure MCP servers in Cascade IDE (Windsurf).
 
 ## Config Path
 
-`~/.windsurf/mcp.json` or project-level `.windsurf/mcp.json`
+| OS | Path |
+|----|------|
+| macOS/Linux | `~/.codeium/windsurf/mcp_config.json` |
+| Windows | `%USERPROFILE%\.codeium\windsurf\mcp_config.json` |
 
 ## Config Format
 
@@ -39,15 +42,21 @@ Configure MCP servers in Cascade IDE (Windsurf).
 
 1. Create config directory:
 ```bash
-mkdir -p ~/.windsurf
+mkdir -p ~/.codeium/windsurf
 ```
 
 2. Create/Edit config file:
 ```bash
-nano ~/.windsurf/mcp.json
+nano ~/.codeium/windsurf/mcp_config.json
 ```
 
 3. Restart Windsurf
+
+## UI 配置方式
+
+1. 打开 Windsurf 设置
+2. 找到 MCP Servers 部分
+3. 点击 "View raw config" 编辑配置文件
 
 ## Verification
 

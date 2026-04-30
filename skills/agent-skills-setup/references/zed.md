@@ -4,7 +4,9 @@ Configure MCP servers in Zed Editor.
 
 ## Config Path
 
-`~/.config/zed/mcp.json`
+`~/.config/zed/settings.json`
+
+**Note:** Zed uses the same `settings.json` for MCP configuration, not a separate `mcp.json` file.
 
 ## Config Format
 
@@ -39,9 +41,9 @@ Configure MCP servers in Zed Editor.
 mkdir -p ~/.config/zed
 ```
 
-2. Create config file:
+2. Create/Edit settings file:
 ```bash
-nano ~/.config/zed/mcp.json
+nano ~/.config/zed/settings.json
 ```
 
 3. Reload Zed window
@@ -49,6 +51,10 @@ nano ~/.config/zed/mcp.json
 ## Zed AI Features
 
 Zed includes built-in AI features. MCP support allows extending with custom servers.
+
+## Verification
+
+Check MCP servers in Zed Agent Panel settings view.
 
 ## Troubleshooting
 

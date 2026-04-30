@@ -1,57 +1,42 @@
 # Lapce MCP Setup
 
-Configure MCP servers in Lapce Editor.
+## MCP Support Status
 
-## Config Path
+**Lapce 目前没有原生 MCP 支持。**
 
-`~/.config/lapce/mcp.toml`
+## Current Alternatives
 
-## Config Format
+### Option 1: External MCP Client
 
-```toml
-[server.server-name]
-command = "uvx"
-args = ["mcp-server-package"]
+使用外部 MCP 客户端连接 Lapce:
 
-# With environment variables
-[server.github]
-command = "uvx"
-args = ["@modelcontextprotocol/server-github"]
-env = { GITHUB_PERSONAL_ACCESS_TOKEN = "your-token" }
-```
+1. 配置外部 MCP 服务器
+2. 使用 MCP 客户端工具连接
 
-## Setup Steps
+### Option 2: LSP-based Extensions
 
-1. Create config directory:
-```bash
-mkdir -p ~/.config/lapce
-```
-
-2. Create config file:
-```bash
-nano ~/.config/lapce/mcp.toml
-```
-
-3. Restart Lapce
-
-## Example: Complete Config
-
-```toml
-[server.github]
-command = "uvx"
-args = ["@modelcontextprotocol/server-github"]
-env = { GITHUB_PERSONAL_ACCESS_TOKEN = "ghp_xxx" }
-
-[server.filesystem]
-command = "uvx"
-args = ["@modelcontextprotocol/server-filesystem", "/home/user/projects"]
-```
+Lapce 支持 LSP (Language Server Protocol)，可以使用 LSP 扩展替代部分 MCP 功能。
 
 ## Lapce Features
 
-- Rust-based (fast)
-- GPU rendering
-- Remote development
-- Built-in terminal
-- LSP support
-- MCP for AI extensions
+| 特性 | 说明 |
+|------|------|
+| 平台 | Rust-based |
+| 性能 | GPU 渲染 |
+| 远程开发 | 支持 |
+| 终端 | 内置 |
+| LSP | 支持 |
+| MCP | ❌ 不支持 |
+
+## Alternative Editors with MCP Support
+
+如果需要 MCP 支持，建议使用:
+- **Cursor** - `~/.cursor/mcp.json`
+- **Zed** - `~/.config/zed/settings.json`
+- **Claude Code** - `~/.claude.json`
+
+## Future MCP Support
+
+Lapce 社区正在讨论 MCP 支持，可能在未来的版本中添加。
+
+跟踪进度: https://github.com/lapce/lapce/discussions
