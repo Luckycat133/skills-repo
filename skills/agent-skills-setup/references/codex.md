@@ -1,48 +1,68 @@
-# OpenAI Codex Skills Configuration
+# Codex CLI Configuration
 
-OpenAI Codex requires a specific structure to enable full UI and implicit invocation features.
+Configure MCP servers in OpenAI Codex CLI.
 
-## 1. Directory Scopes
+## Status
 
-### Global Scope
+✅ **Active** - Codex CLI was relaunched in 2025 with MCP support.
 
-- **Path**: `~/.codex/skills/`
-
-### Project Scope
-
-- **Path**: `<project-root>/.agents/skills/`
-
-## 2. Components of a Codex Skill
-
-Codex skills follow the standard structure but have one unique requirement for UI integration:
-
-- `SKILL.md`: **Required**. Metadata (name/description) + Instructions.
-- `agents/openai.yaml`: **Optional but Recommended**. Configures UI metadata and invocation policies.
-
-## 3. The `agents/openai.yaml` File
-
-This file must reside in an `agents/` subdirectory within the skill folder.
-
-```yaml
-interface:
-  display_name: "Skill Proper Name"
-  short_description: "Concise summary (25-64 chars)"
-policy:
-  allow_implicit_invocation: true # Default is true
-```
-
-## 4. Triggering and Discovery
-
-- **Implicit**: Codex automatically matches the prompt against the `description` in `SKILL.md`.
-- **Explicit**: Trigger via `$skill-name` or `/skills`.
-- **Precedence**: Project skills override global skills.
-
-## 5. Sync From Antigravity
-
-If Codex should mirror Antigravity global skills, run:
+## Installation
 
 ```bash
-~/.gemini/antigravity/skills/agent-skills-setup/scripts/sync-global-skills.sh --targets codex
+# Install Codex CLI
+npm install -g @openai/codex
+
+# Or via official installer
+curl -sLS https://github.com/openai/codex/releases/latest/download/codex-linux-x64 -o codex
+chmod +x codex
+mv codex /usr/local/bin/
 ```
 
-The sync script preserves Codex internal `.system/` content while updating user-managed skills.
+## Configuration
+
+**Location**: `~/.codex/settings.json`
+
+```json
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_TOKEN": "your_token"
+      }
+    }
+  }
+}
+```
+
+## Usage
+
+```bash
+# Start Codex
+codex
+
+# Or with specific model
+codex --model gpt-5-codex
+```
+
+## MCP Integration
+
+Codex CLI supports MCP tool calls for:
+- File operations
+- Git operations
+- Database access
+- Custom tools
+
+## History
+
+- **2023**: Original Codex API deprecated
+- **2025**: Codex CLI relaunched with GPT-5 models
+- **2025.09**: Major update with GPT-5.5 model
+
+## Verification
+
+```bash
+codex --version
+codex mcp list
+```
