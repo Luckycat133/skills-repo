@@ -75,13 +75,21 @@ nano .trae/mcp.json
 
 ## Trae CN 特性
 
-- 基于 IntelliJ 平台
+- 基于 Electron 平台
 - AI 驱动的代码补全
 - 智能代码审查
 - MCP 协议支持
 - 内置终端
 - Git 集成
 - 多语言支持
+
+## 与 antigravity 对比
+
+| 特性 | Trae/Trae CN | antigravity |
+|------|-------------|-------------|
+| 开发商 | 字节跳动 | Google |
+| 主模型 | Claude/GPT/通义 | Gemini |
+| 平台 | Electron | Google |
 
 ## 版本历史
 
