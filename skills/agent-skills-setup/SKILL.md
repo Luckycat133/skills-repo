@@ -22,10 +22,10 @@ This skill helps you configure various AI-powered IDEs to use skills from your c
 |-----|--------------|-----|--------|
 | Claude Code | ⭐⭐⭐⭐⭐ | Native | Full |
 | Trae | ⭐⭐⭐⭐ | Native | Full |
-| VSCode Copilot | ⭐⭐⭐ | Extension | Partial |
 | Cursor | ⭐⭐⭐⭐ | Native | Full |
-| JetBrains AI | ⭐⭐⭐ | Plugin | Partial |
 | Continue | ⭐⭐⭐⭐ | Native | Full |
+| VSCode Copilot | ⭐⭐⭐ | Extension | Partial |
+| JetBrains AI | ⭐⭐⭐ | Plugin | Partial |
 | Amazon Q | ⭐⭐⭐ | Native | Partial |
 | Gemini Code Assist | ⭐⭐⭐ | MCP | Partial |
 | Codex | ⭐⭐⭐ | CLI | Limited |
@@ -46,9 +46,6 @@ Generate a Personal Access Token:
 ```bash
 # Node.js (for npx)
 node --version  # >= 18
-
-# Hermes CLI (optional, for advanced features)
-npm install -g @anthropic/hermes-cli
 ```
 
 ### Step 3: Configure MCP
@@ -73,8 +70,9 @@ Configuration file locations:
 - **Claude Code**: `~/.claude/mcp.json`
 - **Trae**: `~/.trae/mcp.json`
 - **Cursor**: `~/.cursor/mcp.json`
-- **VSCode**: `.vscode/mcp.json` (workspace) or `~/.config/Code/User/globalStorage/` (user)
+- **VSCode**: `.vscode/mcp.json` (workspace) or user settings
 - **Continue**: `~/.continue/config.json`
+- **JetBrains**: `.jetbrains.mcp.json`
 
 ### Step 4: Verify Connection
 
@@ -108,89 +106,27 @@ curl -H "Authorization: token $GITHUB_TOKEN" \
 | `skill_view` | Load skill content |
 | `skill_list` | List available skills |
 
-### Utility Tools
-
-| Tool | Description |
-|------|-------------|
-| `memory` | Persistent memory |
-| `terminal` | Shell commands |
-| `execute_code` | Python script execution |
-| `delegate_task` | Spawn subagents |
-
-## Configuration Examples
-
-### Claude Code (Recommended)
-
-```bash
-# Create config directory
-mkdir -p ~/.claude
-
-# Create MCP config
-cat > ~/.claude/mcp.json << 'EOF'
-{
-  "mcpServers": {
-    "github": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-github"],
-      "env": {
-        "GITHUB_TOKEN": "ghp_your_token_here"
-      }
-    }
-  }
-}
-EOF
-```
-
-Run: `claude --acp --stdio`
-
-### Trae (Chinese Interface)
-
-```bash
-mkdir -p ~/.trae
-cat > ~/.trae/mcp.json << 'EOF'
-{
-  "mcpServers": {
-    "github": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-github"],
-      "env": {
-        "GITHUB_TOKEN": "ghp_your_token_here"
-      }
-    }
-  }
-}
-EOF
-```
-
-### VSCode Copilot
-
-Add to `.vscode/mcp.json`:
-```json
-{
-  "mcpServers": {
-    "github": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-github"],
-      "env": {
-        "GITHUB_TOKEN": "ghp_your_token_here"
-      }
-    }
-  }
-}
-```
-
 ## References (IDE-Specific Guides)
 
-- [Claude Code Setup](references/claude-code.md) - Primary IDE with full ACP support
-- [Trae Setup](references/trae.md) - Chinese-friendly IDE with MCP support
-- [VSCode Copilot Setup](references/vscode-copilot.md) - Microsoft Copilot integration
-- [JetBrains AI Setup](references/jetbrains-ai.md) - IntelliJ/PyCharm AI Assistant
-- [Cursor Setup](references/cursor.md) - AI-first code editor
-- [Continue Setup](references/continue.md) - Open-source AI assistant
-- [Amazon Q Setup](references/amazon-q.md) - AWS integrated AI assistant
-- [Gemini Code Assist](references/gemini-code-assist.md) - Google Cloud AI assistant
-- [Codex Setup](references/codex.md) - OpenAI's CLI assistant
-- [OpenClaw Setup](references/openclaw.md) - Custom IDE integration
+| Guide | Description |
+|-------|-------------|
+| [Claude Code](references/claude-code.md) | Primary IDE with full ACP support |
+| [Trae](references/trae.md) | Chinese-friendly IDE with MCP support |
+| [Cursor](references/cursor.md) | AI-first code editor |
+| [Continue](references/continue.md) | Open-source AI assistant |
+| [VSCode Copilot](references/vscode-copilot.md) | Microsoft Copilot integration |
+| [JetBrains AI](references/jetbrains-ai.md) | IntelliJ/PyCharm AI Assistant |
+| [Amazon Q](references/amazon-q.md) | AWS integrated AI assistant |
+| [Gemini Code Assist](references/gemini-code-assist.md) | Google Cloud AI assistant |
+| [Codex](references/codex.md) | OpenAI's CLI assistant |
+| [OpenClaw](references/openclaw.md) | Custom IDE integration |
+
+## Additional Resources
+
+| Resource | Description |
+|----------|-------------|
+| [IDE Migration](references/ide-migration.md) | Migrate skills between IDEs |
+| [Publishing](references/publishing.md) | How to publish skills |
 
 ## Verification
 
@@ -223,18 +159,6 @@ Search for repositories with "python" in name
 - Verify `skills-repo` is accessible
 - Check skill format (SKILL.md with YAML frontmatter)
 - Ensure skill name matches trigger
-
-## Advanced: Skills Sync
-
-To sync skills from repo to local:
-
-```bash
-# Clone skills repo
-git clone https://github.com/Luckycat133/skills-repo.git ~/.hermes/skills
-
-# Or use Hermes CLI
-hermes-cli sync --from Luckycat133/skills-repo
-```
 
 ## Related Skills
 
