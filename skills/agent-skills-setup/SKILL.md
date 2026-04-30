@@ -21,47 +21,47 @@ Configure Model Context Protocol (MCP) servers across popular AI-powered IDEs.
 
 ### Primary Editors (CLI & Desktop)
 
-| IDE | Type | MCP Support | Config Path | Last Updated |
-|-----|------|-------------|-------------|--------------|
-| [Claude Code](#claude-code) | CLI | Full | `~/.claude.json` | 2025-03 |
-| [Cursor](#cursor) | Desktop | Full | `~/.cursor/mcp.json` | 2025-03 |
-| [JetBrains AI](#jetbrains-ai) | Desktop | Full | `~/.jetbrains.mcp.json` | 2025-03 |
-| [Trae](#trae) | Desktop | Full | `.trae/mcp.json` | 2025-03 |
-| [Trae CN](#trae-cn) | Desktop | Full | `.trae/mcp.json` | 2025-03 |
-| [antigravity](#antigravity) | Desktop | Full | `.antigravity/mcp.json` | 2025-03 |
-| [Windsurf](#windsurf) | Desktop | Full | `.windsurf/mcp.json` | 2025-03 |
-| [Zed](#zed) | Desktop | Full | `~/.config/zed/mcp.json` | 2025-03 |
-| [Helix](#helix) | Terminal | Full | `~/.config/helix/MCP.toml` | 2025-03 |
-| [Lapce](#lapce) | Desktop | Full | `~/.config/lapce/mcp.toml` | 2025-03 |
+| IDE | Developer | MCP Support | Config Path | Last Updated |
+|-----|-----------|-------------|-------------|--------------|
+| [Claude Code](#claude-code) | Anthropic | Full | `~/.claude.json` | 2025-03 |
+| [Cursor](#cursor) | Cursor | Full | `~/.cursor/mcp.json` | 2025-03 |
+| [JetBrains AI](#jetbrains-ai) | JetBrains | Full | `~/.jetbrains.mcp.json` | 2025-03 |
+| [Trae](#trae) | ByteDance | Full | `.trae/mcp.json` | 2025-03 |
+| [Trae CN](#trae-cn) | ByteDance | Full | `.trae/mcp.json` | 2025-03 |
+| [antigravity](#antigravity) | **Google** | Full | `.antigravity/mcp.json` | 2025-03 |
+| [Windsurf](#windsurf) | Codeium | Full | `.windsurf/mcp.json` | 2025-03 |
+| [Zed](#zed) | Zed | Full | `~/.config/zed/mcp.json` | 2025-03 |
+| [Helix](#helix) | Helix | Full | `~/.config/helix/MCP.toml` | 2025-03 |
+| [Lapce](#lapce) | Lapce | Full | `~/.config/lapce/mcp.toml` | 2025-03 |
 
 ### Cloud & Web IDEs
 
-| IDE | Type | MCP Support | Config Path | Last Updated |
-|-----|------|-------------|-------------|--------------|
-| [GitHub Codespaces](#github-codespaces) | Cloud | Full | `.devcontainer.json` | 2025-03 |
-| [StackBlitz](#stackblitz) | Cloud | Partial | Via extension | 2025-03 |
-| [Gitpod](#gitpod) | Cloud | Full | `.gitpod.yml` | 2025-03 |
-| [Replit](#replit) | Cloud | Full | Via secrets | 2025-03 |
-| [CodeSandbox](#codesandbox) | Cloud | Partial | Via extension | 2025-03 |
+| IDE | Developer | MCP Support | Config Path | Last Updated |
+|-----|-----------|-------------|-------------|--------------|
+| [GitHub Codespaces](#github-codespaces) | GitHub | Full | `.devcontainer.json` | 2025-03 |
+| [StackBlitz](#stackblitz) | StackBlitz | Partial | Via extension | 2025-03 |
+| [Gitpod](#gitpod) | Gitpod | Full | `.gitpod.yml` | 2025-03 |
+| [Replit](#replit) | Replit | Full | Via secrets | 2025-03 |
+| [CodeSandbox](#codesandbox) | CodeSandbox | Partial | Via extension | 2025-03 |
 
 ### Enterprise & Team IDEs
 
-| IDE | Type | MCP Support | Config Path | Last Updated |
-|-----|------|-------------|-------------|--------------|
-| [VS Code + Copilot](#vs-code-copilot) | Desktop | Partial | `.vscode/mcp.json` | 2025-03 |
-| [Amazon Q](#amazon-q) | Desktop | Full | `.amazonq/mcp.json` | 2025-03 |
-| [Gemini CLI](#gemini-cli) | CLI | Full | `~/.gemini/settings.json` | 2025-03 |
-| [Codex](#codex) | CLI | Full | `~/.codex/settings.json` | 2025-03 |
+| IDE | Developer | MCP Support | Config Path | Last Updated |
+|-----|-----------|-------------|-------------|--------------|
+| [VS Code + Copilot](#vs-code-copilot) | Microsoft | Partial | `.vscode/mcp.json` | 2025-03 |
+| [Amazon Q](#amazon-q) | AWS | Full | `.amazonq/mcp.json` | 2025-03 |
+| [Gemini CLI](#gemini-cli) | Google | Full | `~/.gemini/settings.json` | 2025-03 |
+| [Codex](#codex) | OpenAI | Full | `~/.codex/settings.json` | 2025-03 |
 
 ### Legacy & Specialized
 
-| IDE | Type | MCP Support | Config Path | Last Updated |
-|-----|------|-------------|-------------|--------------|
-| [Sublime Merge](#sublime-merge) | Git UI | Full | `Packages/User/mcp.json` | 2025-03 |
-| [Nova](#nova) | Desktop (macOS) | Full | Nova extensions path | 2025-03 |
-| [Forge](#forge) | Desktop | Full | `.forge/mcp.json` | 2025-03 |
-| [BBEdit](#bbedit) | Text Editor | Partial | Via extension | 2025-03 |
-| [Zulip](#zulip) | Chat | Partial | Via webhook | 2025-03 |
+| IDE | Developer | MCP Support | Config Path | Last Updated |
+|-----|-----------|-------------|-------------|--------------|
+| [Sublime Merge](#sublime-merge) | Sublime HQ | Full | `Packages/User/mcp.json` | 2025-03 |
+| [Nova](#nova) | Panic | Full | Nova extensions path | 2025-03 |
+| [Forge](#forge) | Forge | Full | `.forge/mcp.json` | 2025-03 |
+| [BBEdit](#bbedit) | Bare Bones | Partial | Via extension | 2025-03 |
+| [Zulip](#zulip) | Zulip | Partial | Via webhook | 2025-03 |
 
 ## Installation Methods
 
@@ -95,6 +95,7 @@ pip install mcp-server-package
 
 ## Trae
 
+**Developer:** ByteDance
 **Path:** `.trae/mcp.json`
 
 ### Config Format
@@ -114,17 +115,11 @@ pip install mcp-server-package
 
 Added Agent Mode with enhanced MCP support.
 
-### Setup
-
-```bash
-mkdir -p .trae
-nano .trae/mcp.json
-```
-
 ---
 
 ## Trae CN
 
+**Developer:** ByteDance
 **Path:** `.trae/mcp.json` (same as Trae)
 
 ### 区别
@@ -137,57 +132,16 @@ nano .trae/mcp.json
 | 模型来源 | OpenAI/Anthropic | OpenAI/阿里/DeepSeek |
 | MCP配置 | 相同 | 相同 |
 
-### Config Format
-
-```json
-{
-  "mcpServers": {
-    "github": {
-      "command": "uvx",
-      "args": ["@modelcontextprotocol/server-github"],
-      "env": {
-        "GITHUB_PERSONAL_ACCESS_TOKEN": "your-token"
-      }
-    },
-    "filesystem": {
-      "command": "uvx",
-      "args": ["@modelcontextprotocol/server-filesystem", "/path/to/project"]
-    }
-  }
-}
-```
-
-### Setup
-
-1. Create `.trae` folder in project root:
-```bash
-mkdir -p .trae
-```
-
-2. Create MCP config:
-```bash
-nano .trae/mcp.json
-```
-
-3. Restart Trae CN
-
-### 内置模型 (Trae CN)
-
-- Claude 3.5 Sonnet
-- GPT-4o
-- 通义千问 (Qwen)
-- DeepSeek Chat
-- Gemini Pro
-
 ---
 
 ## antigravity
 
+**Developer:** Google
 **Path:** `.antigravity/mcp.json`
 
 ### 简介
 
-antigravity 是字节跳动推出的 AI 代码编辑器，基于 IntelliJ 平台，支持 MCP 协议。
+Google Antigravity 是 Google 推出的 AI 优先 IDE，基于 Gemini 大模型，支持 MCP 协议扩展。
 
 ### Config Format
 
@@ -218,107 +172,48 @@ antigravity 是字节跳动推出的 AI 代码编辑器，基于 IntelliJ 平台
 }
 ```
 
-### Setup
+### antigravity 特性
 
-1. Create config directory:
-```bash
-mkdir -p .antigravity
-```
-
-2. Create MCP config:
-```bash
-nano .antigravity/mcp.json
-```
-
-3. Restart antigravity
-
-### 特性
-
-- 基于 IntelliJ 平台
-- 深度集成豆包大模型
-- 支持 Claude/GPT 等外部模型
-- MCP 协议支持
-- 智能代码补全
-- 代码审查
+| 特性 | 说明 |
+|------|------|
+| 主模型 | Gemini 3.1 Pro |
+| Agent Mode | Agent Manager |
+| 代码补全 | Tab autocomplete |
+| 命令 | Natural language code commands |
 
 ---
 
 ## Windsurf
 
+**Developer:** Codeium
 **Path:** `.windsurf/mcp.json`
-
-### Config Format
-
-```json
-{
-  "mcpServers": {
-    "server-name": {
-      "command": "uvx",
-      "args": ["mcp-server-package"]
-    }
-  }
-}
-```
 
 ---
 
 ## Zed
 
+**Developer:** Zed
 **Path:** `~/.config/zed/mcp.json`
-
-### Config Format
-
-```json
-{
-  "mcpServers": {
-    "server-name": {
-      "command": "uvx",
-      "args": ["mcp-server-package"]
-    }
-  }
-}
-```
 
 ---
 
 ## Claude Code
 
+**Developer:** Anthropic
 **Path:** `~/.claude.json`
-
-```bash
-cat >> ~/.claude.json << 'EOF'
-{
-  "mcpServers": {
-    "server-name": {
-      "command": "uvx",
-      "args": ["mcp-server-package", "--key", "value"]
-    }
-  }
-}
-EOF
-```
 
 ---
 
 ## Cursor
 
+**Developer:** Cursor
 **Path:** `~/.cursor/mcp.json`
-
-```json
-{
-  "mcpServers": {
-    "server-name": {
-      "command": "uvx",
-      "args": ["mcp-server-package"]
-    }
-  }
-}
-```
 
 ---
 
 ## JetBrains AI
 
+**Developer:** JetBrains
 **Path:** `~/.jetbrains.mcp.json`
 
 Supported: IntelliJ IDEA, PyCharm, WebStorm, PhpStorm, RubyMine, GoLand, CLion, Rider, DataSpell, DataGrip
@@ -327,18 +222,21 @@ Supported: IntelliJ IDEA, PyCharm, WebStorm, PhpStorm, RubyMine, GoLand, CLion, 
 
 ## Gemini CLI
 
+**Developer:** Google
 **Path:** `~/.gemini/settings.json`
 
 ---
 
 ## Codex
 
+**Developer:** OpenAI
 **Path:** `~/.codex/settings.json`
 
 ---
 
 ## Helix
 
+**Developer:** Helix
 **Path:** `~/.config/helix/MCP.toml`
 
 ```toml
@@ -351,91 +249,91 @@ args = ["mcp-server-package"]
 
 ## Lapce
 
+**Developer:** Lapce
 **Path:** `~/.config/lapce/mcp.toml`
 
 ---
 
 ## Sublime Merge
 
+**Developer:** Sublime HQ
 **Path:** `Packages/User/mcp.json`
 
 ---
 
 ## Nova
 
+**Developer:** Panic
 **Path:** `~/Library/Application Support/Nova/extensions/mcp-servers.json`
 
 ---
 
 ## Forge
 
+**Developer:** Forge
 **Path:** `.forge/mcp.json`
 
 ---
 
 ## BBEdit
 
-Partial support via extension.
+**Developer:** Bare Bones
+**Partial support** via extension.
 
 ---
 
 ## GitHub Codespaces
 
+**Developer:** GitHub
 **Path:** `.devcontainer.json`
-
-```json
-{
-  "features": {
-    "ghcr.io/microsoft/vscode/devcontainers/features/mcp": {}
-  }
-}
-```
 
 ---
 
 ## StackBlitz
 
-Partial - via WebContainer extension.
+**Developer:** StackBlitz
+**Partial** - via WebContainer extension.
 
 ---
 
 ## Gitpod
 
+**Developer:** Gitpod
 **Path:** `.gitpod.yml`
-
-```yaml
-tasks:
-  - init: npx -y @modelcontextprotocol/server-* && exit
-```
 
 ---
 
 ## Replit
 
-Configure via Secrets panel.
+**Developer:** Replit
+**Configuration:** Via Secrets panel.
 
 ---
 
 ## CodeSandbox
 
-Partial - via extension.
+**Developer:** CodeSandbox
+**Partial** - via extension.
 
 ---
 
 ## VS Code + Copilot
 
+**Developer:** Microsoft
 **Path:** `.vscode/mcp.json` (Insiders) or via Continue/Cline extensions.
 
 ---
 
 ## Amazon Q
 
+**Developer:** AWS
 **Path:** `.amazonq/mcp.json`
 
 ---
 
 ## Zulip
 
+**Developer:** Zulip
 Via webhook integration.
 
 ---
