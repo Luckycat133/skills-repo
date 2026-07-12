@@ -262,6 +262,7 @@ This repository includes a dedicated helper:
 
 ```bash
 bash skills/agent-skills-setup/scripts/auto-configure-openclaw-skills.sh \
+  --yes \
   --scope both \
   --agent home:~/.openclaw/workspace-home \
   --agent work:~/.openclaw/workspace-work \
@@ -386,6 +387,10 @@ OPENCLAW_CONFIG_PATH=/tmp/openclaw-test-state/openclaw.json \
 AGENT_SKILLS_OPENCLAW_DIR=/tmp/openclaw-test-state/skills \
 bash skills/agent-skills-setup/scripts/auto-configure-openclaw-skills.sh --dry-run
 ```
+
+The script refuses global installs, config writes, and replacement syncs unless `--yes` is supplied. Review `--dry-run` output first; existing skill directories and config files receive timestamped `.bak.*` copies before replacement.
+
+该脚本在未提供 `--yes` 时会拒绝全局安装、配置写入和替换同步。请先审查 `--dry-run` 输出；替换前，已有技能目录和配置文件会生成带时间戳的 `.bak.*` 备份。
 
 Important note: even with isolated config paths, `openclaw doctor` may still observe or interact with machine-global gateway state such as a running local service or LaunchAgent. Use dry runs first when non-interference matters.
 

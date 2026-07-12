@@ -88,6 +88,7 @@ AGENT_SKILLS_SOURCE_DIR="$SOURCE_DIR" \
 OPENCLAW_STATE_DIR="$TEST_HOME/.openclaw" \
 OPENCLAW_CONFIG_PATH="$CONFIG_PATH" \
 bash "$SCRIPT_DIR/auto-configure-openclaw-skills.sh" \
+    --yes \
     --skip-openclaw-install \
     --skip-clawhub-install \
     --managed-dir "$OPENCLAW_DIR" \

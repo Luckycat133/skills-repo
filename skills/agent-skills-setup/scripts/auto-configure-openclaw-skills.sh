@@ -15,6 +15,7 @@ WATCH=1
 WATCH_DEBOUNCE_MS=250
 SCOPE="both"
 DRY_RUN=0
+CONFIRM_WRITE=0
 SKIP_OPENCLAW_INSTALL=0
 SKIP_CLAWHUB_INSTALL=0
 SKIP_DOCTOR=0
@@ -52,8 +53,9 @@ Options:
   --watch-debounce-ms <ms>      Configure skills.load.watchDebounceMs. Default: 250.
   --skip-openclaw-install       Do not install OpenClaw automatically.
   --skip-clawhub-install        Do not install ClawHub automatically.
-    --skip-doctor                 Do not run `openclaw doctor` after applying changes.
+  --skip-doctor                 Do not run `openclaw doctor` after applying changes.
   --dry-run                     Print planned commands without changing the system.
+  --yes                         Confirm global installs, config writes, and replacement syncs.
   -h, --help                    Show this help text.
 EOF
 }
@@ -226,6 +228,10 @@ while [[ $# -gt 0 ]]; do
             DRY_RUN=1
             shift
             ;;
+        --yes)
+            CONFIRM_WRITE=1
+            shift
+            ;;
         -h|--help)
             usage
             exit 0
@@ -248,6 +254,10 @@ if [[ ${#REQUESTED_SKILLS[@]} -eq 0 ]]; then
 fi
 
 [[ ${#REQUESTED_SKILLS[@]} -gt 0 ]] || die "No skills selected"
+
+if [[ $DRY_RUN -eq 0 && $CONFIRM_WRITE -eq 0 ]]; then
+    die "Refusing global changes without --yes. Run once with --dry-run, review the plan, then rerun with --yes."
+fi
 
 for skill_name in "${REQUESTED_SKILLS[@]}"; do
     [[ -d "$SOURCE_DIR/$skill_name" ]] || die "Requested skill not found: $SOURCE_DIR/$skill_name"
@@ -330,6 +340,9 @@ sync_skill_dir() {
     local destination_root="$2"
     local destination_dir="$destination_root/$skill_name"
 
+    if [[ -d "$destination_dir" ]]; then
+        run_cmd cp -a "$destination_dir" "${destination_dir}.bak.$(date +%Y%m%d%H%M%S).$$"
+    fi
     run_cmd mkdir -p "$destination_root"
     run_cmd rsync -a --delete "$SOURCE_DIR/$skill_name/" "$destination_dir/"
 }
@@ -663,6 +676,10 @@ patch_openclaw_config() {
     requested_skills_json="$(build_json_array REQUESTED_SKILLS)"
 
     run_cmd mkdir -p "$(dirname "$CONFIG_PATH")"
+
+    if [[ -f "$CONFIG_PATH" ]]; then
+        run_cmd cp -a "$CONFIG_PATH" "${CONFIG_PATH}.bak.$(date +%Y%m%d%H%M%S).$$"
+    fi
 
     if [[ $DRY_RUN -eq 1 ]]; then
         log "+ patch OpenClaw config: $CONFIG_PATH"
