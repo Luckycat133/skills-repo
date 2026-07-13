@@ -12,6 +12,9 @@ FAKE_BIN="$TMP_ROOT/bin"
 CONFIG_PATH="$TEST_HOME/.openclaw/openclaw.json"
 NPM_LOG="$TMP_ROOT/npm.log"
 OPENCLAW_LOG="$TMP_ROOT/openclaw.log"
+DOWNLOAD_SOURCE="$TMP_ROOT/download-source"
+DOWNLOAD_ARCHIVE="$TMP_ROOT/download-cli.tar.gz"
+DOWNLOAD_TARGET="$TMP_ROOT/download-target"
 
 cleanup() {
     rm -rf "$TMP_ROOT"
@@ -46,6 +49,26 @@ metadata: {"openclaw":{"requires":{"bins":["demo-cli"]},"install":[{"kind":"node
 ---
 
 # Demo
+
+Test skill.
+EOF
+
+mkdir -p "$SOURCE_DIR/download-demo" "$DOWNLOAD_SOURCE"
+cat > "$DOWNLOAD_SOURCE/download-cli" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+chmod +x "$DOWNLOAD_SOURCE/download-cli"
+tar -czf "$DOWNLOAD_ARCHIVE" -C "$DOWNLOAD_SOURCE" download-cli
+DOWNLOAD_SHA256="$(shasum -a 256 "$DOWNLOAD_ARCHIVE" | awk '{print $1}')"
+cat > "$SOURCE_DIR/download-demo/SKILL.md" <<EOF
+---
+name: download-demo
+description: Demo checksum-verified download installer.
+metadata: {"openclaw":{"requires":{"bins":["download-cli"]},"install":[{"kind":"download","url":"file://$DOWNLOAD_ARCHIVE","archive":"tar.gz","targetDir":"$DOWNLOAD_TARGET","bins":["download-cli"],"sha256":"$DOWNLOAD_SHA256"}]}}
+---
+
+# Download Demo
 
 Test skill.
 EOF
@@ -95,7 +118,7 @@ bash "$SCRIPT_DIR/auto-configure-openclaw-skills.sh" \
     --workspace "$WORKSPACE_DIR" \
     --agent home:"$WORKSPACE_DIR" \
     --default-agent home \
-    --skills demo \
+    --skills demo,download-demo \
     --env demo:DEMO_TOKEN=123 \
     --api-key-env demo:DEMO_TOKEN
 
@@ -106,6 +129,27 @@ assert_contains "$CONFIG_PATH" '"nodeManager": "npm"'
 assert_contains "$CONFIG_PATH" '"DEMO_TOKEN": "123"'
 assert_contains "$NPM_LOG" 'install -g demo-cli@1.0.0'
 assert_contains "$OPENCLAW_LOG" 'doctor'
+assert_file_exists "$DOWNLOAD_TARGET/download-cli"
+assert_file_exists "$TEST_HOME/.openclaw/bin/download-cli"
+
+perl -0pi -e 's/"sha256":"[0-9a-f]{64}"/"sha256":"0000000000000000000000000000000000000000000000000000000000000000"/' \
+    "$SOURCE_DIR/download-demo/SKILL.md"
+rm "$TEST_HOME/.openclaw/bin/download-cli"
+if OPENCLAW_STATE_DIR="$TEST_HOME/.openclaw" \
+    OPENCLAW_CONFIG_PATH="$CONFIG_PATH" \
+    AGENT_SKILLS_SOURCE_DIR="$SOURCE_DIR" \
+    bash "$SCRIPT_DIR/auto-configure-openclaw-skills.sh" \
+        --yes \
+        --skip-openclaw-install \
+        --skip-clawhub-install \
+        --skip-doctor \
+        --managed-dir "$OPENCLAW_DIR" \
+        --scope managed \
+        --skills download-demo >"$TMP_ROOT/checksum-failure.log" 2>&1; then
+    echo "ASSERT FAIL: expected mismatched download checksum to fail" >&2
+    exit 1
+fi
+assert_contains "$TMP_ROOT/checksum-failure.log" 'SHA-256 mismatch for download-demo download'
 
 printf '\nUpdated by test run.\n' >> "$SOURCE_DIR/demo/SKILL.md"
 

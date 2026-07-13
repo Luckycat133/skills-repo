@@ -82,6 +82,20 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+sha256_file() {
+    local file_path="$1"
+
+    if command_exists sha256sum; then
+        sha256sum "$file_path" | awk '{print $1}'
+    elif command_exists shasum; then
+        shasum -a 256 "$file_path" | awk '{print $1}'
+    elif command_exists openssl; then
+        openssl dgst -sha256 "$file_path" | awk '{print $NF}'
+    else
+        die "A SHA-256 tool is required (sha256sum, shasum, or openssl)"
+    fi
+}
+
 parse_bool() {
     local lowered
 
@@ -483,7 +497,7 @@ has_all_bins() {
 
     while IFS= read -r bin_name; do
         [[ -z "$bin_name" ]] && continue
-        if ! command_exists "$bin_name"; then
+        if ! command_exists "$bin_name" && [[ ! -x "$BIN_DIR/$bin_name" ]]; then
             return 1
         fi
     done < <(printf '%s' "$bins_json" | node -e 'const bins=JSON.parse(require("node:fs").readFileSync(0,"utf8")); for (const bin of bins) console.log(bin);')
@@ -494,7 +508,7 @@ has_all_bins() {
 install_download_spec() {
     local skill_name="$1"
     local spec_json="$2"
-    local url archive extract strip_components target_dir bins_json
+    local url archive extract strip_components target_dir bins_json expected_sha256 actual_sha256
     local tmp_dir archive_path extract_dir link_target bin_name
 
     url="$(json_get "$spec_json" url)"
@@ -503,9 +517,14 @@ install_download_spec() {
     strip_components="$(json_get "$spec_json" stripComponents)"
     target_dir="$(json_get "$spec_json" targetDir)"
     bins_json="$(json_get "$spec_json" bins)"
+    expected_sha256="$(json_get "$spec_json" sha256)"
 
     [[ -n "$url" ]] || die "Download installer for $skill_name is missing url"
     [[ -n "$target_dir" ]] || target_dir="$TOOLS_DIR/$skill_name"
+
+    if [[ -n "$expected_sha256" && ! "$expected_sha256" =~ ^[[:xdigit:]]{64}$ ]]; then
+        die "Download installer for $skill_name has an invalid sha256 value"
+    fi
 
     tmp_dir="$(mktemp -d /tmp/openclaw-skill-download.XXXXXX)"
     archive_path="$tmp_dir/archive"
@@ -513,12 +532,31 @@ install_download_spec() {
 
     if [[ $DRY_RUN -eq 1 ]]; then
         log "+ download $url -> $target_dir"
+        if [[ -n "$expected_sha256" ]]; then
+            log "+ verify sha256 $expected_sha256"
+        else
+            log "WARN: Download installer for $skill_name has no sha256; integrity cannot be verified"
+        fi
         rm -rf "$tmp_dir"
         return 0
     fi
 
-    mkdir -p "$target_dir" "$extract_dir" "$BIN_DIR"
+    mkdir -p "$extract_dir" "$BIN_DIR"
     curl -fsSL "$url" -o "$archive_path"
+
+    if [[ -n "$expected_sha256" ]]; then
+        actual_sha256="$(sha256_file "$archive_path")"
+        expected_sha256="$(printf '%s' "$expected_sha256" | tr '[:upper:]' '[:lower:]')"
+        actual_sha256="$(printf '%s' "$actual_sha256" | tr '[:upper:]' '[:lower:]')"
+        if [[ "$actual_sha256" != "$expected_sha256" ]]; then
+            rm -rf "$tmp_dir"
+            die "SHA-256 mismatch for $skill_name download: expected $expected_sha256, got $actual_sha256"
+        fi
+    else
+        log "WARN: Download installer for $skill_name has no sha256; integrity was not verified"
+    fi
+
+    mkdir -p "$target_dir"
 
     if [[ "$extract" == "true" || -n "$archive" ]]; then
         case "$archive" in

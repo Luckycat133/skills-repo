@@ -241,7 +241,7 @@ metadata: {"openclaw":{"emoji":"🧲","requires":{"bins":["gifgrep"]},"install":
 | `node` | `package`, `bins`, `label`, `os` |
 | `go` | `module`, `bins`, `label`, `os` |
 | `uv` | `package`, `bins`, `label`, `os` |
-| `download` | `url`, `archive`, `extract`, `stripComponents`, `targetDir`, `bins`, `label`, `os` |
+| `download` | `url`, `sha256`, `archive`, `extract`, `stripComponents`, `targetDir`, `bins`, `label`, `os` |
 
 Notes:
 
@@ -251,6 +251,8 @@ Notes:
 - 存在多个安装器时，OpenClaw 优先使用 `brew`，否则通常回落到 `node`。
 - `download` installers default to `~/.openclaw/tools/<skillKey>` if `targetDir` is omitted.
 - `download` 安装器在未指定 `targetDir` 时，默认解压到 `~/.openclaw/tools/<skillKey>`。
+- Set `sha256` to the expected 64-character SHA-256 digest. The helper verifies it before extracting or writing to `targetDir`; legacy specs without it emit a warning.
+- 请把 `sha256` 设为预期的 64 位 SHA-256 摘要。辅助脚本会在解压或写入 `targetDir` 前完成校验；旧版未提供该字段的配置会输出警告。
 - `skills.install.nodeManager` affects skill dependency installs, not the OpenClaw runtime itself.
 - `skills.install.nodeManager` 只控制 skill 依赖安装，不控制 OpenClaw 运行时本身的安装方式。
 
