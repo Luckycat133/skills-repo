@@ -1,5 +1,7 @@
 # Skills Repository
 
+> Status: Active Development · Canonical Skill Source
+
 [![GitHub Repo](https://img.shields.io/badge/GitHub-Luckycat133%2Fskills--repo-181717?logo=github)](https://github.com/Luckycat133/skills-repo)
 [![License](https://img.shields.io/badge/License-MIT-0b7285.svg)](LICENSE)
 [![OpenClaw Ready](https://img.shields.io/badge/OpenClaw-Ready-1f7a8c)](skills/agent-skills-setup/references/openclaw.md)
@@ -8,9 +10,9 @@ AI Assistant Capabilities (formerly skills) with a local-first authoring workflo
 
 AI Assistant Capabilities（原 skills）仓库，采用本地优先的编写流程，并保留清晰的公开发布路径。
 
-日本語: このリポジトリは、Antigravity を編集元として保ちながら、OpenClaw を含む複数のエージェント環境へ skill を同期・公開するためのワークフローを提供します。
+日本語: この GitHub リポジトリを唯一の編集元として、OpenClaw を含む複数のエージェント環境へ skill を同期・公開します。
 
-Español: Este repositorio ofrece un flujo de trabajo para crear, sincronizar y publicar skills reutilizables para varios agentes, con Antigravity como fuente principal y OpenClaw como destino de primera clase.
+Español: Este repositorio de GitHub es la única fuente editable para sincronizar y publicar skills reutilizables en varios agentes.
 
 ## Table Of Contents / 目录
 
@@ -50,10 +52,10 @@ skills-repo/
 - `skills/` 用于存放可发布的 skill 目录。
 - `docs/` stores development notes, release plans, validation notes, and maintenance checklists.
 - `docs/` 用于存放开发笔记、发布方案、验证记录和维护清单。
-- Antigravity remains the authoring source of truth unless explicitly changed.
-- 除非明确变更，否则始终以 Antigravity 作为技能内容的事实来源。
-- Import or sync changes into this repository before preparing a public release.
-- 在准备公开发布前，先把变更导入或同步到本仓库。
+- GitHub `main` is the canonical source of truth; do not edit installed copies.
+- GitHub `main` 是唯一事实源；不要直接修改各 Agent 的安装副本。
+- Product-specific skills stay with their canonical product repository.
+- 产品专用 Skill 保留在对应产品源码仓库。
 
 ## Current Capability Module / 当前能力模块
 
@@ -70,16 +72,22 @@ Covered mainstream IDE ecosystems now include Copilot, Cursor, Windsurf, JetBrai
 
 ## Development Workflow / 开发流程
 
-1. Edit the source skill in Antigravity.
-2. 在 Antigravity 中修改源技能。
-3. Import or sync the updated skill into this repository.
-4. 将更新后的技能导入或同步到本仓库。
-5. Refine release docs under `docs/agent-skills-setup/`.
-6. 在 `docs/agent-skills-setup/` 下完善发布文档和验证材料。
-7. Publish the repository when the skill, metadata, and validation results are ready.
-8. 当技能、元数据和验证结果准备就绪后再进行发布。
+1. Edit the skill under `skills/` in a GitHub branch.
+2. Run `bash validate-all.sh`.
+3. Merge only after the validation workflow passes.
+4. Install the merged version into an agent environment:
+
+```bash
+bash install.sh
+bash sync-to-codex.sh
+bash sync-to-openclaw.sh
+```
+
+Existing targets are never overwritten silently. Pass `--force` only when you want the installer to move the current copy to a timestamped backup and replace it.
 
 ## Importing Skills / 导入技能
+
+The legacy import helper is only for bringing an external skill into a review branch. Imported content is not canonical until validation and merge.
 
 Use the bundled import script:
 
@@ -130,6 +138,6 @@ Additional public-language positioning:
 - `github/awesome-copilot` for curated Copilot visibility.
 - 使用 `github/awesome-copilot` 获取 Copilot 社区的精选曝光。
 
-Before publishing, review the files under `docs/agent-skills-setup/` and confirm the repository contains no private paths, local secrets, or machine-specific assumptions.
+Before publishing, run `bash validate-all.sh`, review `THIRD_PARTY_NOTICES.md`, and confirm the repository contains no private paths, local secrets, or machine-specific assumptions.
 
 发布前，请先审阅 `docs/agent-skills-setup/` 下的文档，并确认仓库中不包含私有路径、本地密钥或特定机器假设。
