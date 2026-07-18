@@ -91,7 +91,7 @@ def main() -> int:
         validate_skill(skill_dir)
 
     for path in ROOT.rglob("*"):
-        if not path.is_file() or ".git" in path.parts:
+        if not path.is_file() or ".git" in path.parts or path.resolve() == Path(__file__).resolve():
             continue
         if path.suffix.lower() not in {".md", ".sh", ".py", ".yml", ".yaml"}:
             continue
