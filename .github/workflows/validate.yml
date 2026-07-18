@@ -1,0 +1,23 @@
+name: Validate skills
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate repository
+        run: bash validate-all.sh
+      - name: Test installer without touching the runner profile
+        run: |
+          target="$RUNNER_TEMP/skills"
+          bash install.sh --target "$target"
+          test -f "$target/agent-skills-setup/SKILL.md"
