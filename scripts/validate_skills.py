@@ -1,0 +1,114 @@
+#!/usr/bin/env python3
+"""Validate publishable skills without requiring third-party dependencies."""
+
+from __future__ import annotations
+
+import re
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+SKILLS = ROOT / "skills"
+errors: list[str] = []
+
+SECRET = re.compile(r"(?:sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|tvly-[A-Za-z0-9_-]{16,})")
+PRIVATE_PATH = re.compile(r"(?:/Users/[^/\s]+|/home/[^/\s]+|[A-Za-z]:\\Users\\[^\\\s]+)")
+LINK = re.compile(r"!?(?:\[[^\]]*\])\(([^)]+)\)")
+
+
+def frontmatter(text: str, path: Path) -> dict[str, str]:
+    if not text.startswith("---\n"):
+        errors.append(f"{path}: missing YAML frontmatter")
+        return {}
+    end = text.find("\n---\n", 4)
+    if end < 0:
+        errors.append(f"{path}: unterminated YAML frontmatter")
+        return {}
+
+    values: dict[str, str] = {}
+    current_key: str | None = None
+    for raw_line in text[4:end].splitlines():
+        if raw_line.startswith((" ", "\t", "- ")):
+            continue
+        match = re.match(r"^([A-Za-z0-9_-]+):\s*(.*)$", raw_line)
+        if match:
+            current_key = match.group(1)
+            value = match.group(2).strip()
+            if value not in {"", ">", "|"}:
+                values[current_key] = value.strip("'\"")
+            elif current_key not in values:
+                values[current_key] = ""
+        elif current_key and raw_line.strip():
+            values[current_key] = (values[current_key] + " " + raw_line.strip()).strip()
+    return values
+
+
+def validate_skill(skill_dir: Path) -> None:
+    path = skill_dir / "SKILL.md"
+    if not path.is_file():
+        errors.append(f"{skill_dir}: missing SKILL.md")
+        return
+
+    text = path.read_text(encoding="utf-8")
+    metadata = frontmatter(text, path.relative_to(ROOT))
+    name = metadata.get("name", "")
+    description = metadata.get("description", "")
+
+    if name != skill_dir.name:
+        errors.append(f"{path.relative_to(ROOT)}: name must match directory ({skill_dir.name})")
+    if not description and "description:" not in text.split("---", 2)[1]:
+        errors.append(f"{path.relative_to(ROOT)}: description is required")
+    if SECRET.search(text):
+        errors.append(f"{path.relative_to(ROOT)}: possible secret detected")
+    if PRIVATE_PATH.search(text):
+        errors.append(f"{path.relative_to(ROOT)}: private absolute path detected")
+
+    for target in LINK.findall(text):
+        target = target.split("#", 1)[0].strip()
+        if not target or "://" in target or target.startswith(("mailto:", "#")):
+            continue
+        resolved = (path.parent / target).resolve()
+        try:
+            resolved.relative_to(ROOT.resolve())
+        except ValueError:
+            errors.append(f"{path.relative_to(ROOT)}: link escapes repository: {target}")
+            continue
+        if not resolved.exists():
+            errors.append(f"{path.relative_to(ROOT)}: broken relative link: {target}")
+
+
+def main() -> int:
+    if not SKILLS.is_dir():
+        print("ERROR: skills/ directory is missing", file=sys.stderr)
+        return 1
+
+    skill_dirs = sorted(path for path in SKILLS.iterdir() if path.is_dir())
+    if not skill_dirs:
+        print("ERROR: no skill directories found", file=sys.stderr)
+        return 1
+
+    for skill_dir in skill_dirs:
+        validate_skill(skill_dir)
+
+    for path in ROOT.rglob("*"):
+        if not path.is_file() or ".git" in path.parts:
+            continue
+        if path.suffix.lower() not in {".md", ".sh", ".py", ".yml", ".yaml"}:
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        if SECRET.search(text):
+            errors.append(f"{path.relative_to(ROOT)}: possible secret detected")
+        if PRIVATE_PATH.search(text):
+            errors.append(f"{path.relative_to(ROOT)}: private absolute path detected")
+
+    if errors:
+        for error in sorted(set(errors)):
+            print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+
+    print(f"Validated {len(skill_dirs)} skill(s).")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
