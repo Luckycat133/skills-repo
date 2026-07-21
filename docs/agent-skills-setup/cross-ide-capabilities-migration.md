@@ -11,6 +11,11 @@ This guide expands migration scope from skills-only to a complete AI Assistant C
 
 中文说明：本指南把迁移范围从仅 skills 扩展到完整 AI Assistant Capabilities，包括能力模块、提示词、配置、规则、工作流，以及相关的 agents/hooks 自动化面。
 
+> **⚠️ Status: Design / Not yet implemented**
+> The `migrate-ai-capabilities.sh` and `validate-capability-migration.sh` scripts referenced in §6 and §11 are **planned but not yet shipped** in this repository. The command examples in §6 are illustrative of the intended interface, not runnable today. The migration model, object taxonomy, and per-IDE paths described here are the design baseline.
+>
+> 状态说明：本文档为设计稿。§6 与 §11 提到的 `migrate-ai-capabilities.sh`、`validate-capability-migration.sh` 脚本**尚未实装**，当前不在仓库中。§6 的命令示例仅用于说明预期接口，暂不可直接运行。本文档描述的迁移模型、对象分类与各 IDE 路径为设计基线。
+
 ## 1. Terminology and Compatibility
 
 Preferred term:
@@ -55,6 +60,7 @@ Note:
 
 - Some prompt/config/rules/workflow locations are platform-native, while others are team conventions for portability.
 - Use the validation section to separate hard requirements from convention-level assets.
+- JetBrains row uses the JetBrains AI Assistant project layout (`.idea/ai-capabilities/...`). This is distinct from the **skill**-install path for JetBrains documented in `skills/agent-skills-setup/references/ide-registry.md`, which maps JetBrains to Junie at `~/.junie` (global) / `.junie` (project). The two layouts cover different asset types and are not in conflict.
 
 ## 4. Preconditions
 
@@ -93,9 +99,12 @@ If you intentionally migrate only a subset and want soft behavior, use:
 --allow-missing-objects
 ```
 
-## 6. Automated Migration (Implemented)
+## 6. Automated Migration (Planned)
 
-Two scripts are provided:
+> **Note:** The two scripts below are **designed but not yet shipped**. They are listed as the intended interface; do not run these commands until the scripts land in `skills/agent-skills-setup/scripts/`.
+> 说明：以下两个脚本**已设计但尚未实装**，此处仅列出预期接口；在脚本正式进入 `skills/agent-skills-setup/scripts/` 之前，请勿运行下列命令。
+
+Two scripts are planned:
 
 1. scripts/migrate-ai-capabilities.sh
 2. scripts/validate-capability-migration.sh
@@ -314,11 +323,14 @@ After publication:
 
 ## 11. Implementation Status in This Repo
 
-Implemented now:
+Implemented now (documentation / design baseline):
 
-- migrate-ai-capabilities.sh
-- validate-capability-migration.sh
-- this cross-IDE migration guide
+- this cross-IDE migration guide (model, object taxonomy, per-IDE paths)
+
+Planned (not yet shipped):
+
+- `scripts/migrate-ai-capabilities.sh`
+- `scripts/validate-capability-migration.sh`
 
 Next recommended rollout:
 

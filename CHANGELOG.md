@@ -21,10 +21,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 新增 `skills/agent-skills-setup/references/openclaw.md`，并更新了双语发布与分发文档。
 - `skills/agent-skills-setup/scripts/prepare-clawhub-release.sh` and `docs/agent-skills-setup/clawhub-release.md` for ClawHub publishing.
 - 新增 `skills/agent-skills-setup/scripts/prepare-clawhub-release.sh` 和 `docs/agent-skills-setup/clawhub-release.md`，用于 ClawHub 发布。
-- `skills/agent-skills-setup/scripts/migrate-ai-capabilities.sh` for cross-IDE migration of capabilities, prompts, configurations, rules, workflows, hooks, and agents.
-- 新增 `skills/agent-skills-setup/scripts/migrate-ai-capabilities.sh`，用于跨 IDE 迁移 capabilities、prompts、configurations、rules、workflows、hooks 和 agents。
-- `skills/agent-skills-setup/scripts/validate-capability-migration.sh` for migration quality gates and structural validation.
-- 新增 `skills/agent-skills-setup/scripts/validate-capability-migration.sh`，用于迁移质量门禁和结构校验。
 - `docs/agent-skills-setup/cross-ide-capabilities-migration.md` as the end-to-end migration implementation guide.
 - 新增 `docs/agent-skills-setup/cross-ide-capabilities-migration.md` 作为端到端迁移实施指南。
 - Expanded cross-IDE migration target coverage: Copilot, Cursor, Windsurf, JetBrains, Claude Code, Codex, OpenClaw, Trae, and Trae CN.
@@ -42,12 +38,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 面向公开发布的文档现已增加日语和西语摘要，并改进了版式与导航结构。
 - Repository wording now standardizes on AI Assistant Capabilities (formerly skills) for cross-IDE migration topics.
 - 仓库在跨 IDE 迁移主题中统一使用 AI Assistant Capabilities（原 skills）术语。
-- `migrate-ai-capabilities.sh` now supports staging-safe write mode by default and direct-write rollout as an explicit option.
-- `migrate-ai-capabilities.sh` 现默认使用 staging 安全写入模式，并将 direct 写入作为显式选项。
-- `validate-capability-migration.sh` now validates TOML files and checks platform layouts under staging outputs.
-- `validate-capability-migration.sh` 现支持 TOML 校验，并可检查 staging 输出下的平台目录布局。
-- `migrate-ai-capabilities.sh` now fails fast when selected objects are missing, unless `--allow-missing-objects` is explicitly set.
-- `migrate-ai-capabilities.sh` 现默认在所选对象缺失时失败退出，除非显式设置 `--allow-missing-objects`。
+
+### Fixed
+
+- Resolved 18 audit findings (C1–C3, H1–H4, M1–M6, L1–L5) in `agent-skills-setup`: real MCP/config migration (no false success on empty transfer), corrected Copilot/Codex/WorkBuddy sync paths, supply-chain-safe OpenClaw install gated behind `--yes` with optional `OPENCLAW_INSTALL_SHA256` pin, IDE path registry (`references/ide-paths.json`) as single source of truth with a 182-check drift test, hardened shell scripts (`set -euo pipefail`, deterministic temp-file cleanup), honest migration status vocabulary (`success`/`copied`/`manual`/`absent`/`skipped`), and SKILL.md accuracy.
+- 修复 `agent-skills-setup` 中的 18 项审计问题（C1–C3、H1–H4、M1–M6、L1–L5）：真实 MCP/配置迁移（空迁移不再虚假成功）、修正 Copilot/Codex/WorkBuddy 同步路径、供应链安全的 OpenClaw 安装（需 `--yes` 且可校验 `OPENCLAW_INSTALL_SHA256`）、以 IDE 路径注册表（`references/ide-paths.json`）作为单一事实来源并新增 182 项漂移测试、加固 Shell 脚本（`set -euo pipefail`、确定性临时文件清理）、诚实的迁移状态描述（`success`/`copied`/`manual`/`absent`/`skipped`），以及 SKILL.md 准确性修正。
+- Reconciled three non-blocking follow-ups: Copilot global sync now mirrors full skill directories (matching `smart-ide-migration.sh` H4) instead of flattening to `<name>.md`; the capabilities-migration doc clarifies the JetBrains `.idea/ai-capabilities/` layout is distinct from the Junie `~/.junie` skill-install path in `ide-registry.md`; the stale pre-audit WorkBuddy working-tree changes were already discarded.
+- 进一步收敛三项非阻塞遗留：Copilot 全局同步改为镜像完整技能目录（与 `smart-ide-migration.sh` H4 一致），不再扁平化为 `<name>.md`；能力迁移文档补充说明 JetBrains 的 `.idea/ai-capabilities/` 布局与 `ide-registry.md` 中 Junie 的 `~/.junie` 技能路径互不冲突；审计前遗留的 WorkBuddy 工作树改动此前已丢弃。
+
+### Planned
+
+- `skills/agent-skills-setup/scripts/migrate-ai-capabilities.sh` and `validate-capability-migration.sh` are **designed but not yet shipped** (see `docs/agent-skills-setup/cross-ide-capabilities-migration.md` §6/§11). Their command examples are illustrative of the intended interface, not runnable today.
+- `skills/agent-skills-setup/scripts/migrate-ai-capabilities.sh` 与 `validate-capability-migration.sh` **已设计但尚未实装**（见 `docs/agent-skills-setup/cross-ide-capabilities-migration.md` §6/§11）。其命令示例仅说明预期接口，目前不可直接运行。
 
 ## [0.1.0] - 2026-03-22
 

@@ -74,7 +74,11 @@ Covered mainstream IDE ecosystems now include Copilot, Cursor, Windsurf, JetBrai
 
 1. Edit the skill under `skills/` in a GitHub branch.
 2. Run `bash validate-all.sh`.
-3. Merge only after the validation workflow passes.
+3. For `agent-skills-setup` changes, also run the focused verification suite:
+   - `bash skills/agent-skills-setup/scripts/verify-ide-config.sh` — asserts resolved IDE paths match `references/ide-registry.md` (13 checks).
+   - `bash skills/agent-skills-setup/scripts/test-ide-paths.sh` — drift test between `references/ide-paths.json` and the script (182 checks).
+   - `bash skills/agent-skills-setup/scripts/test-migration.sh` — migration + global-sync engine tests (54 checks, isolated temp HOME).
+4. Merge only after the validation workflow passes.
 4. Install the merged version into an agent environment:
 
 ```bash
