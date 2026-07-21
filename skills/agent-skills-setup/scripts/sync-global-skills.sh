@@ -2,20 +2,23 @@
 
 set -euo pipefail
 
+# SOURCE OF TRUTH: skills/agent-skills-setup/references/ide-registry.md (and ide-paths.json).
+# Keep these functions in sync with that file. Drift is caught by test-ide-paths.sh.
 SOURCE_DIR="${AGENT_SKILLS_SOURCE_DIR:-${HOME}/.gemini/antigravity/skills}"
 CLAUDE_DIR="${AGENT_SKILLS_CLAUDE_DIR:-${HOME}/.claude/skills}"
-CODEX_DIR="${AGENT_SKILLS_CODEX_DIR:-${HOME}/.codex/skills}"
-COPILOT_DIR="${AGENT_SKILLS_COPILOT_DIR:-${HOME}/.copilot-skills}"
+CODEX_DIR="${AGENT_SKILLS_CODEX_DIR:-${HOME}/.agents/skills}"
+COPILOT_DIR="${AGENT_SKILLS_COPILOT_DIR:-${HOME}/.copilot/skills}"
 OPENCLAW_DIR="${AGENT_SKILLS_OPENCLAW_DIR:-${HOME}/.openclaw/skills}"
 TRAE_DIR="${AGENT_SKILLS_TRAE_DIR:-${HOME}/.trae/skills}"
 TRAE_CN_DIR="${AGENT_SKILLS_TRAE_CN_DIR:-${HOME}/.trae-cn/skills}"
+WORKBUDDY_DIR="${AGENT_SKILLS_WORKBUDDY_DIR:-${HOME}/.workbuddy/skills}"
 
 DRY_RUN=0
-TARGETS_RAW="claude,codex,copilot,openclaw,trae,trae-cn"
+TARGETS_RAW="claude,codex,copilot,openclaw,trae,trae-cn,workbuddy"
 
 usage() {
     cat <<'EOF'
-Usage: sync-global-skills.sh [--dry-run] [--targets claude,codex,copilot,openclaw,trae,trae-cn]
+Usage: sync-global-skills.sh [--dry-run] [--targets claude,codex,copilot,openclaw,trae,trae-cn,workbuddy]
 
 Mirrors Antigravity global capabilities (skills) into supported IDE global skill directories.
 Antigravity is treated as the source of truth.
@@ -87,7 +90,7 @@ ensure_targets_valid() {
 
     for item in "${TARGETS[@]}"; do
         case "$item" in
-            claude|codex|copilot|openclaw|trae|trae-cn)
+            claude|codex|copilot|openclaw|trae|trae-cn|workbuddy)
                 ;;
             *)
                 echo "ERROR: Unsupported target: $item" >&2
@@ -156,39 +159,8 @@ verify_shared_directories() {
     echo "VERIFY PASS: $label content matches Antigravity"
 }
 
-verify_copilot() {
-    local skill
-
-    if ! diff -u <(find "$SOURCE_DIR" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort) <(find "$COPILOT_DIR" -mindepth 1 -maxdepth 1 -type f -name '*.md' -exec basename {} .md \; | sort) >/dev/null; then
-        echo "VERIFY FAIL: Copilot inventory differs from Antigravity" >&2
-        return 1
-    fi
-
-    while IFS= read -r skill; do
-        diff -q "$SOURCE_DIR/$skill/SKILL.md" "$COPILOT_DIR/$skill.md" >/dev/null || {
-            echo "VERIFY FAIL: Copilot content drift in $skill" >&2
-            return 1
-        }
-    done < <(find "$SOURCE_DIR" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort)
-
-    echo "VERIFY PASS: Copilot inventory and content match Antigravity"
-}
-
-sync_copilot() {
-    local temp_dir
-    local skill_dir
-    local skill_name
-
-    mkdir -p "$COPILOT_DIR"
-    temp_dir="$(mktemp -d /tmp/copilot-skills-sync.XXXXXX)"
-
-    while IFS= read -r skill_dir; do
-        skill_name="$(basename "$skill_dir")"
-        cp "$skill_dir/SKILL.md" "$temp_dir/$skill_name.md"
-    done < <(find "$SOURCE_DIR" -mindepth 1 -maxdepth 1 -type d | sort)
-
-    rsync_mirror "$temp_dir" "$COPILOT_DIR"
-}
+# Copilot is handled by the shared rsync_mirror path (full skill directories),
+# consistent with smart-ide-migration.sh H4. No custom flattening to <name>.md.
 
 split_targets "$TARGETS_RAW"
 ensure_targets_valid
@@ -224,8 +196,14 @@ if contains_target openclaw; then
     rsync_mirror "$SOURCE_DIR" "$OPENCLAW_DIR"
 fi
 
+if contains_target workbuddy; then
+    mkdir -p "$WORKBUDDY_DIR"
+    rsync_mirror "$SOURCE_DIR" "$WORKBUDDY_DIR"
+fi
+
 if contains_target copilot; then
-    sync_copilot
+    mkdir -p "$COPILOT_DIR"
+    rsync_mirror "$SOURCE_DIR" "$COPILOT_DIR"
 fi
 
 if [[ $DRY_RUN -eq 0 ]]; then
@@ -249,8 +227,12 @@ if [[ $DRY_RUN -eq 0 ]]; then
         verify_directory_inventory "$SOURCE_DIR" "$OPENCLAW_DIR" "OpenClaw" && verify_shared_directories "$OPENCLAW_DIR" "OpenClaw" || VERIFY_FAILED=1
     fi
 
+    if contains_target workbuddy; then
+        verify_directory_inventory "$SOURCE_DIR" "$WORKBUDDY_DIR" "WorkBuddy" && verify_shared_directories "$WORKBUDDY_DIR" "WorkBuddy" || VERIFY_FAILED=1
+    fi
+
     if contains_target copilot; then
-        verify_copilot || VERIFY_FAILED=1
+        verify_directory_inventory "$SOURCE_DIR" "$COPILOT_DIR" "Copilot" && verify_shared_directories "$COPILOT_DIR" "Copilot" || VERIFY_FAILED=1
     fi
 
     if [[ $VERIFY_FAILED -ne 0 ]]; then

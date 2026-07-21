@@ -4,6 +4,10 @@ description: >
   Migrate ALL AI assistant context between IDEs — MCP servers, rules/instructions,
   skills, slash commands, agents, hooks, and memory. Detects installed IDEs,
   converts formats across platforms, safely merges without overwriting, verifies results.
+  WHEN TO USE: trigger when the user wants to migrate, move, transfer, copy, convert,
+  sync, or back up AI assistant context between IDEs — e.g. "migrate MCP config",
+  "move skills from Cursor to Claude", "transfer rules from Windsurf to Cursor",
+  "copy agents between IDEs", "sync memory bank", "ai ide migration".
 triggers:
   - migrate mcp config
   - migrate ai ide settings
@@ -121,6 +125,7 @@ Root key and format differences — the most common migration errors:
 | v0 (Vercel) | UI | — | `v0.app/.../mcp-connections` | Bidirectional MCP; also exposes mcp.v0.dev; whitelisted clients only |
 | Lovable | UI | — | (lovable.dev chat connectors) | Bidirectional MCP; server OAuth limited to 5 clients; Enterprise disabled |
 | gptel + mcp.el (Emacs) | elisp | — | `~/.emacs.d/init.el` | Emacs ecosystem; `mcp-hub-start`; requires lisp |
+| WorkBuddy | `mcpServers` | JSON | `~/.workbuddy/.mcp.json` | Path is `~/.workbuddy/` not `~/.workbuddy` root; skills at `~/.workbuddy/skills/` |
 
 ---
 
@@ -262,12 +267,34 @@ Copy markdown body; adapt frontmatter. Supported fields by IDE:
 | Copy/migrate API keys, tokens, secrets | Security; blank values, tell user to fill in |
 | Overwrite existing config without backup | Data loss; always .bak.TIMESTAMP first |
 | Overwrite existing entries | Merge only; conflicts → `<name>_migrated` |
-| Execute package installs (npm install -g, curl \| sh) | Don't modify user's system |
+| Execute package installs (npm install -g, curl \| sh) | Don't modify user's system — NEVER silent; see the OpenClaw exception below |
 | Modify shell rc files | PATH issues noted but not auto-fixed |
 | Kill/restart IDE processes | Tell user to restart in manual steps |
 | Migrate IDE UI settings / chat history / OAuth tokens / SQLite databases | Out of scope or privacy/security risk |
 | Write in dry-run mode | Default to preview; write only after user confirms |
 | Proceed when config is invalid JSON/TOML/YAML | Parse errors = corrupted; stop and report |
+
+### Exception — OpenClaw auto-configuration (explicit, user-consented)
+
+`scripts/auto-configure-openclaw-skills.sh` is the installer for **OpenClaw**, a
+*target runtime* for this skill. It is the single deliberate, user-consented exception to the
+"no global installs / no unverified curl|sh" rule above. It MAY:
+
+- run `npm install -g clawhub` (installs the ClawHub package manager), and
+- download and execute `https://openclaw.ai/install.sh` (the OpenClaw runtime installer),
+
+**but ONLY when ALL of the following hold:**
+
+1. The user passes `--yes` (explicit, recorded consent to modify their system).
+2. For `install.sh`, the downloaded script's SHA-256 is verified against `OPENCLAW_INSTALL_SHA256`
+   when a pin is provided; if no pin is set, the script prints a *prominent WARNING* showing the
+   computed hash rather than silently trusting the download.
+3. In `--dry-run` mode it only previews these actions and never executes them.
+
+This exception applies **solely** to installing the OpenClaw runtime / ClawHub for this skill's own
+target platform. It does **NOT** weaken the general rule for any other operation: no other command
+may run silent global `npm install -g`, pipe a remote script to `sh`, or modify the user's system
+without equivalent explicit consent and integrity verification.
 
 **IDE-specific pitfalls** (will cause silent failure):
 

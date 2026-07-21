@@ -16,6 +16,7 @@ WATCH_DEBOUNCE_MS=250
 SCOPE="both"
 DRY_RUN=0
 CONFIRM_WRITE=0
+YES=0
 SKIP_OPENCLAW_INSTALL=0
 SKIP_CLAWHUB_INSTALL=0
 SKIP_DOCTOR=0
@@ -93,6 +94,22 @@ sha256_file() {
         openssl dgst -sha256 "$file_path" | awk '{print $NF}'
     else
         die "A SHA-256 tool is required (sha256sum, shasum, or openssl)"
+    fi
+}
+
+check_prerequisites() {
+    local missing=()
+
+    for tool in curl rsync node; do
+        command_exists "$tool" || missing+=("$tool")
+    done
+
+    if ! command_exists tar && ! command_exists unzip; then
+        missing+=("tar-or-unzip")
+    fi
+
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        die "缺少必要的前置工具：${missing[*]}。请先安装后再运行本脚本（例如 macOS: brew install curl rsync gnu-tar node；node 也可从 nodejs.org 下载安装；解压工具需要 tar 或 unzip 之一）。"
     fi
 }
 
@@ -244,6 +261,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --yes)
             CONFIRM_WRITE=1
+            YES=1
             shift
             ;;
         -h|--help)
@@ -258,6 +276,7 @@ done
 
 ensure_supported_scope
 ensure_node_manager_supported
+check_prerequisites
 
 [[ -d "$SOURCE_DIR" ]] || die "Source skills directory not found: $SOURCE_DIR"
 
@@ -268,10 +287,6 @@ if [[ ${#REQUESTED_SKILLS[@]} -eq 0 ]]; then
 fi
 
 [[ ${#REQUESTED_SKILLS[@]} -gt 0 ]] || die "No skills selected"
-
-if [[ $DRY_RUN -eq 0 && $CONFIRM_WRITE -eq 0 ]]; then
-    die "Refusing global changes without --yes. Run once with --dry-run, review the plan, then rerun with --yes."
-fi
 
 for skill_name in "${REQUESTED_SKILLS[@]}"; do
     [[ -d "$SOURCE_DIR/$skill_name" ]] || die "Requested skill not found: $SOURCE_DIR/$skill_name"
@@ -295,7 +310,37 @@ install_openclaw_if_needed() {
 
     case "$(uname -s)" in
         Darwin|Linux)
-            run_cmd bash -lc 'curl -fsSL https://openclaw.ai/install.sh | bash -s -- --no-onboard --no-prompt'
+            if [[ $DRY_RUN -eq 1 ]]; then
+                log "[dry-run] would install OpenClaw runtime via https://openclaw.ai/install.sh (requires --yes + optional checksum)"
+                return 0
+            fi
+
+            if [[ $YES -ne 1 ]]; then
+                die "即将安装外部运行时 OpenClaw（会修改你的系统）。请使用 --yes 显式授权后重试。"
+            fi
+
+            log "WARNING: 即将执行外部安装脚本 install.sh（来源 https://openclaw.ai/install.sh）"
+            log "         该脚本会修改你的系统；仅当你明确授权（--yes）且已核对校验和后才应继续。"
+
+            local tmp_install actual_sha256 expected
+            tmp_install="$(mktemp "/tmp/openclaw-install.XXXXXX.sh")"
+            trap 'rm -f "$tmp_install" 2>/dev/null' EXIT
+            curl -fsSL https://openclaw.ai/install.sh -o "$tmp_install" || die "下载 OpenClaw install.sh 失败"
+            actual_sha256="$(sha256_file "$tmp_install")"
+
+            if [[ -n "${OPENCLAW_INSTALL_SHA256:-}" ]]; then
+                expected="$(printf '%s' "$OPENCLAW_INSTALL_SHA256" | tr '[:upper:]' '[:lower:]')"
+                if [[ "$(printf '%s' "$actual_sha256" | tr '[:upper:]' '[:lower:]')" != "$expected" ]]; then
+                    rm -f "$tmp_install"
+                    die "OpenClaw install.sh 校验和不符：期望 $expected，实际 $actual_sha256"
+                fi
+                log "install.sh 校验和已验证"
+            else
+                log "WARN: 未设置 OPENCLAW_INSTALL_SHA256，无法校验 install.sh 完整性。下载文件 sha256: $actual_sha256"
+            fi
+
+            run_cmd bash "$tmp_install" --no-onboard --no-prompt
+            rm -f "$tmp_install"
             ;;
         *)
             die "Automatic OpenClaw installation is only supported by this script on macOS/Linux"
@@ -341,6 +386,17 @@ install_clawhub_if_needed() {
     if [[ $SKIP_CLAWHUB_INSTALL -eq 1 ]]; then
         return 0
     fi
+
+    if [[ $DRY_RUN -eq 1 ]]; then
+        log "[dry-run] would install ClawHub via ${NODE_MANAGER} install -g clawhub (requires --yes)"
+        return 0
+    fi
+
+    if [[ $YES -ne 1 ]]; then
+        die "即将安装外部包 ClawHub（${NODE_MANAGER} install -g，会修改你的系统）。请使用 --yes 显式授权后重试。"
+    fi
+
+    log "WARNING: 即将通过 ${NODE_MANAGER} install -g 安装 ClawHub（会修改你的系统）；仅当你明确授权（--yes）后才应继续。"
 
     if ! command_exists "$NODE_MANAGER"; then
         die "Required node manager not found on PATH: $NODE_MANAGER"
@@ -541,8 +597,13 @@ install_download_spec() {
         return 0
     fi
 
+    if [[ $YES -ne 1 ]]; then
+        rm -rf "$tmp_dir"
+        die "即将下载并安装外部依赖（${skill_name} 的 download 类型安装器，会修改你的系统）。请使用 --yes 显式授权后重试。"
+    fi
+
     mkdir -p "$extract_dir" "$BIN_DIR"
-    curl -fsSL "$url" -o "$archive_path"
+    curl -fsSL "$url" -o "$archive_path" || { rm -rf "$tmp_dir"; die "下载失败: $url"; }
 
     if [[ -n "$expected_sha256" ]]; then
         actual_sha256="$(sha256_file "$archive_path")"
@@ -831,6 +892,10 @@ NODE
 
 install_openclaw_if_needed
 install_clawhub_if_needed
+
+if [[ $DRY_RUN -eq 0 && $CONFIRM_WRITE -eq 0 ]]; then
+    die "Refusing global changes without --yes. Run once with --dry-run, review the plan, then rerun with --yes."
+fi
 
 case "$SCOPE" in
     managed|both)

@@ -352,6 +352,13 @@ Detailed per-IDE paths for all migration objects. Read this when executing STEP 
 - **other**: `~/.kimi-code/config.toml` (main config, TOML NOT JSON) · `~/.kimi-code/tui.toml` · `~/.kimi-code/credentials/` · `~/.kimi-code/mcp-oauth/`
 - **note**: Path is `~/.kimi-code/` NOT `~/.kimi/`; config is `config.toml` NOT `config.json`; legacy kimi-cli deprecated
 
+### workbuddy (WorkBuddy)
+- **detect**: `~/.workbuddy/`
+- **mcp**: global `~/.workbuddy/.mcp.json` · root_key `mcpServers` · JSON · stdio+HTTP · `workbuddy mcp list`
+- **skills**: global `~/.workbuddy/skills/` · project `.workbuddy/skills/`
+- **settings**: `~/.workbuddy/settings.json`
+- **note**: Path is `~/.workbuddy/` NOT `~/.workbuddy` root; skills live under `~/.workbuddy/skills/`
+
 ### zcode (Zhipu AI / 智谱)
 - **detect**: `~/.zcode/`
 - **mcp**: global `~/.zcode/cli/config.json` · project `.zcode/config.json` · root_key `mcp.servers` (dot-path; also accepts `mcpServers`) · JSON · stdio+SSE+HTTP · can import from ~/.claude, ~/.codex, ~/.config/opencode, ~/.agents

@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
-
+#
+# export-public-skill.sh — SINGLE RESPONSIBILITY: prepare the PUBLIC repository layout.
+# Copies a source skill into a standalone public-repo structure (via rsync) and
+# generates/updates the public README from `public-repo-readme-template.md`.
+# This script does NOT publish the skill. Publishing is the job of
+# prepare-clawhub-release.sh (see ./prepare-clawhub-release.sh), whose canonical
+# publish command is `clawhub publish`.
+# NOTE: the `npx skills add <owner/repo>` step printed at the end is for CONSUMERS to
+# install the already-published skill — it is an install/test command, NOT a publish command.
+#
 set -euo pipefail
 
 SOURCE_ROOT="${AGENT_SKILLS_SOURCE_DIR:-${HOME}/.gemini/antigravity/skills}"
