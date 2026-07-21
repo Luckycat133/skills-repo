@@ -67,7 +67,7 @@ get_global_path() {
     case "$ide" in
         antigravity) echo "${HOME}/.gemini/antigravity/skills" ;;
         claude)      echo "${HOME}/.claude/skills" ;;
-        codex)       echo "${HOME}/.codex" ;;
+        codex)       echo "${HOME}/.agents/skills" ;;
         copilot)     echo "${HOME}/.copilot-skills" ;;
         cursor)      echo "${HOME}/.cursor" ;;
         windsurf)    echo "${HOME}/.windsurf" ;;
@@ -447,6 +447,7 @@ migrate_skills() {
         local skill_dir skill_name
         for skill_dir in "$source_global"/*/; do
             [[ -d "$skill_dir" ]] || continue
+            [[ -f "$skill_dir/SKILL.md" ]] || continue
             skill_name=$(basename "$skill_dir")
 
             if [[ -f "$skill_dir/SKILL.md" ]]; then
@@ -473,6 +474,7 @@ migrate_skills() {
         local skill_dir skill_name
         for skill_dir in "$source_global"/*/; do
             [[ -d "$skill_dir" ]] || continue
+            [[ -f "$skill_dir/SKILL.md" ]] || continue
             skill_name=$(basename "$skill_dir")
 
             if [[ $DRY_RUN -eq 1 ]]; then
