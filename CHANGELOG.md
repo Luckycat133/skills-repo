@@ -5,9 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.5.0] - 2026-07-22
 
-### Added (0.1.0)
+> **Note:** ClawHub was previously published at v0.4.0 (2026-05-11). Versions 0.2.0–0.4.0 were released to ClawHub but not recorded in this file; this release catches the changelog up.
+
+### Added
 
 - OpenClaw support for `agent-skills-setup`, including shared and per-agent skill configuration guidance.
 - 为 `agent-skills-setup` 增加 OpenClaw 支持，包括共享技能与单 agent 技能配置说明。
@@ -65,5 +67,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docs/agent-skills-setup/` — development notes, roadmap, release checklist, and ideas
 - MIT License, CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md
 
-[Unreleased]: https://github.com/Luckycat133/skills-repo/compare/v0.1.0...HEAD
+[0.5.0]: https://github.com/Luckycat133/skills-repo/compare/v0.4.0...HEAD
+[0.4.0]: https://clawhub.ai/Luckycat133/agent-skills-setup
 [0.1.0]: https://github.com/Luckycat133/skills-repo/releases/tag/v0.1.0

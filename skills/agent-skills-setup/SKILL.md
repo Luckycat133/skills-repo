@@ -1,5 +1,7 @@
 ---
 name: agent-skills-setup
+version: 0.5.0
+license: MIT
 description: >
   Migrate ALL AI assistant context between IDEs — MCP servers, rules/instructions,
   skills, slash commands, agents, hooks, and memory. Detects installed IDEs,
