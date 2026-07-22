@@ -3,7 +3,7 @@
 > Status: Active Development · Canonical Skill Source
 
 [![GitHub Repo](https://img.shields.io/badge/GitHub-Luckycat133%2Fskills--repo-181717?logo=github)](https://github.com/Luckycat133/skills-repo)
-[![License](https://img.shields.io/badge/License-MIT-0b7285.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-MIT-b7285.svg)](LICENSE)
 [![OpenClaw Ready](https://img.shields.io/badge/OpenClaw-Ready-1f7a8c)](skills/agent-skills-setup/references/openclaw.md)
 
 AI Assistant Capabilities (formerly skills) with a local-first authoring workflow and a practical path to public release.
@@ -14,9 +14,28 @@ AI Assistant Capabilities（原 skills）仓库，采用本地优先的编写流
 
 Español: Este repositorio de GitHub es la única fuente editable para sincronizar y publicar skills reutilizables en varios agentes.
 
+## Install / 安装
+
+Install the `agent-skills-setup` skill into your agent environment:
+
+通过以下任一方式把 `agent-skills-setup` 技能安装到你的 Agent 环境：
+
+**ClawHub (OpenClaw-native)**
+```bash
+openclaw skills install @luckycat133/agent-skills-setup
+```
+
+**skills.sh (cross-agent, Vercel)**
+```bash
+npx skills add Luckycat133/skills-repo
+```
+
+Source repository / 源码仓库: [Luckycat133/skills-repo](https://github.com/Luckycat133/skills-repo)
+
 ## Table Of Contents / 目录
 
 - [Quick Summary / 快速说明](#quick-summary--快速说明)
+- [Install / 安装](#install--安装)
 - [Structure / 结构](#structure--结构)
 - [Conventions / 约定](#conventions--约定)
 - [Current Capability Module / 当前能力模块](#current-capability-module--当前能力模块)
