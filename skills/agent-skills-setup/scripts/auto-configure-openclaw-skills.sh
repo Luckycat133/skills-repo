@@ -328,16 +328,16 @@ install_openclaw_if_needed() {
             curl -fsSL https://openclaw.ai/install.sh -o "$tmp_install" || die "下载 OpenClaw install.sh 失败"
             actual_sha256="$(sha256_file "$tmp_install")"
 
-            if [[ -n "${OPENCLAW_INSTALL_SHA256:-}" ]]; then
-                expected="$(printf '%s' "$OPENCLAW_INSTALL_SHA256" | tr '[:upper:]' '[:lower:]')"
-                if [[ "$(printf '%s' "$actual_sha256" | tr '[:upper:]' '[:lower:]')" != "$expected" ]]; then
-                    rm -f "$tmp_install"
-                    die "OpenClaw install.sh 校验和不符：期望 $expected，实际 $actual_sha256"
-                fi
-                log "install.sh 校验和已验证"
-            else
-                log "WARN: 未设置 OPENCLAW_INSTALL_SHA256，无法校验 install.sh 完整性。下载文件 sha256: $actual_sha256"
+            if [[ -z "${OPENCLAW_INSTALL_SHA256:-}" ]]; then
+                rm -f "$tmp_install"
+                die "安全策略：运行 OpenClaw install.sh 前必须设置 OPENCLAW_INSTALL_SHA256（从该脚本发布页获取其 SHA-256）。未设置则拒绝执行，以防供应链篡改。"
             fi
+            expected="$(printf '%s' "$OPENCLAW_INSTALL_SHA256" | tr '[:upper:]' '[:lower:]')"
+            if [[ "$(printf '%s' "$actual_sha256" | tr '[:upper:]' '[:lower:]')" != "$expected" ]]; then
+                rm -f "$tmp_install"
+                die "OpenClaw install.sh 校验和不符：期望 $expected，实际 $actual_sha256"
+            fi
+            log "install.sh 校验和已验证"
 
             run_cmd bash "$tmp_install" --no-onboard --no-prompt
             rm -f "$tmp_install"
@@ -580,6 +580,10 @@ install_download_spec() {
 
     if [[ -n "$expected_sha256" && ! "$expected_sha256" =~ ^[[:xdigit:]]{64}$ ]]; then
         die "Download installer for $skill_name has an invalid sha256 value"
+    fi
+
+    if [[ -z "$expected_sha256" ]]; then
+        die "Download installer for $skill_name is missing sha256; refusing to install an unverified binary. Add a sha256 to the skill's download spec."
     fi
 
     tmp_dir="$(mktemp -d /tmp/openclaw-skill-download.XXXXXX)"

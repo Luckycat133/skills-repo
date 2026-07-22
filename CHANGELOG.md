@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-07-22
+
+### Security
+- Made `OPENCLAW_INSTALL_SHA256` **mandatory** for the OpenClaw `install.sh` step (previously optional; an unverified remote script could execute). The installer now refuses to run without a verified checksum.
+- Made SHA-256 **mandatory** for skill `download` specs in `install_download_spec()` (previously warned-and-proceeded on a missing hash).
+- Hardened `export-public-skill.sh`: `rsync --delete` now supports `--dry-run` and refuses to run against a non-empty existing target unless `--force` is given.
+- Added a `capabilities:` declaration to `SKILL.md` so platforms can enforce boundaries.
+- Corrected the skill description, which previously claimed it "merges without overwriting" while an explicit `overwrite` strategy (rsync --delete) existed. Default strategy remains `backup`.
+
 ## [0.5.0] - 2026-07-22
 
 > **Note:** ClawHub was previously published at v0.4.0 (2026-05-11). Versions 0.2.0–0.4.0 were released to ClawHub but not recorded in this file; this release catches the changelog up.

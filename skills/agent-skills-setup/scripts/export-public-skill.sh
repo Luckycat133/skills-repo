@@ -16,6 +16,8 @@ TEMPLATE_PATH="${SOURCE_ROOT}/agent-skills-setup/assets/public-repo-readme-templ
 SKILL_NAME=""
 OUTPUT_DIR=""
 REPO_NAME=""
+DRY_RUN=0
+FORCE=0
 
 usage() {
     cat <<'EOF'
@@ -27,6 +29,8 @@ Options:
   --skill <name>        Skill folder name under ~/.gemini/antigravity/skills
   --output <dir>        Destination repository directory to create or update
   --repo <owner/repo>   Public repository name used in generated install docs
+  --dry-run             Preview rsync --delete changes without writing
+  --force               Allow rsync --delete into a non-empty existing target
   -h, --help            Show this help text
 EOF
 }
@@ -44,6 +48,14 @@ while [[ $# -gt 0 ]]; do
         --repo)
             REPO_NAME="$2"
             shift 2
+            ;;
+        --dry-run)
+            DRY_RUN=1
+            shift
+            ;;
+        --force)
+            FORCE=1
+            shift
             ;;
         -h|--help)
             usage
@@ -76,7 +88,16 @@ if [[ ! -f "$TEMPLATE_PATH" ]]; then
 fi
 
 mkdir -p "$OUTPUT_DIR"
-rsync -a --delete "$SOURCE_SKILL_DIR/" "$OUTPUT_DIR/$SKILL_NAME/"
+if [[ -e "$OUTPUT_DIR/$SKILL_NAME" && -n "$(ls -A "$OUTPUT_DIR/$SKILL_NAME" 2>/dev/null)" && $FORCE -ne 1 ]]; then
+    echo "ERROR: $OUTPUT_DIR/$SKILL_NAME 已存在且非空；rsync --delete 会删除其中的额外文件。" >&2
+    echo "        请加 --force 确认，或用 --dry-run 预览将要删除/新增的内容。" >&2
+    exit 1
+fi
+if [[ $DRY_RUN -eq 1 ]]; then
+    rsync -a --delete --dry-run "$SOURCE_SKILL_DIR/" "$OUTPUT_DIR/$SKILL_NAME/"
+else
+    rsync -a --delete "$SOURCE_SKILL_DIR/" "$OUTPUT_DIR/$SKILL_NAME/"
+fi
 
 sed \
     -e "s/{{SKILL_NAME}}/$SKILL_NAME/g" \

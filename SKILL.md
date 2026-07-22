@@ -1,15 +1,16 @@
 ---
 name: agent-skills-setup
-version: 0.5.0
+version: 0.5.1
 license: MIT
 description: >
   Migrate ALL AI assistant context between IDEs — MCP servers, rules/instructions,
   skills, slash commands, agents, hooks, and memory. Detects installed IDEs,
-  converts formats across platforms, safely merges without overwriting, verifies results.
+  converts formats across platforms, merges with a safe default (backup-before-change)
+  and an explicit overwrite mode (rsync --delete); always verifies results.
   WHEN TO USE: trigger when the user wants to migrate, move, transfer, copy, convert,
-  sync, or back up AI assistant context between IDEs — e.g. "migrate MCP config",
+  or sync AI assistant context between IDEs — e.g. "migrate MCP config",
   "move skills from Cursor to Claude", "transfer rules from Windsurf to Cursor",
-  "copy agents between IDEs", "sync memory bank", "ai ide migration".
+  "copy agents between IDEs", "ai ide migration".
 triggers:
   - migrate mcp config
   - migrate ai ide settings
@@ -21,6 +22,13 @@ triggers:
   - migrate ai assistant context
   - move skills between ide
   - migrate memory bank
+capabilities:
+  - read:  IDE/agent config dirs (MCP, rules, skills, commands, agents, hooks, memory)
+  - write: IDE/agent config dirs (gated by --strategy: skip|backup|overwrite; default backup)
+  - exec:  rsync, curl, node, tar/unzip (local migration + verification)
+  - install: global software (OpenClaw runtime, clawhub) — ONLY with explicit --yes AND mandatory SHA-256 verification
+  - remote: download+execute OpenClaw install.sh — ONLY with --yes AND mandatory OPENCLAW_INSTALL_SHA256
+  - network: outbound HTTPS for downloads (gated by consent)
 ---
 
 <!--
