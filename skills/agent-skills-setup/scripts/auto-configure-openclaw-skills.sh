@@ -822,7 +822,7 @@ let config = {};
 if (fs.existsSync(configPath)) {
   const raw = fs.readFileSync(configPath, "utf8").trim();
   if (raw) {
-    config = Function(`"use strict"; return (${raw});`)();
+    config = JSON.parse(raw);
   }
 }
 

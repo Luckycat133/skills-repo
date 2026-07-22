@@ -151,6 +151,28 @@ if OPENCLAW_STATE_DIR="$TEST_HOME/.openclaw" \
 fi
 assert_contains "$TMP_ROOT/checksum-failure.log" 'SHA-256 mismatch for download-demo download'
 
+CONFIG_EXEC_MARKER="$TMP_ROOT/config-executed"
+printf '(require("node:fs").writeFileSync("%s", "owned"), {})\n' "$CONFIG_EXEC_MARKER" > "$CONFIG_PATH"
+if OPENCLAW_STATE_DIR="$TEST_HOME/.openclaw" \
+    OPENCLAW_CONFIG_PATH="$CONFIG_PATH" \
+    AGENT_SKILLS_SOURCE_DIR="$SOURCE_DIR" \
+    bash "$SCRIPT_DIR/auto-configure-openclaw-skills.sh" \
+        --yes \
+        --skip-openclaw-install \
+        --skip-clawhub-install \
+        --skip-doctor \
+        --managed-dir "$OPENCLAW_DIR" \
+        --scope managed \
+        --skills demo >"$TMP_ROOT/invalid-config.log" 2>&1; then
+    echo "ASSERT FAIL: expected executable non-JSON config to fail" >&2
+    exit 1
+fi
+[[ ! -e "$CONFIG_EXEC_MARKER" ]] || {
+    echo "ASSERT FAIL: executable config content was evaluated" >&2
+    exit 1
+}
+assert_contains "$TMP_ROOT/invalid-config.log" 'SyntaxError'
+
 printf '\nUpdated by test run.\n' >> "$SOURCE_DIR/demo/SKILL.md"
 
 OPENCLAW_STATE_DIR="$TEST_HOME/.openclaw" \
