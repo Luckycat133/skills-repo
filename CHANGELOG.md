@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.4] - 2026-07-23
+
+### Added
+- **`scripts/sync-root-mirror.sh`** regenerates the repository-root `SKILL.md` mirror from the canonical `skills/agent-skills-setup/SKILL.md`. It rewrites repo-relative links (`references/`, `scripts/`) to `skills/agent-skills-setup/...` so they resolve from the repository root, and supports a `--check` mode. That `--check` is now enforced in `validate-all.sh`, so the root mirror can no longer silently drift from the source.
+
+### Fixed
+- **Root `SKILL.md` mirror links.** The mirror's `references/ide-registry.md` and `scripts/smart-ide-migration.sh` links pointed at paths that do not exist at the repository root (404 on platforms that scan the root). They are now rewritten to the nested `skills/agent-skills-setup/...` paths on every regeneration.
+
+### Changed
+- **Deduplicated the IDE Quick Reference table** in `SKILL.md`. The ~54-row table (which duplicated `references/ide-registry.md`) is replaced by the 5 highest-risk format examples plus a pointer to the full registry with a `grep` pattern, improving progressive disclosure.
+- Bumped `SKILL.md` (source + root mirror) to `0.5.4`.
+
 ## [0.5.3] - 2026-07-23
 
 ### Security

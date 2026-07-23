@@ -1,6 +1,6 @@
 ---
 name: agent-skills-setup
-version: 0.5.3
+version: 0.5.4
 license: MIT
 description: >
   Migrate ALL AI assistant context between IDEs — MCP servers, rules/instructions,
@@ -82,62 +82,21 @@ Migrate AI assistant context (MCP, rules, skills, commands, agents, hooks, memor
 
 ## IDE Quick Reference
 
-Root key and format differences — the most common migration errors:
+Root key and format differences cause the most common migration errors. The full per-IDE registry — paths for **all** migration objects (not just MCP) across 50+ IDEs — lives in `references/ide-registry.md`. Load only what you need, e.g.:
+
+```bash
+grep -nE '^### ' references/ide-registry.md   # list every IDE section
+```
+
+The highest-risk formats to get wrong (see `references/ide-registry.md` for the complete list):
 
 | IDE | MCP Root Key | Format | Config Path | Key Pitfall |
 |-----|-------------|--------|-------------|-------------|
-| Claude Desktop | `mcpServers` | JSON | `claude_desktop_config.json` | MCP only; no rules/skills |
-| Claude Code | `mcpServers` | JSON | `~/.claude.json` / `.mcp.json` | MCP NOT in settings.json |
-| Cursor | `mcpServers` | JSON | `~/.cursor/mcp.json` / `.cursor/mcp.json` | Skills since v0.44; hooks supported |
-| Cline | `mcpServers` | JSON | globalStorage path (VS Code) | CLI uses `~/.cline/mcp.json` separately |
-| VS Code Copilot | `servers` | JSON | `.vscode/mcp.json` | `servers` NOT `mcpServers`; needs type |
-| Copilot CLI | `mcpServers` | JSON | `~/.copilot/mcp-config.json` | Needs type; no longer reads .vscode/mcp.json |
-| Windsurf | `mcpServers` | JSON | `~/.codeium/windsurf/mcp_config.json` | Uses `serverUrl` not `url` |
-| Zed | `context_servers` | JSON | `settings.json` | 1.4.2+ uses AGENTS.md, removed @rule |
-| Trae | `mcpServers` | JSON | `.trae/mcp.json` | Project MCP needs manual toggle |
-| Trae Work | `mcpServers` | JSON | `.trae/mcp.json` | Shares Trae IDE config; SOLO/Code mode for agents |
-| Codex CLI | `[mcp_servers.*]` | TOML | `~/.codex/config.toml` | Underscores in names; prompts deprecated→skills |
-| Gemini CLI | `mcpServers` | JSON | `~/.gemini/settings.json` | Server names must use hyphens; commands are TOML |
+| VS Code Copilot | `servers` | JSON | `.vscode/mcp.json` | `servers` NOT `mcpServers`; needs `type:'stdio'\|'http'` |
 | OpenCode | `mcp` | JSON | `opencode.json` | `mcp` not `mcpServers`; command is array; env is `environment` |
-| Goose | `extensions` | YAML | `~/.config/goose/config.yaml` | `extensions` not `mcpServers`; cmd/args/envs |
-| JetBrains Junie | `mcpServers` | JSON | `~/.junie/mcp/mcp.json` | Rules is `.junie/guidelines.md` single file |
-| Kiro | `mcpServers` | JSON | `.kiro/settings/mcp.json` | Path has `settings/` subdir; supports hooks |
-| Continue.dev | `mcpServers` | YAML | `~/.continue/config.yaml` | mcpServers is ARRAY not object |
-| Sourcegraph Amp | CLI-managed | JSON | `~/.config/amp/` | MCP via `amp mcp add`, not config key |
-| Sourcegraph Cody | `mcpServers` | JSON | `~/.config/cody/mcp_servers.json` | Free/Pro sunset 2025-06; MCP via feature flag; agentic gathering not @mentions |
-| PearAI | `mcpServers` | JSON | `~/.pearai/config.json` | Standard object format; file is `config.json` |
-| Forge | `mcpServers` | JSON | `~/.forge/.mcp.json` | Path is `~/.forge/` not `~/.config/forge/` |
-| Void Editor | `mcpServers` | JSON | `~/.config/void/mcp_servers.json` | File is `mcp_servers.json` not `mcp.json` |
-| Kilo Code | `mcpServers` | JSON | `~/.config/kilo/kilo.jsonc` | Global is `~/.config/kilo/`; agents from modes |
-| Roo Code | `mcpServers` | JSON | `.roo/mcp.json` | Archived 2026-05; migrate to Kilo Code |
-| Amazon Q | `mcpServers` | JSON | `~/.aws/amazonq/default.json` | Legacy mcp.json with useLegacyMcpJson flag |
-| antigravity | `mcpServers` | JSON | `~/.gemini/config/mcp_config.json` | Config NOT in antigravity/ (that's cache) |
-| Augment Code | `mcpServers` | JSON | `~/.augment/settings.json` | GUI primary; skills follow agentskills.io |
-| OpenHands | `mcpServers` | JSON | `~/.openhands/mcp.json` | CLI 1.0+ JSON; GUI uses config.toml [mcp] |
-| Aider | N/A | YAML | `~/.aider.conf.yml` | No native MCP; rules via CONVENTIONS.md |
-| Helix | `[mcp_servers.*]` | TOML | `~/.config/helix/config.toml` | Via helix-ai plugin; tools-only |
-| Tabnine | `mcpServers` | JSON | `.tabnine/mcp_servers.json` | Rules via guidelines/rules.md |
-| Tongyi Lingma | `mcpServers` | JSON | `.lingma/mcp-settings.json` | GUI primary; ModelScope integration |
-| Baidu Comate | `mcpServers` | JSON | `.comate/mcp.json` | Rules use .mdr format; supports .agents/skills/ |
-| Tencent CodeBuddy | `mcpServers` | JSON | `~/.codebuddy/.mcp.json` | Full rules/agents/skills/memory system |
-| Kimi Code | `mcpServers` | JSON | `~/.kimi-code/mcp.json` | Path is `.kimi-code` NOT `.kimi`; config is `config.toml` |
-| ZCode (Zhipu) | `mcp.servers` | JSON | `~/.zcode/cli/config.json` | Root key `mcp.servers` (dot); uses AGENTS.md not CLAUDE.md |
-| MiniMax Code | N/A | — | (desktop app) | Built-in Agent Team/Skills/Memory; MCP unconfirmed |
-| mmx-cli (MiniMax) | N/A | JSON | `~/.mmx/config.json` | Region trap: api.minimax.io vs api.minimaxi.com |
-| Qoder CN (fmr Tongyi Lingma) | `mcpServers` | JSON | `~/.qoder/` / `qodercli mcp add` | Renamed 2026-05-20; uses AGENTS.md; ModelScope MCP plaza |
-| Baidu Comate IDE | `mcpServers` | JSON | (desktop app) | Distinct from plugin; Zulu multi-agent; .mdr rules; global config since 2025-08 |
-| Tencent CodeBuddy IDE | `mcpServers` | JSON | (desktop app) | Distinct from plugin; shares config with CodeBuddy CLI |
-| iFlyCode (讯飞) | `mcpServers` | JSON | (UI config) | MCP via UI paste JSON; no file-level config docs |
-| Raccoon AI (商汤) | `mcpServers` | JSON | (UI config) | MCP via UI paste JSON; no file-level config docs |
-| MonkeyCode (长亭) | `mcpServers` | JSON | `~/.monkeycode/` | AGPL-3.0 open source; SDD specs; MonkeyScan; private deploy |
-| veCLI (火山引擎) | `mcpServers` | JSON | `~/.vecli/` | Distinct from Trae CLI (Volcano Engine vs Trae brand) |
-| bolt.new / bolt.diy | `servers` | JSON | `~/.boltai/mcp.json` | Root key `servers` NOT `mcpServers`!; supports import from Cursor/Claude |
-| Qodo (fmr CodiumAI) | `mcpServers` | JSON | IDE Tools Mgmt UI | CodiumAI ≠ Codeium; agents in .toml; CLI supports `--mcp` |
-| Devin (Cognition) | `mcpServers` | JSON | (cloud dashboard) | Cloud SaaS only; bidirectional MCP; also exposes mcp.devin.ai |
-| v0 (Vercel) | UI | — | `v0.app/.../mcp-connections` | Bidirectional MCP; also exposes mcp.v0.dev; whitelisted clients only |
-| Lovable | UI | — | (lovable.dev chat connectors) | Bidirectional MCP; server OAuth limited to 5 clients; Enterprise disabled |
-| gptel + mcp.el (Emacs) | elisp | — | `~/.emacs.d/init.el` | Emacs ecosystem; `mcp-hub-start`; requires lisp |
-| WorkBuddy | `mcpServers` | JSON | `~/.workbuddy/.mcp.json` | Path is `~/.workbuddy/` not `~/.workbuddy` root; skills at `~/.workbuddy/skills/` |
+| Windsurf | `mcpServers` | JSON | `~/.codeium/windsurf/mcp_config.json` | Uses `serverUrl` not `url` for HTTP |
+| Continue.dev | `mcpServers` | YAML | `~/.continue/config.yaml` | mcpServers is ARRAY not object (only IDE using array) |
+| bolt.new/bolt.diy | `servers` | JSON | `~/.boltai/mcp.json` | Root key `servers` NOT `mcpServers`! |
 
 ---
 
