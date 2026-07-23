@@ -313,7 +313,8 @@ Detailed per-IDE paths for all migration objects. Read this when executing STEP 
 
 ## Chinese AI Assistants
 
-### tongyi-lingma
+### tongyi-lingma (DEPRECATED — renamed to Qoder CN on 2026-05-20, see `qoder-cn`)
+- **status**: legacy installs only; new installs use `~/.qoder/`. Paths below remain valid for pre-rename installs.
 - **detect**: `~/.lingma/`
 - **mcp**: project `.lingma/mcp-settings.json` · root_key `mcpServers` · JSON · GUI primary · ModelScope MCP plaza 3000+
 - **rules**: project `.lingma/<rulename>.md`

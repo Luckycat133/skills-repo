@@ -230,7 +230,7 @@ run env \
     AGENT_SKILLS_TRAE_CN_DIR="$T_TRAE_CN" \
     AGENT_SKILLS_WORKBUDDY_DIR="$T_WORKBUDDY" \
     bash "$SCRIPT_DIR/sync-global-skills.sh" \
-    --targets claude,codex,copilot,openclaw,trae,trae-cn,workbuddy
+    --targets claude,codex,copilot,openclaw,trae,trae-cn,workbuddy --yes
 assert_eq "$LAST_RC" "0" "B5: sync of all 7 targets exits 0 (verify passed)"
 
 # Each target should have received the synced skills (full-dir targets keep subdirs).

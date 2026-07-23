@@ -14,7 +14,7 @@ REPORT_FILE=""
 PRINT_PATH_IDE=""
 PRINT_PATH_OBJECT=""
 
-SUPPORTED_IDES="antigravity claude codex copilot cursor windsurf jetbrains openclaw trae trae-cn vscode zed neovim emacs continue aider roo-code cline amazon-q cody codeium tabnine replit pearai supermaven pieces blackbox gemini-cli goose-cli opencode kilocode kimiai workbuddy"
+SUPPORTED_IDES="antigravity claude claude-desktop codex copilot cursor windsurf jetbrains openclaw trae trae-cn vscode zed neovim emacs continue aider roo-code cline amazon-q cody codeium tabnine replit pearai supermaven pieces blackbox gemini-cli goose-cli opencode kilocode kimiai workbuddy kiro augment-code void-editor baidu-comate tencent-codebuddy zcode"
 
 MIGRATION_TOTAL=0
 MIGRATION_SUCCESS=0
@@ -61,6 +61,13 @@ get_ide_name() {
         kilocode)    echo "Kilocode" ;;
         kimiai)      echo "Kimi AI" ;;
         workbuddy)   echo "WorkBuddy" ;;
+        claude-desktop)    echo "Claude Desktop" ;;
+        kiro)              echo "Kiro" ;;
+        augment-code)      echo "Augment Code" ;;
+        void-editor)       echo "Void Editor" ;;
+        baidu-comate)      echo "Baidu Comate (文心快码)" ;;
+        tencent-codebuddy) echo "Tencent CodeBuddy" ;;
+        zcode)             echo "ZCode (智谱)" ;;
         *)           echo "$ide" ;;
     esac
 }
@@ -106,6 +113,14 @@ get_global_path() {
         kilocode)    echo "${HOME}/.kilocode" ;;
         kimiai)      echo "${HOME}/.kimi-code/skills" ;;
         workbuddy)   echo "${HOME}/.workbuddy/skills" ;;
+        # claude-desktop is MCP-only (no skills dir).
+        claude-desktop)    echo "" ;;
+        kiro)              echo "${HOME}/.kiro/steering" ;;
+        augment-code)      echo "${HOME}/.augment/skills" ;;
+        void-editor)       echo "" ;;
+        baidu-comate)      echo "${HOME}/.comate/skills" ;;
+        tencent-codebuddy) echo "${HOME}/.codebuddy/skills" ;;
+        zcode)             echo "${HOME}/.zcode/skills" ;;
         *)           echo "" ;;
     esac
 }
@@ -152,6 +167,13 @@ get_project_path() {
         kilocode)    echo ".kilocode" ;;
         kimiai)      echo ".kimi-code/skills" ;;
         workbuddy)   echo ".workbuddy/skills" ;;
+        claude-desktop)    echo "" ;;  # desktop app: no project-level config
+        kiro)              echo ".kiro" ;;
+        augment-code)      echo ".augment" ;;
+        void-editor)       echo ".void" ;;
+        baidu-comate)      echo ".comate" ;;
+        tencent-codebuddy) echo ".codebuddy" ;;
+        zcode)             echo ".zcode" ;;
         *)           echo "" ;;
     esac
 }
@@ -176,6 +198,11 @@ get_rules_file() {
         opencode)    echo "OPENCODE.md" ;;
         kilocode)    echo "KILOCODE.md" ;;
         kimiai)      echo "AGENTS.md" ;;
+        zcode)       echo "AGENTS.md" ;;
+        tencent-codebuddy) echo "CODEBUDDY.md" ;;
+        # kiro/augment-code/baidu-comate use rules DIRECTORIES
+        # (.kiro/steering/, .augment/rules/, .comate/rules/*.mdr) — not a
+        # single file, so they are intentionally absent here.
         *)           echo "" ;;
     esac
 }
@@ -214,6 +241,34 @@ get_mcp_path() {
         aider)       echo "${HOME}/.aider.conf.yml" ;;
         kimiai)      echo "${HOME}/.kimi-code/mcp.json" ;;
         workbuddy)   echo "${HOME}/.workbuddy/.mcp.json" ;;
+        # copilot = GitHub Copilot CLI: ~/.copilot/mcp-config.json, root key
+        # mcpServers (project .mcp.json ALSO uses mcpServers, unlike VS Code).
+        copilot)     echo "${HOME}/.copilot/mcp-config.json" ;;
+        # vscode = VS Code (v1.102+): user-level mcp.json, root key `servers`.
+        vscode)
+            if [[ "$(uname -s)" == "Darwin" ]]; then
+                echo "${HOME}/Library/Application Support/Code/User/mcp.json"
+            else
+                echo "${HOME}/.config/Code/User/mcp.json"
+            fi ;;
+        zed)         echo "${HOME}/.config/zed/settings.json" ;;
+        opencode)    echo "${HOME}/.config/opencode/opencode.json" ;;
+        amazon-q)    echo "${HOME}/.aws/amazonq/default.json" ;;
+        pearai)      echo "${HOME}/.pearai/config.json" ;;
+        cody)        echo "${HOME}/.config/cody/mcp_servers.json" ;;
+        tabnine)     echo "${HOME}/.tabnine/mcp_servers.json" ;;
+        claude-desktop)
+            if [[ "$(uname -s)" == "Darwin" ]]; then
+                echo "${HOME}/Library/Application Support/Claude/claude_desktop_config.json"
+            else
+                echo "${HOME}/.config/Claude/claude_desktop_config.json"
+            fi ;;
+        kiro)              echo "${HOME}/.kiro/settings/mcp.json" ;;
+        augment-code)      echo "${HOME}/.augment/settings.json" ;;
+        void-editor)       echo "${HOME}/.config/void/mcp_servers.json" ;;
+        baidu-comate)      echo "${HOME}/.comate/mcp.json" ;;
+        tencent-codebuddy) echo "${HOME}/.codebuddy/.mcp.json" ;;
+        zcode)             echo "${HOME}/.zcode/cli/config.json" ;;
         *)           echo "" ;;
     esac
 }
@@ -244,6 +299,9 @@ get_config_file() {
         kilocode)    echo "${HOME}/.kilocode/config.json" ;;
         kimiai)      echo "${HOME}/.kimi-code/config.toml" ;;
         workbuddy)   echo "${HOME}/.workbuddy/settings.json" ;;
+        tencent-codebuddy) echo "${HOME}/.codebuddy/settings.json" ;;
+        augment-code)      echo "${HOME}/.augment/settings.json" ;;
+        zcode)             echo "${HOME}/.zcode/cli/config.json" ;;
         *)           echo "" ;;
     esac
 }
@@ -255,12 +313,18 @@ get_config_file() {
 get_mcp_root_key() {
     local ide="$1"
     case "$ide" in
-        claude|cursor|windsurf|gemini-cli|trae|trae-cn|openclaw|continue|cline|roo-code|antigravity|amazon-q|kimiai|workbuddy)
+        claude|cursor|windsurf|gemini-cli|trae|trae-cn|openclaw|continue|cline|roo-code|antigravity|amazon-q|kimiai|workbuddy|copilot|claude-desktop|kiro|augment-code|void-editor|baidu-comate|tencent-codebuddy|pearai|cody|tabnine)
             echo "mcpServers" ;;
         codex)       echo "mcp_servers" ;;
         goose-cli)   echo "extensions" ;;
         zed)         echo "context_servers" ;;
         opencode)    echo "mcp" ;;
+        # VS Code user-level mcp.json uses `servers` (NOT mcpServers).
+        vscode)      echo "servers" ;;
+        # zcode natively nests under mcp.servers (dot-path), but it also
+        # accepts a flat mcpServers key (import-compat), which is what
+        # convert_mcp_file can produce with a single top-level key.
+        zcode)       echo "mcpServers" ;;
         *)           echo "" ;;
     esac
 }
@@ -490,7 +554,8 @@ set_manual_step() {
 get_status() {
     local obj="$1"
     if [[ -f "$MIGRATION_STATUS_FILE" ]]; then
-        grep "^$obj:" "$MIGRATION_STATUS_FILE" | tail -1 | sed 's/^[^:]*://'
+        # awk with literal string compare — $obj is never treated as regex.
+        awk -v o="$obj" -F: '$1 == o { sub(/^[^:]*:/, ""); print }' "$MIGRATION_STATUS_FILE" | tail -1
     fi
 }
 
@@ -499,14 +564,14 @@ get_message() {
     if [[ -f "$MIGRATION_MESSAGES_FILE" ]]; then
         # Parse only on the FIRST colon so values containing ':' (e.g.
         # file://... URLs or Windows C: paths) are preserved intact.
-        grep "^$obj:" "$MIGRATION_MESSAGES_FILE" | tail -1 | sed 's/^[^:]*://'
+        awk -v o="$obj" -F: '$1 == o { sub(/^[^:]*:/, ""); print }' "$MIGRATION_MESSAGES_FILE" | tail -1
     fi
 }
 
 get_manual_steps() {
     local obj="$1"
     if [[ -f "$MIGRATION_MANUAL_FILE" ]]; then
-        grep "^$obj:" "$MIGRATION_MANUAL_FILE" | sed 's/^[^:]*://'
+        awk -v o="$obj" -F: '$1 == o { sub(/^[^:]*:/, ""); print }' "$MIGRATION_MANUAL_FILE"
     fi
 }
 
@@ -828,19 +893,48 @@ def redact_value(v):
             return ""
     return v
 
-def redact_node(node):
+# CLI flag that names a secret (e.g. --token, --api-key). The flag itself is
+# kept; only its VALUE (the next argv element, or the =-suffix) is blanked.
+FLAG_RE = re.compile(r"^--?[A-Za-z0-9_\-]+$")
+FLAG_EQ_RE = re.compile(r"^(--?[A-Za-z0-9_\-]+)=(.+)$")
+
+def redact_node(node, key_ctx=""):
     if isinstance(node, dict):
         for k, v in list(node.items()):
             if isinstance(v, (dict, list)):
-                redact_node(v)
+                redact_node(v, k)
             elif isinstance(v, str) and SECRET_KEY_RE.search(k):
                 # key name itself signals a secret (e.g. "apiKey", "token")
                 node[k] = ""
             else:
                 node[k] = redact_value(v)
     elif isinstance(node, list):
-        for item in node:
-            redact_node(item)
+        # Arrays leak secrets two ways: (a) the PARENT key is secret-like
+        # ("API_KEYS": ["a","b"]) -> blank every string element; (b) argv-style
+        # flag pairs ("args": ["--token","val"] or ["--token=val"]) -> keep the
+        # flag, blank its value.
+        parent_secret = bool(SECRET_KEY_RE.search(key_ctx or ""))
+        blank_next = False
+        for i, item in enumerate(node):
+            if isinstance(item, (dict, list)):
+                redact_node(item, key_ctx)
+                blank_next = False
+            elif isinstance(item, str):
+                if parent_secret:
+                    node[i] = ""
+                elif blank_next:
+                    node[i] = ""
+                    blank_next = False
+                else:
+                    m_eq = FLAG_EQ_RE.match(item)
+                    if m_eq and SECRET_KEY_RE.search(m_eq.group(1)):
+                        node[i] = m_eq.group(1) + "="
+                    elif FLAG_RE.match(item) and SECRET_KEY_RE.search(item):
+                        blank_next = True  # flag kept; next argv element blanked
+                    else:
+                        node[i] = redact_value(item)
+            else:
+                blank_next = False
 
 try:
     with open(src) as f:
@@ -951,15 +1045,72 @@ def is_secret(key, val):
 
 count = 0
 out = []
+# Multi-line array state: >0 while inside an array opened by a secret-like key
+# (e.g.  "API_KEYS": [  ...elements on following lines... ]). Every quoted
+# string element inside such an array is blanked. flag_pending handles
+# argv-style pairs split across lines ("--token" on one line, value on next).
+secret_array_depth = 0
+
 with open(file) as f:
     for raw in f:
         line = raw.rstrip("\n")
+        # ---- inside a multi-line secret-keyed array: blank string elements
+        if secret_array_depth > 0:
+            secret_array_depth += line.count("[") - line.count("]")
+            stripped = line.strip()
+            if re.match(r'^["\'].*["\']\s*,?\s*$', stripped) and stripped not in ('""', '"",'):
+                line = re.sub(r'["\'].*?["\']', '""', line, count=1)
+                count += 1
+            out.append(line + "\n")
+            continue
         m = re.match(r'^\s*["\']?([A-Za-z0-9_.\-]+)["\']?\s*[:=]\s*(.*)$', line)
         if m:
             key, rest = m.group(1), m.group(2).strip()
-            # Skip container lines ("key": { or [) and empty values — never
+            key_secret = bool(SECRET_KEY_RE.search(key))
+            # Array opened by a secret-like key.
+            if rest == "[":
+                if key_secret:
+                    secret_array_depth = 1
+                out.append(line + "\n")
+                continue
+            # Single-line array value: [ "a", "b" ] — blank elements when the
+            # key is secret-like, or blank values following secret CLI flags.
+            if rest.startswith("["):
+                if key_secret:
+                    # Blank every non-empty quoted element; keep key + brackets.
+                    count += len(re.findall(r'["\'](.+?)["\']', rest))
+                    payload = re.sub(r'["\'](.+?)["\']', '""', rest)
+                    prefix = re.match(r'^(\s*["\']?[A-Za-z0-9_.\-]+["\']?\s*[:=]\s*)', raw.rstrip("\n")).group(1)
+                    line = prefix + payload
+                else:
+                    # argv-style: --token "val" / --token=val inside one line
+                    elems = re.findall(r'["\'](.*?)["\']', rest)
+                    blank_next = False
+                    changed = False
+                    new_elems = []
+                    for e in elems:
+                        if blank_next:
+                            new_elems.append("")
+                            count += 1
+                            changed = True
+                            blank_next = False
+                        elif re.match(r'^--?[A-Za-z0-9_\-]+=', e) and SECRET_KEY_RE.search(e.split("=", 1)[0]):
+                            new_elems.append(e.split("=", 1)[0] + "=")
+                            count += 1
+                            changed = True
+                        elif re.match(r'^--?[A-Za-z0-9_\-]+$', e) and SECRET_KEY_RE.search(e):
+                            new_elems.append(e)
+                            blank_next = True
+                        else:
+                            new_elems.append(e)
+                    if changed:
+                        it = iter(new_elems)
+                        line = re.sub(r'["\'](.*?)["\']', lambda m: '"%s"' % next(it), line)
+                out.append(line + "\n")
+                continue
+            # Skip container lines ("key": {) and empty values — never
             # redact an entire object just because its key looks secret.
-            if rest in ("{", "[", ""):
+            if rest in ("{", ""):
                 out.append(line + "\n")
                 continue
             # Quoted string value, possibly with a trailing comma: "value",
@@ -972,9 +1123,13 @@ with open(file) as f:
                     line = re.sub(r'([:=]\s*)["\'].*?["\'](\s*,?\s*)$', r'\1""\2', line)
                     count += 1
             else:
-                # Bare value (TOML/YAML, no surrounding quotes).
+                # Bare value (TOML/YAML, no surrounding quotes). A rest that
+                # STARTS with a quote but did not match the quoted-value regex
+                # is NOT a bare value — it is an array element like
+                # "--api-key=", (JSON) or an unterminated string; rewriting it
+                # would corrupt the file, so leave it untouched.
                 bare = rest.rstrip(',').strip()
-                if bare and is_secret(key, bare):
+                if bare and not bare.startswith(('"', "'")) and is_secret(key, bare):
                     line = re.sub(r'[:=]\s*\S.*?(\s*,?\s*)$', r': ""\1', line)
                     count += 1
         out.append(line + "\n")
@@ -1168,8 +1323,17 @@ migrate_config() {
     if cp "$source_config" "$target_config" 2>/dev/null; then
         if [[ -s "$target_config" ]]; then
             echo "  [COPY] 复制配置文件: $target_config"
+            # SECURITY: settings/config files routinely embed API keys and
+            # tokens. Strip them from the COPY (never the source) — same
+            # policy as MCP migration.
+            local config_redacted
+            config_redacted=$(redact_secrets_in_file "$target_config")
+            if [[ "${config_redacted:-0}" -gt 0 ]]; then
+                echo "  [SECURITY] 已清空 $config_redacted 处疑似密钥值，请在目标IDE中重新配置凭据"
+                set_manual_step "config" "配置文件中 $config_redacted 处密钥已被清空，需在目标IDE重新填写"
+            fi
             set_status "config" "copied"
-            set_message "config" "配置文件已复制 (可能需要手动调整格式): $target_config"
+            set_message "config" "配置文件已复制 (可能需要手动调整格式，密钥已清空): $target_config"
             set_manual_step "config" "检查并调整IDE配置文件格式 ($source_ide -> $target_ide)"
             MIGRATION_SUCCESS=$((MIGRATION_SUCCESS + 1))
         else
@@ -1309,7 +1473,7 @@ generate_report() {
     report+="  目标IDE: $(get_ide_name "$target_ide") ($target_ide)\n"
     report+="  工作区: $WORKSPACE_ROOT\n"
     report+="  策略: $STRATEGY\n"
-    report+="  时间: $(date -Iseconds)\n"
+    report+="  时间: $(date '+%Y-%m-%dT%H:%M:%S%z')\n"  # portable (BSD date lacks -Iseconds)
     report+="\n"
     report+="统计:\n"
     report+="  总操作数: $MIGRATION_TOTAL\n"

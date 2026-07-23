@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.6] - 2026-07-23
+
+### Security
+- **Array-valued secrets are now redacted.** Previously `"API_KEYS": ["a","b"]` and argv-style secrets (`"args": ["--token","VALUE"]` or `["--api-key=VALUE"]`) leaked on BOTH redaction paths. Fixed in `convert_mcp_file()`'s JSON walker (list elements inherit the parent key's secret context; secret CLI flags keep the flag and blank the following value / `=`-suffix) and in the line-based `redact_secrets_in_file()` (single-line arrays rewritten element-wise; multi-line arrays under a secret key tracked with a depth counter). Benign array elements are preserved and output stays valid JSON.
+- **Config migration (`--objects config`) now redacts secrets too.** `migrate_config` copied `settings.json`-style files verbatim, leaking embedded API keys; it now runs `redact_secrets_in_file` on the copy and prints the `[SECURITY]` count plus a manual re-credential step.
+
+### Added
+- **7 newly wired IDEs** in `smart-ide-migration.sh` (previously registry-doc-only): Claude Desktop, Kiro, Augment Code, Void Editor, Baidu Comate, Tencent CodeBuddy, ZCode — 40 supported IDEs total.
+- **MCP paths for 8 previously silent IDEs**: `copilot` (`~/.copilot/mcp-config.json`), `vscode` (`.../Code/User/mcp.json`, root key `servers`), `zed`, `opencode`, `amazon-q`, `pearai`, `cody`, `tabnine`. `claude → copilot/vscode` MCP migration no longer silently skips.
+- 17 new assertions in `test-mcp-secret-redaction.sh` (37 total): array-secret leaks (both paths), config-migration redaction, copilot/vscode MCP wiring.
+
+### Fixed
+- **`test-migration.sh` B5 harness bug**: the `sync-global-skills.sh` call omitted the required `--yes` confirmation flag, failing 29/56 checks. The guard was working as designed; the test now passes 56/56.
+- Portable timestamp in the migration report (`date '+%Y-%m-%dT%H:%M:%S%z'`; BSD/macOS `date` lacks `-Iseconds`).
+- `get_status`/`get_message`/`get_manual_steps` now use literal-string `awk` matching instead of interpolating `$obj` into a `grep` regex.
+- Line-based redactor no longer corrupts JSON when an array element resembles `key=value` (e.g. a blanked `"--api-key=",` line).
+
+### Changed
+- `references/ide-registry.md`: `tongyi-lingma` section marked DEPRECATED (renamed to Qoder CN 2026-05-20) with pointer to `qoder-cn`. Audit claims that copilot-cli project `.mcp.json` uses root key `servers` and that Qoder CN lives at `~/.qoder-cn/` were verified against official docs and found incorrect — registry entries (`mcpServers`, `~/.qoder/`) stand.
+- Bumped `SKILL.md` (source + root mirror) to `0.5.6`.
+
 ## [0.5.5] - 2026-07-23
 
 ### Security
@@ -26,15 +47,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **Root `SKILL.md` mirror links.** The mirror's `references/ide-registry.md` and `scripts/smart-ide-migration.sh` links pointed at paths that do not exist at the repository root (404 on platforms that scan the root). They are now rewritten to the nested `skills/agent-skills-setup/...` paths on every regeneration.
+- **Force ClawHub license metadata to refresh to MIT.** The registry caches a skill-level `license` field at first publish and does not re-derive it on a same-version republish (0.5.3's `license: MIT` frontmatter was correctly embedded in the description but the displayed License stayed `MIT-0`). Republishing the same version is rejected (`Version X already exists`), so the refresh is delivered via this version bump, whose publish re-derives the license from the `license: MIT` frontmatter.
 
 ### Changed
 - **Deduplicated the IDE Quick Reference table** in `SKILL.md`. The ~54-row table (which duplicated `references/ide-registry.md`) is replaced by the 5 highest-risk format examples plus a pointer to the full registry with a `grep` pattern, improving progressive disclosure.
 - Bumped `SKILL.md` (source + root mirror) to `0.5.4`.
-
-## [0.5.4] - 2026-07-23
-
-### Fixed
-- **Force ClawHub license metadata to refresh to MIT.** The registry caches a skill-level `license` field at first publish and does not re-derive it on a same-version republish (0.5.3's `license: MIT` frontmatter was correctly embedded in the description but the displayed License stayed `MIT-0`). Republishing the same version is rejected (`Version X already exists`), so this is delivered via a new version bump (0.5.4) whose publish re-derives the license from the `license: MIT` frontmatter. No code changes from 0.5.3.
 
 ## [0.5.3] - 2026-07-23
 

@@ -166,6 +166,100 @@ if grep -Fq "默认仅迁移低风险类型" "$OUT_FILE"; then check_pass "4: de
 
 # ===========================================================================
 echo ""
+echo "== 5. Array secrets: secret-named key with LIST value (JSON path) =="
+S5="$HOME/.claude.json"
+cat > "$S5" <<'EOF'
+{
+  "mcpServers": {
+    "arr-server": {
+      "command": "npx",
+      "env": { "NORMAL_VAR": "keep-me" },
+      "API_KEYS": ["EXAMPLE_ARRAY_KEY_1", "EXAMPLE_ARRAY_KEY_2"],
+      "args": ["--port", "8080", "--token", "EXAMPLE_ARGV_TOKEN", "--api-key=EXAMPLE_EQ_TOKEN"]
+    }
+  }
+}
+EOF
+run bash "$MIG" --source claude --target cursor --objects mcp --strategy overwrite
+assert_valid_json "$HOME/.cursor/mcp.json" "5: destination is valid JSON"
+if grep -Fq "EXAMPLE_ARRAY_KEY_1" "$HOME/.cursor/mcp.json"; then check_fail "5: API_KEYS[0] leaked"; else check_pass "5: API_KEYS[0] blanked"; fi
+if grep -Fq "EXAMPLE_ARRAY_KEY_2" "$HOME/.cursor/mcp.json"; then check_fail "5: API_KEYS[1] leaked"; else check_pass "5: API_KEYS[1] blanked"; fi
+if grep -Fq "EXAMPLE_ARGV_TOKEN" "$HOME/.cursor/mcp.json"; then check_fail "5: --token argv value leaked"; else check_pass "5: --token argv value blanked"; fi
+if grep -Fq "EXAMPLE_EQ_TOKEN" "$HOME/.cursor/mcp.json"; then check_fail "5: --api-key=... value leaked"; else check_pass "5: --api-key=... value blanked"; fi
+if grep -Fq '"--token"' "$HOME/.cursor/mcp.json"; then check_pass "5: --token flag itself preserved"; else check_fail "5: --token flag lost"; fi
+if grep -Fq '"8080"' "$HOME/.cursor/mcp.json"; then check_pass "5: benign argv (8080) preserved"; else check_fail "5: benign argv lost"; fi
+
+# ===========================================================================
+echo ""
+echo "== 6. Array secrets: line-based fallback (YAML-ish copy path) =="
+mkdir -p "$HOME/.config/goose"
+cat > "$HOME/.config/goose/config.yaml" <<'EOF'
+extensions:
+  arr:
+    command: npx
+    api_keys: ["EXAMPLE_YAML_ARR_KEY_1", "EXAMPLE_YAML_ARR_KEY_2"]
+    args: ["--token", "EXAMPLE_YAML_ARGV_TOKEN"]
+    keep: ["normal-item"]
+EOF
+run bash "$MIG" --source goose-cli --target cursor --objects mcp --strategy overwrite
+if grep -Fq "EXAMPLE_YAML_ARR_KEY_1" "$HOME/.cursor/mcp.json"; then check_fail "6: api_keys[0] leaked (line path)"; else check_pass "6: api_keys[0] blanked (line path)"; fi
+if grep -Fq "EXAMPLE_YAML_ARR_KEY_2" "$HOME/.cursor/mcp.json"; then check_fail "6: api_keys[1] leaked (line path)"; else check_pass "6: api_keys[1] blanked (line path)"; fi
+if grep -Fq "EXAMPLE_YAML_ARGV_TOKEN" "$HOME/.cursor/mcp.json"; then check_fail "6: --token value leaked (line path)"; else check_pass "6: --token value blanked (line path)"; fi
+if grep -Fq "normal-item" "$HOME/.cursor/mcp.json"; then check_pass "6: benign array preserved (line path)"; else check_fail "6: benign array lost (line path)"; fi
+
+# ===========================================================================
+echo ""
+echo "== 7. Config migration also redacts secrets =="
+mkdir -p "$HOME/.cursor"
+cat > "$HOME/.cursor/settings.json" <<'EOF'
+{
+  "editor.fontSize": 14,
+  "apiKey": "EXAMPLE_SETTINGS_API_KEY",
+  "telemetry": "off"
+}
+EOF
+run bash "$MIG" --source cursor --target windsurf --objects config --strategy overwrite
+if [[ -f "$HOME/.windsurf/settings.json" ]]; then
+    if grep -Fq "EXAMPLE_SETTINGS_API_KEY" "$HOME/.windsurf/settings.json"; then
+        check_fail "7: config migration leaked apiKey"
+    else
+        check_pass "7: config apiKey blanked"
+    fi
+    if grep -Fq '"editor.fontSize": 14' "$HOME/.windsurf/settings.json"; then check_pass "7: benign settings preserved"; else check_fail "7: benign settings lost"; fi
+    assert_valid_json "$HOME/.windsurf/settings.json" "7: migrated config is valid JSON"
+    if grep -Fq "[SECURITY]" "$OUT_FILE"; then check_pass "7: [SECURITY] warning printed for config redaction"; else check_fail "7: [SECURITY] warning missing for config redaction"; fi
+else
+    check_fail "7: config migration produced no target file"
+fi
+
+# ===========================================================================
+echo ""
+echo "== 8. copilot/vscode MCP paths wired (no silent skip) =="
+S8="$HOME/.claude.json"
+cat > "$S8" <<'EOF'
+{ "mcpServers": { "demo-server": { "command": "echo" } } }
+EOF
+run bash "$MIG" --source claude --target copilot --objects mcp --strategy overwrite
+if [[ -f "$HOME/.copilot/mcp-config.json" ]] && grep -Fq "demo-server" "$HOME/.copilot/mcp-config.json"; then
+    check_pass "8: claude -> copilot mcp migrated to ~/.copilot/mcp-config.json"
+else
+    check_fail "8: claude -> copilot mcp still skipped"
+fi
+run bash "$MIG" --source claude --target vscode --objects mcp --strategy overwrite
+VSCODE_MCP="$HOME/Library/Application Support/Code/User/mcp.json"
+[[ -f "$VSCODE_MCP" ]] || VSCODE_MCP="$HOME/.config/Code/User/mcp.json"
+if [[ -f "$VSCODE_MCP" ]]; then
+    if python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert "demo-server" in d.get("servers", {})' "$VSCODE_MCP" 2>/dev/null; then
+        check_pass "8: claude -> vscode mcp under root key servers"
+    else
+        check_fail "8: vscode mcp.json missing servers.demo-server"
+    fi
+else
+    check_fail "8: claude -> vscode mcp produced no file"
+fi
+
+# ===========================================================================
+echo ""
 if [[ $FAIL -eq 0 ]]; then
     echo "ALL $CHECKS MCP SECRET-REDACTION CHECKS PASSED"
     exit 0

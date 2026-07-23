@@ -24,7 +24,7 @@
     "global_skills": "~/.copilot/skills",
     "project_skills": ".github/copilot-instructions.md",
     "rules": ".github/copilot-instructions.md",
-    "mcp": "",
+    "mcp": "~/.copilot/mcp-config.json",
     "config": ""
   },
   "cursor": {
@@ -73,14 +73,14 @@
     "global_skills": "~/.vscode",
     "project_skills": ".vscode",
     "rules": "",
-    "mcp": "",
+    "mcp": "~/Library/Application Support/Code/User/mcp.json",
     "config": "~/.vscode/settings.json"
   },
   "zed": {
     "global_skills": "~/.config/zed",
     "project_skills": ".zed",
     "rules": "",
-    "mcp": "",
+    "mcp": "~/.config/zed/settings.json",
     "config": "~/.config/zed/settings.json"
   },
   "neovim": {
@@ -129,14 +129,14 @@
     "global_skills": "~/.aws/amazon-q",
     "project_skills": ".amazon-q",
     "rules": "",
-    "mcp": "",
+    "mcp": "~/.aws/amazonq/default.json",
     "config": ""
   },
   "cody": {
     "global_skills": "",
     "project_skills": ".cody",
     "rules": ".codyrules",
-    "mcp": "",
+    "mcp": "~/.config/cody/mcp_servers.json",
     "config": ""
   },
   "codeium": {
@@ -150,7 +150,7 @@
     "global_skills": "",
     "project_skills": ".tabnine",
     "rules": "",
-    "mcp": "",
+    "mcp": "~/.tabnine/mcp_servers.json",
     "config": ""
   },
   "replit": {
@@ -164,7 +164,7 @@
     "global_skills": "~/.pearai",
     "project_skills": ".pearai",
     "rules": ".pearairules",
-    "mcp": "",
+    "mcp": "~/.pearai/config.json",
     "config": "~/.pearai/settings.json"
   },
   "supermaven": {
@@ -206,7 +206,7 @@
     "global_skills": "~/.config/opencode",
     "project_skills": ".opencode",
     "rules": "OPENCODE.md",
-    "mcp": "",
+    "mcp": "~/.config/opencode/opencode.json",
     "config": "~/.config/opencode/config.json"
   },
   "kilocode": {
@@ -229,5 +229,54 @@
     "rules": "",
     "mcp": "~/.workbuddy/.mcp.json",
     "config": "~/.workbuddy/settings.json"
+  },
+  "claude-desktop": {
+    "global_skills": "",
+    "project_skills": "",
+    "rules": "",
+    "mcp": "~/Library/Application Support/Claude/claude_desktop_config.json",
+    "config": ""
+  },
+  "kiro": {
+    "global_skills": "~/.kiro/steering",
+    "project_skills": ".kiro",
+    "rules": "",
+    "mcp": "~/.kiro/settings/mcp.json",
+    "config": ""
+  },
+  "augment-code": {
+    "global_skills": "~/.augment/skills",
+    "project_skills": ".augment",
+    "rules": "",
+    "mcp": "~/.augment/settings.json",
+    "config": "~/.augment/settings.json"
+  },
+  "void-editor": {
+    "global_skills": "",
+    "project_skills": ".void",
+    "rules": "",
+    "mcp": "~/.config/void/mcp_servers.json",
+    "config": ""
+  },
+  "baidu-comate": {
+    "global_skills": "~/.comate/skills",
+    "project_skills": ".comate",
+    "rules": "",
+    "mcp": "~/.comate/mcp.json",
+    "config": ""
+  },
+  "tencent-codebuddy": {
+    "global_skills": "~/.codebuddy/skills",
+    "project_skills": ".codebuddy",
+    "rules": "CODEBUDDY.md",
+    "mcp": "~/.codebuddy/.mcp.json",
+    "config": "~/.codebuddy/settings.json"
+  },
+  "zcode": {
+    "global_skills": "~/.zcode/skills",
+    "project_skills": ".zcode",
+    "rules": "AGENTS.md",
+    "mcp": "~/.zcode/cli/config.json",
+    "config": "~/.zcode/cli/config.json"
   }
 }
