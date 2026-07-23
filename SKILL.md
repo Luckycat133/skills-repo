@@ -1,23 +1,25 @@
 ---
 name: agent-skills-setup
-version: 0.5.1
+version: 0.5.2
 license: MIT
 description: >
   Migrate ALL AI assistant context between IDEs — MCP servers, rules/instructions,
   skills, slash commands, agents, hooks, and memory. Detects installed IDEs,
   converts formats across platforms, merges with a safe default (backup-before-change)
   and an explicit overwrite mode (rsync --delete); always verifies results.
-  WHEN TO USE: trigger when the user wants to migrate, move, transfer, copy, convert,
-  or sync AI assistant context between IDEs — e.g. "migrate MCP config",
+  WHEN TO USE: ONLY when the user explicitly asks to migrate, move, transfer, copy,
+  convert, or sync AI assistant context between IDEs — e.g. "migrate MCP config",
   "move skills from Cursor to Claude", "transfer rules from Windsurf to Cursor",
-  "copy agents between IDEs", "ai ide migration".
+  "copy agents between IDEs". The skill previews every change with --dry-run and never
+  writes files without an explicit --yes confirmation; it must not activate on vague
+  or unrelated prompts.
 triggers:
   - migrate mcp config
   - migrate ai ide settings
   - move skills from cursor to claude
   - transfer mcp servers between ide
   - migrate rules from windsurf to cursor
-  - ai ide migration
+  - migrate ai ide context
   - copy mcp config to another ide
   - migrate ai assistant context
   - move skills between ide

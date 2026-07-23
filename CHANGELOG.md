@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.2] - 2026-07-22
+
+### Security
+- **Fixed arbitrary code execution (RCE) in `auto-configure-openclaw-skills.sh`.** The OpenClaw config file was previously parsed with `Function("return (…)")()`, which executes the file's contents as JavaScript. Replaced with a non-executing parser: strict `JSON.parse` first, then a string-aware JSONC-tolerant fallback (strips `//` and `/* */` comments and trailing commas) — never `eval`/`Function`. Verified by harness: valid JSON and JSONC still parse; embedded `child_process.execSync(...)` payloads are rejected and produce zero side effects.
+- **Added a `--yes` confirmation gate to `sync-global-skills.sh`.** The script mirrors with `rsync -a --delete` (which deletes skills in targets absent from the source). It now refuses to run destructively unless `--yes` is passed, and prints an explicit `WARNING` listing the targets and the deletion behavior before applying. `--dry-run` remains the safe default for previewing.
+- **Tightened SKILL.md triggers.** The activation description now requires an explicit user instruction and states the dry-run/`--yes` safety model; the broad `ai ide migration` trigger was narrowed to `migrate ai ide context` to reduce unintended activation.
+
+### Changed
+- Bumped `SKILL.md` (source + root mirror) to `0.5.2`.
+
 ## [0.5.1] - 2026-07-22
 
 ### Security

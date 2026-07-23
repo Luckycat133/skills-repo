@@ -14,6 +14,7 @@ TRAE_CN_DIR="${AGENT_SKILLS_TRAE_CN_DIR:-${HOME}/.trae-cn/skills}"
 WORKBUDDY_DIR="${AGENT_SKILLS_WORKBUDDY_DIR:-${HOME}/.workbuddy/skills}"
 
 DRY_RUN=0
+CONFIRM=0
 TARGETS_RAW="claude,codex,copilot,openclaw,trae,trae-cn,workbuddy"
 
 usage() {
@@ -26,6 +27,9 @@ Antigravity is treated as the source of truth.
 Options:
   --dry-run              Preview rsync operations without modifying files.
   --targets <list>       Comma-separated subset of targets to sync.
+  --yes                  Apply the mirror. REQUIRED for any destructive change;
+                         without it the script refuses to run (rsync -a --delete
+                         removes skills in targets that are absent from the source).
   -h, --help             Show this help text.
 EOF
 }
@@ -34,6 +38,10 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --dry-run)
             DRY_RUN=1
+            shift
+            ;;
+        --yes)
+            CONFIRM=1
             shift
             ;;
         --targets)
@@ -170,6 +178,19 @@ VERIFY_FAILED=0
 echo "Source of truth: $SOURCE_DIR"
 echo "Targets: ${TARGETS[*]}"
 [[ $DRY_RUN -eq 1 ]] && echo "Mode: dry-run"
+
+if [[ $DRY_RUN -eq 0 && $CONFIRM -eq 0 ]]; then
+    echo "REFUSING destructive sync: this mirrors with 'rsync -a --delete', which" >&2
+    echo "removes skills in each target dir that are not present in the source." >&2
+    echo "Review a plan first with --dry-run, then rerun with --yes to apply." >&2
+    exit 1
+fi
+
+if [[ $DRY_RUN -eq 0 ]]; then
+    echo "WARNING: applying destructive mirror (rsync -a --delete) to targets:" >&2
+    echo "  ${TARGETS[*]}" >&2
+    echo "Any skill present in a target but missing from the source will be deleted." >&2
+fi
 
 if contains_target claude; then
     mkdir -p "$CLAUDE_DIR"

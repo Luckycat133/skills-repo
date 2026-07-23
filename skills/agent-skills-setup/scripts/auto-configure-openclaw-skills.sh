@@ -818,11 +818,59 @@ const agents = JSON.parse(process.env.AGENTS_JSON || "[]");
 const requestedSkills = JSON.parse(process.env.REQUESTED_SKILLS_JSON || "[]");
 const defaultAgentId = process.env.DEFAULT_AGENT_ID || "";
 
+// Parse an OpenClaw config file without ever executing its contents.
+// Strict JSON first (covers configs this script and OpenClaw itself write);
+// fall back to a tolerant, NON-executing parse for JSONC-style inputs
+// (line/block comments and trailing commas). No eval/Function is used.
+function stripJsonc(input) {
+  let out = "";
+  let inString = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+  let i = 0;
+  while (i < input.length) {
+    const ch = input[i];
+    const next = input[i + 1];
+    if (inLineComment) {
+      if (ch === "\n") { inLineComment = false; out += ch; }
+    } else if (inBlockComment) {
+      if (ch === "*" && next === "/") { inBlockComment = false; i += 2; continue; }
+    } else if (inString) {
+      out += ch;
+      if (ch === "\\") { out += next; i += 2; continue; }
+      if (ch === '"') { inString = false; }
+    } else if (ch === '"') {
+      inString = true; out += ch;
+    } else if (ch === "/" && next === "/") {
+      inLineComment = true; i += 2; continue;
+    } else if (ch === "/" && next === "*") {
+      inBlockComment = true; i += 2; continue;
+    } else {
+      out += ch;
+    }
+    i++;
+  }
+  return out;
+}
+
+function parseConfig(text) {
+  try {
+    return JSON.parse(text);
+  } catch (_) {
+    const stripped = stripJsonc(text);
+    return JSON.parse(stripped.replace(/,(\s*[}\]])/g, "$1"));
+  }
+}
+
 let config = {};
 if (fs.existsSync(configPath)) {
   const raw = fs.readFileSync(configPath, "utf8").trim();
   if (raw) {
-    config = JSON.parse(raw);
+    try {
+      config = parseConfig(raw);
+    } catch (err) {
+      throw new Error(`Could not parse OpenClaw config at ${configPath} as JSON: ${err.message}`);
+    }
   }
 }
 
