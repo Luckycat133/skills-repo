@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Deduplicated the IDE Quick Reference table** in `SKILL.md`. The ~54-row table (which duplicated `references/ide-registry.md`) is replaced by the 5 highest-risk format examples plus a pointer to the full registry with a `grep` pattern, improving progressive disclosure.
 - Bumped `SKILL.md` (source + root mirror) to `0.5.4`.
 
+## [0.5.4] - 2026-07-23
+
+### Fixed
+- **Force ClawHub license metadata to refresh to MIT.** The registry caches a skill-level `license` field at first publish and does not re-derive it on a same-version republish (0.5.3's `license: MIT` frontmatter was correctly embedded in the description but the displayed License stayed `MIT-0`). Republishing the same version is rejected (`Version X already exists`), so this is delivered via a new version bump (0.5.4) whose publish re-derives the license from the `license: MIT` frontmatter. No code changes from 0.5.3.
+
 ## [0.5.3] - 2026-07-23
 
 ### Security
