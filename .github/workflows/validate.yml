@@ -21,3 +21,6 @@ jobs:
           target="$RUNNER_TEMP/skills"
           bash install.sh --target "$target"
           test -f "$target/agent-skills-setup/SKILL.md"
+
+      - name: Regression — MCP secret redaction during migration
+        run: bash skills/agent-skills-setup/scripts/test-mcp-secret-redaction.sh

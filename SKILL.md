@@ -10,7 +10,7 @@
 
 ---
 name: agent-skills-setup
-version: 0.5.4
+version: 0.5.5
 license: MIT
 description: >
   Migrate ALL AI assistant context between IDEs — MCP servers, rules/instructions,
@@ -64,7 +64,7 @@ Migrate AI assistant context (MCP, rules, skills, commands, agents, hooks, memor
 | 6 | **hooks** | Lifecycle event hooks |
 | 7 | **memory** | Persistent memory / memory banks / context files |
 
-**Never migrate**: API keys, tokens, OAuth tokens, chat history/transcripts, IDE UI settings, built-in vector indexes, workspace storage, SQLite databases.
+**Never migrate live secrets**: API keys, tokens, and bearer/OAuth credentials are always **BLANKED** during mcp/config migration (key names kept, values set to `""`) — they are never copied as-is. Also never migrate: chat history/transcripts, IDE UI settings, built-in vector indexes, workspace storage, SQLite databases.
 
 ---
 
@@ -85,7 +85,8 @@ Migrate AI assistant context (MCP, rules, skills, commands, agents, hooks, memor
 - Default to DRY-RUN. Never write without user confirmation.
 - Always backup before overwriting. Use `.bak.<YYYYMMDDHHMMSS>` suffix.
 - Merge, never overwrite. Conflicts renamed to `<name>_migrated`.
-- Blank all secret values in env (keep key names, set values to "").
+- Blank all secret values during migration (keep key names, set values to `""`): env vars (API keys, tokens), `Authorization`/bearer headers, `user:pass@` or `?key=` credential URLs, and DB connection strings. Secrets are redacted BEFORE the config is written to the target; the `[SECURITY]` warning in the report confirms this happened.
+- Default migration scope is **LOW-RISK ONLY** (`skills`, `rules`, `prompts`). `mcp`/`config`/`project` — which can carry live credentials — are NEVER migrated unless the user explicitly passes `--objects mcp|config|project`; a security warning is shown and secrets are redacted when they are in scope.
 - If source or target config is invalid JSON/TOML/YAML, STOP and report.
 
 ---

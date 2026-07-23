@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.5] - 2026-07-23
+
+### Security
+- **Secret redaction actually enforced during MCP/config migration.** A security audit flagged that `smart-ide-migration.sh` could read credential-bearing agent-config directories and copy live secrets to the target IDE. The documented "blank secret values" promise was previously only honored for a subset of cases. `convert_mcp_file()` now redacts, on every code path (JSON→JSON conversion **and** the TOML/YAML verbatim-copy fallback), and before the file is written to disk:
+  - env values whose key is secret-like (`API_KEY`, `TOKEN`, `GITHUB_TOKEN`, `SECRET`, `PASSWORD`, `AUTHORIZATION`, `CLIENT_SECRET`, …) — value blanked, key name preserved;
+  - `Authorization`/bearer header values;
+  - `user:pass@` credential URLs (incl. `postgres://`, `mysql://`, `redis://`, `mongodb://`, …);
+  - `?key=` / `?token=` / `?secret=` / `?access_token=` query-string credentials.
+  Non-secret values (e.g. `NORMAL_VAR`) and benign URLs are preserved.
+- **Default migration scope excludes credential-bearing objects.** When `--objects` is not given, the script now defaults to LOW-RISK types only (`skills`, `rules`, `prompts`). `mcp`/`config`/`project` — which can carry API keys, tokens, and bearer credentials — are NEVER migrated unless the user explicitly opts in via `--objects mcp|config|project`. A `⚠️ SECURITY` notice is shown whenever those types are in scope, and the `[SECURITY]` report line confirms secrets were cleared. Added `scripts/test-mcp-secret-redaction.sh` (20 assertions) covering both redaction paths, the honest no-false-warning case, and the default-scope hardening; wired into CI (`validate.yml`).
+
+### Changed
+- Bumped `SKILL.md` (source + root mirror) to `0.5.5`.
+
 ## [0.5.4] - 2026-07-23
 
 ### Added

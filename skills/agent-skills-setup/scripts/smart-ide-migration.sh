@@ -783,6 +783,7 @@ convert_mcp_file() {
     local src="$1" src_key="$2" dst="$3" dst_key="$4"
     CONV_RESULT=""
     CONV_DETAIL=""
+    MCP_REDACTED_COUNT=0
 
     if [[ ! -r "$src" ]]; then
         CONV_RESULT="failed"
@@ -793,15 +794,54 @@ convert_mcp_file() {
     # Only perform a true root-key conversion when BOTH the source and target
     # are JSON files. If either side is TOML/YAML (or any other format) we
     # cannot truly convert, so we fall back to a verbatim copy and report
-    # "copied" (never a false "success").
+    # "copied" (never a false "success"). In EVERY path we strip secrets
+    # (env values, bearer/API keys, URL-embedded credentials, auth headers)
+    # before the result lands on disk — honouring the skill's safety promise
+    # to never migrate live credentials.
     local src_ext dst_ext
     src_ext="${src##*.}"
     dst_ext="${dst##*.}"
 
     if [[ "$src_ext" == "json" && "$dst_ext" == "json" ]] && command -v python3 >/dev/null 2>&1; then
         if python3 - "$src" "$src_key" "$dst" "$dst_key" >/dev/null 2>&1 <<'PYEOF'
-import json, os, sys
+import json, os, re, sys
 src, src_key, dst, dst_key = sys.argv[1], (sys.argv[2] or ""), sys.argv[3], (sys.argv[4] or "")
+SECRET_KEY_RE = re.compile(r"(?i)(api[_-]?key|token|secret|password|passwd|authorization|auth|bearer|private[_-]?key|access[_-]?key|client[_-]?secret|session|cookie)", re.IGNORECASE)
+# Broadened to catch credential-bearing DB/connection URIs (postgres://user:pass@,
+# mysql://..., redis://..., etc.), not just http(s).
+URL_CRED_RE = re.compile(r"^(?:https?|postgres|postgresql|mysql|mongodb|mongodb\+srv|redis|ftp|amqp|sqlserver)://[^:@/\s]+:[^@/\s]+@", re.IGNORECASE)
+URL_TOKEN_RE = re.compile(r"^(https?://)[^/\s]*:(//)?[A-Za-z0-9_\-]{16,}", re.IGNORECASE)
+# Query-string credentials: ?key=..., ?token=..., ?secret=..., ?access_token=...
+QUERY_CRED_RE = re.compile(r"[?&](key|token|secret|access[_-]?token|api[_-]?key)=[A-Za-z0-9_\-]{12,}", re.IGNORECASE)
+
+def redact_value(v):
+    # Strings that look like a credential/secret get blanked (key name kept).
+    if isinstance(v, str):
+        # A secret keyword appearing inside a value (e.g. a bare bearer/token
+        # string) — but only when the value has no spaces, so prose such as
+        # "my password is secret" is never touched.
+        if SECRET_KEY_RE.search(v) and ' ' not in v:
+            return ""
+        if URL_CRED_RE.match(v) or URL_TOKEN_RE.match(v):
+            return ""
+        if QUERY_CRED_RE.search(v):
+            return ""
+    return v
+
+def redact_node(node):
+    if isinstance(node, dict):
+        for k, v in list(node.items()):
+            if isinstance(v, (dict, list)):
+                redact_node(v)
+            elif isinstance(v, str) and SECRET_KEY_RE.search(k):
+                # key name itself signals a secret (e.g. "apiKey", "token")
+                node[k] = ""
+            else:
+                node[k] = redact_value(v)
+    elif isinstance(node, list):
+        for item in node:
+            redact_node(item)
+
 try:
     with open(src) as f:
         data = json.load(f)
@@ -821,6 +861,7 @@ if not servers:
     # "success" for a zero-server transfer; signal the caller to fall back
     # to a verbatim copy instead.
     sys.exit(3)
+redact_node(servers)
 existing = {}
 if os.path.exists(dst):
     try:
@@ -847,20 +888,23 @@ with open(dst, "w") as f:
 sys.exit(0)
 PYEOF
         then
+            MCP_REDACTED_COUNT=$(redact_secrets_in_file "$dst")
             CONV_RESULT="success"
-            CONV_DETAIL="MCP配置已转换 (根键 ${src_key:-mcpServers} -> ${dst_key:-mcpServers})"
+            CONV_DETAIL="MCP配置已转换 (根键 ${src_key:-mcpServers} -> ${dst_key:-mcpServers})，密钥已清空"
             return
         fi
         # exit 2 (not JSON) or exit 3 (empty server map) -> fall through to a
         # verbatim copy so we never report a false "success"
     fi
 
-    # Fallback: copy as-is. Marked "copied" (not "success") because the format
-    # was not truly converted and manual adjustment is expected.
+    # Fallback: copy as-is, then strip secrets from the COPY (not the source).
+    # Marked "copied" (not "success") because the format was not truly
+    # converted and manual adjustment is expected.
     if cp "$src" "$dst" 2>/dev/null; then
         if [[ -s "$dst" ]]; then
+            MCP_REDACTED_COUNT=$(redact_secrets_in_file "$dst")
             CONV_RESULT="copied"
-            CONV_DETAIL="MCP配置按原样复制 (源/目标格式不直接兼容，需手动调整根键 ${src_key:-?} -> ${dst_key:-?})"
+            CONV_DETAIL="MCP配置按原样复制 (源/目标格式不直接兼容，需手动调整根键 ${src_key:-?} -> ${dst_key:-?})，密钥已清空"
         else
             CONV_RESULT="failed"
             CONV_DETAIL="MCP配置复制后为空"
@@ -869,6 +913,75 @@ PYEOF
         CONV_RESULT="failed"
         CONV_DETAIL="MCP配置复制失败"
     fi
+}
+
+# Strip likely secrets from a config file in place (env values, bearer/API
+# keys, URL-embedded credentials, auth headers, query-string creds). Works on
+# JSON/TOML/YAML by redacting quoted values whose key name is secret-like or
+# whose value looks like a credential. Keys are preserved; values are blanked.
+#
+# IMPORTANT: this must only ever touch LEAF values. A line like `"secret-env": {`
+# has a secret-looking KEY but its value is a container (`{`), NOT a secret — so
+# we skip it. Otherwise the whole object would be replaced with `""` and the
+# file (e.g. JSON) would be corrupted. Trailing commas (always present in
+# json.dump output) are handled too.
+#
+# Returns, on stdout, the number of values actually redacted (0 when none).
+redact_secrets_in_file() {
+    local file="$1"
+    [[ -f "$file" ]] || { echo 0; return 0; }
+    command -v python3 >/dev/null 2>&1 || { echo 0; return 0; }
+    python3 - "$file" <<'PYEOF'
+import re, sys
+file = sys.argv[1]
+SECRET_KEY_RE = re.compile(r"(?i)(api[_-]?key|token|secret|password|passwd|authorization|auth|bearer|private[_-]?key|access[_-]?key|client[_-]?secret|session|cookie)")
+URL_CRED_RE = re.compile(r"^(?:https?|postgres|postgresql|mysql|mongodb|mongodb\+srv|redis|ftp|amqp|sqlserver)://[^:@/\s]+:[^@/\s]+@", re.IGNORECASE)
+URL_TOKEN_RE = re.compile(r"^(https?://)[^/\s]*:(//)?[A-Za-z0-9_\-]{16,}", re.IGNORECASE)
+QUERY_CRED_RE = re.compile(r"[?&](key|token|secret|access[_-]?token|api[_-]?key)=[A-Za-z0-9_\-]{12,}", re.IGNORECASE)
+
+def is_secret(key, val):
+    if SECRET_KEY_RE.search(key or ""):
+        return True
+    if isinstance(val, str):
+        if URL_CRED_RE.match(val) or URL_TOKEN_RE.match(val):
+            return True
+        if QUERY_CRED_RE.search(val):
+            return True
+    return False
+
+count = 0
+out = []
+with open(file) as f:
+    for raw in f:
+        line = raw.rstrip("\n")
+        m = re.match(r'^\s*["\']?([A-Za-z0-9_.\-]+)["\']?\s*[:=]\s*(.*)$', line)
+        if m:
+            key, rest = m.group(1), m.group(2).strip()
+            # Skip container lines ("key": { or [) and empty values — never
+            # redact an entire object just because its key looks secret.
+            if rest in ("{", "[", ""):
+                out.append(line + "\n")
+                continue
+            # Quoted string value, possibly with a trailing comma: "value",
+            # The trailing comma (present in JSON, absent in TOML/YAML) must be
+            # PRESERVED or the file becomes invalid JSON. Capture it in group 2.
+            qm = re.match(r'^["\'](.*)["\']\s*,?\s*$', rest)
+            if qm:
+                val = qm.group(1)
+                if is_secret(key, val):
+                    line = re.sub(r'([:=]\s*)["\'].*?["\'](\s*,?\s*)$', r'\1""\2', line)
+                    count += 1
+            else:
+                # Bare value (TOML/YAML, no surrounding quotes).
+                bare = rest.rstrip(',').strip()
+                if bare and is_secret(key, bare):
+                    line = re.sub(r'[:=]\s*\S.*?(\s*,?\s*)$', r': ""\1', line)
+                    count += 1
+        out.append(line + "\n")
+with open(file, "w") as f:
+    f.writelines(out)
+print(count)
+PYEOF
 }
 
 migrate_mcp() {
@@ -948,12 +1061,18 @@ migrate_mcp() {
     case "$CONV_RESULT" in
         success)
             echo "  [OK] 转换MCP配置: ${src_key:-mcpServers} -> ${dst_key:-mcpServers}"
+            if [[ ${MCP_REDACTED_COUNT:-0} -ne 0 ]]; then
+                echo "  [SECURITY] MCP 配置中的密钥/令牌/凭据已在写入目标前被清空 (仅保留键名)。请确认目标 IDE 的密钥来源 (如环境变量/密钥管理器) 后再启用。"
+            fi
             set_status "mcp" "success"
             set_message "mcp" "$CONV_DETAIL"
             MIGRATION_SUCCESS=$((MIGRATION_SUCCESS + 1))
             ;;
         copied)
             echo "  [COPY] 按原样复制MCP配置: $target_mcp"
+            if [[ ${MCP_REDACTED_COUNT:-0} -ne 0 ]]; then
+                echo "  [SECURITY] MCP 配置中的密钥/令牌/凭据已在写入目标前被清空 (仅保留键名)。请确认目标 IDE 的密钥来源 (如环境变量/密钥管理器) 后再启用。"
+            fi
             set_status "mcp" "copied"
             set_message "mcp" "$CONV_DETAIL"
             set_manual_step "mcp" "检查MCP根键兼容性: ${src_key:-?} -> ${dst_key:-?}"
@@ -1383,12 +1502,25 @@ if [[ "$SOURCE_IDE" == "$TARGET_IDE" ]]; then
 fi
 
 if [[ -z "$OBJECTS" ]]; then
-    OBJECTS=$(list_available_objects "$SOURCE_IDE")
+    # Default to LOW-RISK object types only. mcp/config/project can carry live
+    # credentials (API keys, tokens, bearer auth); they are NEVER migrated by
+    # default — the user must opt in explicitly via --objects. This prevents
+    # accidental bulk copying of secret-bearing config (see security audit).
+    OBJECTS=$(list_available_objects "$SOURCE_IDE" | tr ',' '\n' | grep -E '^(skills|rules|prompts)$' | paste -sd, -)
     if [[ -z "$OBJECTS" ]]; then
-        echo "警告: 未检测到可迁移的内容，将尝试迁移所有类型" >&2
-        OBJECTS="skills,rules,prompts,mcp,config,project"
+        OBJECTS="skills,rules,prompts"
     fi
-    echo "自动检测到可迁移内容: $OBJECTS"
+    echo "未指定 --objects：默认仅迁移低风险类型 (skills,rules,prompts)。" >&2
+    echo "如需迁移 mcp/config/project（可能含密钥），请显式指定 --objects 并确认已审查。" >&2
+fi
+
+# Security reminder when sensitive (credential-bearing) object types are in scope.
+if [[ "$OBJECTS" == *mcp* || "$OBJECTS" == *config* || "$OBJECTS" == *project* ]]; then
+    echo "" >&2
+    echo "⚠️  SECURITY: 本次迁移包含 mcp/config/project，这些配置可能含有 API 密钥、令牌、" >&2
+    echo "    bearer 凭据或内嵌 URL 凭据。迁移时密钥会被自动清空 (仅保留键名)，目标 IDE" >&2
+    echo "    需另行配置密钥来源 (环境变量/密钥管理器)。请仅在你信任的源与目标间执行。" >&2
+    echo "" >&2
 fi
 
 echo "========================================"
