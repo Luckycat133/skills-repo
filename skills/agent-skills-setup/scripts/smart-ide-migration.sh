@@ -353,6 +353,43 @@ print_progress() {
     echo "[${step}] ${message}"
 }
 
+# Safely remove a single skill directory nested directly under a parent dir.
+# Guards against the classic `rm -rf` foot-guns before deleting anything:
+#   - both the parent dir and the skill name must be non-empty (an empty
+#     variable would collapse the path and risk wiping the parent or "/");
+#   - the skill name must be a single path component (no "/", no "." / "..",
+#     no leading dash) so it cannot escape the parent via traversal;
+#   - the resolved target must exist and be a directory before removal.
+# On any violation it prints an error and returns non-zero WITHOUT deleting.
+safe_remove_skill_dir() {
+    local parent="$1"
+    local name="$2"
+
+    if [[ -z "$parent" || -z "$name" ]]; then
+        echo "  [GUARD] 拒绝删除：目标目录或技能名为空 (parent='$parent', name='$name')" >&2
+        return 1
+    fi
+    case "$name" in
+        */*|.|..|.*/*|-*)
+            echo "  [GUARD] 拒绝删除：非法技能名 '$name'（禁止路径分隔符/穿越/前导短横线）" >&2
+            return 1
+            ;;
+    esac
+
+    local target="$parent/$name"
+    if [[ -L "$target" ]]; then
+        # A symlink here could point outside the parent; unlink only the link.
+        rm -f "$target"
+        return 0
+    fi
+    if [[ ! -d "$target" ]]; then
+        echo "  [GUARD] 跳过删除：目标不是目录或不存在 '$target'" >&2
+        return 1
+    fi
+
+    rm -rf "$target"
+}
+
 validate_ide() {
     local ide="$1"
     local supported
@@ -537,7 +574,11 @@ migrate_skills() {
                                 echo "  [BACKUP] 备份已存在: $skill_name"
                                 ;;
                             overwrite)
-                                rm -rf "$target_global/$skill_name"
+                                if ! safe_remove_skill_dir "$target_global" "$skill_name"; then
+                                    echo "  [FAIL] 覆盖前安全删除失败，跳过: $skill_name"
+                                    failed_count=$((failed_count + 1))
+                                    continue
+                                fi
                                 ;;
                         esac
                     fi
@@ -581,7 +622,11 @@ migrate_skills() {
                             echo "  [BACKUP] 备份已存在: $skill_name"
                             ;;
                         overwrite)
-                            rm -rf "$target_global/$skill_name"
+                            if ! safe_remove_skill_dir "$target_global" "$skill_name"; then
+                                echo "  [FAIL] 覆盖前安全删除失败，跳过: $skill_name"
+                                failed_count=$((failed_count + 1))
+                                continue
+                            fi
                             ;;
                     esac
                 fi

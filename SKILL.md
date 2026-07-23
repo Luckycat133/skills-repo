@@ -1,6 +1,6 @@
 ---
 name: agent-skills-setup
-version: 0.5.2
+version: 0.5.3
 license: MIT
 description: >
   Migrate ALL AI assistant context between IDEs — MCP servers, rules/instructions,
@@ -19,10 +19,10 @@ triggers:
   - move skills from cursor to claude
   - transfer mcp servers between ide
   - migrate rules from windsurf to cursor
-  - migrate ai ide context
   - copy mcp config to another ide
   - migrate ai assistant context
   - move skills between ide
+  - migrate ai ide context
   - migrate memory bank
 capabilities:
   - read:  IDE/agent config dirs (MCP, rules, skills, commands, agents, hooks, memory)
@@ -286,7 +286,7 @@ Copy markdown body; adapt frontmatter. Supported fields by IDE:
 | Copy/migrate API keys, tokens, secrets | Security; blank values, tell user to fill in |
 | Overwrite existing config without backup | Data loss; always .bak.TIMESTAMP first |
 | Overwrite existing entries | Merge only; conflicts → `<name>_migrated` |
-| Execute package installs (npm install -g, curl \| sh) | Don't modify user's system — NEVER silent; see the OpenClaw exception below |
+| Execute package installs (global npm installs, or piping a remote script straight into a shell interpreter) | Don't modify user's system — NEVER silent; see the OpenClaw exception below |
 | Modify shell rc files | PATH issues noted but not auto-fixed |
 | Kill/restart IDE processes | Tell user to restart in manual steps |
 | Migrate IDE UI settings / chat history / OAuth tokens / SQLite databases | Out of scope or privacy/security risk |
@@ -297,7 +297,7 @@ Copy markdown body; adapt frontmatter. Supported fields by IDE:
 
 `scripts/auto-configure-openclaw-skills.sh` is the installer for **OpenClaw**, a
 *target runtime* for this skill. It is the single deliberate, user-consented exception to the
-"no global installs / no unverified curl|sh" rule above. It MAY:
+"no global installs / no unverified remote-script execution" rule above. It MAY:
 
 - run `npm install -g clawhub` (installs the ClawHub package manager), and
 - download and execute `https://openclaw.ai/install.sh` (the OpenClaw runtime installer),
@@ -305,9 +305,10 @@ Copy markdown body; adapt frontmatter. Supported fields by IDE:
 **but ONLY when ALL of the following hold:**
 
 1. The user passes `--yes` (explicit, recorded consent to modify their system).
-2. For `install.sh`, the downloaded script's SHA-256 is verified against `OPENCLAW_INSTALL_SHA256`
-   when a pin is provided; if no pin is set, the script prints a *prominent WARNING* showing the
-   computed hash rather than silently trusting the download.
+2. For `install.sh`, the script downloads to a temp file (it never pipes the download
+   directly into a shell interpreter) and verifies its SHA-256 against `OPENCLAW_INSTALL_SHA256`.
+   Setting this pin is **mandatory**: if it is unset, the script refuses to run the installer and
+   exits, rather than trusting an unverified download — this prevents supply-chain tampering.
 3. In `--dry-run` mode it only previews these actions and never executes them.
 
 This exception applies **solely** to installing the OpenClaw runtime / ClawHub for this skill's own

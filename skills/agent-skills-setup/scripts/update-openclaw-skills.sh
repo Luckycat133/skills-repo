@@ -6,6 +6,7 @@ SOURCE_DIR="${AGENT_SKILLS_SOURCE_DIR:-${HOME}/.gemini/antigravity/skills}"
 STATE_DIR="${OPENCLAW_STATE_DIR:-${HOME}/.openclaw}"
 MANAGED_DIR="${AGENT_SKILLS_OPENCLAW_DIR:-${STATE_DIR}/skills}"
 DRY_RUN=0
+CONFIRM=0
 SKIP_RUNTIME=0
 SKIP_CLAWHUB=0
 SKIP_MIRROR=0
@@ -32,6 +33,11 @@ Options:
   --skip-mirror           Do not run local rsync mirror updates.
     --skip-doctor           Do not run `openclaw doctor` after updates.
   --dry-run               Preview commands and rsync changes without applying.
+  --yes                   Confirm destructive mirror. REQUIRED to apply the local
+                          rsync mirror: it uses `rsync -a --delete`, which removes
+                          any file in a destination skill dir that is absent from
+                          the source. Without --yes (and not in --dry-run), the
+                          script refuses the mirror step. Preview first with --dry-run.
   -h, --help              Show this help text.
 EOF
 }
@@ -117,6 +123,10 @@ while [[ $# -gt 0 ]]; do
             DRY_RUN=1
             shift
             ;;
+        --yes)
+            CONFIRM=1
+            shift
+            ;;
         -h|--help)
             usage
             exit 0
@@ -190,6 +200,32 @@ if [[ $SKIP_CLAWHUB -eq 0 ]]; then
 fi
 
 if [[ $SKIP_MIRROR -eq 0 ]]; then
+    if [[ $DRY_RUN -eq 0 && $CONFIRM -eq 0 ]]; then
+        echo "REFUSING destructive mirror: this mirrors with 'rsync -a --delete', which" >&2
+        echo "removes any file in a destination skill dir that is absent from the source." >&2
+        echo "Affected destinations:" >&2
+        echo "  $MANAGED_DIR" >&2
+        if [[ ${#WORKSPACES[@]} -gt 0 ]]; then
+            for workspace in "${WORKSPACES[@]}"; do
+                echo "  $workspace/skills" >&2
+            done
+        fi
+        echo "Preview a plan first with --dry-run, then rerun with --yes to apply" >&2
+        echo "(or pass --skip-mirror to skip local mirroring entirely)." >&2
+        exit 1
+    fi
+
+    if [[ $DRY_RUN -eq 0 ]]; then
+        echo "WARNING: applying destructive mirror (rsync -a --delete) to:" >&2
+        echo "  $MANAGED_DIR" >&2
+        if [[ ${#WORKSPACES[@]} -gt 0 ]]; then
+            for workspace in "${WORKSPACES[@]}"; do
+                echo "  $workspace/skills" >&2
+            done
+        fi
+        echo "Any file present in a destination but missing from the source will be deleted." >&2
+    fi
+
     mirror_selected_skills "$MANAGED_DIR"
     if [[ ${#WORKSPACES[@]} -gt 0 ]]; then
         for workspace in "${WORKSPACES[@]}"; do

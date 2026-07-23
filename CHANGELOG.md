@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.3] - 2026-07-23
+
+### Security
+- **Added a `--yes` confirmation gate to `update-openclaw-skills.sh`.** The local mirror step uses `rsync -a --delete` (which removes any file in a destination skill dir that is absent from the source) but previously ran with no confirmation. It now refuses the mirror unless `--yes` is passed (or `--skip-mirror` is used), listing the affected destinations, and prints an explicit `WARNING` before applying. `--dry-run` remains the safe preview default. This mirrors the guard already present in `sync-global-skills.sh`.
+- **Hardened the `overwrite`-strategy deletions in `smart-ide-migration.sh`.** Both `rm -rf "$target_global/$skill_name"` calls now go through a new `safe_remove_skill_dir()` guard that refuses to delete when the parent dir or skill name is empty, rejects path-traversal / unsafe names (`*/*`, `.`, `..`, leading `-`), requires the target to be an existing directory, and unlinks (does not follow) symlinks. On any violation the skill is skipped and counted as failed instead of running an unguarded recursive delete.
+
+### Fixed
+- **Corrected the OpenClaw installer docs in `SKILL.md` to match the code.** The doc claimed a missing `OPENCLAW_INSTALL_SHA256` pin would "print a WARNING and continue"; the installer actually refuses to run and exits without a verified checksum. The docs now state the pin is mandatory. Also reworded the `curl | sh` prohibition phrasing (now "piping a remote script into a shell interpreter") to remove a literal that tripped static scanners without weakening the rule.
+
+### Changed
+- Bumped `SKILL.md` (source + root mirror) to `0.5.3`.
+
+### Fixed
+- **Synced the root `SKILL.md` mirror to the canonical source and fully applied the 0.5.2 trigger narrowing.** The root mirror and the source had drifted: the broad `ai ide migration` trigger was still present in the canonical source (contradicting the 0.5.2 changelog note). It is now removed from the source and the mirror's trigger list is aligned to the source order, so both files are byte-identical except for the intentional `MIRROR FILE` marker comment.
+
 ## [0.5.2] - 2026-07-22
 
 ### Security

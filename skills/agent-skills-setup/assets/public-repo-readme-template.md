@@ -1,7 +1,7 @@
 # {{SKILL_NAME}}
 
 [![GitHub](https://img.shields.io/badge/GitHub-{{REPO_NAME}}-181717?logo=github)](https://github.com/{{REPO_NAME}})
-[![License](https://img.shields.io/badge/License-MIT-0b7285.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 Reusable multi-agent skill for Antigravity, Claude Code, OpenAI Codex, GitHub Copilot, Trae, OpenClaw, and related tooling.
 
