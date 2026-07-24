@@ -1653,6 +1653,28 @@ migrate_config() {
     fi
 }
 
+# Redact secrets in every config-like text file under a migrated project
+# tree (the COPY, never the source). Prints the total number of blanked
+# values. Fail-closed: redact_secrets_in_file already deletes a copy it
+# cannot redact; this helper then reports partial failure via rc=1.
+redact_project_copy() {
+    local root="$1"
+    local total=0 n had_fail=0 f
+    while IFS= read -r -d '' f; do
+        if n=$(redact_secrets_in_file "$f") && [[ "${n:--1}" != "-1" ]]; then
+            [[ "${n:-0}" -gt 0 ]] && total=$((total + n))
+        else
+            # Copy already removed by the fail-closed redactor; make sure.
+            rm -f "$f" 2>/dev/null || true
+            had_fail=1
+        fi
+    done < <(find "$root" -name '*.bak.*' -prune -o -type f \( \
+        -name '*.json' -o -name '*.jsonc' -o -name '*.yaml' -o -name '*.yml' \
+        -o -name '*.toml' -o -name '*.env' -o -name '.env*' \) -print0 2>/dev/null)
+    echo "$total"
+    return $had_fail
+}
+
 migrate_project() {
     local source_ide="$1"
     local target_ide="$2"
@@ -1700,27 +1722,127 @@ migrate_project() {
         set_message "project" "项目配置准备迁移"
     else
         if [[ -d "$source_path" ]]; then
+            # Apply the migration strategy to an EXISTING target (dir or file).
+            if [[ -e "$target_path" ]]; then
+                case "$STRATEGY" in
+                    skip)
+                        echo "  [SKIP] 目标项目配置已存在: $target_project"
+                        set_status "project" "skipped"
+                        set_message "project" "目标项目配置已存在，跳过 (策略: skip)"
+                        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
+                        return 0
+                        ;;
+                    backup)
+                        local ts
+                        ts=$(date +%Y%m%d%H%M%S)
+                        cp -r "$target_path" "$target_path.bak.$ts"
+                        echo "  [BACKUP] 备份已有项目配置: $target_project.bak.$ts"
+                        ;;
+                    overwrite)
+                        rm -rf "$target_path"
+                        ;;
+                esac
+            fi
             mkdir -p "$target_path"
-            if cp -r "$source_path"/* "$target_path/" 2>/dev/null; then
-                echo "  [OK] 迁移项目配置目录"
-                set_status "project" "success"
-                set_message "project" "项目配置迁移成功"
-                MIGRATION_SUCCESS=$((MIGRATION_SUCCESS + 1))
+            # Guard: refuse to report success if the source tree is empty
+            # (e.g. only non-tracked dotfiles), so we never claim a
+            # zero-byte transfer as "success".
+            local src_files
+            src_files=$(find "$source_path" -type f 2>/dev/null | wc -l | tr -d ' ')
+            if [[ "${src_files:-0}" -eq 0 ]]; then
+                set_status "project" "skipped"
+                set_message "project" "源项目配置目录为空: $source_project"
+                MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
+                return 0
+            fi
+            if cp -r "$source_path"/. "$target_path"/ 2>/dev/null; then
+                if [[ $(find "$target_path" -type f 2>/dev/null | wc -l | tr -d ' ') -eq 0 ]]; then
+                    set_status "project" "failed"
+                    set_message "project" "项目配置复制后为空"
+                    MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
+                else
+                    echo "  [OK] 迁移项目配置目录"
+                    # SECURITY: project trees routinely bundle .env / .toml /
+                    # json credentials (local service configs, etc.). Strip
+                    # them from the COPY (never the source) — same policy as
+                    # the mcp and config migrations. Fail-closed: if any file
+                    # cannot be redacted, the whole copy is removed so no
+                    # secret-bearing file is left on disk.
+                    local proj_redacted proj_rc=0
+                    proj_redacted=$(redact_project_copy "$target_path") || proj_rc=$?
+                    if [[ "$proj_rc" -ne 0 ]]; then
+                        echo "  [FAIL] 项目配置脱敏失败，目标副本已删除以防密钥泄漏"
+                        rm -rf "$target_path"
+                        set_status "project" "failed"
+                        set_message "project" "项目配置脱敏失败，目标副本已删除以防密钥泄漏 (源文件未动)"
+                        MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
+                    else
+                        if [[ "${proj_redacted:-0}" -gt 0 ]]; then
+                            echo "  [SECURITY] 已清空 $proj_redacted 处疑似密钥值，请检查目标项目中的凭据并重新配置"
+                            set_manual_step "project" "项目配置中 $proj_redacted 处密钥已被清空，请在目标IDE重新填写 (如 .env / 配置文件)"
+                        fi
+                        set_status "project" "success"
+                        set_message "project" "项目配置目录已迁移，密钥已清空: $target_project"
+                        MIGRATION_SUCCESS=$((MIGRATION_SUCCESS + 1))
+                    fi
+                fi
             else
                 set_status "project" "failed"
                 set_message "project" "项目配置迁移失败"
                 MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
             fi
         else
+            # Single project-level config FILE case (e.g. .dir-locals.el,
+            # .aider.conf.yml, .github/copilot-instructions.md).
+            if [[ -e "$target_path" ]]; then
+                case "$STRATEGY" in
+                    skip)
+                        echo "  [SKIP] 目标项目配置文件已存在: $target_project"
+                        set_status "project" "skipped"
+                        set_message "project" "目标项目配置文件已存在，跳过 (策略: skip)"
+                        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
+                        return 0
+                        ;;
+                    backup)
+                        local ts
+                        ts=$(date +%Y%m%d%H%M%S)
+                        cp "$target_path" "$target_path.bak.$ts"
+                        echo "  [BACKUP] 备份已有项目配置文件: $target_project.bak.$ts"
+                        ;;
+                    overwrite)
+                        rm -f "$target_path"
+                        ;;
+                esac
+            fi
             mkdir -p "$(dirname "$target_path")"
             if cp "$source_path" "$target_path" 2>/dev/null; then
-                echo "  [OK] 迁移项目配置文件"
-                set_status "project" "success"
-                set_message "project" "项目配置迁移成功"
-                MIGRATION_SUCCESS=$((MIGRATION_SUCCESS + 1))
+                if [[ ! -s "$target_path" ]]; then
+                    set_status "project" "failed"
+                    set_message "project" "项目配置文件复制后为空"
+                    MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
+                else
+                    echo "  [OK] 迁移项目配置文件"
+                    local proj_redacted proj_rc=0
+                    proj_redacted=$(redact_project_copy "$target_path") || proj_rc=$?
+                    if [[ "$proj_rc" -ne 0 ]]; then
+                        echo "  [FAIL] 项目配置脱敏失败，目标副本已删除以防密钥泄漏"
+                        rm -f "$target_path"
+                        set_status "project" "failed"
+                        set_message "project" "项目配置脱敏失败，目标副本已删除以防密钥泄漏 (源文件未动)"
+                        MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
+                    else
+                        if [[ "${proj_redacted:-0}" -gt 0 ]]; then
+                            echo "  [SECURITY] 已清空 $proj_redacted 处疑似密钥值，请检查目标项目中的凭据并重新配置"
+                            set_manual_step "project" "项目配置中 $proj_redacted 处密钥已被清空，请在目标IDE重新填写"
+                        fi
+                        set_status "project" "success"
+                        set_message "project" "项目配置文件已迁移，密钥已清空: $target_project"
+                        MIGRATION_SUCCESS=$((MIGRATION_SUCCESS + 1))
+                    fi
+                fi
             else
                 set_status "project" "failed"
-                set_message "project" "项目配置迁移失败"
+                set_message "project" "项目配置文件迁移失败"
                 MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
             fi
         fi

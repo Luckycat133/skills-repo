@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.7] - 2026-07-24
+
+### Security
+- **Project-level migration (`--objects project`) now honors the same backup + secret-redaction contract as `mcp`/`config`.** The scanner flagged that `smart-ide-migration.sh` could copy project trees (which routinely bundle `.env` / `.toml` / `*.json` credentials) **without** the backup/secret-redaction behavior the skill documentation already promised. Fixed in `migrate_project()`:
+  - Applies the migration `STRATEGY` to an **existing** target before overwrite: `skip` → leave target untouched; `backup` (default) → copy target to `.bak.<YYYYMMDDHHMMSS>` first; `overwrite` → remove target.
+  - After copying, runs `redact_project_copy()` over the **copy** (never the source): blanks secret values in `*.json/jsonc/yaml/yml/toml/.env` files (keys preserved), mirroring the mcp/config path.
+  - **Fail-closed**: if any file in the copy cannot be redacted, the entire copied tree is removed and the migration is marked `failed` — no secret-bearing copy is ever left on disk.
+  - Refuses to report "success" on a zero-byte transfer (empty source tree → `skipped`).
+  - Added `scripts/test-migration.sh` Section D (project object): dry-run zero-write, real migration redacts copy while leaving the **source** untouched, existing-target backup, `skip` (no new backup), and `overwrite` (re-copy + redact). Migration suite now **85 checks**.
+
+> Note: 0.5.6 was published but held in moderation (`clawscan.status: suspicious`) for this exact gap. Registry version numbers are immutable and cannot be reused, so the fix ships as **0.5.7**.
+
 ## [0.5.6] - 2026-07-24
 
 ### Security

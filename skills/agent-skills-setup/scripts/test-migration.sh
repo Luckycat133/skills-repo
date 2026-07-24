@@ -294,6 +294,89 @@ assert_eq "$LAST_RC" "0" "C3: dry-run exits 0 without --yes"
 assert_not_exists "$GATE_TGT" "C3: dry-run performs zero writes (no target dir created)"
 
 # ===========================================================================
+# D. project object — backup + fail-closed secret redaction (C3/L5 fix)
+# ===========================================================================
+# Source project lives under WORKSPACE_ROOT ($WS): source=claude -> .claude
+# Target project (codex) -> .codex, also under $WS.
+
+echo ""
+echo "== D. project object (backup + secret redaction) =="
+
+SRC_PROJ="$WS/.claude"
+rm -rf "$SRC_PROJ"
+mkdir -p "$SRC_PROJ"
+# A secret-bearing env file and a secret-bearing json file.
+printf 'API_KEY=EXAMPLE_SECRET_VALUE_1234567890\nPASSWORD=example-password-xyz\n' > "$SRC_PROJ/.env"
+printf '{ "token": "example-token-value-1234567890", "name": "ok" }\n' > "$SRC_PROJ/svc.json"
+# A harmless, non-secret file that must survive the copy untouched.
+printf 'name: demo\n' > "$SRC_PROJ/notes.yaml"
+
+D_TGT="$WS/.codex"
+rm -rf "$D_TGT" "$WS"/.codex.bak.*
+
+# --- D1. dry-run: zero writes, plan printed -------------------------------
+run bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+    --source claude --target codex \
+    --workspace "$WS" \
+    --objects project --dry-run
+assert_eq "$LAST_RC" "0" "D1: project dry-run exits 0"
+assert_not_exists "$D_TGT" "D1: project dry-run performs ZERO writes"
+
+# --- D2. real migration with --yes (default strategy = backup) -----------
+run bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+    --source claude --target codex \
+    --workspace "$WS" \
+    --objects project --yes
+assert_eq "$LAST_RC" "0" "D2: project migration exits 0"
+assert_dir "$D_TGT" "D2: project target dir created"
+assert_file "$D_TGT/.env" "D2: secret file copied to target"
+# SECURITY: the copy's secret VALUES must be blanked, KEYS preserved.
+assert_not_contains "$D_TGT/.env" "EXAMPLE_SECRET_VALUE_1234567890" "D2: env secret VALUE redacted from copy"
+assert_not_contains "$D_TGT/.env" "example-password-xyz" "D2: password secret redacted from copy"
+assert_contains "$D_TGT/.env" "PASSWORD" "D2: password secret KEY preserved (value blanked)"
+assert_contains "$D_TGT/.env" "API_KEY" "D2: env secret KEY preserved (value blanked)"
+assert_not_contains "$D_TGT/svc.json" "example-token-value-1234567890" "D2: json secret redacted from copy"
+assert_contains "$OUT_FILE" "[SECURITY]" "D2: redaction count reported to user"
+# Non-secret content is preserved.
+assert_contains "$D_TGT/notes.yaml" "name: demo" "D2: non-secret file preserved"
+# CRITICAL: the SOURCE is never redacted (fail-open-safe: untouched source = recoverable).
+assert_contains "$SRC_PROJ/.env" "EXAMPLE_SECRET_VALUE_1234567890" "D2: SOURCE secret untouched"
+assert_contains "$SRC_PROJ/svc.json" "example-token-value-1234567890" "D2: SOURCE json secret untouched"
+
+# --- D3. re-run with existing target: must BACK UP first -----------------
+run bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+    --source claude --target codex \
+    --workspace "$WS" \
+    --objects project --yes
+assert_eq "$LAST_RC" "0" "D3: second migration exits 0"
+if ls -d "$WS"/.codex.bak.* >/dev/null 2>&1; then check_pass "D3: existing project target backed up before overwrite"; else check_fail "D3: existing project target backed up before overwrite"; fi
+# The backup itself must NOT contain live secrets (it is the previously-redacted copy).
+BK=$(ls -d "$WS"/.codex.bak.* 2>/dev/null | head -1)
+if [[ -n "$BK" ]]; then
+    assert_not_contains "$BK/.env" "EXAMPLE_SECRET_VALUE_1234567890" "D3: backup holds no live secret"
+fi
+
+# --- D4. --strategy skip on existing target: no write, no new backup ----
+bk_before=$(ls -d "$WS"/.codex.bak.* 2>/dev/null | wc -l | tr -d ' ')
+run bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+    --source claude --target codex \
+    --workspace "$WS" \
+    --objects project --yes --strategy skip
+assert_eq "$LAST_RC" "0" "D4: skip strategy exits 0"
+bk_after=$(ls -d "$WS"/.codex.bak.* 2>/dev/null | wc -l | tr -d ' ')
+assert_eq "$bk_after" "$bk_before" "D4: skip created no new backup"
+assert_not_contains "$D_TGT/.env" "EXAMPLE_SECRET_VALUE_1234567890" "D4: skipped target still has no live secret"
+
+# --- D5. --strategy overwrite: removes target and re-copies + redacts ---
+run bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+    --source claude --target codex \
+    --workspace "$WS" \
+    --objects project --yes --strategy overwrite
+assert_eq "$LAST_RC" "0" "D5: overwrite strategy exits 0"
+assert_not_contains "$D_TGT/.env" "EXAMPLE_SECRET_VALUE_1234567890" "D5: overwrite re-copied + redacted"
+assert_contains "$D_TGT/notes.yaml" "name: demo" "D5: overwrite preserved non-secret file"
+
+# ===========================================================================
 # Summary
 # ===========================================================================
 echo ""
