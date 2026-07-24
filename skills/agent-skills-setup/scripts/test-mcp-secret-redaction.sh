@@ -93,7 +93,7 @@ cat > "$S1" <<'EOF'
 }
 EOF
 
-run bash "$MIG" --source claude --target cursor --objects mcp --strategy overwrite
+run bash "$MIG" --source claude --target cursor --objects mcp --strategy overwrite --yes
 assert_valid_json "$HOME/.cursor/mcp.json" "1: destination is valid JSON"
 assert_json_val "$HOME/.cursor/mcp.json" secret-env "env.API_KEY" "" "1: API_KEY blanked"
 assert_json_val "$HOME/.cursor/mcp.json" secret-env "env.GITHUB_TOKEN" "" "1: GITHUB_TOKEN blanked"
@@ -112,7 +112,7 @@ S2="$HOME/.claude.json"
 cat > "$S2" <<'EOF'
 { "mcpServers": { "demo-server": { "command": "echo", "args": [] } } }
 EOF
-run bash "$MIG" --source claude --target cursor --objects mcp --strategy overwrite
+run bash "$MIG" --source claude --target cursor --objects mcp --strategy overwrite --yes
 assert_valid_json "$HOME/.cursor/mcp.json" "2: destination is valid JSON"
 if grep -Fq "demo-server" "$HOME/.cursor/mcp.json"; then check_pass "2: demo-server migrated"; else check_fail "2: demo-server missing"; fi
 if grep -Fq "[SECURITY]" "$OUT_FILE"; then check_fail "2: [SECURITY] should NOT print for secret-free config"; else check_pass "2: no false [SECURITY] warning"; fi
@@ -132,7 +132,7 @@ extensions:
           NORMAL_VAR: "keep-this-value"
           DB_URL: "postgres://u:p@localhost/db"
 EOF
-run bash "$MIG" --source goose-cli --target cursor --objects mcp --strategy overwrite
+run bash "$MIG" --source goose-cli --target cursor --objects mcp --strategy overwrite --yes
 if grep -Fq 'API_KEY: ""' "$HOME/.cursor/mcp.json"; then check_pass "3: YAML API_KEY blanked"; else check_fail "3: YAML API_KEY not redacted"; fi
 if grep -Fq 'NORMAL_VAR: "keep-this-value"' "$HOME/.cursor/mcp.json"; then check_pass "3: YAML NORMAL_VAR preserved"; else check_fail "3: YAML NORMAL_VAR lost"; fi
 if grep -Fq 'DB_URL: ""' "$HOME/.cursor/mcp.json"; then check_pass "3: YAML DB_URL (postgres cred) blanked"; else check_fail "3: YAML DB_URL not redacted"; fi
@@ -151,7 +151,7 @@ printf '%s\n' '---' 'name: demo-skill' 'description: fixture' '---' > "$HOME/.cl
 
 # Run WITHOUT --objects (default). The skill should migrate; the secret mcp
 # must NOT be copied by default.
-run bash "$MIG" --source claude --target cursor
+run bash "$MIG" --source claude --target cursor --yes
 if [[ -f "$HOME/.cursor/skills/demo-skill/SKILL.md" ]]; then check_pass "4: low-risk skill migrated by default"; else check_fail "4: default migration did not move skills"; fi
 if [[ -e "$HOME/.cursor/mcp.json" ]]; then
     if grep -Fq "EXAMPLE_API_KEY_VALUE" "$HOME/.cursor/mcp.json"; then
@@ -180,7 +180,7 @@ cat > "$S5" <<'EOF'
   }
 }
 EOF
-run bash "$MIG" --source claude --target cursor --objects mcp --strategy overwrite
+run bash "$MIG" --source claude --target cursor --objects mcp --strategy overwrite --yes
 assert_valid_json "$HOME/.cursor/mcp.json" "5: destination is valid JSON"
 if grep -Fq "EXAMPLE_ARRAY_KEY_1" "$HOME/.cursor/mcp.json"; then check_fail "5: API_KEYS[0] leaked"; else check_pass "5: API_KEYS[0] blanked"; fi
 if grep -Fq "EXAMPLE_ARRAY_KEY_2" "$HOME/.cursor/mcp.json"; then check_fail "5: API_KEYS[1] leaked"; else check_pass "5: API_KEYS[1] blanked"; fi
@@ -201,7 +201,7 @@ extensions:
     args: ["--token", "EXAMPLE_YAML_ARGV_TOKEN"]
     keep: ["normal-item"]
 EOF
-run bash "$MIG" --source goose-cli --target cursor --objects mcp --strategy overwrite
+run bash "$MIG" --source goose-cli --target cursor --objects mcp --strategy overwrite --yes
 if grep -Fq "EXAMPLE_YAML_ARR_KEY_1" "$HOME/.cursor/mcp.json"; then check_fail "6: api_keys[0] leaked (line path)"; else check_pass "6: api_keys[0] blanked (line path)"; fi
 if grep -Fq "EXAMPLE_YAML_ARR_KEY_2" "$HOME/.cursor/mcp.json"; then check_fail "6: api_keys[1] leaked (line path)"; else check_pass "6: api_keys[1] blanked (line path)"; fi
 if grep -Fq "EXAMPLE_YAML_ARGV_TOKEN" "$HOME/.cursor/mcp.json"; then check_fail "6: --token value leaked (line path)"; else check_pass "6: --token value blanked (line path)"; fi
@@ -218,7 +218,7 @@ cat > "$HOME/.claude/settings.json" <<'EOF'
   "telemetry": "off"
 }
 EOF
-run bash "$MIG" --source claude --target opencode --objects config --strategy overwrite
+run bash "$MIG" --source claude --target opencode --objects config --strategy overwrite --yes
 if [[ -f "$HOME/.config/opencode/opencode.json" ]]; then
     if grep -Fq "EXAMPLE_SETTINGS_API_KEY" "$HOME/.config/opencode/opencode.json"; then
         check_fail "7: config migration leaked apiKey"
@@ -239,13 +239,13 @@ S8="$HOME/.claude.json"
 cat > "$S8" <<'EOF'
 { "mcpServers": { "demo-server": { "command": "echo" } } }
 EOF
-run bash "$MIG" --source claude --target copilot --objects mcp --strategy overwrite
+run bash "$MIG" --source claude --target copilot --objects mcp --strategy overwrite --yes
 if [[ -f "$HOME/.copilot/mcp-config.json" ]] && grep -Fq "demo-server" "$HOME/.copilot/mcp-config.json"; then
     check_pass "8: claude -> copilot mcp migrated to ~/.copilot/mcp-config.json"
 else
     check_fail "8: claude -> copilot mcp still skipped"
 fi
-run bash "$MIG" --source claude --target vscode --objects mcp --strategy overwrite
+run bash "$MIG" --source claude --target vscode --objects mcp --strategy overwrite --yes
 VSCODE_MCP="$HOME/Library/Application Support/Code/User/mcp.json"
 [[ -f "$VSCODE_MCP" ]] || VSCODE_MCP="$HOME/.config/Code/User/mcp.json"
 if [[ -f "$VSCODE_MCP" ]]; then
@@ -281,7 +281,7 @@ extensions:
           - -t
           - CROSS_T_VAL
 EOF
-run bash "$MIG" --source goose-cli --target cursor --objects mcp --strategy overwrite
+run bash "$MIG" --source goose-cli --target cursor --objects mcp --strategy overwrite --yes
 D9="$HOME/.cursor/mcp.json"
 if [[ -f "$D9" ]]; then
     if grep -Fq "SHORT_P_VAL" "$D9"; then check_fail "9: line-path -p value leaked (inline)"; else check_pass "9: line-path -p value blanked (inline)"; fi
@@ -317,7 +317,7 @@ cat > "$S10" <<'EOF'
   }
 }
 EOF
-run bash "$MIG" --source claude --target cursor --objects mcp --strategy overwrite
+run bash "$MIG" --source claude --target cursor --objects mcp --strategy overwrite --yes
 assert_valid_json "$HOME/.cursor/mcp.json" "10: destination valid JSON after line redaction"
 if [[ $LAST_RC -eq 0 ]]; then check_pass "10: migration did NOT crash on quoted-key inline array (rc=0)"; else check_fail "10: migration aborted/crashed on quoted-key inline array (rc=$LAST_RC)"; fi
 if grep -Fq "STOPITER_PWD" "$HOME/.cursor/mcp.json"; then check_fail "10: -p value leaked"; else check_pass "10: -p value blanked"; fi
@@ -342,7 +342,7 @@ extensions:
           - token: "tok-xyz-789"
           - normal_var: "keep-this"
 EOF
-run bash "$MIG" --source goose-cli --target cursor --objects mcp --strategy overwrite
+run bash "$MIG" --source goose-cli --target cursor --objects mcp --strategy overwrite --yes
 D11="$HOME/.cursor/mcp.json"
 if [[ -f "$D11" ]]; then
     if grep -Fq "secret123" "$D11"; then check_fail "11: list-item api_key value leaked"; else check_pass "11: list-item api_key value blanked"; fi
@@ -375,7 +375,7 @@ extensions:
           - mypassword
           - normal-arg
 EOF
-run bash "$MIG" --source goose-cli --target cursor --objects mcp --strategy overwrite
+run bash "$MIG" --source goose-cli --target cursor --objects mcp --strategy overwrite --yes
 D12="$HOME/.cursor/mcp.json"
 if [[ -f "$D12" ]]; then
     if grep -Fq "TOKVALUE-abcdef123456" "$D12"; then check_fail "12: cross-line --token value leaked"; else check_pass "12: cross-line --token value blanked"; fi
@@ -403,7 +403,7 @@ cat > "$HOME/.claude/settings.json" <<'EOF'
   "nested": { "secret": "SEC_NESTED" }
 }
 EOF
-run bash "$MIG" --source claude --target opencode --objects config --strategy overwrite
+run bash "$MIG" --source claude --target opencode --objects config --strategy overwrite --yes
 D13="$HOME/.config/opencode/opencode.json"
 if [[ -f "$D13" ]]; then
     if grep -Fq "AK_SL" "$D13"; then check_fail "13: compact line apiKey leaked"; else check_pass "13: compact line apiKey blanked"; fi
@@ -433,7 +433,7 @@ extensions:
         apiKey: bare-val-42
         timeout: "30s"
 EOF
-run bash "$MIG" --source goose-cli --target cursor --objects mcp --strategy overwrite
+run bash "$MIG" --source goose-cli --target cursor --objects mcp --strategy overwrite --yes
 D14="$HOME/.cursor/mcp.json"
 if [[ -f "$D14" ]]; then
     if grep -Fq "tok-xyz-789" "$D14"; then check_fail "14: quoted keyed secret value leaked"; else check_pass "14: quoted keyed secret value blanked"; fi
@@ -461,7 +461,7 @@ extensions:
           - CONSEC_SECRET_VAL
           - --verbose
 EOF
-run bash "$MIG" --source goose-cli --target cursor --objects mcp --strategy overwrite
+run bash "$MIG" --source goose-cli --target cursor --objects mcp --strategy overwrite --yes
 D15="$HOME/.cursor/mcp.json"
 if [[ -f "$D15" ]]; then
     if grep -Fq "CONSEC_SECRET_VAL" "$D15"; then check_fail "15: consecutive-flag value leaked"; else check_pass "15: consecutive-flag value blanked"; fi

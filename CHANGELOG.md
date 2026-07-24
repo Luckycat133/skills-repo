@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.6] - 2026-07-24
+
+### Security
+- **Confirmation gate: the migration script never writes without explicit approval.** `smart-ide-migration.sh` now implements the safety contract the skill documentation promises: applying changes requires `--yes`/`-y`. Interactive terminals get a `[y/N]` prompt before any write; non-interactive runs (CI/agent) without `--yes` abort with guidance and touch nothing (exit 2). `--dry-run` remains a pure preview — two stray `mkdir -p "$target_global"` calls that created the target skills directory even in dry-run mode were fixed (dry-run is now strictly zero-write). Usage examples switched to the two-step pattern (preview with `--dry-run`, then apply with `--yes`); tests extended with 6 gate assertions (migration suite now 62 checks).
+
+> Note: 0.5.5 was uploaded to ClawHub but held in moderation (scanner flagged the
+> documented `--yes` gate as not implemented — a valid finding, fixed here). Registry
+> version numbers are immutable and cannot be reused, so the fix ships as 0.5.6.
+
 ## [0.5.5] - 2026-07-23
 
 ### Security

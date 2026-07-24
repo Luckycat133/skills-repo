@@ -10,7 +10,7 @@
 
 ---
 name: agent-skills-setup
-version: 0.5.5
+version: 0.5.6
 license: MIT
 description: >
   Migrate ALL AI assistant context between IDEs — MCP servers, rules/instructions,
@@ -355,7 +355,14 @@ without equivalent explicit consent and integrity verification.
 
 `skills/agent-skills-setup/scripts/smart-ide-migration.sh` automates file operations between 40 IDEs. Use it for bulk file copying; use the IDE Registry for format conversion it doesn't handle.
 
+The script never writes files without explicit approval: `--dry-run` previews with zero
+writes; applying changes requires `--yes` (interactive terminals get a `[y/N]` prompt;
+non-interactive runs without `--yes` abort before touching anything). Always preview first:
+
 ```bash
+# 1) Preview (zero writes)
 bash skills/agent-skills-setup/scripts/smart-ide-migration.sh --source cursor --target claude --dry-run
-bash skills/agent-skills-setup/scripts/smart-ide-migration.sh --source cursor --target windsurf --objects skills,rules --strategy backup
+# 2) Apply after reviewing the plan (explicit consent)
+bash skills/agent-skills-setup/scripts/smart-ide-migration.sh --source cursor --target claude --yes
+bash skills/agent-skills-setup/scripts/smart-ide-migration.sh --source cursor --target windsurf --objects skills,rules --strategy backup --yes
 ```

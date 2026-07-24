@@ -10,6 +10,7 @@ WORKSPACE_ROOT="$(pwd)"
 OBJECTS=""
 STRATEGY="backup"
 DRY_RUN=0
+ASSUME_YES=0
 REPORT_FILE=""
 PRINT_PATH_IDE=""
 PRINT_PATH_OBJECT=""
@@ -396,6 +397,9 @@ IDE Migration Tool - 在不同AI IDE之间迁移配置
   --strategy <mode>      迁移策略: skip, overwrite, backup (默认: backup)
   --report <file>        保存迁移报告到文件
   --dry-run              预览模式，不实际修改文件
+  --yes, -y              确认写入。非 dry-run 时必须显式确认：
+                          交互式终端会提示 [y/N]；非交互环境（CI/agent）缺少
+                          --yes 将直接中止且不写任何文件
   --print-path <ide> <object>
                           只读诊断：打印指定IDE/对象类型的解析路径并退出(无副作用)
                           object ∈ global|project|mcp|config|rules
@@ -446,11 +450,12 @@ IDE Migration Tool - 在不同AI IDE之间迁移配置
   config       - IDE配置文件
   project      - 项目级配置
 
-示例:
-  smart-ide-migration.sh --source trae-cn --target claude
-  smart-ide-migration.sh --source cursor --target windsurf --objects skills,rules
+示例 (推荐两段式: 先 --dry-run 预览, 确认后加 --yes 应用):
+  smart-ide-migration.sh --source trae-cn --target claude --dry-run
+  smart-ide-migration.sh --source trae-cn --target claude --yes
+  smart-ide-migration.sh --source cursor --target windsurf --objects skills,rules --dry-run
+  smart-ide-migration.sh --source cursor --target windsurf --objects skills,rules --yes
   smart-ide-migration.sh --source openclaw --target copilot --dry-run
-  smart-ide-migration.sh --source aider --target cline --objects skills,rules
 EOF
 }
 
@@ -669,7 +674,10 @@ migrate_skills() {
         # name (registry: global ~/.copilot/skills/, project .github/skills/).
         # Copy the ENTIRE skill directory so scripts/ references/ assets/ are
         # preserved (consistent with CONVERT_SKILL and the non-copilot branch).
-        mkdir -p "$target_global"
+        # Never create the target directory in dry-run mode (zero writes).
+        if [[ $DRY_RUN -eq 0 ]]; then
+            mkdir -p "$target_global"
+        fi
 
         local skill_dir skill_name
         for skill_dir in "$source_global"/*/; do
@@ -718,7 +726,10 @@ migrate_skills() {
         set_manual_step "skills" "更新 VS Code settings.json 引用迁移的技能文件 (.github/skills/ 或 ~/.copilot/skills/)"
 
     else
-        mkdir -p "$target_global"
+        # Never create the target directory in dry-run mode (zero writes).
+        if [[ $DRY_RUN -eq 0 ]]; then
+            mkdir -p "$target_global"
+        fi
 
         local skill_dir skill_name
         for skill_dir in "$source_global"/*/; do
@@ -1854,6 +1865,10 @@ while [[ $# -gt 0 ]]; do
             DRY_RUN=1
             shift
             ;;
+        --yes|-y)
+            ASSUME_YES=1
+            shift
+            ;;
         --print-path)
             PRINT_PATH_IDE="$2"
             PRINT_PATH_OBJECT="$3"
@@ -1995,6 +2010,32 @@ if [[ $DRY_RUN -eq 1 ]]; then
 fi
 
 echo ""
+
+# ---------------------------------------------------------------------------
+# Confirmation gate: the script NEVER writes files without explicit approval.
+# - --dry-run       : preview only, no gate needed (no writes happen at all)
+# - --yes / -y      : explicit approval, proceed
+# - interactive TTY : ask [y/N] before touching anything
+# - non-interactive : abort with guidance (CI/agent must pass --yes)
+# ---------------------------------------------------------------------------
+if [[ $DRY_RUN -eq 0 && $ASSUME_YES -eq 0 ]]; then
+    if [[ -t 0 ]]; then
+        printf '即将按上述摘要写入目标 IDE 配置。继续? [y/N] ' >&2
+        read -r _confirm_reply
+        case "$_confirm_reply" in
+            y|Y|yes|YES)
+                ;;
+            *)
+                echo "已取消：未修改任何文件。可先用 --dry-run 预览。" >&2
+                exit 2
+                ;;
+        esac
+    else
+        echo "错误: 非交互环境且未指定 --yes，为安全起见拒绝写入。" >&2
+        echo "请先用 --dry-run 预览变更，确认后追加 --yes 执行。未修改任何文件。" >&2
+        exit 2
+    fi
+fi
 
 init_migration_files
 

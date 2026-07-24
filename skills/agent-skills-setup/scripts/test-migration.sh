@@ -150,7 +150,7 @@ for target in kimiai copilot codex workbuddy; do
     run bash "$SCRIPT_DIR/smart-ide-migration.sh" \
         --source claude --target "$target" \
         --workspace "$WS" \
-        --objects skills
+        --objects skills --yes
     assert_eq "$LAST_RC" "0" "A2: real migration to $target exits 0"
 done
 
@@ -168,7 +168,7 @@ assert_dir "$HOME/.copilot/skills/demo-skill/references" "A3: copilot preserves 
 run bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source claude --target kimiai \
     --workspace "$WS" \
-    --objects mcp
+    --objects mcp --yes
 assert_eq "$LAST_RC" "0" "A4: mcp migration exits 0"
 
 # The fixed logic NEVER reports success/copied without actually writing the file.
@@ -258,6 +258,40 @@ assert_dir  "$T_COPILOT/demo-b/references" "B5: copilot preserved demo-b/referen
 # No sync may land on a wrong/stale path.
 assert_not_exists "$HOME/.copilot-skills" "B5: never syncs to stale ~/.copilot-skills"
 assert_not_exists "$HOME/.codex/skills"  "B5: never syncs to stale ~/.codex/skills"
+
+# ===========================================================================
+# C. Confirmation gate (--yes) — script must never write without approval
+# ===========================================================================
+
+echo ""
+echo "== C. confirmation gate (--yes) =="
+
+# --- C1. Non-interactive without --yes: abort (rc=2) and ZERO writes --------
+GATE_TGT="$HOME/.windsurf"
+rm -rf "$GATE_TGT"
+run bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+    --source claude --target windsurf \
+    --workspace "$WS" \
+    --objects skills </dev/null
+assert_eq "$LAST_RC" "2" "C1: non-interactive without --yes aborts with rc=2"
+assert_not_exists "$GATE_TGT" "C1: gate abort leaves zero writes (no target dir created)"
+
+# --- C2. With --yes: proceeds and writes ------------------------------------
+run bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+    --source claude --target windsurf \
+    --workspace "$WS" \
+    --objects skills --yes </dev/null
+assert_eq "$LAST_RC" "0" "C2: --yes proceeds (rc=0)"
+assert_file "$GATE_TGT/skills/demo-skill/SKILL.md" "C2: --yes migration wrote target skill"
+
+# --- C3. --dry-run without --yes: previews with ZERO writes ------------------
+rm -rf "$GATE_TGT"
+run bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+    --source claude --target windsurf \
+    --workspace "$WS" \
+    --objects skills --dry-run </dev/null
+assert_eq "$LAST_RC" "0" "C3: dry-run exits 0 without --yes"
+assert_not_exists "$GATE_TGT" "C3: dry-run performs zero writes (no target dir created)"
 
 # ===========================================================================
 # Summary
