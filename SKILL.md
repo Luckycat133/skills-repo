@@ -104,6 +104,8 @@ The highest-risk formats to get wrong (see `skills/agent-skills-setup/references
 | IDE | MCP Root Key | Format | Config Path | Key Pitfall |
 |-----|-------------|--------|-------------|-------------|
 | VS Code Copilot | `servers` | JSON | `.vscode/mcp.json` | `servers` NOT `mcpServers`; needs `type:'stdio'\|'http'` |
+| GitHub Copilot CLI | `mcpServers` | JSON | `~/.copilot/mcp-config.json` | Root key `mcpServers` + REQUIRES `type:'local'\|'http'`; no longer reads `.vscode/mcp.json` |
+| Kilo Code | `mcpServers` | JSON | `~/.config/kilo/kilo.jsonc` (global) / `.kilocode/mcp.json` (project) | Global is `kilo.jsonc`; project MCP is `.kilocode/mcp.json` (project-relative) |
 | OpenCode | `mcp` | JSON | `opencode.json` | `mcp` not `mcpServers`; command is array; env is `environment` |
 | Windsurf | `mcpServers` | JSON | `~/.codeium/windsurf/mcp_config.json` | Uses `serverUrl` not `url` for HTTP |
 | Continue.dev | `mcpServers` | YAML | `~/.continue/config.yaml` | mcpServers is ARRAY not object (only IDE using array) |
@@ -121,7 +123,7 @@ Migrate to these FIRST for maximum cross-IDE compatibility:
 | `.agents/skills/<name>/SKILL.md` | Universal skills | Cursor, Copilot, Codex, Trae, antigravity, OpenCode, Augment, Amp, Zed, Comate, Kimi Code |
 | `.claude/skills/<name>/SKILL.md` | Claude-compatible skills | Claude Code, Cursor (loads natively), OpenCode, Augment, Copilot |
 | `.mcp.json` | Universal project MCP | Claude Code, Copilot CLI |
-| `.vscode/mcp.json` | VS Code ecosystem MCP | Copilot, Cline, Continue, Cody, Kilo Code, Void |
+| `.vscode/mcp.json` | VS Code Copilot project-level MCP | Copilot (project); shareable with VS Code/Cursor/Cline/Zed via mcphub-nvim |
 
 ---
 
@@ -167,7 +169,7 @@ Rules are MARKDOWN. The BODY is always reusable — only frontmatter and filenam
 |--------|------------|
 | `.cursorrules` / `.windsurfrules` / `.clinerules` / `.voidrules` | Copy body; rename to target's rules file |
 | `.cursor/rules/*.mdc` | Extract body; adapt frontmatter (description, globs, alwaysApply) |
-| `CLAUDE.md` / `GEMINI.md` / `CODY.md` / `CODEBUDDY.md` / `HELIX.md` | Copy body; rename to target's filename |
+| `CLAUDE.md` / `GEMINI.md` / `.codyrules` / `CODEBUDDY.md` / `HELIX.md` | Copy body; rename to target's filename |
 | `AGENTS.md` | Copy directly (universal standard) |
 | `.kiro/steering/*.md` | Copy body; note conditional steering (inclusion: always/fileMatch/auto/manual) |
 | `.augment/rules/*.md` | Extract body; adapt frontmatter (always/auto/manual) |
@@ -314,6 +316,7 @@ without equivalent explicit consent and integrity verification.
 | Qoder CN | Renamed from Tongyi Lingma 2026-05-20; path `~/.qoder/` not `~/.lingma/`; uses AGENTS.md |
 | Baidu Comate IDE | Distinct from plugin version; global Rules/MCP only since 2025-08 late version; can't install MS Python/C++ plugins |
 | veCLI | Distinct from Trae CLI (different ByteDance product lines: Volcano Engine vs Trae brand) |
+| WorkBuddy | Config at `~/.workbuddy/settings.json`; skills under `~/.workbuddy/skills/`; MCP at `~/.workbuddy/.mcp.json` (root key `mcpServers`) |
 
 ---
 
@@ -337,6 +340,8 @@ without equivalent explicit consent and integrity verification.
 | Trae | GUI: Settings → MCP |
 | Cline | GUI: Cline sidebar → MCP Servers |
 | ZCode | GUI: Settings → MCP Servers |
+| WorkBuddy | `workbuddy mcp list` |
+| Kilo Code | GUI: Kilo settings; or inspect `~/.config/kilo/kilo.jsonc` |
 | mcphub-nvim | `:McpHub` in Neovim |
 | codecompanion-nvim | `/mcp` in chat buffer |
 | JSON/TOML/YAML | `python3 -c "import json/tomllib/yaml; ..."` parse check |

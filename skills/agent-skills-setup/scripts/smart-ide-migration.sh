@@ -28,13 +28,13 @@ MIGRATION_MANUAL_FILE=""
 get_ide_name() {
     local ide="$1"
     case "$ide" in
-        antigravity) echo "Antigravity" ;;
+        antigravity) echo "Antigravity (Google)" ;;
         claude)      echo "Claude Code" ;;
         codex)       echo "OpenAI Codex CLI" ;;
-        copilot)     echo "VS Code Copilot" ;;
+        copilot)     echo "GitHub Copilot CLI" ;;
         cursor)      echo "Cursor" ;;
         windsurf)    echo "Windsurf" ;;
-        jetbrains)   echo "JetBrains IDEs" ;;
+        jetbrains)   echo "JetBrains Junie" ;;
         openclaw)    echo "OpenClaw" ;;
         trae)        echo "Trae (International)" ;;
         trae-cn)     echo "Trae CN (China)" ;;
@@ -77,13 +77,15 @@ get_ide_name() {
 get_global_path() {
     local ide="$1"
     case "$ide" in
-        antigravity) echo "${HOME}/.gemini/antigravity/skills" ;;
+        antigravity) echo "${HOME}/.gemini/config/skills" ;;
         claude)      echo "${HOME}/.claude/skills" ;;
         codex)       echo "${HOME}/.agents/skills" ;;
         copilot)     echo "${HOME}/.copilot/skills" ;;
-        cursor)      echo "${HOME}/.cursor" ;;
-        windsurf)    echo "${HOME}/.windsurf" ;;
-        jetbrains)   echo "${HOME}/.idea" ;;
+        cursor)      echo "${HOME}/.cursor/skills" ;;
+        windsurf)    echo "${HOME}/.windsurf/skills" ;;
+        # jetbrains (Junie): no documented global skills dir (~/.junie/ holds
+        # mcp + guidelines only) — empty avoids creating a bogus ~/.idea dir.
+        jetbrains)   echo "" ;;
         openclaw)    echo "${HOME}/.openclaw/skills" ;;
         trae)        echo "${HOME}/.trae/skills" ;;
         trae-cn)     echo "${HOME}/.trae-cn/skills" ;;
@@ -95,7 +97,7 @@ get_global_path() {
         aider)       echo "${HOME}/.aider" ;;
         roo-code)    echo "${HOME}/.roo" ;;
         cline)       echo "${HOME}/.cline" ;;
-        amazon-q)    echo "${HOME}/.aws/amazon-q" ;;
+        amazon-q)    echo "${HOME}/.aws/amazonq" ;;
         # cody/codeium/tabnine/blackbox: no stable global skills directory.
         # Returning "" avoids emitting glob literals (e.g. sourcegraph.cody*)
         # that would otherwise be turned into illegal directory names by mkdir -p.
@@ -110,7 +112,7 @@ get_global_path() {
         gemini-cli)  echo "${HOME}/.gemini" ;;
         goose-cli)   echo "${HOME}/.config/goose" ;;
         opencode)    echo "${HOME}/.config/opencode" ;;
-        kilocode)    echo "${HOME}/.kilocode" ;;
+        kilocode)    echo "${HOME}/.config/kilo" ;;
         kimiai)      echo "${HOME}/.kimi-code/skills" ;;
         workbuddy)   echo "${HOME}/.workbuddy/skills" ;;
         # claude-desktop is MCP-only (no skills dir).
@@ -140,7 +142,7 @@ get_project_path() {
         copilot)     echo ".github/copilot-instructions.md" ;;
         cursor)      echo ".cursor" ;;
         windsurf)    echo ".windsurf" ;;
-        jetbrains)   echo ".idea" ;;
+        jetbrains)   echo ".junie" ;;
         openclaw)    echo "skills" ;;
         trae)        echo ".trae" ;;
         trae-cn)     echo ".trae" ;;
@@ -188,18 +190,25 @@ get_rules_file() {
         claude)      echo "CLAUDE.md" ;;
         aider)       echo "CONVENTIONS.md" ;;
         cline)       echo ".clinerules" ;;
-        continue)    echo ".continuerc.json" ;;
-        roo-code)    echo ".roomotes" ;;
+        # continue: rules live in .continue/rules/*.md (directory) or a
+        # single CONTINUE.md at project root — use the single-file form here.
+        continue)    echo "CONTINUE.md" ;;
+        roo-code)    echo ".roorules" ;;
         cody)        echo ".codyrules" ;;
         pearai)      echo ".pearairules" ;;
         codex)       echo "AGENTS.md" ;;
         gemini-cli)  echo "GEMINI.md" ;;
-        goose-cli)   echo "GOOSE.md" ;;
-        opencode)    echo "OPENCODE.md" ;;
-        kilocode)    echo "KILOCODE.md" ;;
+        goose-cli)   echo ".goosehints" ;;
+        opencode)    echo "AGENTS.md" ;;
         kimiai)      echo "AGENTS.md" ;;
+        zed)         echo "AGENTS.md" ;;
         zcode)       echo "AGENTS.md" ;;
+        antigravity) echo "AGENTS.md" ;;
+        jetbrains)   echo ".junie/guidelines.md" ;;
+        void-editor) echo ".voidrules" ;;
         tencent-codebuddy) echo "CODEBUDDY.md" ;;
+        # kilocode rules are DIRECTORIES (.kilocode/rules/ or .kilo/rules/),
+        # not a single file — intentionally absent here (like kiro/augment).
         # kiro/augment-code/baidu-comate use rules DIRECTORIES
         # (.kiro/steering/, .augment/rules/, .comate/rules/*.mdr) — not a
         # single file, so they are intentionally absent here.
@@ -210,8 +219,8 @@ get_rules_file() {
 get_prompts_path() {
     local ide="$1"
     case "$ide" in
-        cursor)      echo ".cursor/prompts" ;;
-        windsurf)    echo ".windsurf/prompts" ;;
+        cursor)      echo ".cursor/commands" ;;
+        windsurf)    echo ".windsurf/workflows" ;;
         copilot)     echo ".github/prompts" ;;
         openclaw)    echo ".github/prompts" ;;
         continue)    echo ".continue/prompts" ;;
@@ -226,15 +235,41 @@ get_prompts_path() {
 get_mcp_path() {
     local ide="$1"
     case "$ide" in
-        trae)        echo "${HOME}/.trae/mcps" ;;
-        trae-cn)     echo "${HOME}/.trae-cn/mcps" ;;
+        # trae/trae-cn: global MCP lives under the editor's user-data dir
+        # (NOT ~/.trae*/mcps — that path never existed in Trae docs).
+        trae)
+            if [[ "$(uname -s)" == "Darwin" ]]; then
+                echo "${HOME}/Library/Application Support/Trae/User/mcp.json"
+            else
+                echo "${HOME}/.config/Trae/User/mcp.json"
+            fi ;;
+        trae-cn)
+            if [[ "$(uname -s)" == "Darwin" ]]; then
+                echo "${HOME}/Library/Application Support/Trae CN/User/mcp.json"
+            else
+                echo "${HOME}/.config/Trae CN/User/mcp.json"
+            fi ;;
         openclaw)    echo "${HOME}/.openclaw/openclaw.json" ;;
         claude)      echo "${HOME}/.claude.json" ;;
-        continue)    echo "${HOME}/.continue/config.json" ;;
+        # continue: config.yaml replaced config.json (mcpServers is an ARRAY
+        # of {name,type,command,args,env} — convert_mcp_file falls back to
+        # copy+manual for YAML targets, so no array conversion is attempted).
+        continue)    echo "${HOME}/.continue/config.yaml" ;;
         cline)       echo "${HOME}/.cline/mcp.json" ;;
         cursor)      echo "${HOME}/.cursor/mcp.json" ;;
-        roo-code)    echo "${HOME}/.roo/mcp.json" ;;
-        windsurf)    echo "${HOME}/.windsurf/mcp.json" ;;
+        # roo-code: global MCP sits in the VS Code extension's globalStorage.
+        roo-code)
+            if [[ "$(uname -s)" == "Darwin" ]]; then
+                echo "${HOME}/Library/Application Support/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/mcp_settings.json"
+            else
+                echo "${HOME}/.config/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/mcp_settings.json"
+            fi ;;
+        windsurf)    echo "${HOME}/.codeium/windsurf/mcp_config.json" ;;
+        jetbrains)   echo "${HOME}/.junie/mcp/mcp.json" ;;
+        antigravity) echo "${HOME}/.gemini/config/mcp_config.json" ;;
+        # kilocode has NO global MCP file — project-level .kilocode/mcp.json
+        # only (resolved against the workspace root by callers via -e check).
+        kilocode)    echo ".kilocode/mcp.json" ;;
         gemini-cli)  echo "${HOME}/.gemini/settings.json" ;;
         goose-cli)   echo "${HOME}/.config/goose/config.yaml" ;;
         codex)       echo "${HOME}/.codex" ;;
@@ -279,24 +314,40 @@ get_config_file() {
         trae)        echo "${HOME}/.trae/argv.json" ;;
         trae-cn)     echo "${HOME}/.trae-cn/argv.json" ;;
         openclaw)    echo "${HOME}/.openclaw/openclaw.json" ;;
-        cursor)      echo "${HOME}/.cursor/settings.json" ;;
-        windsurf)    echo "${HOME}/.windsurf/settings.json" ;;
-        vscode)      echo "${HOME}/.vscode/settings.json" ;;
+        # cursor: user settings live in the editor's user-data dir (VS Code
+        # fork layout), NOT ~/.cursor/settings.json.
+        cursor)
+            if [[ "$(uname -s)" == "Darwin" ]]; then
+                echo "${HOME}/Library/Application Support/Cursor/User/settings.json"
+            else
+                echo "${HOME}/.config/Cursor/User/settings.json"
+            fi ;;
+        # windsurf: no documented standalone settings file (config lives in
+        # ~/.codeium/windsurf/) — empty prevents inventing one.
+        windsurf)    echo "" ;;
+        vscode)
+            if [[ "$(uname -s)" == "Darwin" ]]; then
+                echo "${HOME}/Library/Application Support/Code/User/settings.json"
+            else
+                echo "${HOME}/.config/Code/User/settings.json"
+            fi ;;
         zed)         echo "${HOME}/.config/zed/settings.json" ;;
         neovim)      echo "${HOME}/.config/nvim/init.lua" ;;
         emacs)       echo "${HOME}/.emacs.d/init.el" ;;
-        continue)    echo "${HOME}/.continue/config.json" ;;
+        continue)    echo "${HOME}/.continue/config.yaml" ;;
         aider)       echo "${HOME}/.aider.conf.yml" ;;
         cline)       echo "${HOME}/.cline/config.json" ;;
-        roo-code)    echo "${HOME}/.roo/config.json" ;;
+        # roo-code: no standalone global config file documented (settings sit
+        # in VS Code extension storage) — empty prevents inventing one.
+        roo-code)    echo "" ;;
         claude)      echo "${HOME}/.claude/settings.json" ;;
         replit)      echo "${HOME}/.replit/replit.nix" ;;
-        pearai)      echo "${HOME}/.pearai/settings.json" ;;
+        pearai)      echo "${HOME}/.pearai/config.json" ;;
         gemini-cli)  echo "${HOME}/.gemini/settings.json" ;;
         goose-cli)   echo "${HOME}/.config/goose/config.yaml" ;;
         codex)       echo "${HOME}/.codex" ;;
-        opencode)    echo "${HOME}/.config/opencode/config.json" ;;
-        kilocode)    echo "${HOME}/.kilocode/config.json" ;;
+        opencode)    echo "${HOME}/.config/opencode/opencode.json" ;;
+        kilocode)    echo "${HOME}/.config/kilo/kilo.jsonc" ;;
         kimiai)      echo "${HOME}/.kimi-code/config.toml" ;;
         workbuddy)   echo "${HOME}/.workbuddy/settings.json" ;;
         tencent-codebuddy) echo "${HOME}/.codebuddy/settings.json" ;;
@@ -313,7 +364,7 @@ get_config_file() {
 get_mcp_root_key() {
     local ide="$1"
     case "$ide" in
-        claude|cursor|windsurf|gemini-cli|trae|trae-cn|openclaw|continue|cline|roo-code|antigravity|amazon-q|kimiai|workbuddy|copilot|claude-desktop|kiro|augment-code|void-editor|baidu-comate|tencent-codebuddy|pearai|cody|tabnine)
+        claude|cursor|windsurf|gemini-cli|trae|trae-cn|openclaw|continue|cline|roo-code|antigravity|amazon-q|kimiai|workbuddy|copilot|claude-desktop|kiro|augment-code|void-editor|baidu-comate|tencent-codebuddy|pearai|cody|tabnine|jetbrains|kilocode)
             echo "mcpServers" ;;
         codex)       echo "mcp_servers" ;;
         goose-cli)   echo "extensions" ;;
@@ -333,7 +384,7 @@ usage() {
     cat <<'EOF'
 IDE Migration Tool - 在不同AI IDE之间迁移配置
 
-用法: ide-migrate.sh [选项]
+用法: smart-ide-migration.sh [选项]
 
 必选参数:
   --source <ide>         源IDE (从哪个IDE迁移)
@@ -396,10 +447,10 @@ IDE Migration Tool - 在不同AI IDE之间迁移配置
   project      - 项目级配置
 
 示例:
-  ide-migrate.sh --source trae-cn --target claude
-  ide-migrate.sh --source cursor --target windsurf --objects skills,rules
-  ide-migrate.sh --source openclaw --target copilot --dry-run
-  ide-migrate.sh --source aider --target cline --objects skills,rules
+  smart-ide-migration.sh --source trae-cn --target claude
+  smart-ide-migration.sh --source cursor --target windsurf --objects skills,rules
+  smart-ide-migration.sh --source openclaw --target copilot --dry-run
+  smart-ide-migration.sh --source aider --target cline --objects skills,rules
 EOF
 }
 
@@ -497,6 +548,11 @@ list_available_objects() {
 
     local mcp_path
     mcp_path=$(get_mcp_path "$source_ide")
+    # Project-relative MCP paths (e.g. kilocode .kilocode/mcp.json) resolve
+    # against the workspace root, not the caller's cwd.
+    if [[ -n "$mcp_path" && "$mcp_path" != /* ]]; then
+        mcp_path="$WORKSPACE_ROOT/$mcp_path"
+    fi
     if [[ -n "$mcp_path" ]] && [[ -e "$mcp_path" ]]; then
         objects+="mcp,"
     fi
@@ -897,6 +953,11 @@ def redact_value(v):
 # kept; only its VALUE (the next argv element, or the =-suffix) is blanked.
 FLAG_RE = re.compile(r"^--?[A-Za-z0-9_\-]+$")
 FLAG_EQ_RE = re.compile(r"^(--?[A-Za-z0-9_\-]+)=(.+)$")
+# Conventional SHORT flags that carry credentials (mysql/psql -p, -t token,
+# -k key). Their names don't contain a secret keyword, so SECRET_KEY_RE can't
+# catch them. Deliberate over-redaction tradeoff: the blanked value is always
+# recoverable from the untouched SOURCE config.
+SHORT_SECRET_FLAGS = {"-p", "-t", "-k"}
 
 def redact_node(node, key_ctx=""):
     if isinstance(node, dict):
@@ -927,8 +988,10 @@ def redact_node(node, key_ctx=""):
                     blank_next = False
                 else:
                     m_eq = FLAG_EQ_RE.match(item)
-                    if m_eq and SECRET_KEY_RE.search(m_eq.group(1)):
+                    if m_eq and (SECRET_KEY_RE.search(m_eq.group(1)) or m_eq.group(1) in SHORT_SECRET_FLAGS):
                         node[i] = m_eq.group(1) + "="
+                    elif item in SHORT_SECRET_FLAGS:
+                        blank_next = True  # short secret flag (-p/-t/-k); value blanked
                     elif FLAG_RE.match(item) and SECRET_KEY_RE.search(item):
                         blank_next = True  # flag kept; next argv element blanked
                     else:
@@ -982,9 +1045,14 @@ with open(dst, "w") as f:
 sys.exit(0)
 PYEOF
         then
-            MCP_REDACTED_COUNT=$(redact_secrets_in_file "$dst")
-            CONV_RESULT="success"
-            CONV_DETAIL="MCP配置已转换 (根键 ${src_key:-mcpServers} -> ${dst_key:-mcpServers})，密钥已清空"
+            if MCP_REDACTED_COUNT=$(redact_secrets_in_file "$dst"); then
+                CONV_RESULT="success"
+                CONV_DETAIL="MCP配置已转换 (根键 ${src_key:-mcpServers} -> ${dst_key:-mcpServers})，密钥已清空"
+            else
+                MCP_REDACTED_COUNT=0
+                CONV_RESULT="failed"
+                CONV_DETAIL="MCP配置脱敏失败，目标文件已删除以防密钥泄漏 (源文件未动)"
+            fi
             return
         fi
         # exit 2 (not JSON) or exit 3 (empty server map) -> fall through to a
@@ -996,9 +1064,14 @@ PYEOF
     # converted and manual adjustment is expected.
     if cp "$src" "$dst" 2>/dev/null; then
         if [[ -s "$dst" ]]; then
-            MCP_REDACTED_COUNT=$(redact_secrets_in_file "$dst")
-            CONV_RESULT="copied"
-            CONV_DETAIL="MCP配置按原样复制 (源/目标格式不直接兼容，需手动调整根键 ${src_key:-?} -> ${dst_key:-?})，密钥已清空"
+            if MCP_REDACTED_COUNT=$(redact_secrets_in_file "$dst"); then
+                CONV_RESULT="copied"
+                CONV_DETAIL="MCP配置按原样复制 (源/目标格式不直接兼容，需手动调整根键 ${src_key:-?} -> ${dst_key:-?})，密钥已清空"
+            else
+                MCP_REDACTED_COUNT=0
+                CONV_RESULT="failed"
+                CONV_DETAIL="MCP配置脱敏失败，目标文件已删除以防密钥泄漏 (源文件未动)"
+            fi
         else
             CONV_RESULT="failed"
             CONV_DETAIL="MCP配置复制后为空"
@@ -1025,118 +1098,322 @@ redact_secrets_in_file() {
     local file="$1"
     [[ -f "$file" ]] || { echo 0; return 0; }
     command -v python3 >/dev/null 2>&1 || { echo 0; return 0; }
-    python3 - "$file" <<'PYEOF'
-import re, sys
+    local n rc=0 pyout
+    pyout=$(mktemp "${TMPDIR:-/tmp}/redact-out.XXXXXX")
+    # NOTE: the heredoc must NOT sit inside $(...) — bash 3.2 (macOS default)
+    # mis-parses quotes in command-substituted heredocs. Redirect instead.
+    python3 - "$file" >"$pyout" <<'PYEOF' || rc=$?
+import os, re, sys
 file = sys.argv[1]
+TMP = file + ".redact.tmp"
+
+def _fail_closed(exc_type=None, exc=None, tb=None):
+    # FAIL CLOSED: the destination copy may still hold un-redacted secrets.
+    # Never leave it (or a half-written temp) behind; the untouched SOURCE
+    # config remains the recoverable source of truth.
+    for p in (TMP, file):
+        try:
+            os.unlink(p)
+        except OSError:
+            pass
+    try:
+        # flush=True is REQUIRED: stdout is redirected to a file (block
+        # buffered) and os._exit() skips buffer flushing.
+        print(-1, flush=True)
+    except Exception:
+        pass
+    os._exit(4)
+
+# Any unhandled exception anywhere below (vector ②) -> fail closed instead of
+# leaving a secret-bearing file on disk under bash `set -euo pipefail`.
+sys.excepthook = _fail_closed
 SECRET_KEY_RE = re.compile(r"(?i)(api[_-]?key|token|secret|password|passwd|authorization|auth|bearer|private[_-]?key|access[_-]?key|client[_-]?secret|session|cookie)")
 URL_CRED_RE = re.compile(r"^(?:https?|postgres|postgresql|mysql|mongodb|mongodb\+srv|redis|ftp|amqp|sqlserver)://[^:@/\s]+:[^@/\s]+@", re.IGNORECASE)
 URL_TOKEN_RE = re.compile(r"^(https?://)[^/\s]*:(//)?[A-Za-z0-9_\-]{16,}", re.IGNORECASE)
 QUERY_CRED_RE = re.compile(r"[?&](key|token|secret|access[_-]?token|api[_-]?key)=[A-Za-z0-9_\-]{12,}", re.IGNORECASE)
+# Conventional SHORT flags that carry credentials (mysql/psql -p, -t token,
+# -k key). Their names don't contain a secret keyword, so SECRET_KEY_RE can't
+# catch them. Deliberate over-redaction tradeoff: the blanked value is always
+# recoverable from the untouched SOURCE config.
+SHORT_SECRET_FLAGS = {"-p", "-t", "-k"}
+FLAG_RE = re.compile(r"^--?[A-Za-z0-9_\-]+$")
+FLAG_EQ_RE = re.compile(r"^(--?[A-Za-z0-9_\-]+)=(.+)$")
 
-def is_secret(key, val):
-    if SECRET_KEY_RE.search(key or ""):
+def is_secret_value(val):
+    if not isinstance(val, str):
+        return False
+    if URL_CRED_RE.match(val) or URL_TOKEN_RE.match(val):
         return True
-    if isinstance(val, str):
-        if URL_CRED_RE.match(val) or URL_TOKEN_RE.match(val):
-            return True
-        if QUERY_CRED_RE.search(val):
-            return True
+    if QUERY_CRED_RE.search(val):
+        return True
+    # A secret keyword appearing inside a value (e.g. a bare bearer/token
+    # string) — but only when the value has no spaces, so prose such as
+    # "my password is secret" is never touched.
+    if SECRET_KEY_RE.search(val) and ' ' not in val:
+        return True
     return False
+
+def is_secret_key(key):
+    return bool(SECRET_KEY_RE.search(key or ""))
+
+def is_secret_flag(tok):
+    # CLI flag that names a secret: --token, --api-key, or short -p/-t/-k.
+    if tok in SHORT_SECRET_FLAGS:
+        return True
+    return bool(FLAG_RE.match(tok) and SECRET_KEY_RE.search(tok))
+
+def blank_all_quoted(text):
+    # Blank every nonempty quoted element; return (new_text, n_blanked).
+    n = [0]
+    def repl(m):
+        n[0] += 1
+        return '""'
+    new = re.sub(r'["\']([^"\']+)["\']', repl, text)
+    return new, n[0]
 
 count = 0
 out = []
-# Multi-line array state: >0 while inside an array opened by a secret-like key
-# (e.g.  "API_KEYS": [  ...elements on following lines... ]). Every quoted
-# string element inside such an array is blanked. flag_pending handles
-# argv-style pairs split across lines ("--token" on one line, value on next).
+# Depth of a multi-line array opened by a secret-like key (e.g.
+# "API_KEYS": [ ...elements on following lines... ]). Every quoted string
+# element inside such an array is blanked.
 secret_array_depth = 0
+# argv cross-line state: a secret CLI flag seen on a previous line whose value
+# lives on the next line (e.g. JSON '"-p",' then '"MySecret"', or YAML
+# "- --token" then "- sk-live-xxx", or an unclosed inline array).
+flag_pending = False
 
-with open(file) as f:
-    for raw in f:
-        line = raw.rstrip("\n")
-        # ---- inside a multi-line secret-keyed array: blank string elements
-        if secret_array_depth > 0:
-            secret_array_depth += line.count("[") - line.count("]")
-            stripped = line.strip()
-            if re.match(r'^["\'].*["\']\s*,?\s*$', stripped) and stripped not in ('""', '"",'):
-                line = re.sub(r'["\'].*?["\']', '""', line, count=1)
-                count += 1
+def redact_kv(m):
+    # Vector ⑤: blank the VALUE of EVERY secret-like keyed pair on a line,
+    # not just the first. Only touches quoted leaf values ("v"), never
+    # containers ("{") or arrays ("["). The key (and its quoting) is kept.
+    global count
+    k = m.group(1).strip().rstrip(":").strip('"\'')
+    if is_secret_key(k):
+        count += 1
+        return '%s""' % m.group(1)
+    return m.group(0)
+
+try:
+    with open(file) as f:
+        raw_lines = f.readlines()
+except Exception:
+    # Unreadable destination: we cannot prove it holds no secrets -> fail
+    # closed (delete it) rather than leaving an un-redacted copy behind.
+    _fail_closed()
+
+for raw in raw_lines:
+    line = raw.rstrip("\n")
+    # ---- inside a multi-line secret-keyed array: blank every string element
+    if secret_array_depth > 0:
+        secret_array_depth += line.count("[") - line.count("]")
+        stripped = line.strip()
+        if stripped and not stripped.startswith(("]", "}")):
+            new_line, n = blank_all_quoted(line)
+            if n:
+                line = new_line
+                count += n
+        out.append(line + "\n")
+        continue
+    # ---- YAML/JSON list item: "- api_key: secret" / "- --token" / "- value"
+    ym = re.match(r'^\s*-\s+(.*\S)\s*$', line)
+    if ym:
+        item = ym.group(1)
+        # NOTE: flag_pending must survive into CASE B — a bare list element
+        # may be the VALUE of a secret flag on the previous line (vector ④).
+        # Only a KEYED pair (CASE A) ends a pending argv pair.
+        km = re.match(r'["\']?([A-Za-z0-9_.\-]+)["\']?\s*[:=]\s*(.*)$', item)
+        if km:
+            flag_pending = False  # a keyed list line ends any pending pair
+            key, rest = km.group(1), km.group(2).strip()
+            if is_secret_key(key):
+                if rest == "[":
+                    secret_array_depth = 1
+                elif rest.startswith("["):
+                    new_rest, n = blank_all_quoted(rest)
+                    line = line[:line.index("[")] + new_rest
+                    count += n
+                elif rest.startswith("{") or rest == "":
+                    pass
+                else:
+                    # Key IS secret -> blank the value unconditionally; the
+                    # value need not look secret itself (e.g. "tok-xyz-789").
+                    qm = re.match(r'^["\'](.*)["\']\s*,?\s*$', rest)
+                    if qm:
+                        if qm.group(1):
+                            line = re.sub(r'([:=]\s*)["\'].*?["\'](\s*,?\s*)$', r'\1""\2', line)
+                            count += 1
+                    elif not rest.startswith(('"', "'")):
+                        line = re.sub(r'[:=]\s*\S.*?(\s*,?\s*)$', r': ""\1', line)
+                        count += 1
             out.append(line + "\n")
             continue
-        m = re.match(r'^\s*["\']?([A-Za-z0-9_.\-]+)["\']?\s*[:=]\s*(.*)$', line)
-        if m:
-            key, rest = m.group(1), m.group(2).strip()
-            key_secret = bool(SECRET_KEY_RE.search(key))
-            # Array opened by a secret-like key.
-            if rest == "[":
-                if key_secret:
-                    secret_array_depth = 1
+        # CASE B: list item is a bare element (a flag or a value)
+        if flag_pending:
+            if FLAG_RE.match(item):
+                # consecutive flags ('- -p' then '- -t'): the element is a
+                # FLAG, not the pending value -> keep it, re-arm only if it
+                # is itself a secret flag.
+                flag_pending = is_secret_flag(item)
                 out.append(line + "\n")
                 continue
-            # Single-line array value: [ "a", "b" ] — blank elements when the
-            # key is secret-like, or blank values following secret CLI flags.
-            if rest.startswith("["):
-                if key_secret:
-                    # Blank every non-empty quoted element; keep key + brackets.
-                    count += len(re.findall(r'["\'](.+?)["\']', rest))
-                    payload = re.sub(r'["\'](.+?)["\']', '""', rest)
-                    prefix = re.match(r'^(\s*["\']?[A-Za-z0-9_.\-]+["\']?\s*[:=]\s*)', raw.rstrip("\n")).group(1)
-                    line = prefix + payload
-                else:
-                    # argv-style: --token "val" / --token=val inside one line
-                    elems = re.findall(r'["\'](.*?)["\']', rest)
-                    blank_next = False
-                    changed = False
-                    new_elems = []
-                    for e in elems:
-                        if blank_next:
-                            new_elems.append("")
-                            count += 1
-                            changed = True
-                            blank_next = False
-                        elif re.match(r'^--?[A-Za-z0-9_\-]+=', e) and SECRET_KEY_RE.search(e.split("=", 1)[0]):
-                            new_elems.append(e.split("=", 1)[0] + "=")
-                            count += 1
-                            changed = True
-                        elif re.match(r'^--?[A-Za-z0-9_\-]+$', e) and SECRET_KEY_RE.search(e):
-                            new_elems.append(e)
-                            blank_next = True
-                        else:
-                            new_elems.append(e)
-                    if changed:
-                        it = iter(new_elems)
-                        line = re.sub(r'["\'](.*?)["\']', lambda m: '"%s"' % next(it), line)
-                out.append(line + "\n")
-                continue
-            # Skip container lines ("key": {) and empty values — never
-            # redact an entire object just because its key looks secret.
-            if rest in ("{", ""):
-                out.append(line + "\n")
-                continue
-            # Quoted string value, possibly with a trailing comma: "value",
-            # The trailing comma (present in JSON, absent in TOML/YAML) must be
-            # PRESERVED or the file becomes invalid JSON. Capture it in group 2.
-            qm = re.match(r'^["\'](.*)["\']\s*,?\s*$', rest)
-            if qm:
-                val = qm.group(1)
-                if is_secret(key, val):
-                    line = re.sub(r'([:=]\s*)["\'].*?["\'](\s*,?\s*)$', r'\1""\2', line)
+            # value of a preceding secret flag -> blank the whole element
+            idx = line.rfind(item)
+            if idx != -1:
+                line = line[:idx] + '""'
+                count += 1
+            flag_pending = False
+            out.append(line + "\n")
+            continue
+        # Arm pending when this element is a secret flag whose value is on the
+        # next line; or blank an inline "--flag=value" immediately (vector ④).
+        if "=" in item:
+            eqm = FLAG_EQ_RE.match(item)
+            if eqm and (SECRET_KEY_RE.search(eqm.group(1)) or eqm.group(1) in SHORT_SECRET_FLAGS):
+                idx = line.rfind(item)
+                if idx != -1:
+                    line = line[:idx] + eqm.group(1) + "="
                     count += 1
+                out.append(line + "\n")
+                continue
+        elif is_secret_flag(item):
+            flag_pending = True
+            out.append(line + "\n")
+            continue
+    # ---- Vector ⑤: blank every "secretKey":"value" pair on the line
+    line = re.sub(r'("?[A-Za-z0-9_.\-]+"?\s*:\s*)"([^"]*)"', redact_kv, line)
+    # ---- normal keyed-line handling (single key + arrays + argv)
+    m = re.match(r'^\s*["\']?([A-Za-z0-9_.\-]+)["\']?\s*[:=]\s*(.*)$', line)
+    if m:
+        key, rest = m.group(1), m.group(2).strip()
+        key_secret = bool(SECRET_KEY_RE.search(key))
+        flag_pending = False  # a fresh keyed line ends any pending argv pair
+        if rest == "[":
+            if key_secret:
+                secret_array_depth = 1
+            out.append(line + "\n")
+            continue
+        if rest.startswith("["):
+            if key_secret:
+                new_rest, n = blank_all_quoted(rest)
+                prefix = re.match(r'^(\s*["\']?[A-Za-z0-9_.\-]+["\']?\s*[:=]\s*)', raw.rstrip("\n")).group(1)
+                line = prefix + new_rest
+                count += n
             else:
-                # Bare value (TOML/YAML, no surrounding quotes). A rest that
-                # STARTS with a quote but did not match the quoted-value regex
-                # is NOT a bare value — it is an array element like
-                # "--api-key=", (JSON) or an unterminated string; rewriting it
-                # would corrupt the file, so leave it untouched.
-                bare = rest.rstrip(',').strip()
-                if bare and not bare.startswith(('"', "'")) and is_secret(key, bare):
-                    line = re.sub(r'[:=]\s*\S.*?(\s*,?\s*)$', r': ""\1', line)
-                    count += 1
-        out.append(line + "\n")
-with open(file, "w") as f:
+                # argv-style: --token "val" / --token=val / -p "val" inside one
+                # line. Operate on the bracketed REST only so the key (which may
+                # itself be quoted, e.g. JSON "args") is never clobbered.
+                elems = re.findall(r'["\'](.*?)["\']', rest)
+                blank_next = False
+                changed = False
+                new_elems = []
+                for e in elems:
+                    if blank_next:
+                        new_elems.append("")
+                        count += 1
+                        changed = True
+                        blank_next = False
+                    elif FLAG_EQ_RE.match(e) and (SECRET_KEY_RE.search(FLAG_EQ_RE.match(e).group(1)) or FLAG_EQ_RE.match(e).group(1) in SHORT_SECRET_FLAGS):
+                        new_elems.append(FLAG_EQ_RE.match(e).group(1) + "=")
+                        count += 1
+                        changed = True
+                    elif e in SHORT_SECRET_FLAGS:
+                        new_elems.append(e)
+                        blank_next = True
+                    elif FLAG_RE.match(e) and SECRET_KEY_RE.search(e):
+                        new_elems.append(e)
+                        blank_next = True
+                    else:
+                        new_elems.append(e)
+                if changed:
+                    it = iter(new_elems)
+                    # Vector ②: next() must NEVER raise StopIteration. Any extra
+                    # quoted string on the line (e.g. the key itself) is kept
+                    # verbatim instead of crashing the whole redaction pass.
+                    new_rest = re.sub(r'["\'](.*?)["\']', lambda mm: '"%s"' % next(it, mm.group(0)), rest)
+                    prefix = re.match(r'^(\s*["\']?[A-Za-z0-9_.\-]+["\']?\s*[:=]\s*)', raw.rstrip("\n")).group(1)
+                    line = prefix + new_rest
+                # A secret flag at the END of an unclosed inline array has its
+                # value on the following line (vector ①/④ cross-line).
+                if blank_next and not rest.rstrip().endswith("]"):
+                    flag_pending = True
+            out.append(line + "\n")
+            continue
+        # Skip container lines ("key": {) and empty values — never
+        # redact an entire object just because its key looks secret.
+        if rest in ("{", ""):
+            out.append(line + "\n")
+            continue
+        # Quoted string value, possibly with a trailing comma: "value",
+        # The trailing comma (present in JSON, absent in TOML/YAML) must be
+        # PRESERVED or the file becomes invalid JSON. Capture it in group 2.
+        qm = re.match(r'^["\'](.*)["\']\s*,?\s*$', rest)
+        if qm:
+            val = qm.group(1)
+            # A secret KEY alone is sufficient (value need not look secret,
+            # e.g. token: "tok-xyz-789"). redact_kv may have already blanked
+            # double-quoted pairs -> val == "" -> skip (no double count).
+            if val and (key_secret or is_secret_value(val)):
+                line = re.sub(r'([:=]\s*)["\'].*?["\'](\s*,?\s*)$', r'\1""\2', line)
+                count += 1
+        else:
+            # Bare value (TOML/YAML, no surrounding quotes). A rest that
+            # STARTS with a quote but did not match the quoted-value regex
+            # is NOT a bare value — it is an array element like
+            # "--api-key=", (JSON) or an unterminated string; rewriting it
+            # would corrupt the file, so leave it untouched.
+            bare = rest.rstrip(',').strip()
+            if bare and not bare.startswith(('"', "'")) and (key_secret or is_secret_value(bare)):
+                line = re.sub(r'[:=]\s*\S.*?(\s*,?\s*)$', r': ""\1', line)
+                count += 1
+    # ---- argv element lines standing alone (e.g. JSON array continuation
+    #      '"-p",' / '"MySecret"') — handle cross-line secret-flag pairs.
+    if not line.strip().startswith("[") and not m:
+        stripped = line.strip()
+        if flag_pending:
+            mnext = re.match(r'^["\']?(--?[A-Za-z0-9_\-]+)["\']?,?\s*$', stripped)
+            if mnext and FLAG_RE.match(mnext.group(1)):
+                # consecutive flags ('"-p",' then '"-t",'): keep the flag,
+                # re-arm only if it is itself a secret flag.
+                flag_pending = is_secret_flag(mnext.group(1))
+            else:
+                new_line, n = blank_all_quoted(line)
+                if n:
+                    line = new_line
+                    count += n
+                else:
+                    # bare (unquoted) value after a secret flag -> blank it.
+                    # Skip ALREADY-quoted tokens (e.g. an already-blanked "")
+                    # so we never strip a neighbouring comma on valid JSON.
+                    if stripped and not stripped.startswith(('"', "'")):
+                        line = re.sub(r'\S.*$', '""', line)
+                        count += 1
+                flag_pending = False
+        else:
+            mflag = re.match(r'^["\'](--?[A-Za-z0-9_\-]+)["\']?,?\s*$', stripped)
+            if mflag and is_secret_flag(mflag.group(1)) and "=" not in mflag.group(1):
+                flag_pending = True
+    out.append(line + "\n")
+
+# Atomic replace: write the fully-redacted content to a temp file first, then
+# swap it in. A crash mid-write can therefore never leave a half-redacted
+# destination; any exception here is caught by _fail_closed via excepthook.
+with open(TMP, "w") as f:
     f.writelines(out)
+os.replace(TMP, file)
 print(count)
 PYEOF
+    n=$(cat "$pyout" 2>/dev/null || echo "-1")
+    rm -f "$pyout"
+    if [[ $rc -ne 0 || "$n" == "-1" ]]; then
+        # FAIL CLOSED (vector ②): python already removed the destination; make
+        # doubly sure nothing secret-bearing survives, then signal failure.
+        rm -f "$file" "${file}.redact.tmp" 2>/dev/null || true
+        echo "  [SECURITY] 密钥脱敏失败，已删除目标文件以防泄漏 (源文件未动): $file" >&2
+        echo "-1"
+        return 1
+    fi
+    echo "$n"
+    return 0
 }
 
 migrate_mcp() {
@@ -1149,6 +1426,15 @@ migrate_mcp() {
     source_mcp=$(get_mcp_path "$source_ide")
     local target_mcp
     target_mcp=$(get_mcp_path "$target_ide")
+
+    # Project-relative MCP paths (e.g. kilocode .kilocode/mcp.json) resolve
+    # against the workspace root, not the caller's cwd.
+    if [[ -n "$source_mcp" && "$source_mcp" != /* ]]; then
+        source_mcp="$WORKSPACE_ROOT/$source_mcp"
+    fi
+    if [[ -n "$target_mcp" && "$target_mcp" != /* ]]; then
+        target_mcp="$WORKSPACE_ROOT/$target_mcp"
+    fi
 
     if [[ -z "$source_mcp" ]]; then
         set_status "mcp" "skipped"
@@ -1327,15 +1613,21 @@ migrate_config() {
             # tokens. Strip them from the COPY (never the source) — same
             # policy as MCP migration.
             local config_redacted
-            config_redacted=$(redact_secrets_in_file "$target_config")
-            if [[ "${config_redacted:-0}" -gt 0 ]]; then
-                echo "  [SECURITY] 已清空 $config_redacted 处疑似密钥值，请在目标IDE中重新配置凭据"
-                set_manual_step "config" "配置文件中 $config_redacted 处密钥已被清空，需在目标IDE重新填写"
+            if config_redacted=$(redact_secrets_in_file "$target_config"); then
+                if [[ "${config_redacted:-0}" -gt 0 ]]; then
+                    echo "  [SECURITY] 已清空 $config_redacted 处疑似密钥值，请在目标IDE中重新配置凭据"
+                    set_manual_step "config" "配置文件中 $config_redacted 处密钥已被清空，需在目标IDE重新填写"
+                fi
+                set_status "config" "copied"
+                set_message "config" "配置文件已复制 (可能需要手动调整格式，密钥已清空): $target_config"
+                set_manual_step "config" "检查并调整IDE配置文件格式 ($source_ide -> $target_ide)"
+                MIGRATION_SUCCESS=$((MIGRATION_SUCCESS + 1))
+            else
+                echo "  [FAIL] 配置文件脱敏失败，目标副本已删除以防密钥泄漏"
+                set_status "config" "failed"
+                set_message "config" "配置文件脱敏失败，目标副本已删除以防密钥泄漏 (源文件未动)"
+                MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
             fi
-            set_status "config" "copied"
-            set_message "config" "配置文件已复制 (可能需要手动调整格式，密钥已清空): $target_config"
-            set_manual_step "config" "检查并调整IDE配置文件格式 ($source_ide -> $target_ide)"
-            MIGRATION_SUCCESS=$((MIGRATION_SUCCESS + 1))
         else
             echo "  [FAIL] 配置文件复制后为空"
             set_status "config" "failed"

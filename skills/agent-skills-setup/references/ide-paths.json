@@ -1,9 +1,9 @@
 {
   "antigravity": {
-    "global_skills": "~/.gemini/antigravity/skills",
+    "global_skills": "~/.gemini/config/skills",
     "project_skills": ".agents/skills",
-    "rules": "",
-    "mcp": "",
+    "rules": "AGENTS.md",
+    "mcp": "~/.gemini/config/mcp_config.json",
     "config": ""
   },
   "claude": {
@@ -28,24 +28,24 @@
     "config": ""
   },
   "cursor": {
-    "global_skills": "~/.cursor",
+    "global_skills": "~/.cursor/skills",
     "project_skills": ".cursor",
     "rules": ".cursorrules",
     "mcp": "~/.cursor/mcp.json",
-    "config": "~/.cursor/settings.json"
+    "config": "~/Library/Application Support/Cursor/User/settings.json"
   },
   "windsurf": {
-    "global_skills": "~/.windsurf",
+    "global_skills": "~/.windsurf/skills",
     "project_skills": ".windsurf",
     "rules": ".windsurfrules",
-    "mcp": "~/.windsurf/mcp.json",
-    "config": "~/.windsurf/settings.json"
+    "mcp": "~/.codeium/windsurf/mcp_config.json",
+    "config": ""
   },
   "jetbrains": {
-    "global_skills": "~/.idea",
-    "project_skills": ".idea",
-    "rules": "",
-    "mcp": "",
+    "global_skills": "",
+    "project_skills": ".junie",
+    "rules": ".junie/guidelines.md",
+    "mcp": "~/.junie/mcp/mcp.json",
     "config": ""
   },
   "openclaw": {
@@ -59,14 +59,14 @@
     "global_skills": "~/.trae/skills",
     "project_skills": ".trae",
     "rules": "",
-    "mcp": "~/.trae/mcps",
+    "mcp": "~/Library/Application Support/Trae/User/mcp.json",
     "config": "~/.trae/argv.json"
   },
   "trae-cn": {
     "global_skills": "~/.trae-cn/skills",
     "project_skills": ".trae",
     "rules": "",
-    "mcp": "~/.trae-cn/mcps",
+    "mcp": "~/Library/Application Support/Trae CN/User/mcp.json",
     "config": "~/.trae-cn/argv.json"
   },
   "vscode": {
@@ -74,12 +74,12 @@
     "project_skills": ".vscode",
     "rules": "",
     "mcp": "~/Library/Application Support/Code/User/mcp.json",
-    "config": "~/.vscode/settings.json"
+    "config": "~/Library/Application Support/Code/User/settings.json"
   },
   "zed": {
     "global_skills": "~/.config/zed",
     "project_skills": ".zed",
-    "rules": "",
+    "rules": "AGENTS.md",
     "mcp": "~/.config/zed/settings.json",
     "config": "~/.config/zed/settings.json"
   },
@@ -100,9 +100,9 @@
   "continue": {
     "global_skills": "~/.continue",
     "project_skills": ".continue",
-    "rules": ".continuerc.json",
-    "mcp": "~/.continue/config.json",
-    "config": "~/.continue/config.json"
+    "rules": "CONTINUE.md",
+    "mcp": "~/.continue/config.yaml",
+    "config": "~/.continue/config.yaml"
   },
   "aider": {
     "global_skills": "~/.aider",
@@ -114,9 +114,9 @@
   "roo-code": {
     "global_skills": "~/.roo",
     "project_skills": ".roo",
-    "rules": ".roomotes",
-    "mcp": "~/.roo/mcp.json",
-    "config": "~/.roo/config.json"
+    "rules": ".roorules",
+    "mcp": "~/Library/Application Support/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/mcp_settings.json",
+    "config": ""
   },
   "cline": {
     "global_skills": "~/.cline",
@@ -126,7 +126,7 @@
     "config": "~/.cline/config.json"
   },
   "amazon-q": {
-    "global_skills": "~/.aws/amazon-q",
+    "global_skills": "~/.aws/amazonq",
     "project_skills": ".amazon-q",
     "rules": "",
     "mcp": "~/.aws/amazonq/default.json",
@@ -165,7 +165,7 @@
     "project_skills": ".pearai",
     "rules": ".pearairules",
     "mcp": "~/.pearai/config.json",
-    "config": "~/.pearai/settings.json"
+    "config": "~/.pearai/config.json"
   },
   "supermaven": {
     "global_skills": "~/.supermaven",
@@ -198,23 +198,23 @@
   "goose-cli": {
     "global_skills": "~/.config/goose",
     "project_skills": ".goose",
-    "rules": "GOOSE.md",
+    "rules": ".goosehints",
     "mcp": "~/.config/goose/config.yaml",
     "config": "~/.config/goose/config.yaml"
   },
   "opencode": {
     "global_skills": "~/.config/opencode",
     "project_skills": ".opencode",
-    "rules": "OPENCODE.md",
+    "rules": "AGENTS.md",
     "mcp": "~/.config/opencode/opencode.json",
-    "config": "~/.config/opencode/config.json"
+    "config": "~/.config/opencode/opencode.json"
   },
   "kilocode": {
-    "global_skills": "~/.kilocode",
+    "global_skills": "~/.config/kilo",
     "project_skills": ".kilocode",
-    "rules": "KILOCODE.md",
-    "mcp": "",
-    "config": "~/.kilocode/config.json"
+    "rules": "",
+    "mcp": ".kilocode/mcp.json",
+    "config": "~/.config/kilo/kilo.jsonc"
   },
   "kimiai": {
     "global_skills": "~/.kimi-code/skills",
@@ -254,7 +254,7 @@
   "void-editor": {
     "global_skills": "",
     "project_skills": ".void",
-    "rules": "",
+    "rules": ".voidrules",
     "mcp": "~/.config/void/mcp_servers.json",
     "config": ""
   },

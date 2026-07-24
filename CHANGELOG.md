@@ -21,12 +21,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **7 newly wired IDEs** in `smart-ide-migration.sh` (previously registry-doc-only): Claude Desktop, Kiro, Augment Code, Void Editor, Baidu Comate, Tencent CodeBuddy, ZCode — 40 supported IDEs total.
 - **MCP paths for 8 previously silent IDEs**: `copilot` (`~/.copilot/mcp-config.json`), `vscode` (`.../Code/User/mcp.json`, root key `servers`), `zed`, `opencode`, `amazon-q`, `pearai`, `cody`, `tabnine`. `claude → copilot/vscode` MCP migration no longer silently skips.
+- **Registry gaps closed** in `references/ide-registry.md`: added entries for openclaw, codeium, replit, supermaven, blackbox, and pieces (all script-supported but previously undocumented); corrected the `### kilo-code` section header to `### kilocode` (matching the `kilocode` token); fixed Zed's macOS detect path to `~/.config/zed` (cross-platform, where Zed stores `settings.json`).
+- **`scripts/sync-root-mirror.sh` created** (it was referenced by `validate-all.sh --check` but missing from the repo). The root `SKILL.md` mirror now regenerates from the canonical `skills/agent-skills-setup/SKILL.md` with correctly rewritten repo-relative links and passes `--check`, so the mirror can no longer silently drift.
 
 ### Fixed
 - **`test-migration.sh` B5 harness bug**: the `sync-global-skills.sh` call omitted the required `--yes` confirmation flag, failing 29/56 checks. The guard was working as designed; the test now passes 56/56.
 - Portable timestamp in the migration report (`date '+%Y-%m-%dT%H:%M:%S%z'`; BSD/macOS `date` lacks `-Iseconds`).
 - `get_status`/`get_message`/`get_manual_steps` now use literal-string `awk` matching instead of interpolating `$obj` into a `grep` regex.
 - Line-based redactor no longer corrupts JSON when an array element resembles `key=value` (e.g. a blanked `"--api-key=",` line).
+- **15 IDE path mappings corrected** in `smart-ide-migration.sh` resolver functions, with lock-step updates to `references/ide-paths.json` (all 218 `test-ide-paths.sh` drift checks pass). Affected: windsurf, jetbrains (Junie), trae, trae-cn, cursor, copilot (GitHub Copilot CLI), continue, roo-code, amazon-q, goose-cli, opencode, antigravity, kilocode, void-editor, zcode — including the project-relative Kilo Code MCP path (`.kilocode/mcp.json`) now resolved against the workspace root.
+- **SKILL.md tutorial errors fixed**: Cody/Cline/Continue/Kilo Code/Void were wrongly listed as using `.vscode/mcp.json` (each uses its own MCP path — see registry); the non-existent `CODY.md` rules file replaced with `.codyrules`; added the previously missing WorkBuddy, Kilo Code, and GitHub Copilot CLI entries to the quick-reference, verification, and pitfalls tables.
 
 ### Changed
 - `references/ide-registry.md`: `tongyi-lingma` section marked DEPRECATED (renamed to Qoder CN 2026-05-20) with pointer to `qoder-cn`. Audit claims that copilot-cli project `.mcp.json` uses root key `servers` and that Qoder CN lives at `~/.qoder-cn/` were verified against official docs and found incorrect — registry entries (`mcpServers`, `~/.qoder/`) stand.

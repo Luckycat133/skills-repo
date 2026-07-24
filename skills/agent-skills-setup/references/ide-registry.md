@@ -4,6 +4,7 @@ Detailed per-IDE paths for all migration objects. Read this when executing STEP 
 
 > **Verified**: 2026-07-16 via official docs. All paths are macOS/Linux unless noted.
 > Objects not listed for an IDE = not supported by that IDE.
+> **Tool-supported entries** (openclaw, codeium, replit, supermaven, blackbox, pieces) are derived from the migration script's path tables; their paths may need official-doc confirmation.
 
 ---
 
@@ -90,6 +91,10 @@ Detailed per-IDE paths for all migration objects. Read this when executing STEP 
 - **memory**: `~/.codeium/windsurf/memories/` (Cascade auto-generated, workspace-isolated)
 - **note**: No project-level MCP; 6000 char per rule limit; 100 tool limit
 
+### codeium (Codeium → Windsurf)
+- **detect**: `~/.codeium/`
+- **note**: Codeium's AI assistant was rebranded to **Windsurf**; its config now lives under `~/.codeium/windsurf/` (see `### windsurf`). The `codeium` token is retained only for legacy detection of pre-rebrand installs; project-level config dir is `.codeium/`. No standalone MCP/rules/skills files are tracked separately — they inherit Windsurf's layout.
+
 ### continue
 - **detect**: `~/.continue/`
 - **mcp**: global `~/.continue/config.yaml` · project `.continue/mcpServers/<name>.yaml` · root_key `mcpServers` · YAML · ARRAY format (not object)
@@ -105,7 +110,7 @@ Detailed per-IDE paths for all migration objects. Read this when executing STEP 
 - **commands**: global `~/.augment/commands/`
 - **other**: `~/.augment-plugin/` (plugins marketplace)
 
-### kilo-code
+### kilocode
 - **detect**: `~/.kilocode/` (project) · `~/.config/kilo/` (global)
 - **mcp**: project `.kilocode/mcp.json` · root_key `mcpServers` · JSON · stdio+HTTP
 - **rules**: project `.kilo/rules/*.md` / `.kilocode/rules/` · config `kilo.jsonc` instructions array · global `~/.config/kilo/kilo.jsonc`
@@ -117,7 +122,7 @@ Detailed per-IDE paths for all migration objects. Read this when executing STEP 
 ## Standalone IDEs
 
 ### zed
-- **detect**: `~/Library/Application Support/Zed/` (mac) · `~/.config/zed/` (linux) · `%APPDATA%\Zed\` (win)
+- **detect**: `~/.config/zed/` (mac/linux/win — Zed stores `settings.json` here cross-platform; `~/Library/Application Support/Zed/` holds extensions/data only)
 - **mcp**: global `settings.json` · project `.zed/settings.json` · root_key `context_servers` · JSON · stdio+HTTP
 - **rules**: `AGENTS.md` (since 1.4.2, removed @rule system)
 - **skills**: `.agents/skills/<name>/SKILL.md` (universal standard)
@@ -222,6 +227,14 @@ Detailed per-IDE paths for all migration objects. Read this when executing STEP 
 - **memory**: global `~/.config/goose/memory/` (directory, JSON shards) · project `.goose/memory/`
 - **other**: `~/.config/goose/permission.yaml` · `~/.config/goose/secrets.yaml`
 
+### openclaw (OpenClaw)
+- **detect**: `~/.openclaw/`
+- **mcp**: global `~/.openclaw/openclaw.json` · root_key `mcpServers` · JSON · stdio+HTTP
+- **rules**: project `AGENT_RULES.md`
+- **skills**: project `skills/` · global `~/.openclaw/skills/`
+- **config**: `~/.openclaw/openclaw.json`
+- **note**: Open-source Claude-Code-style agent; config is a single `openclaw.json` (MCP + skills + rules refs). This skill can install/config OpenClaw (see Safety Boundaries exception in SKILL.md).
+
 ### aider
 - **detect**: `~/.aider.conf.yml`
 - **rules**: `CONVENTIONS.md` (add to `read:` in .aider.conf.yml)
@@ -237,6 +250,11 @@ Detailed per-IDE paths for all migration objects. Read this when executing STEP 
 - **skills**: project skills (via `load_project_skills()`, agentskills.io standard)
 - **agents**: `~/.openhands-cli/persist/agent_settings.json`
 - **memory**: Condenser system (config.toml [condenser]: type=amortized/llm_attention/llm_summarizing)
+
+### replit (Replit AI)
+- **detect**: `~/.replit/` · project `.replit`
+- **config**: `~/.replit/replit.nix`
+- **note**: Replit Agent is primarily cloud-first; local file config is limited in this layout. No documented local MCP/skills/rules files (tool tracks project `.replit` + `~/.replit/replit.nix` only).
 
 ### sourcegraph-amp
 - **detect**: `~/.config/amp/`
@@ -290,6 +308,18 @@ Detailed per-IDE paths for all migration objects. Read this when executing STEP 
 - **mcp**: global `~/.tabnine/mcp_servers.json` · project `.tabnine/mcp_servers.json` · root_key `mcpServers` · JSON · stdio auto from command, HTTP from url
 - **rules**: `.tabnine/guidelines/rules.md`
 - **other**: Enterprise MCP Governance (Admin Console whitelist)
+
+### supermaven
+- **detect**: `~/.supermaven/` · project `.supermaven`
+- **note**: Acquired by Cursor (2025); a completion engine, not a full agent. No MCP/skills/rules file config in this layout (tool tracks project `.supermaven` only).
+
+### blackbox (Blackbox AI)
+- **detect**: `~/.blackbox/` (tool heuristic; official local config not publicly documented) · project `.blackbox`
+- **note**: Primarily a VS Code/Cursor/JetBrains extension; local file config not well documented. Tool tracks project `.blackbox` only.
+
+### pieces (Pieces for Developers)
+- **detect**: `~/.pieces/` · project `.pieces`
+- **note**: Copilot with PiecesOS; MCP/rules/skills not file-exposed in this layout (tool tracks `~/.pieces` / `.pieces` only). Cross-IDE memory via Pieces LTM MCP server — see Cross-IDE Memory Solutions below.
 
 ### helix
 - **detect**: `~/.config/helix/`

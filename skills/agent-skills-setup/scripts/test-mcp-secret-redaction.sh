@@ -152,7 +152,7 @@ printf '%s\n' '---' 'name: demo-skill' 'description: fixture' '---' > "$HOME/.cl
 # Run WITHOUT --objects (default). The skill should migrate; the secret mcp
 # must NOT be copied by default.
 run bash "$MIG" --source claude --target cursor
-if [[ -f "$HOME/.cursor/demo-skill/SKILL.md" ]]; then check_pass "4: low-risk skill migrated by default"; else check_fail "4: default migration did not move skills"; fi
+if [[ -f "$HOME/.cursor/skills/demo-skill/SKILL.md" ]]; then check_pass "4: low-risk skill migrated by default"; else check_fail "4: default migration did not move skills"; fi
 if [[ -e "$HOME/.cursor/mcp.json" ]]; then
     if grep -Fq "EXAMPLE_API_KEY_VALUE" "$HOME/.cursor/mcp.json"; then
         check_fail "4: DEFAULT scope copied a live secret (mcp must be opt-in)"
@@ -210,23 +210,23 @@ if grep -Fq "normal-item" "$HOME/.cursor/mcp.json"; then check_pass "6: benign a
 # ===========================================================================
 echo ""
 echo "== 7. Config migration also redacts secrets =="
-mkdir -p "$HOME/.cursor"
-cat > "$HOME/.cursor/settings.json" <<'EOF'
+mkdir -p "$HOME/.claude"
+cat > "$HOME/.claude/settings.json" <<'EOF'
 {
   "editor.fontSize": 14,
   "apiKey": "EXAMPLE_SETTINGS_API_KEY",
   "telemetry": "off"
 }
 EOF
-run bash "$MIG" --source cursor --target windsurf --objects config --strategy overwrite
-if [[ -f "$HOME/.windsurf/settings.json" ]]; then
-    if grep -Fq "EXAMPLE_SETTINGS_API_KEY" "$HOME/.windsurf/settings.json"; then
+run bash "$MIG" --source claude --target opencode --objects config --strategy overwrite
+if [[ -f "$HOME/.config/opencode/opencode.json" ]]; then
+    if grep -Fq "EXAMPLE_SETTINGS_API_KEY" "$HOME/.config/opencode/opencode.json"; then
         check_fail "7: config migration leaked apiKey"
     else
         check_pass "7: config apiKey blanked"
     fi
-    if grep -Fq '"editor.fontSize": 14' "$HOME/.windsurf/settings.json"; then check_pass "7: benign settings preserved"; else check_fail "7: benign settings lost"; fi
-    assert_valid_json "$HOME/.windsurf/settings.json" "7: migrated config is valid JSON"
+    if grep -Fq '"editor.fontSize": 14' "$HOME/.config/opencode/opencode.json"; then check_pass "7: benign settings preserved"; else check_fail "7: benign settings lost"; fi
+    assert_valid_json "$HOME/.config/opencode/opencode.json" "7: migrated config is valid JSON"
     if grep -Fq "[SECURITY]" "$OUT_FILE"; then check_pass "7: [SECURITY] warning printed for config redaction"; else check_fail "7: [SECURITY] warning missing for config redaction"; fi
 else
     check_fail "7: config migration produced no target file"
@@ -257,6 +257,242 @@ if [[ -f "$VSCODE_MCP" ]]; then
 else
     check_fail "8: claude -> vscode mcp produced no file"
 fi
+
+# ===========================================================================
+echo ""
+echo "== 9. Vector ①: line-based short-secret-flag values (-p/-t/-k) =="
+# The JSON-tree converter already handles short flags, but the LINE-BASED
+# redactor (redact_secrets_in_file) must ALSO blank them when it is the
+# primary redactor (verbatim YAML copy). Exercises inline flow arrays AND
+# cross-line list pairs.
+mkdir -p "$HOME/.config/goose"
+cat > "$HOME/.config/goose/config.yaml" <<'EOF'
+extensions:
+  mcp:
+    servers:
+      shortflag-inline:
+        command: npx
+        args: ["-p", "SHORT_P_VAL", "-t", "SHORT_T_VAL", "-k", "SHORT_K_VAL"]
+      shortflag-cross:
+        command: npx
+        args:
+          - -p
+          - CROSS_P_VAL
+          - -t
+          - CROSS_T_VAL
+EOF
+run bash "$MIG" --source goose-cli --target cursor --objects mcp --strategy overwrite
+D9="$HOME/.cursor/mcp.json"
+if [[ -f "$D9" ]]; then
+    if grep -Fq "SHORT_P_VAL" "$D9"; then check_fail "9: line-path -p value leaked (inline)"; else check_pass "9: line-path -p value blanked (inline)"; fi
+    if grep -Fq "SHORT_T_VAL" "$D9"; then check_fail "9: line-path -t value leaked (inline)"; else check_pass "9: line-path -t value blanked (inline)"; fi
+    if grep -Fq "SHORT_K_VAL" "$D9"; then check_fail "9: line-path -k value leaked (inline)"; else check_pass "9: line-path -k value blanked (inline)"; fi
+    if grep -Fq "CROSS_P_VAL" "$D9"; then check_fail "9: line-path -p value leaked (cross-line)"; else check_pass "9: line-path -p value blanked (cross-line)"; fi
+    if grep -Fq "CROSS_T_VAL" "$D9"; then check_fail "9: line-path -t value leaked (cross-line)"; else check_pass "9: line-path -t value blanked (cross-line)"; fi
+    if grep -Eq '("-p"|- -p)' "$D9"; then check_pass "9: -p flag itself preserved"; else check_fail "9: -p flag lost"; fi
+    if grep -Eq '("-t"|- -t)' "$D9"; then check_pass "9: -t flag itself preserved"; else check_fail "9: -t flag lost"; fi
+    if grep -Eq '("-k"|- -k)' "$D9"; then check_pass "9: -k flag itself preserved"; else check_fail "9: -k flag lost"; fi
+    if grep -Fq "[SECURITY]" "$OUT_FILE"; then check_pass "9: [SECURITY] warning printed for short-flag redaction"; else check_fail "9: [SECURITY] warning missing"; fi
+else
+    check_fail "9: short-flag migration produced no destination file"
+fi
+
+# ===========================================================================
+echo ""
+echo "== 10. Vector ②: StopIteration crash on quoted-key inline array =="
+# The JSON-tree converter writes the destination as quoted-key JSON (e.g.
+# "args": [...]). The line-based redactor then re-runs on that file. The OLD
+# code applied re.sub to the WHOLE line (including the quoted key) while
+# new_elems only held argv elements -> an extra quoted token -> next(it)
+# raised StopIteration -> under set -e the whole migration aborted. Assert the
+# migration completes (rc==0) and stays valid JSON instead of crashing.
+S10="$HOME/.claude.json"
+cat > "$S10" <<'EOF'
+{
+  "mcpServers": {
+    "stopiter-server": {
+      "command": "npx",
+      "args": ["-p", "STOPITER_PWD", "--token", "STOPITER_TOK", "benign-arg"]
+    }
+  }
+}
+EOF
+run bash "$MIG" --source claude --target cursor --objects mcp --strategy overwrite
+assert_valid_json "$HOME/.cursor/mcp.json" "10: destination valid JSON after line redaction"
+if [[ $LAST_RC -eq 0 ]]; then check_pass "10: migration did NOT crash on quoted-key inline array (rc=0)"; else check_fail "10: migration aborted/crashed on quoted-key inline array (rc=$LAST_RC)"; fi
+if grep -Fq "STOPITER_PWD" "$HOME/.cursor/mcp.json"; then check_fail "10: -p value leaked"; else check_pass "10: -p value blanked"; fi
+if grep -Fq "STOPITER_TOK" "$HOME/.cursor/mcp.json"; then check_fail "10: --token value leaked"; else check_pass "10: --token value blanked"; fi
+if grep -Fq '"benign-arg"' "$HOME/.cursor/mcp.json"; then check_pass "10: benign argv preserved"; else check_fail "10: benign argv lost"; fi
+
+# ===========================================================================
+echo ""
+echo "== 11. Vector ③: YAML list item '- api_key: secret123' =="
+# A secret-bearing key carried as a YAML LIST ITEM (leading '- ') was invisible
+# to the key/value line regex (which cannot match the leading '- '). The line
+# redactor must now recognise list-item keyed pairs and blank the value.
+mkdir -p "$HOME/.config/goose"
+cat > "$HOME/.config/goose/config.yaml" <<'EOF'
+extensions:
+  mcp:
+    servers:
+      yaml-list-server:
+        command: npx
+        env:
+          - api_key: "secret123"
+          - token: "tok-xyz-789"
+          - normal_var: "keep-this"
+EOF
+run bash "$MIG" --source goose-cli --target cursor --objects mcp --strategy overwrite
+D11="$HOME/.cursor/mcp.json"
+if [[ -f "$D11" ]]; then
+    if grep -Fq "secret123" "$D11"; then check_fail "11: list-item api_key value leaked"; else check_pass "11: list-item api_key value blanked"; fi
+    if grep -Fq "tok-xyz-789" "$D11"; then check_fail "11: list-item token value leaked"; else check_pass "11: list-item token value blanked"; fi
+    if grep -Fq "keep-this" "$D11"; then check_pass "11: list-item normal_var preserved"; else check_fail "11: list-item normal_var lost"; fi
+    if grep -Fq "api_key" "$D11"; then check_pass "11: list-item key (api_key) preserved"; else check_fail "11: list-item key lost"; fi
+    if grep -Fq "[SECURITY]" "$OUT_FILE"; then check_pass "11: [SECURITY] warning printed for list-item redaction"; else check_fail "11: [SECURITY] warning missing"; fi
+else
+    check_fail "11: list-item migration produced no destination file"
+fi
+
+# ===========================================================================
+echo ""
+echo "== 12. Vector ④: YAML multi-line args ('- --token' / '- sk-live-xxx') =="
+# Secret CLI flags whose VALUE sits on the NEXT list item (e.g. '- --token'
+# then '- TOKVALUE-abcdef123456'). The cross-line flag_pending state must carry
+# the secret flag across the line break and blank the following value, while
+# keeping the flag and any benign list element.
+mkdir -p "$HOME/.config/goose"
+cat > "$HOME/.config/goose/config.yaml" <<'EOF'
+extensions:
+  mcp:
+    servers:
+      multiline-args-server:
+        command: npx
+        args:
+          - --token
+          - TOKVALUE-abcdef123456
+          - -p
+          - mypassword
+          - normal-arg
+EOF
+run bash "$MIG" --source goose-cli --target cursor --objects mcp --strategy overwrite
+D12="$HOME/.cursor/mcp.json"
+if [[ -f "$D12" ]]; then
+    if grep -Fq "TOKVALUE-abcdef123456" "$D12"; then check_fail "12: cross-line --token value leaked"; else check_pass "12: cross-line --token value blanked"; fi
+    if grep -Fq "mypassword" "$D12"; then check_fail "12: cross-line -p value leaked"; else check_pass "12: cross-line -p value blanked"; fi
+    if grep -Fq "normal-arg" "$D12"; then check_pass "12: benign list element preserved"; else check_fail "12: benign list element lost"; fi
+    if grep -Fq -- "- --token" "$D12"; then check_pass "12: --token flag preserved (cross-line)"; else check_fail "12: --token flag lost"; fi
+    if grep -Fq -- "- -p" "$D12"; then check_pass "12: -p flag preserved (cross-line)"; else check_fail "12: -p flag lost"; fi
+    if grep -Fq "[SECURITY]" "$OUT_FILE"; then check_pass "12: [SECURITY] warning printed for multi-line args"; else check_fail "12: [SECURITY] warning missing"; fi
+else
+    check_fail "12: multi-line args migration produced no destination file"
+fi
+
+# ===========================================================================
+echo ""
+echo "== 13. Vector ⑤: compact single-line JSON with multiple secret keys =="
+# A single line carrying several '\"secretKey\": \"value\"' pairs. The OLD
+# key/value line regex only matched the FIRST key on a line; the line redactor
+# must now blank EVERY secret-keyed value on the line (redact_kv), leaving
+# non-secret keys and their values intact.
+mkdir -p "$HOME/.claude"
+cat > "$HOME/.claude/settings.json" <<'EOF'
+{
+  "apiKey": "AK_SL", "token": "TOK_SL", "password": "PW_SL",
+  "normalField": "keep-this-too",
+  "nested": { "secret": "SEC_NESTED" }
+}
+EOF
+run bash "$MIG" --source claude --target opencode --objects config --strategy overwrite
+D13="$HOME/.config/opencode/opencode.json"
+if [[ -f "$D13" ]]; then
+    if grep -Fq "AK_SL" "$D13"; then check_fail "13: compact line apiKey leaked"; else check_pass "13: compact line apiKey blanked"; fi
+    if grep -Fq "TOK_SL" "$D13"; then check_fail "13: compact line token leaked"; else check_pass "13: compact line token blanked"; fi
+    if grep -Fq "PW_SL" "$D13"; then check_fail "13: compact line password leaked"; else check_pass "13: compact line password blanked"; fi
+    if grep -Fq "SEC_NESTED" "$D13"; then check_fail "13: second compact line secret leaked"; else check_pass "13: second compact line secret blanked"; fi
+    if grep -Fq "keep-this-too" "$D13"; then check_pass "13: non-secret field preserved"; else check_fail "13: non-secret field lost"; fi
+    assert_valid_json "$D13" "13: compact-line migrated config is valid JSON"
+else
+    check_fail "13: compact-line config migration produced no file"
+fi
+
+# ===========================================================================
+echo ""
+echo "== 14. Review-fix: secret KEY with non-secret-looking value (keyed lines) =="
+# Regression guard: a secret key must blank its value even when the VALUE
+# itself does not look secret (e.g. "tok-xyz-789" contains no keyword).
+# Covers quoted AND bare (unquoted YAML/TOML) forms on NON-list keyed lines.
+mkdir -p "$HOME/.config/goose"
+cat > "$HOME/.config/goose/config.yaml" <<'EOF'
+extensions:
+  mcp:
+    servers:
+      keyedline-server:
+        command: npx
+        token: "tok-xyz-789"
+        apiKey: bare-val-42
+        timeout: "30s"
+EOF
+run bash "$MIG" --source goose-cli --target cursor --objects mcp --strategy overwrite
+D14="$HOME/.cursor/mcp.json"
+if [[ -f "$D14" ]]; then
+    if grep -Fq "tok-xyz-789" "$D14"; then check_fail "14: quoted keyed secret value leaked"; else check_pass "14: quoted keyed secret value blanked"; fi
+    if grep -Fq "bare-val-42" "$D14"; then check_fail "14: bare keyed secret value leaked"; else check_pass "14: bare keyed secret value blanked"; fi
+    if grep -Fq "30s" "$D14"; then check_pass "14: non-secret keyed value preserved"; else check_fail "14: non-secret keyed value lost"; fi
+else
+    check_fail "14: keyed-line migration produced no destination file"
+fi
+
+# ===========================================================================
+echo ""
+echo "== 15. Review-fix: consecutive secret flags ('- -p' then '- -t' then value) =="
+# Regression guard: with -p immediately followed by -t, the SECOND FLAG must
+# not be blanked as if it were the value; only the real value is blanked.
+mkdir -p "$HOME/.config/goose"
+cat > "$HOME/.config/goose/config.yaml" <<'EOF'
+extensions:
+  mcp:
+    servers:
+      consecutive-flags-server:
+        command: npx
+        args:
+          - -p
+          - -t
+          - CONSEC_SECRET_VAL
+          - --verbose
+EOF
+run bash "$MIG" --source goose-cli --target cursor --objects mcp --strategy overwrite
+D15="$HOME/.cursor/mcp.json"
+if [[ -f "$D15" ]]; then
+    if grep -Fq "CONSEC_SECRET_VAL" "$D15"; then check_fail "15: consecutive-flag value leaked"; else check_pass "15: consecutive-flag value blanked"; fi
+    if grep -Eq -- '(- -p|"-p")' "$D15"; then check_pass "15: first flag (-p) preserved"; else check_fail "15: first flag (-p) lost"; fi
+    if grep -Eq -- '(- -t|"-t")' "$D15"; then check_pass "15: second flag (-t) preserved (not blanked as value)"; else check_fail "15: second flag (-t) blanked by mistake"; fi
+    if grep -Eq -- '(- --verbose|"--verbose")' "$D15"; then check_pass "15: benign trailing flag preserved"; else check_fail "15: benign trailing flag lost"; fi
+else
+    check_fail "15: consecutive-flag migration produced no destination file"
+fi
+
+# ===========================================================================
+echo ""
+echo "== 16. Review-fix: fail-closed on redaction failure (vector ② hardening) =="
+# If the redactor cannot even READ the destination copy, it must fail CLOSED:
+# delete the (possibly secret-bearing) copy, emit -1, and return rc!=0 —
+# never leave an un-redacted file behind. Exercises the extracted function
+# directly against an unreadable file.
+D16_DIR=$(mktemp -d "$TMP_ROOT/failclosed.XXXXXX")
+D16="$D16_DIR/copy.json"
+printf '{"apiKey": "FAILCLOSED_SECRET"}\n' > "$D16"
+chmod 000 "$D16"
+set +e
+D16_OUT=$(bash -c '
+    eval "$(sed -n "/^redact_secrets_in_file()/,/^}/p" "$1")"
+    redact_secrets_in_file "$2"
+' _ "$MIG" "$D16" 2>/dev/null)
+D16_RC=$?
+set -e
+if [[ $D16_RC -ne 0 ]]; then check_pass "16: fail-closed returns non-zero rc"; else check_fail "16: fail-closed returned rc=0"; fi
+if [[ "$D16_OUT" == "-1" ]]; then check_pass "16: fail-closed emits -1 sentinel"; else check_fail "16: fail-closed emitted '$D16_OUT' (expected -1)"; fi
+if [[ ! -e "$D16" ]]; then check_pass "16: secret-bearing copy deleted (fail closed)"; else check_fail "16: secret-bearing copy left on disk"; chmod 644 "$D16" 2>/dev/null || true; fi
 
 # ===========================================================================
 echo ""
