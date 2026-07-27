@@ -49,18 +49,18 @@ This implementation now covers these mainstream AI IDE ecosystems:
 
 | Object | Copilot | Cursor | Windsurf | JetBrains | Claude | Codex | OpenClaw | Trae | Trae CN |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Capabilities | .github/skills | .cursor/skills | .windsurf/skills | .idea/ai-capabilities/skills | .claude/skills | .agents/skills | skills (workspace), ~/.openclaw/skills | .trae/skills | .trae-cn/skills |
-| Prompts | .github/prompts | .cursor/prompts | .windsurf/prompts | .idea/ai-capabilities/prompts | .claude/prompts | .codex/prompts | openclaw/prompts | .trae/prompts | .trae-cn/prompts |
-| Configurations | .vscode/copilot-config | .cursor/config | .windsurf/config | .idea/ai-capabilities/config | .claude/config + settings | .codex/config | openclaw/config + openclaw.json | .trae/config | .trae-cn/config |
-| Rules | .github/instructions | .cursor/rules | .windsurf/rules | .idea/ai-capabilities/rules | .claude/rules + CLAUDE.md | .codex/rules + AGENTS.md | openclaw/rules + config policy | .trae/rules | .trae-cn/rules |
-| Workflows | .github/workflows/ai | .cursor/workflows | .windsurf/workflows | .idea/ai-capabilities/workflows | .claude/workflows | .codex/workflows | openclaw/workflows | .trae/workflows | .trae-cn/workflows |
-| Hooks | .github/hooks | .cursor/hooks | .windsurf/hooks | .idea/ai-capabilities/hooks | .claude/hooks | .codex/hooks | openclaw/hooks | .trae/hooks | .trae-cn/hooks |
+| Capabilities | `.github/skills` | `.cursor/skills` | `.windsurf/skills` | `.junie/skills` | `.claude/skills` | `.agents/skills` | `skills` (workspace), `~/.openclaw/skills` | `.trae/skills` | `.trae/skills` |
+| Prompts / commands | `.github/prompts/*.prompt.md` | `.cursor/commands` | `.windsurf/workflows` (manual) | — | `.claude/commands` | — | — | `.trae/commands` (manual) | `.trae/commands` (manual) |
+| Configurations | `.vscode/mcp.json` for workspace MCP; user profile/UI | UI/manual | no portable project config | UI/manual | `.claude/settings.json` / `.claude.json` (scope-specific) | `.codex/config.toml` (manual/trusted-project) | `openclaw.json` + workspace policy | UI/manual | UI/manual |
+| Rules | `.github/copilot-instructions.md`, `.github/instructions` | `.cursor/rules` (manual) | `.devin/rules` / `.windsurf/rules` (manual) | `.junie/AGENTS.md` | `CLAUDE.md` | `AGENTS.md` | `AGENTS.md` | `.trae/rules` (manual) | `.trae/rules` (manual) |
+| Workflows | — | — | `.windsurf/workflows` (manual) | — | — | — | — | — | — |
+| Hooks | surface-specific/manual | `.cursor/hooks.json` (manual) | manual | UI/manual | manual | `.codex/hooks.json` / config (manual) | manual | `.trae/hooks.json` (manual) | `.trae/hooks.json` (manual) |
 
 Note:
 
-- Some prompt/config/rules/workflow locations are platform-native, while others are team conventions for portability.
-- Use the validation section to separate hard requirements from convention-level assets.
-- JetBrains row uses the JetBrains AI Assistant project layout (`.idea/ai-capabilities/...`). This is distinct from the **skill**-install path for JetBrains documented in `skills/agent-skills-setup/references/ide-registry.md`, which maps JetBrains to Junie at `~/.junie` (global) / `.junie` (project). The two layouts cover different asset types and are not in conflict.
+- Some cells are platform-native, while `—` and `(manual)` explicitly mean that the current official docs do not expose a safe portable file contract for the shipped mapper.
+- The canonical evidence for the live script is `skills/agent-skills-setup/references/ide-registry.md` and `references/ide-paths.json`; this design table must not be used to invent `.trae/prompts`, `.trae/config`, `.trae/workflows`, `.trae/hooks`, or JetBrains `.idea/ai-capabilities` paths.
+- Replit is intentionally absent from the table's local-file matrix: its project `.agents/skills` and living `replit.md` are documented, while MCP and user/enterprise surfaces are cloud/UI-managed and require manual handling.
 
 ## 4. Preconditions
 

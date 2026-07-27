@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.5.8] - 2026-07-27
+
+### IDE Support Expansion (40 IDEs & Ecosystems)
+- **Expanded cross-IDE migration and synchronization engine (`smart-ide-migration.sh`) to 40 supported IDEs & AI agent environments**, covering capabilities/skills, rules, prompts, MCP config, settings, and project config:
+  - Mainstream IDEs & Agents: Copilot, Cursor, Windsurf, JetBrains (Junie), Claude Code, Claude Desktop, Codex, OpenClaw, Trae, Trae CN, Antigravity, Kimi AI, Amazon Q, Gemini CLI, Zed, VS Code, Goose CLI, OpenCode, Continue, Roo Code, Cline, Kilo Code, Kiro, Augment Code, Baidu Comate, Tencent CodeBuddy, ZCode, Void Editor, Aider, Tabnine, Replit, Blackbox, Neovim, Emacs, Cody, Supermaven, Codeium, PearAI, Pieces.
+- **Added 17 dedicated IDE mapping & migration regression test suites** (`test-claude-code-mapping.sh`, `test-cursor-mapping.sh`, `test-copilot-mapping.sh`, `test-antigravity-migration.sh`, `test-codex-migration.sh`, `test-zed-mapping.sh`, `test-remaining-ide-mappings.sh`, etc.), asserting 415 path checks against canonical `ide-paths.json` and `ide-registry.md`.
+
+### Security & Scanner Alignment
+- **Hardened the security narrative in `SKILL.md` to match actual code behavior** and reduce false-positive moderation flags (the `skillspector` agentic-risk scanner had flagged broad "scan/migrate ALL" wording):
+  - `Execution Workflow` step 1 `DETECT — Scan filesystem for installed IDEs` → `RESOLVE — read the user-specified source/target IDE names; resolve paths from IDE Registry (no filesystem-wide scanning)`; step 3 `SCAN ALL migration objects` → `READ only the selected objects (default scope: skills, rules, prompts)`.
+  - `description` no longer says "Migrate ALL" / "Detects installed IDEs"; rewritten to "Resolves the user-specified source/target IDE paths".
+  - `triggers` list narrowed to explicit `from X to Y` intent only (removed vague `migrate ai assistant context`, `migrate ai ide context`, `migrate memory bank`, `move skills between ide`).
+  - Added an explicit "**MCP is opt-in**" note above the per-IDE MCP path table: those paths are only touched when `--objects mcp` is passed and secret values are always blanked.
+- **`get_project_path(codex)` now returns `.agents` instead of `.codex`.** Codex project config (agent defs + skills) lives under `.agents`; `.codex` is the CLI's own config dir that may hold `config.toml` with credentials and must not be copied as an opaque project tree. `scripts/test-migration.sh` Section D updated accordingly; migration suite **80 checks**.
+
+### Audit Hardening & Quality Fixes
+- **R1 (`validate_skills.py` gitignore handling)**: `validate_skills.py` now scans using `git ls-files --cached --others --exclude-standard`, ignoring untracked/ignored local environment files.
+- **R2 (IDE count unification)**: Unified IDE count across `SKILL.md` (both occurrences), `README.md`, and `ide-registry.md` to 40.
+- **R3 (CI test coverage)**: Integrated `verify-ide-config.sh`, `test-ide-paths.sh`, `test-migration.sh`, `test-smart-ide-migration.sh`, and `test-mcp-secret-redaction.sh` directly into `validate-all.sh` and GitHub Actions CI workflow.
+- **R4 (`smart-ide-migration.sh` main guard)**: Wrapped CLI entrypoint in `main()` with standard `if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then main "$@"; fi` guard.
+- **R5 (`install.sh` argument checks)**: Added `$# -ge 2` argument-count validation for `--target` and `--skill` options in `install.sh`.
+- **R6 (`validate_skills.py` format extension)**: Extended secret and private-path scanning in `validate_skills.py` to cover `.json` and `.toml` files.
+- **G4 (`sync-root-mirror.sh` link rewrite)**: Refactored `sync-root-mirror.sh` to use dynamic prefix-based regex link replacement and atomic write via temporary file (`mv`).
+- **G6 (`.gitignore` cleanup)**: Added `datasets/` and `.superpowers/` to `.gitignore`.
+- All suites green (migration 80, ide-paths 415, mcp-redaction 52, smart-ide isolation) and `validate-all --check` passes (root mirror synced, secret scan clean).
+
 ## [0.5.7] - 2026-07-24
 
 ### Security

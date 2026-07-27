@@ -24,3 +24,16 @@ Contributions should improve the quality, usability, portability, or publishabil
 - Review the relevant files under `docs/`.
 - Run shell syntax checks for any updated scripts.
 - Confirm the repository README still reflects the current workflow.
+
+## Local Setup (Git Hooks)
+
+The repository-root `SKILL.md` is a generated mirror of the canonical copy at
+`skills/agent-skills-setup/SKILL.md`. A lightweight pre-commit hook blocks
+commits when the two drift apart. Enable it once (repo-local, not committed):
+
+```bash
+git config core.hooksPath "$(git rev-parse --show-toplevel)/scripts/git-hooks"
+```
+
+If a commit is blocked, run `bash scripts/sync-root-mirror.sh`, then
+`git add SKILL.md` and commit again. CI also enforces this via `validate-all.sh`.

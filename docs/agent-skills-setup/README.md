@@ -25,14 +25,16 @@ Español: Esta carpeta reúne la planificación, validación, publicación e ite
 - `roadmap.md`：近期功能和重构方向
 - `release-checklist.md`: pre-publish verification steps
 - `release-checklist.md`：发布前核查步骤
-- `ideas.md`: experiments and backlog items
-- `ideas.md`：实验想法和 backlog
+- `roadmap.md` › Backlog/Ideas: experiments and backlog items (merged from former `ideas.md`)
+- `roadmap.md` › Backlog/Ideas：实验想法与 backlog（由原 `ideas.md` 合并而来）
 - `distribution-guide.md`: release, marketplace, and discovery plan
 - `distribution-guide.md`：发布、市场渠道和曝光计划
 - `clawhub-release.md`: exact ClawHub release commands and metadata
 - `clawhub-release.md`：ClawHub 发布命令和元数据说明
 - `cross-ide-capabilities-migration.md`: full migration playbook across capabilities, prompts, configurations, rules, and workflows
 - `cross-ide-capabilities-migration.md`：覆盖 capabilities、prompts、configurations、rules、workflows 的跨 IDE 迁移总指南
+- `code-review-2026-07-26.md`: full multi-reviewer audit (31 findings: 3 Critical / 4 High / 17 Medium / 7 Low)
+- `code-review-2026-07-26.md`：完整多维度审查归档（31 项：3 Critical / 4 High / 17 Medium / 7 Low）
 
 ## Current Workflow / 当前流程
 

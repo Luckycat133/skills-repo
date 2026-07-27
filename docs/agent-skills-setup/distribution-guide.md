@@ -101,7 +101,7 @@ Visual rule of thumb:
 - 每次发布都要准备简洁的 changelog 文本
 - tags and GitHub topics
 - 标签和 GitHub topics
-- exact ClawHub publish command
+- exact ClawHub publish command（见 [`clawhub-release.md`](./clawhub-release.md)）
 - 精确可执行的 ClawHub 发布命令
 
 ## Suggested Launch Copy / 建议的发布文案
