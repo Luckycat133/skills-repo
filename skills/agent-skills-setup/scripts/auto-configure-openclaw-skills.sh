@@ -29,6 +29,19 @@ declare -a ENV_ASSIGNMENTS=()
 declare -a API_KEY_ENV_ASSIGNMENTS=()
 declare -a REQUESTED_SKILLS=()
 
+# MED-P1: single global EXIT trap for every temp artifact. Individual code
+# paths register their mktemp results here instead of setting their own EXIT
+# traps (a second `trap ... EXIT` would silently replace the first one).
+declare -a GLOBAL_TMP_PATHS=()
+cleanup_global_tmp_paths() {
+    local p
+    for p in "${GLOBAL_TMP_PATHS[@]:-}"; do
+        [[ -n "$p" ]] && rm -rf "$p" 2>/dev/null
+    done
+    return 0
+}
+trap cleanup_global_tmp_paths EXIT
+
 usage() {
     cat <<'EOF'
 Usage: auto-configure-openclaw-skills.sh [options]
@@ -50,6 +63,10 @@ Options:
   --extra-dir <dir>             Append a shared skills.load.extraDirs entry. Repeatable.
   --env <skill:KEY=VALUE>       Set skills.entries.<skill>.env.<KEY>. Repeatable.
   --api-key-env <skill:ENVVAR>  Set skills.entries.<skill>.apiKey SecretRef. Repeatable.
+  --env-file <file>             Read skill:KEY=VALUE lines from <file> (blank
+                                lines and # comments ignored). Preferred over
+                                --env for real secrets: values never appear in
+                                argv, ps output, or shell history.
   --watch true|false            Configure skills.load.watch. Default: true.
   --watch-debounce-ms <ms>      Configure skills.load.watchDebounceMs. Default: 250.
   --skip-openclaw-install       Do not install OpenClaw automatically.
@@ -225,7 +242,24 @@ while [[ $# -gt 0 ]]; do
             ;;
         --env)
             [[ $# -ge 2 ]] || die "--env requires a value"
+            # MED-S2: literal secret values on the command line leak via ps,
+            # shell history, and CI logs. Warn and point to --env-file.
+            if printf '%s' "$2" | grep -Eq '(sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|tvly-[A-Za-z0-9_-]{16,}|AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}|ya29\.[A-Za-z0-9_-]+|AIza[0-9A-Za-z_-]{35}|sk_live_[A-Za-z0-9]{16,})'; then
+                log "WARNING: --env 的值疑似真实密钥。命令行参数会出现在 ps 输出与 shell 历史中；建议改用 --env-file <file>（文件权限 600）传递。"
+            fi
             ENV_ASSIGNMENTS+=("$2")
+            shift 2
+            ;;
+        --env-file)
+            # MED-S2: read skill:KEY=VALUE assignments from a file so secret
+            # values never appear in argv / process listings / history.
+            [[ $# -ge 2 ]] || die "--env-file requires a value"
+            [[ -f "$2" ]] || die "--env-file: file not found: $2"
+            while IFS= read -r _env_line || [[ -n "$_env_line" ]]; do
+                # skip blanks and comments
+                [[ -z "$_env_line" || "$_env_line" == \#* ]] && continue
+                ENV_ASSIGNMENTS+=("$_env_line")
+            done < "$2"
             shift 2
             ;;
         --api-key-env)
@@ -324,7 +358,7 @@ install_openclaw_if_needed() {
 
             local tmp_install actual_sha256 expected
             tmp_install="$(mktemp "/tmp/openclaw-install.XXXXXX.sh")"
-            trap 'rm -f "$tmp_install" 2>/dev/null' EXIT
+            GLOBAL_TMP_PATHS+=("$tmp_install")
             curl -fsSL https://openclaw.ai/install.sh -o "$tmp_install" || die "下载 OpenClaw install.sh 失败"
             actual_sha256="$(sha256_file "$tmp_install")"
 
@@ -427,6 +461,8 @@ ensure_env_file_path() {
     fi
 
     touch "$ENV_FILE"
+    # MED-S1: .env may carry credentials; keep it owner-only at all times.
+    chmod 600 "$ENV_FILE"
     if ! grep -Fqx "PATH=$path_entry:\$PATH" "$ENV_FILE" 2>/dev/null; then
         printf 'PATH=%s:$PATH\n' "$path_entry" >> "$ENV_FILE"
     fi
@@ -587,6 +623,7 @@ install_download_spec() {
     fi
 
     tmp_dir="$(mktemp -d /tmp/openclaw-skill-download.XXXXXX)"
+    GLOBAL_TMP_PATHS+=("$tmp_dir")
     archive_path="$tmp_dir/archive"
     extract_dir="$tmp_dir/extracted"
 
@@ -939,6 +976,10 @@ if (agents.length > 0) {
 
 fs.mkdirSync(path.dirname(configPath), { recursive: true });
 fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+// MED-S1: the config may embed secret env values (--env / --env-file);
+// restrict it to owner read/write. chmodSync also fixes pre-existing files
+// (writeFileSync's mode option only applies at creation time).
+fs.chmodSync(configPath, 0o600);
 NODE
 }
 

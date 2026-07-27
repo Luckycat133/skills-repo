@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+
+# Focused static/fixture guard for the canonical `copilot` migration target.
+# It is GitHub Copilot CLI, deliberately distinct from VS Code's `vscode`
+# target and its `.vscode/mcp.json` `servers` schema.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MIGRATION_SCRIPT="${SCRIPT_DIR}/smart-ide-migration.sh"
+TMP_ROOT="$(mktemp -d /tmp/copilot-mapping-test.XXXXXX)"
+trap 'rm -rf "$TMP_ROOT"' EXIT
+
+TEST_HOME="$TMP_ROOT/home"
+WORKSPACE="$TMP_ROOT/workspace"
+CURSOR_MCP="$TEST_HOME/.cursor/mcp.json"
+
+mkdir -p "$(dirname "$CURSOR_MCP")" "$WORKSPACE"
+
+assert_path() {
+    local object="$1"
+    local expected="$2"
+    local actual
+
+    actual="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" --print-path copilot "$object")"
+    if [[ "$actual" != "$expected" ]]; then
+        echo "FAIL: copilot/${object} expected '${expected}', got '${actual}'" >&2
+        exit 1
+    fi
+}
+
+assert_path project ".github"
+assert_path project-skills ".github/skills"
+assert_path project-mcp ".mcp.json"
+assert_path mcp "~/.copilot/mcp-config.json"
+
+# A JSON source must be converted to the CLI's `mcpServers` root only when the
+# transport is one documented by the CLI. VS Code's user MCP source is manual
+# and is covered by test-vscode-mapping.sh.
+cat > "$CURSOR_MCP" <<'JSON'
+{
+  "mcpServers": {
+    "unsupported": {
+      "type": "websocket",
+      "url": "wss://example.invalid/mcp",
+      "tools": ["*"]
+    }
+  }
+}
+JSON
+
+OUTPUT="$TMP_ROOT/output.txt"
+set +e
+HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+    --source cursor \
+    --target copilot \
+    --workspace "$WORKSPACE" \
+    --objects mcp \
+    --yes >"$OUTPUT" 2>&1
+RC=$?
+set -e
+
+if [[ $RC -eq 0 ]] && ! grep -Fq 'MCP配置迁移失败' "$OUTPUT"; then
+    echo "FAIL: unsupported Copilot CLI MCP transport was not rejected" >&2
+    cat "$OUTPUT" >&2
+    exit 1
+fi
+
+if [[ -e "$TEST_HOME/.copilot/mcp-config.json" ]]; then
+    echo "FAIL: unsupported Copilot CLI MCP transport was written" >&2
+    exit 1
+fi
+
+# A documented stdio entry can be copied into the CLI's separate root-key
+# schema without losing its transport declaration.
+cat > "$CURSOR_MCP" <<'JSON'
+{
+  "mcpServers": {
+    "local-tool": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["server.js"],
+      "tools": ["*"]
+    }
+  }
+}
+JSON
+
+HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+    --source cursor \
+    --target copilot \
+    --workspace "$WORKSPACE" \
+    --objects mcp \
+    --yes >"$OUTPUT" 2>&1
+
+python3 - "$TEST_HOME/.copilot/mcp-config.json" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1]) as f:
+    config = json.load(f)
+
+server = config.get("mcpServers", {}).get("local-tool", {})
+if server.get("type") != "stdio" or server.get("command") != "node":
+    raise SystemExit("CLI MCP conversion did not preserve the documented stdio entry")
+if "servers" in config:
+    raise SystemExit("VS Code MCP root key leaked into CLI config")
+PY
+
+echo "Copilot CLI mapping fixture passed"

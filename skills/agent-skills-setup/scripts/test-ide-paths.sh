@@ -8,7 +8,8 @@
 # the JSON value. This catches drift between the script's hardcoded case
 # tables and the canonical registry/JSON.
 #
-# Additionally, for the key IDEs (kimiai/copilot/codex/workbuddy) every
+# Additionally, for key IDEs, every non-empty JSON value must literally appear
+# in ide-registry.md.
 # non-empty JSON value must literally appear in ide-registry.md.
 #
 # Exits non-zero on ANY mismatch; exits 0 if all checks pass.
@@ -38,7 +39,7 @@ dump_rows() {
     python3 - "$JSON_FILE" "$@" <<'PYEOF'
 import json, sys
 data = json.load(open(sys.argv[1]))
-keymap = {"global_skills":"global","project_skills":"project","rules":"rules","mcp":"mcp","config":"config"}
+keymap = {"global_skills":"global","project_skills":"project-skills","rules":"rules","mcp":"mcp","project_mcp":"project-mcp","project_config":"project-config","config":"config"}
 key_filter = set(sys.argv[2:]) if len(sys.argv) > 2 else None
 for ide in sorted(data.keys()):
     if key_filter is not None and ide not in key_filter:
@@ -85,8 +86,152 @@ while IFS=$'\t' read -r ide jsonkey scriptobj expected; do
     fi
 done <<< "$ALL_ROWS"
 
+# Pieces is an MCP server/provider, not a file-backed IDE target. Keep the
+# canonical entry explicit and require every object key to be present and
+# empty; this prevents a stale ~/.pieces or .pieces heuristic from returning
+# as a supported path later.
+PIECES_CANONICAL_RC=0
+python3 - "$JSON_FILE" <<'PYEOF' || PIECES_CANONICAL_RC=$?
+import json, sys
+data = json.load(open(sys.argv[1]))
+required = {"global_skills", "project_skills", "rules", "mcp", "project_mcp", "project_config", "config"}
+entry = data.get("pieces", {})
+if set(entry) != required or any(entry.values()):
+    raise SystemExit(1)
+PYEOF
+checks=$((checks + 1))
+if [[ "$PIECES_CANONICAL_RC" -eq 0 ]]; then
+    echo "PASS: pieces canonical entry has all objects explicitly unsupported"
+else
+    echo "FAIL: pieces canonical entry must have exactly the empty object map"
+    failures=$((failures + 1))
+fi
+
+# --- GitHub Copilot CLI scope ---
+# The canonical `copilot` target represents GitHub Copilot CLI. Its project
+# skills are not custom instructions: the documented project skill directory
+# is .github/skills. Prompt files are IDE-only and must not be migrated to the
+# CLI target.
+COPILOT_PROJECT_SKILLS="$(bash "$MIGRATION_SCRIPT" --print-path copilot project-skills 2>/dev/null)"
+checks=$((checks + 1))
+if [[ "$COPILOT_PROJECT_SKILLS" == ".github/skills" ]]; then
+    echo "PASS: copilot/project_skills -> ${COPILOT_PROJECT_SKILLS}"
+else
+    echo "FAIL: copilot/project_skills"
+    echo "  expected: .github/skills"
+    echo "  actual:   ${COPILOT_PROJECT_SKILLS}"
+    failures=$((failures + 1))
+fi
+
+# --- Windsurf/Devin Desktop canonical scopes ---
+# Current official docs retain the ~/.codeium/windsurf storage namespace for
+# the Devin Desktop/Windsurf app, while workspace skills remain .windsurf/skills.
+WINDSURF_GLOBAL_SKILLS="$(bash "$MIGRATION_SCRIPT" --print-path windsurf global 2>/dev/null)"
+checks=$((checks + 1))
+if [[ "$WINDSURF_GLOBAL_SKILLS" == "~/.codeium/windsurf/skills" ]]; then
+    echo "PASS: windsurf/global -> ${WINDSURF_GLOBAL_SKILLS}"
+else
+    echo "FAIL: windsurf/global expected ~/.codeium/windsurf/skills, got '${WINDSURF_GLOBAL_SKILLS}'"
+    failures=$((failures + 1))
+fi
+
+WINDSURF_PROJECT_SKILLS="$(bash "$MIGRATION_SCRIPT" --print-path windsurf project-skills 2>/dev/null)"
+checks=$((checks + 1))
+if [[ "$WINDSURF_PROJECT_SKILLS" == ".windsurf/skills" ]]; then
+    echo "PASS: windsurf/project-skills -> ${WINDSURF_PROJECT_SKILLS}"
+else
+    echo "FAIL: windsurf/project-skills expected .windsurf/skills, got '${WINDSURF_PROJECT_SKILLS}'"
+    failures=$((failures + 1))
+fi
+
+COPILOT_HELP="$(bash "$MIGRATION_SCRIPT" --help 2>/dev/null)"
+checks=$((checks + 1))
+if grep -Fq "copilot      - GitHub Copilot CLI" <<< "$COPILOT_HELP" && ! grep -Fq "copilot      - VS Code Copilot" <<< "$COPILOT_HELP"; then
+    echo "PASS: copilot help identifies the CLI target"
+else
+    echo "FAIL: copilot help must identify GitHub Copilot CLI, not VS Code Copilot"
+    failures=$((failures + 1))
+fi
+
+COPILOT_PROMPT_WORKSPACE="$(mktemp -d /tmp/copilot-prompt-scope.XXXXXX)"
+trap 'rm -rf "$COPILOT_PROMPT_WORKSPACE"' EXIT
+mkdir -p "$COPILOT_PROMPT_WORKSPACE/.github/prompts"
+printf '%s\n' '---' 'description: test prompt' '---' > "$COPILOT_PROMPT_WORKSPACE/.github/prompts/test.prompt.md"
+COPILOT_PROMPT_OUTPUT="$(bash "$MIGRATION_SCRIPT" --source copilot --target cursor --workspace "$COPILOT_PROMPT_WORKSPACE" --objects prompts --dry-run 2>&1)"
+checks=$((checks + 1))
+if grep -Fq "源IDE不支持提示词模板" <<< "$COPILOT_PROMPT_OUTPUT"; then
+    echo "PASS: copilot CLI prompt migration is unsupported"
+else
+    echo "FAIL: copilot CLI must not migrate IDE-only prompt files"
+    failures=$((failures + 1))
+fi
+
+# --- Sourcegraph Cody fail-closed boundary ---
+# Cody's current official surfaces are Enterprise extension settings/UI and
+# Prompt Library; no portable Skills/rules/MCP/config/project file is mapped.
+for cody_object in global project project-skills rules mcp project-mcp project-config config; do
+    checks=$((checks + 1))
+    if bash "$MIGRATION_SCRIPT" --print-path cody "$cody_object" >/dev/null 2>&1; then
+        echo "FAIL: cody/${cody_object} must remain unsupported/empty"
+        failures=$((failures + 1))
+    else
+        echo "PASS: cody/${cody_object} -> (unsupported/empty)"
+    fi
+done
+
+# --- Supermaven fail-closed boundary ---
+# Supermaven's official host integrations do not publish portable Skills,
+# rules, MCP, prompt, project, or standalone config paths. In particular,
+# ~/.supermaven is runtime/binary storage and .supermavenignore is not rules.
+for supermaven_object in global project project-skills rules mcp project-mcp project-config config; do
+    checks=$((checks + 1))
+    if bash "$MIGRATION_SCRIPT" --print-path supermaven "$supermaven_object" >/dev/null 2>&1; then
+        echo "FAIL: supermaven/${supermaven_object} must remain unsupported/empty"
+        failures=$((failures + 1))
+    else
+        echo "PASS: supermaven/${supermaven_object} -> (unsupported/empty)"
+    fi
+done
+
+# --- Gemini CLI canonical scopes ---
+# ~/.gemini is a mixed settings/commands/agents namespace; only its Skills
+# subdirectory is a Skills target. Project settings and project MCP share the
+# documented .gemini/settings.json file and remain diagnostic/manual scopes.
+GEMINI_GLOBAL_SKILLS="$(bash "$MIGRATION_SCRIPT" --print-path gemini-cli global 2>/dev/null)"
+checks=$((checks + 1))
+if [[ "$GEMINI_GLOBAL_SKILLS" == "~/.gemini/skills" ]]; then
+    echo "PASS: gemini-cli/global -> ${GEMINI_GLOBAL_SKILLS}"
+else
+    echo "FAIL: gemini-cli/global expected ~/.gemini/skills, got '${GEMINI_GLOBAL_SKILLS}'"
+    failures=$((failures + 1))
+fi
+
+GEMINI_PROJECT_SKILLS="$(bash "$MIGRATION_SCRIPT" --print-path gemini-cli project-skills 2>/dev/null)"
+checks=$((checks + 1))
+if [[ "$GEMINI_PROJECT_SKILLS" == ".gemini/skills" ]]; then
+    echo "PASS: gemini-cli/project-skills -> ${GEMINI_PROJECT_SKILLS}"
+else
+    echo "FAIL: gemini-cli/project-skills expected .gemini/skills, got '${GEMINI_PROJECT_SKILLS}'"
+    failures=$((failures + 1))
+fi
+
+for gemini_object in mcp project-mcp project-config config; do
+    checks=$((checks + 1))
+    actual="$(bash "$MIGRATION_SCRIPT" --print-path gemini-cli "$gemini_object" 2>/dev/null || true)"
+    case "$gemini_object" in
+        mcp|config) expected="~/.gemini/settings.json" ;;
+        project-mcp|project-config) expected=".gemini/settings.json" ;;
+    esac
+    if [[ "$actual" == "$expected" ]]; then
+        echo "PASS: gemini-cli/${gemini_object} -> ${actual}"
+    else
+        echo "FAIL: gemini-cli/${gemini_object} expected ${expected}, got '${actual}'"
+        failures=$((failures + 1))
+    fi
+done
+
 # --- Registry cross-check for key IDEs ---
-# For kimiai/copilot/codex/workbuddy, every non-empty JSON value must literally
+# For antigravity/kimiai/copilot/codex/workbuddy/claude/claude-desktop, every non-empty JSON value must literally
 # appear somewhere in ide-registry.md (the canonical human-readable source).
 if [[ -f "$REGISTRY_FILE" ]]; then
     echo ""
@@ -95,7 +240,7 @@ if [[ -f "$REGISTRY_FILE" ]]; then
     echo "========================================"
     echo ""
 
-    KEY_ROWS="$(dump_rows kimiai copilot codex workbuddy)"
+    KEY_ROWS="$(dump_rows antigravity kimiai copilot codex workbuddy claude claude-desktop openclaw neovim continue aider roo-code cline amazon-q goose-cli pearai pieces blackbox gemini-cli opencode kilocode kiro augment-code void-editor baidu-comate tencent-codebuddy zcode cody codeium tabnine replit supermaven vscode windsurf jetbrains trae trae-cn)"
     while IFS=$'\t' read -r ide jsonkey _scriptobj expected; do
         [[ -z "$expected" ]] && continue
         checks=$((checks + 1))

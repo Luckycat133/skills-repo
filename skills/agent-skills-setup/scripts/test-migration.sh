@@ -139,14 +139,16 @@ assert_contains "$OUT_FILE" "config"  "A1: plan mentions config"
 
 # MCP: dry-run must print a PLAN, never a (false) success. The fixed logic sets
 # status "skipped" for mcp in dry-run; the success wording only appears on a real
-# conversion. Same for config.
+# conversion. Kimi's whole config is intentionally manual because its target
+# schema is TOML, so the config object must report the manual boundary instead
+# of pretending to be a copy plan.
 assert_contains "$OUT_FILE" "DRY-RUN: 转换MCP配置"      "A1: mcp plan printed in dry-run"
 assert_not_contains "$OUT_FILE" "MCP配置已转换"          "A1: mcp NOT marked success in dry-run (C1)"
-assert_contains "$OUT_FILE" "DRY-RUN: 复制配置文件"      "A1: config plan printed in dry-run"
+assert_contains "$OUT_FILE" "Kimi Code config.toml"       "A1: config manual boundary printed"
 assert_not_contains "$OUT_FILE" "配置文件已复制"         "A1: config NOT marked success in dry-run (C2)"
 
-# --- A2. Real execution lands in correct locations (4 targets) --------------
-for target in kimiai copilot codex workbuddy; do
+# --- A2. Real execution lands in correct locations (3 targets) --------------
+for target in kimiai copilot codex; do
     run bash "$SCRIPT_DIR/smart-ide-migration.sh" \
         --source claude --target "$target" \
         --workspace "$WS" \
@@ -157,7 +159,6 @@ done
 assert_file "$HOME/.kimi-code/skills/demo-skill/SKILL.md"   "A2: kimiai  -> ~/.kimi-code/skills/demo-skill/"
 assert_file "$HOME/.copilot/skills/demo-skill/SKILL.md"     "A2: copilot -> ~/.copilot/skills/demo-skill/"
 assert_file "$HOME/.agents/skills/demo-skill/SKILL.md"      "A2: codex   -> ~/.agents/skills/demo-skill/"
-assert_file "$HOME/.workbuddy/skills/demo-skill/SKILL.md"   "A2: workbuddy -> ~/.workbuddy/skills/demo-skill/"
 
 # --- A3. Copilot preserves subdirs (H4) ------------------------------------
 assert_dir "$HOME/.copilot/skills/demo-skill/scripts"    "A3: copilot preserves scripts/ subdir (H4)"
@@ -180,7 +181,7 @@ assert_not_contains "$OUT_FILE" "[✗] mcp" "A4: mcp not failed"
 assert_contains "$OUT_FILE" "mcp" "A4: mcp reported in output"
 
 # ===========================================================================
-# B. sync-global-skills.sh — all 7 targets
+# B. sync-global-skills.sh — all 6 filesystem targets
 # ===========================================================================
 
 echo ""
@@ -217,8 +218,7 @@ T_COPILOT="$TMP_ROOT/t/copilot"
 T_OPENCLAW="$TMP_ROOT/t/openclaw"
 T_TRAE="$TMP_ROOT/t/trae"
 T_TRAE_CN="$TMP_ROOT/t/trae-cn"
-T_WORKBUDDY="$TMP_ROOT/t/workbuddy"
-mkdir -p "$T_CLAUDE" "$T_CODEX" "$T_COPILOT" "$T_OPENCLAW" "$T_TRAE" "$T_TRAE_CN" "$T_WORKBUDDY"
+mkdir -p "$T_CLAUDE" "$T_CODEX" "$T_COPILOT" "$T_OPENCLAW" "$T_TRAE" "$T_TRAE_CN"
 
 run env \
     AGENT_SKILLS_SOURCE_DIR="$SYNC_SRC" \
@@ -228,20 +228,18 @@ run env \
     AGENT_SKILLS_OPENCLAW_DIR="$T_OPENCLAW" \
     AGENT_SKILLS_TRAE_DIR="$T_TRAE" \
     AGENT_SKILLS_TRAE_CN_DIR="$T_TRAE_CN" \
-    AGENT_SKILLS_WORKBUDDY_DIR="$T_WORKBUDDY" \
     bash "$SCRIPT_DIR/sync-global-skills.sh" \
-    --targets claude,codex,copilot,openclaw,trae,trae-cn,workbuddy --yes
-assert_eq "$LAST_RC" "0" "B5: sync of all 7 targets exits 0 (verify passed)"
+    --targets claude,codex,copilot,openclaw,trae,trae-cn --yes
+assert_eq "$LAST_RC" "0" "B5: sync of all 6 targets exits 0 (verify passed)"
 
 # Each target should have received the synced skills (full-dir targets keep subdirs).
-for tv in claude codex openclaw trae trae-cn workbuddy; do
+for tv in claude codex openclaw trae trae-cn; do
     case "$tv" in
         claude)     d="$T_CLAUDE" ;;
         codex)      d="$T_CODEX" ;;
         openclaw)   d="$T_OPENCLAW" ;;
         trae)       d="$T_TRAE" ;;
         trae-cn)    d="$T_TRAE_CN" ;;
-        workbuddy)  d="$T_WORKBUDDY" ;;
     esac
     assert_file "$d/demo-a/SKILL.md"          "B5: $tv received demo-a"
     assert_file "$d/demo-b/SKILL.md"          "B5: $tv received demo-b"
@@ -259,6 +257,14 @@ assert_dir  "$T_COPILOT/demo-b/references" "B5: copilot preserved demo-b/referen
 assert_not_exists "$HOME/.copilot-skills" "B5: never syncs to stale ~/.copilot-skills"
 assert_not_exists "$HOME/.codex/skills"  "B5: never syncs to stale ~/.codex/skills"
 
+# WorkBuddy Skills are Marketplace/UI-managed in the official docs. The
+# filesystem mirror must reject the stale ~/.workbuddy/skills heuristic.
+run env \
+    AGENT_SKILLS_SOURCE_DIR="$SYNC_SRC" \
+    bash "$SCRIPT_DIR/sync-global-skills.sh" \
+    --targets workbuddy --dry-run
+assert_eq "$LAST_RC" "1" "B6: sync rejects undocumented WorkBuddy filesystem Skills target"
+
 # ===========================================================================
 # C. Confirmation gate (--yes) — script must never write without approval
 # ===========================================================================
@@ -267,7 +273,7 @@ echo ""
 echo "== C. confirmation gate (--yes) =="
 
 # --- C1. Non-interactive without --yes: abort (rc=2) and ZERO writes --------
-GATE_TGT="$HOME/.windsurf"
+GATE_TGT="$HOME/.codeium/windsurf"
 rm -rf "$GATE_TGT"
 run bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source claude --target windsurf \
@@ -297,7 +303,7 @@ assert_not_exists "$GATE_TGT" "C3: dry-run performs zero writes (no target dir c
 # D. project object — backup + fail-closed secret redaction (C3/L5 fix)
 # ===========================================================================
 # Source project lives under WORKSPACE_ROOT ($WS): source=claude -> .claude
-# Target project (codex) -> .codex, also under $WS.
+# Target project (codex) -> .agents (codex project config lives under .agents; .codex is its own credential-bearing CLI dir).
 
 echo ""
 echo "== D. project object (backup + secret redaction) =="
@@ -311,8 +317,8 @@ printf '{ "token": "example-token-value-1234567890", "name": "ok" }\n' > "$SRC_P
 # A harmless, non-secret file that must survive the copy untouched.
 printf 'name: demo\n' > "$SRC_PROJ/notes.yaml"
 
-D_TGT="$WS/.codex"
-rm -rf "$D_TGT" "$WS"/.codex.bak.*
+D_TGT="$WS/.agents"
+rm -rf "$D_TGT" "$WS"/.agents.bak.*
 
 # --- D1. dry-run: zero writes, plan printed -------------------------------
 run bash "$SCRIPT_DIR/smart-ide-migration.sh" \
@@ -349,21 +355,21 @@ run bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --workspace "$WS" \
     --objects project --yes
 assert_eq "$LAST_RC" "0" "D3: second migration exits 0"
-if ls -d "$WS"/.codex.bak.* >/dev/null 2>&1; then check_pass "D3: existing project target backed up before overwrite"; else check_fail "D3: existing project target backed up before overwrite"; fi
+if ls -d "$WS"/.agents.bak.* >/dev/null 2>&1; then check_pass "D3: existing project target backed up before overwrite"; else check_fail "D3: existing project target backed up before overwrite"; fi
 # The backup itself must NOT contain live secrets (it is the previously-redacted copy).
-BK=$(ls -d "$WS"/.codex.bak.* 2>/dev/null | head -1)
+BK=$(ls -d "$WS"/.agents.bak.* 2>/dev/null | head -1)
 if [[ -n "$BK" ]]; then
     assert_not_contains "$BK/.env" "EXAMPLE_SECRET_VALUE_1234567890" "D3: backup holds no live secret"
 fi
 
 # --- D4. --strategy skip on existing target: no write, no new backup ----
-bk_before=$(ls -d "$WS"/.codex.bak.* 2>/dev/null | wc -l | tr -d ' ')
+bk_before=$(ls -d "$WS"/.agents.bak.* 2>/dev/null | wc -l | tr -d ' ')
 run bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source claude --target codex \
     --workspace "$WS" \
     --objects project --yes --strategy skip
 assert_eq "$LAST_RC" "0" "D4: skip strategy exits 0"
-bk_after=$(ls -d "$WS"/.codex.bak.* 2>/dev/null | wc -l | tr -d ' ')
+bk_after=$(ls -d "$WS"/.agents.bak.* 2>/dev/null | wc -l | tr -d ' ')
 assert_eq "$bk_after" "$bk_before" "D4: skip created no new backup"
 assert_not_contains "$D_TGT/.env" "EXAMPLE_SECRET_VALUE_1234567890" "D4: skipped target still has no live secret"
 

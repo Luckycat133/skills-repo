@@ -157,6 +157,11 @@ mirror_selected_skills() {
     local skill_name
     local -a rsync_cmd=(rsync -a --delete)
 
+    # MED-P8: fail with a clear hint instead of a raw "command not found".
+    if ! command -v rsync >/dev/null 2>&1; then
+        die "rsync not found; the mirror step requires rsync (macOS: xcode-select --install, Debian/Ubuntu: apt install rsync). Re-run with --skip-mirror to update the runtime only."
+    fi
+
     if [[ $DRY_RUN -eq 1 ]]; then
         rsync_cmd+=(--dry-run --itemize-changes)
     fi

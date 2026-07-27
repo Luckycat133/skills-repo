@@ -93,15 +93,28 @@ if [[ -e "$OUTPUT_DIR/$SKILL_NAME" && -n "$(ls -A "$OUTPUT_DIR/$SKILL_NAME" 2>/d
     echo "        请加 --force 确认，或用 --dry-run 预览将要删除/新增的内容。" >&2
     exit 1
 fi
+# MED-P8: rsync is required for the --delete mirror semantics used here.
+if ! command -v rsync >/dev/null 2>&1; then
+    echo "ERROR: rsync not found. Install rsync (e.g. macOS: xcode-select --install; Debian/Ubuntu: apt install rsync) and retry." >&2
+    exit 1
+fi
 if [[ $DRY_RUN -eq 1 ]]; then
     rsync -a --delete --dry-run "$SOURCE_SKILL_DIR/" "$OUTPUT_DIR/$SKILL_NAME/"
 else
     rsync -a --delete "$SOURCE_SKILL_DIR/" "$OUTPUT_DIR/$SKILL_NAME/"
 fi
 
+# MED-P6: escape sed replacement metacharacters (\, &, delimiter) so names
+# containing them cannot corrupt the generated README or inject expressions.
+sed_escape_replacement() {
+    printf '%s' "$1" | sed -e 's/[\\&|]/\\&/g'
+}
+SKILL_NAME_ESC="$(sed_escape_replacement "$SKILL_NAME")"
+REPO_NAME_ESC="$(sed_escape_replacement "$REPO_NAME")"
+
 sed \
-    -e "s/{{SKILL_NAME}}/$SKILL_NAME/g" \
-    -e "s#{{REPO_NAME}}#$REPO_NAME#g" \
+    -e "s|{{SKILL_NAME}}|$SKILL_NAME_ESC|g" \
+    -e "s|{{REPO_NAME}}|$REPO_NAME_ESC|g" \
     "$TEMPLATE_PATH" > "$OUTPUT_DIR/README.md"
 
 echo "Exported $SKILL_NAME to $OUTPUT_DIR"

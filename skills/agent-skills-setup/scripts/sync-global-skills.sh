@@ -11,18 +11,30 @@ COPILOT_DIR="${AGENT_SKILLS_COPILOT_DIR:-${HOME}/.copilot/skills}"
 OPENCLAW_DIR="${AGENT_SKILLS_OPENCLAW_DIR:-${HOME}/.openclaw/skills}"
 TRAE_DIR="${AGENT_SKILLS_TRAE_DIR:-${HOME}/.trae/skills}"
 TRAE_CN_DIR="${AGENT_SKILLS_TRAE_CN_DIR:-${HOME}/.trae-cn/skills}"
-WORKBUDDY_DIR="${AGENT_SKILLS_WORKBUDDY_DIR:-${HOME}/.workbuddy/skills}"
 
 DRY_RUN=0
 CONFIRM=0
-TARGETS_RAW="claude,codex,copilot,openclaw,trae,trae-cn,workbuddy"
+TARGETS_RAW="claude,codex,copilot,openclaw,trae,trae-cn"
+
+# MED-P1: track every mktemp artifact and clean them on any exit path
+# (verify_directory_inventory previously leaked its list files on early return).
+TMP_FILES=()
+cleanup_tmp_files() {
+    local f
+    for f in "${TMP_FILES[@]:-}"; do
+        [[ -n "$f" ]] && rm -f "$f" "$f.filtered" 2>/dev/null
+    done
+    return 0
+}
+trap cleanup_tmp_files EXIT
 
 usage() {
     cat <<'EOF'
-Usage: sync-global-skills.sh [--dry-run] [--targets claude,codex,copilot,openclaw,trae,trae-cn,workbuddy]
+Usage: sync-global-skills.sh [--dry-run] [--targets claude,codex,copilot,openclaw,trae,trae-cn]
 
 Mirrors Antigravity global capabilities (skills) into supported IDE global skill directories.
-Antigravity is treated as the source of truth.
+Antigravity is treated as the source of truth. WorkBuddy Skills are Marketplace/UI-managed
+and intentionally are not a filesystem sync target.
 
 Options:
   --dry-run              Preview rsync operations without modifying files.
@@ -98,7 +110,7 @@ ensure_targets_valid() {
 
     for item in "${TARGETS[@]}"; do
         case "$item" in
-            claude|codex|copilot|openclaw|trae|trae-cn|workbuddy)
+            claude|codex|copilot|openclaw|trae|trae-cn)
                 ;;
             *)
                 echo "ERROR: Unsupported target: $item" >&2
@@ -112,6 +124,28 @@ rsync_mirror() {
     local src="$1"
     local dest="$2"
     shift 2
+
+    # MED-P8: detect rsync and fall back to a cp-based mirror when absent
+    # (e.g. minimal containers). The fallback emulates `rsync -a --delete`
+    # by clearing the destination first, always preserving `.system/`
+    # (the only protect-filter any caller uses, for Codex).
+    if ! command -v rsync >/dev/null 2>&1; then
+        if [[ $DRY_RUN -eq 1 ]]; then
+            echo "DRY-RUN (no rsync): would mirror $src/ -> $dest/ via cp -R (preserving .system/)"
+            return 0
+        fi
+        echo "WARN: rsync not found; using cp -R fallback mirror for $dest" >&2
+        mkdir -p "$dest"
+        local entry
+        for entry in "$dest"/* "$dest"/.[!.]*; do
+            [[ -e "$entry" ]] || continue
+            [[ "$(basename "$entry")" == ".system" ]] && continue
+            rm -rf "$entry"
+        done
+        cp -R "$src/." "$dest/"
+        return 0
+    fi
+
     local cmd=(rsync -a --delete)
 
     if [[ $DRY_RUN -eq 1 ]]; then
@@ -135,6 +169,7 @@ verify_directory_inventory() {
 
     left_list="$(mktemp /tmp/skill-sync-left.XXXXXX)"
     right_list="$(mktemp /tmp/skill-sync-right.XXXXXX)"
+    TMP_FILES+=("$left_list" "$right_list")
 
     find "$left" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort > "$left_list"
     find "$right" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort > "$right_list"
@@ -217,11 +252,6 @@ if contains_target openclaw; then
     rsync_mirror "$SOURCE_DIR" "$OPENCLAW_DIR"
 fi
 
-if contains_target workbuddy; then
-    mkdir -p "$WORKBUDDY_DIR"
-    rsync_mirror "$SOURCE_DIR" "$WORKBUDDY_DIR"
-fi
-
 if contains_target copilot; then
     mkdir -p "$COPILOT_DIR"
     rsync_mirror "$SOURCE_DIR" "$COPILOT_DIR"
@@ -246,10 +276,6 @@ if [[ $DRY_RUN -eq 0 ]]; then
 
     if contains_target openclaw; then
         verify_directory_inventory "$SOURCE_DIR" "$OPENCLAW_DIR" "OpenClaw" && verify_shared_directories "$OPENCLAW_DIR" "OpenClaw" || VERIFY_FAILED=1
-    fi
-
-    if contains_target workbuddy; then
-        verify_directory_inventory "$SOURCE_DIR" "$WORKBUDDY_DIR" "WorkBuddy" && verify_shared_directories "$WORKBUDDY_DIR" "WorkBuddy" || VERIFY_FAILED=1
     fi
 
     if contains_target copilot; then

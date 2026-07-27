@@ -103,7 +103,7 @@ export PATH="$FAKE_BIN:$PATH"
 
 AGENT_SKILLS_SOURCE_DIR="$SOURCE_DIR" \
 AGENT_SKILLS_OPENCLAW_DIR="$OPENCLAW_DIR" \
-bash "$SCRIPT_DIR/sync-global-skills.sh" --targets openclaw
+bash "$SCRIPT_DIR/sync-global-skills.sh" --targets openclaw --yes
 
 assert_file_exists "$OPENCLAW_DIR/demo/SKILL.md"
 
@@ -171,13 +171,14 @@ fi
     echo "ASSERT FAIL: executable config content was evaluated" >&2
     exit 1
 }
-assert_contains "$TMP_ROOT/invalid-config.log" 'SyntaxError'
+assert_contains "$TMP_ROOT/invalid-config.log" 'Could not parse OpenClaw config'
 
 printf '\nUpdated by test run.\n' >> "$SOURCE_DIR/demo/SKILL.md"
 
 OPENCLAW_STATE_DIR="$TEST_HOME/.openclaw" \
 AGENT_SKILLS_SOURCE_DIR="$SOURCE_DIR" \
 bash "$SCRIPT_DIR/update-openclaw-skills.sh" \
+    --yes \
     --skip-runtime \
     --skip-clawhub \
     --managed-dir "$OPENCLAW_DIR" \
