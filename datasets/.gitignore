@@ -1,0 +1,21 @@
+# 真实数据不入库：只保留目录结构、README、metadata、清单与配置示例
+# ------------------------------------------------------------------
+
+# 忽略各数据集的真实数据文件（raw / processed 下的一切）
+*/raw/*
+*/processed/*
+
+# 但保留占位文件，确保空目录结构可被 Git 追踪
+!*/raw/.gitkeep
+!*/processed/.gitkeep
+
+# 本地实际配置（从 *.example 复制而来）不入库
+config/data_paths.yaml
+config/data_paths.json
+
+# 系统/临时文件
+.DS_Store
+
+# ------------------------------------------------------------------
+# 说明：metadata/、README.md、DATA_*.md、scripts/、config/*.example.*、
+# 以及 .manifests/*.json（轻量校验清单）会被正常提交。

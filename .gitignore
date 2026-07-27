@@ -1,4 +1,30 @@
+# OS / editor
 .DS_Store
 *.swp
 *.swo
+
+# Local tooling / private state
 .workbuddy/
+.superpowers/
+
+# Secrets / environment (migration scripts write OpenClaw config/.env)
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Node (safety net)
+node_modules/
+
+# Build output / logs
+dist/
+build/
+*.log
+
+# Datasets: real data is excluded by datasets/.gitignore
+# (docs, scripts, config examples, and metadata are tracked).

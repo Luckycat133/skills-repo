@@ -1,0 +1,33 @@
+# 数据存放路径配置示例（YAML）
+# 复制为 data_paths.yaml 后按项目实际情况修改；data_paths.yaml 建议纳入 .gitignore。
+
+project: my-ml-project
+data_root: datasets            # 相对项目根目录
+
+paths:
+  train:
+    raw:       datasets/train_data/raw
+    processed: datasets/train_data/processed
+    metadata:  datasets/train_data/metadata
+  validation:
+    raw:       datasets/validation_data/raw
+    processed: datasets/validation_data/processed
+    metadata:  datasets/validation_data/metadata
+  test:
+    raw:       datasets/test_data/raw
+    processed: datasets/test_data/processed
+    metadata:  datasets/test_data/metadata
+
+# 划分参数（供 split_dataset.py 复用，保证团队一致）
+split:
+  input:       datasets/train_data/raw/full_dataset.csv
+  label_col:   label
+  test_ratio:  0.25     # 测试集占总量，建议 0.20-0.30
+  val_ratio:   0.18     # 验证集占"剩余训练池"，建议 0.15-0.20
+  seed:        42       # 固定随机种子，保证可复现
+  stratified:  true     # 分层抽样，保持标签分布一致
+
+# 版本控制
+version:
+  current:  v1.0.0
+  manifest_dir: datasets/.manifests
