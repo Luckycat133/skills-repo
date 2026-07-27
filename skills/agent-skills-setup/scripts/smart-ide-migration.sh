@@ -8,6 +8,7 @@ SOURCE_IDE=""
 TARGET_IDE=""
 WORKSPACE_ROOT="$(pwd)"
 OBJECTS=""
+SCOPE="global"
 STRATEGY="backup"
 DRY_RUN=0
 ASSUME_YES=0
@@ -66,9 +67,9 @@ get_ide_name() {
         kiro)              echo "Kiro" ;;
         augment-code)      echo "Augment Code" ;;
         void-editor)       echo "Void Editor" ;;
-        baidu-comate)      echo "Baidu Comate (文心快码)" ;;
+        baidu-comate)      echo "Baidu Comate (ERNIE Code)" ;;
         tencent-codebuddy) echo "Tencent CodeBuddy" ;;
-        zcode)             echo "ZCode (智谱)" ;;
+        zcode)             echo "ZCode (Zhipu)" ;;
         *)           echo "$ide" ;;
     esac
 }
@@ -78,7 +79,9 @@ get_ide_name() {
 get_global_path() {
     local ide="$1"
     case "$ide" in
-        # Antigravity IDE global skills are distinct from Gemini CLI skills.
+        # Antigravity IDE global Skills live at ~/.gemini/antigravity/skills
+        # per the official IDE skills docs. ~/.gemini/config/ holds MCP,
+        # hooks, plugins, and workflows, not skills.
         antigravity) echo "${HOME}/.gemini/antigravity/skills" ;;
         claude)      echo "${HOME}/.claude/skills" ;;
         codex)       echo "${HOME}/.agents/skills" ;;
@@ -343,9 +346,9 @@ get_project_skills_path() {
 }
 
 # Project-scoped MCP configuration is separate from both the project
-# configuration directory and the user/local MCP store. The generic migration
-# workflow has no scope selector, so this function is diagnostic-only: the
-# automatic MCP mapper continues to operate on get_mcp_path's user file.
+# configuration directory and the user/local MCP store. This resolver is used
+# by the explicit `--scope project` / `--objects project-mcp` path; entries whose
+# schema or precedence is not safe remain guarded as manual in migrate_mcp().
 get_project_mcp_path() {
     local ide="$1"
     case "$ide" in
@@ -356,6 +359,7 @@ get_project_mcp_path() {
         # exposes the root-level canonical path only; migration never picks
         # between the two project files automatically.
         copilot) echo ".mcp.json" ;;
+        cursor) echo ".cursor/mcp.json" ;;
         zed) echo ".zed/settings.json" ;;
         # VS Code's documented workspace MCP file is portable. User MCP is
         # intentionally absent from get_mcp_path because its official path is
@@ -366,8 +370,8 @@ get_project_mcp_path() {
         # generic workflow only exposes this as a diagnostic/manual path.
         trae) echo ".trae/mcp.json" ;;
         trae-cn) echo ".trae/mcp.json" ;;
-        # Roo documents project MCP at .roo/mcp.json. The generic MCP
-        # converter has no scope selector, so this is diagnostic/manual only.
+        # Roo documents project MCP at .roo/mcp.json. Its global MCP is still
+        # extension-settings/UI managed, so this project path remains manual.
         roo-code) echo ".roo/mcp.json" ;;
         # Workspace MCP is documented, but the generic mapper handles only
         # the user file; preserve this as a diagnostic/manual path.
@@ -375,16 +379,14 @@ get_project_mcp_path() {
         # Continue's project MCP path is a directory of standalone YAML/JSON
         # blocks, not one MCP file. This is diagnostic/manual only.
         continue) echo ".continue/mcpServers" ;;
-        # Tabnine documents this project-scoped JSON file, but the generic
-        # MCP workflow has no project/global scope selector; it is diagnostic.
+        # Tabnine documents this project-scoped JSON file; permissions and
+        # project precedence remain manual even when the file is selected.
         tabnine) echo ".tabnine/mcp_servers.json" ;;
         # Gemini CLI uses the same JSON settings file at user and project
-        # scope. The generic MCP workflow only handles the user file, so the
-        # workspace file is diagnostic/manual.
+        # scope. Project settings remain subject to trust/precedence review.
         gemini-cli) echo ".gemini/settings.json" ;;
-        # OpenCode stores project MCP in the project-root opencode.json. The
-        # generic MCP workflow handles only the global file; project scope is
-        # diagnostic/manual so precedence and merge semantics stay explicit.
+        # OpenCode stores project MCP in the project-root opencode.json;
+        # precedence and merge semantics stay explicit in the report.
         opencode) echo "opencode.json" ;;
         kilocode) echo ".kilo/kilo.jsonc" ;;
         kimiai) echo ".kimi-code/mcp.json" ;;
@@ -728,6 +730,15 @@ get_config_file() {
 # source and target formats.
 get_mcp_root_key() {
     local ide="$1"
+    local scope="${2:-global}"
+    # Void's project MCP path is the inherited VS Code `.vscode/mcp.json`
+    # (see `get_project_mcp_path`), which uses the VS Code `servers` root
+    # key — NOT the legacy Void-global `mcpServers` schema. At user/global
+    # scope, Void uses its own `~/.void-editor/mcp.json` with `mcpServers`.
+    if [[ "$ide" == "void-editor" && "$scope" == "project" ]]; then
+        echo "servers"
+        return 0
+    fi
     case "$ide" in
         claude|cursor|windsurf|gemini-cli|trae|trae-cn|continue|cline|roo-code|antigravity|amazon-q|kimiai|workbuddy|copilot|kiro|augment-code|void-editor|baidu-comate|tencent-codebuddy|cody|tabnine|jetbrains)
             echo "mcpServers" ;;
@@ -757,29 +768,30 @@ get_mcp_root_key() {
 
 usage() {
     cat <<'EOF'
-IDE Migration Tool - 在不同AI IDE之间迁移配置
+IDE Migration Tool - Migrate configuration between different AI IDEs
 
-用法: smart-ide-migration.sh [选项]
+Usage: smart-ide-migration.sh [options]
 
-必选参数:
-  --source <ide>         源IDE (从哪个IDE迁移)
-  --target <ide>         目标IDE (迁移到哪个IDE)
+Required arguments:
+  --source <ide>         source IDE (which IDE to migrate from)
+  --target <ide>         target IDE (which IDE to migrate to)
 
-可选参数:
-  --workspace <dir>      工作区根目录 (默认: 当前目录)
-  --objects <list>       要迁移的内容类型 (逗号分隔)
-  --strategy <mode>      迁移策略: skip, overwrite, backup (默认: backup)
-  --report <file>        保存迁移报告到文件
-  --dry-run              预览模式，不实际修改文件
-  --yes, -y              确认写入。非 dry-run 时必须显式确认：
-                          交互式终端会提示 [y/N]；非交互环境（CI/agent）缺少
-                          --yes 将直接中止且不写任何文件
+Optional arguments:
+  --workspace <dir>      workspace root directory (default: current directory)
+  --objects <list>       content types to migrate (comma-separated)
+  --scope <scope>        Skills/MCP scope: global, project, both (default: global)
+  --strategy <mode>      migration strategy: skip, overwrite, backup (default: backup)
+  --report <file>        save migration report to file
+  --dry-run              preview mode, does not actually modify files
+  --yes, -y              confirm writing. Explicit confirmation required when not in dry-run:
+                          interactive terminal will prompt [y/N]; non-interactive environment (CI/agent) lacking
+                          --yes will abort immediately and write no files
   --print-path <ide> <object>
-                          只读诊断：打印指定IDE/对象类型的解析路径并退出(无副作用)
+                          read-only diagnosis: print resolved paths for the specified IDE/object type and exit (no side effects)
                           object ∈ global|project|project-skills|mcp|project-mcp|project-config|config|rules|prompts|commands
-  -h, --help             显示帮助信息
+  -h, --help             show help information
 
-支持的IDE:
+Supported IDEs:
   antigravity  - Antigravity
   claude       - Claude Code
   codex        - OpenAI Codex CLI
@@ -788,8 +800,8 @@ IDE Migration Tool - 在不同AI IDE之间迁移配置
   windsurf     - Windsurf
   jetbrains    - JetBrains IDEs
   openclaw     - OpenClaw
-  trae         - Trae (国际版)
-  trae-cn      - Trae CN (中国版)
+  trae         - Trae (International version)
+  trae-cn      - Trae CN (China version)
   vscode       - VS Code
   zed          - Zed Editor
   neovim       - Neovim
@@ -810,11 +822,11 @@ IDE Migration Tool - 在不同AI IDE之间迁移配置
   kiro         - Kiro
   augment-code - Augment Code
   void-editor  - Void Editor
-  baidu-comate - Baidu Comate (文心快码)
+  baidu-comate - Baidu Comate (ERNIE Code)
   tencent-codebuddy - Tencent CodeBuddy
-  zcode        - ZCode (智谱)
+  zcode        - ZCode (Zhipu)
 
-支持的CLI工具:
+Supported CLI tools:
   gemini-cli   - Gemini CLI (Google)
   goose-cli    - Goose CLI (Block)
   opencode     - OpenCode
@@ -822,15 +834,19 @@ IDE Migration Tool - 在不同AI IDE之间迁移配置
   kimiai       - Kimi AI CLI
   workbuddy    - WorkBuddy
 
-内容类型:
-  skills       - 技能/Skills (SKILL.md)
-  rules        - 规则文件 (.cursorrules, .windsurfrules等)
-  prompts      - 提示词模板
-  mcp          - MCP服务器配置
-  config       - IDE配置文件
-  project      - 项目级配置
+Content types:
+  skills       - skills/Skills (SKILL.md)
+  rules        - rules files (.cursorrules, .windsurfrules, etc.)
+  prompts      - prompt templates
+  mcp          - MCP server configuration
+  project-mcp  - explicitly migrate project MCP files (equivalent to --objects mcp --scope project)
+  config       - IDE configuration file
+  project      - project-level configuration
+  agents       - Agents/Subagents diagnosis (manual handling only, not auto-converted)
+  hooks        - lifecycle Hooks diagnosis (manual handling only, not copied or executed)
+  memory       - Memory/Memory Bank diagnosis (manual handling only, not copying generated state)
 
-示例 (推荐两段式: 先 --dry-run 预览, 确认后加 --yes 应用):
+Example (recommended two-stage: first --dry-run to preview, then add --yes to apply):
   smart-ide-migration.sh --source trae-cn --target claude --dry-run
   smart-ide-migration.sh --source trae-cn --target claude --yes
   smart-ide-migration.sh --source cursor --target windsurf --objects skills,rules --dry-run
@@ -866,12 +882,12 @@ safe_remove_skill_dir() {
     local name="$2"
 
     if [[ -z "$parent" || -z "$name" ]]; then
-        echo "  [GUARD] 拒绝删除：目标目录或技能名为空 (parent='$parent', name='$name')" >&2
+        echo "  [GUARD] refused to delete: target directory or skill name is empty (parent='$parent', name='$name')" >&2
         return 1
     fi
     case "$name" in
         */*|.|..|.*/*|-*)
-            echo "  [GUARD] 拒绝删除：非法技能名 '$name'（禁止路径分隔符/穿越/前导短横线）" >&2
+            echo "  [GUARD] refused to delete: illegal skill name '$name' (path separators/traversal/leading dash forbidden)" >&2
             return 1
             ;;
     esac
@@ -883,7 +899,7 @@ safe_remove_skill_dir() {
         return 0
     fi
     if [[ ! -d "$target" ]]; then
-        echo "  [GUARD] 跳过删除：目标不是目录或不存在 '$target'" >&2
+        echo "  [GUARD] skipped deletion: target is not a directory or does not exist '$target'" >&2
         return 1
     fi
 
@@ -1030,18 +1046,18 @@ apply_skill_strategy() {
     [[ -d "$target_global/$skill_name" ]] || return 0
     case "$STRATEGY" in
         skip)
-            echo "  [SKIP] 技能已存在: $skill_name"
+            echo "  [SKIP] skill already exists: $skill_name" 
             return 1
             ;;
         backup)
             local timestamp
             timestamp="$(date +%Y%m%d%H%M%S).$$"
             mv "$target_global/$skill_name" "$target_global/$skill_name.bak.$timestamp"
-            echo "  [BACKUP] 备份已存在: $skill_name"
+            echo "  [BACKUP] backup already exists: $skill_name" 
             ;;
         overwrite)
             if ! safe_remove_skill_dir "$target_global" "$skill_name"; then
-                echo "  [FAIL] 覆盖前安全删除失败，跳过: $skill_name"
+                echo "  [FAIL] safe delete before overwrite failed, skipped: $skill_name" 
                 return 2
             fi
             ;;
@@ -1049,7 +1065,7 @@ apply_skill_strategy() {
     return 0
 }
 
-migrate_skills() {
+migrate_global_skills() {
     local source_ide="$1"
     local target_ide="$2"
     local strategy_rc
@@ -1068,8 +1084,8 @@ migrate_skills() {
     if [[ "$source_ide" == "blackbox" || "$target_ide" == "blackbox" ]]; then
         MIGRATION_TOTAL=$((MIGRATION_TOTAL + 1))
         set_status "skills" "manual"
-        set_message "skills" "Blackbox 仅文档化项目 .blackbox/skills；本迁移器无项目 Skills 自动迁移"
-        set_manual_step "skills" "Blackbox AI CLI: 手动审查并迁移项目 .blackbox/skills/<name>/SKILL.md；不要推断 ~/.blackbox 或将 .blackbox 当作全局技能目录"
+        set_message "skills" "Blackbox only documents project .blackbox/skills; this migrator has no automatic project Skills migration" 
+        set_manual_step "skills" "Blackbox AI CLI: manually review and migrate project .blackbox/skills/<name>/SKILL.md; do not infer ~/.blackbox or treat .blackbox as a global skills directory" 
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
     fi
@@ -1103,16 +1119,16 @@ migrate_skills() {
 
     if [[ "$source_ide" == "workbuddy" || "$target_ide" == "workbuddy" ]]; then
         set_status "skills" "manual"
-        set_message "skills" "WorkBuddy 官方文档化 Skills 市场/UI 与本地技能包导入；没有可验证的可移植 Skills 目录"
-        set_manual_step "skills" "WorkBuddy: 通过官方 Skills Marketplace/技能栏上传本地 Skill 包、安装、启停或卸载；不要推断 ~/.workbuddy/skills 或 .workbuddy/skills"
+        set_message "skills" "WorkBuddy officially documents Skills Marketplace/UI and local skill package import; no verifiable portable Skills directory" 
+        set_manual_step "skills" "WorkBuddy: upload local Skill package via official Skills Marketplace/skills bar, install, enable/disable or uninstall; do not infer ~/.workbuddy/skills or .workbuddy/skills" 
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
     fi
 
     if [[ "$source_ide" == "void-editor" || "$target_ide" == "void-editor" ]]; then
         set_status "skills" "manual"
-        set_message "skills" "Void 官方源码和文档没有 Agent Skills 目录"
-        set_manual_step "skills" 'Void: `.voidrules` 是规则文件，不是 Agent Skills；不要把 .void-editor 或 VS Code 存储目录当作 Skills 目录'
+        set_message "skills" "Void official source and docs have no Agent Skills directory" 
+        set_manual_step "skills" 'Void: `.voidrules` is a rules file, not Agent Skills; do not treat .void-editor or VS Code storage directory as a Skills directory' 
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
     fi
@@ -1135,7 +1151,7 @@ migrate_skills() {
     # the copilot branch and the generic branch below.
     if [[ -z "$target_global" ]]; then
         set_status "skills" "skipped"
-        set_message "skills" "目标IDE无全局技能目录，跳过"
+        set_message "skills" "target IDE has no global skills directory, skip" 
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
     fi
@@ -1144,12 +1160,12 @@ migrate_skills() {
 
     if [[ ! -d "$source_global" ]]; then
         set_status "skills" "skipped"
-        set_message "skills" "源目录不存在: $source_global"
+        set_message "skills" "source directory does not exist: $source_global" 
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
     fi
 
-    print_progress "MIGRATE" "迁移技能 (Skills)..."
+    print_progress "MIGRATE" "Migrating skills (Skills)..." 
 
     local migrated_count=0
     local failed_count=0
@@ -1192,22 +1208,22 @@ migrate_skills() {
                         # source). Fail-closed: on redaction failure remove
                         # the whole copied skill so no secret survives.
                         if redact_project_copy "$target_global/$skill_name" >/dev/null; then
-                            echo "  [OK] 迁移技能: $skill_name"
+                            echo "  [OK] migrated skill: $skill_name" 
                             ((migrated_count++))
                         else
                             rm -rf "${target_global:?}/${skill_name:?}"
-                            echo "  [FAIL] 技能副本脱敏失败，已删除副本以防密钥泄漏: $skill_name"
+                            echo "  [FAIL] skill copy redaction failed, deleted copy to prevent key leak: $skill_name" 
                             ((failed_count++))
                         fi
                     else
-                        echo "  [FAIL] 迁移失败: $skill_name"
+                        echo "  [FAIL] migration failed: $skill_name" 
                         ((failed_count++))
                     fi
                 fi
             fi
         done
 
-        set_manual_step "skills" "GitHub Copilot CLI: 此操作只迁移全局 ~/.copilot/skills；如需项目技能，请单独审查 .github/skills、.claude/skills 或 .agents/skills"
+        set_manual_step "skills" "GitHub Copilot CLI: this operation only migrates global ~/.copilot/skills; for project skills, review .github/skills, .claude/skills or .agents/skills separately" 
 
     else
         # Never create the target directory in dry-run mode (zero writes).
@@ -1237,15 +1253,15 @@ migrate_skills() {
                 if cp -r "$skill_dir" "$target_global/$skill_name"; then
                     # MED-S3: redact the copied skill bundle (fail-closed).
                     if redact_project_copy "$target_global/$skill_name" >/dev/null; then
-                        echo "  [OK] 迁移技能: $skill_name"
+                        echo "  [OK] migrated skill: $skill_name" 
                         ((migrated_count++))
                     else
                         rm -rf "${target_global:?}/${skill_name:?}"
-                        echo "  [FAIL] 技能副本脱敏失败，已删除副本以防密钥泄漏: $skill_name"
+                        echo "  [FAIL] skill copy redaction failed, deleted copy to prevent key leak: $skill_name" 
                         ((failed_count++))
                     fi
                 else
-                    echo "  [FAIL] 迁移失败: $skill_name"
+                    echo "  [FAIL] migration failed: $skill_name" 
                     ((failed_count++))
                 fi
             fi
@@ -1262,13 +1278,166 @@ migrate_skills() {
 
     if [[ $failed_count -gt 0 ]]; then
         set_status "skills" "partial"
-        set_message "skills" "成功 $migrated_count 个, 失败 $failed_count 个"
+        set_message "skills" "succeeded $migrated_count, failed $failed_count" 
         MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
     else
         set_status "skills" "success"
-        set_message "skills" "成功迁移 $migrated_count 个技能"
+        set_message "skills" "successfully migrated $migrated_count skills" 
         MIGRATION_SUCCESS=$((MIGRATION_SUCCESS + 1))
     fi
+}
+
+project_skills_manual_only() {
+    local ide="$1"
+    case "$ide" in
+        amazon-q|blackbox|claude-desktop|codeium|cody|continue|emacs|neovim|pearai|pieces|replit|supermaven|tabnine|trae|trae-cn|void-editor|workbuddy|zcode)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+migrate_project_skills() {
+    local source_ide="$1"
+    local target_ide="$2"
+    local source_skills target_skills source_path target_path
+
+    MIGRATION_TOTAL=$((MIGRATION_TOTAL + 1))
+
+    if project_skills_manual_only "$source_ide" || project_skills_manual_only "$target_ide"; then
+        set_status "skills" "manual"
+        set_message "skills" "project Skills compatibility directory/priority or official path still needs manual review" 
+        set_manual_step "skills" "project Skills: only review native project path; do not blindly merge between compatibility directories, unclear-version or UI-only IDEs; preserve SKILL.md, scripts, references, assets and symlink boundaries" 
+        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
+        return 0
+    fi
+
+    source_skills=$(get_project_skills_path "$source_ide")
+    target_skills=$(get_project_skills_path "$target_ide")
+    if [[ -z "$source_skills" || -z "$target_skills" ]]; then
+        set_status "skills" "manual"
+        set_message "skills" "source/target IDE has no confirmable project Skills directory" 
+        set_manual_step "skills" "project Skills: source='$source_skills' target='$target_skills'; please select native directory manually according to IDE Registry, do not infer paths" 
+        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
+        return 0
+    fi
+
+    source_path="$WORKSPACE_ROOT/$source_skills"
+    target_path="$WORKSPACE_ROOT/$target_skills"
+    if [[ ! -d "$source_path" ]]; then
+        set_status "skills" "skipped"
+        set_message "skills" "project Skills source directory does not exist: $source_skills"
+        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
+        return 0
+    fi
+
+    # Refuse to operate when source and target resolve to the same path.
+    # antigravity/codex/zed (and several others) all share `.agents/skills`,
+    # and `claude → copilot` / `tencent-codebuddy` share `.mcp.json`. Without
+    # this guard, the backup strategy's `mv` would rename the source in
+    # place and the subsequent `cp -R` would fail; the overwrite strategy
+    # would `rm -rf` the source with no backup. Either path destroys data.
+    if [[ "$(cd "$source_path" 2>/dev/null && pwd -P)" == "$(cd "$target_path" 2>/dev/null && pwd -P)" ]]; then
+        set_status "skills" "manual"
+        set_message "skills" "project Skills source and target resolve to the same path; refusing to self-overwrite"
+        set_manual_step "skills" "project Skills: source and target IDEs share '$source_skills' on this workspace; pick a different target or relocate the source manually before retrying"
+        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
+        return 0
+    fi
+
+    print_progress "MIGRATE" "Migrating project Skills..."
+    local migrated_count=0 failed_count=0 skill_dir skill_name timestamp
+    if [[ $DRY_RUN -eq 0 ]]; then
+        mkdir -p "$target_path"
+    fi
+
+    for skill_dir in "$source_path"/*/; do
+        [[ -d "$skill_dir" ]] || continue
+        [[ -f "$skill_dir/SKILL.md" ]] || continue
+        skill_name=$(basename "$skill_dir")
+
+        if [[ $DRY_RUN -eq 1 ]]; then
+            echo "  DRY-RUN: cp -r $skill_dir $target_path/$skill_name"
+            migrated_count=$((migrated_count + 1))
+            continue
+        fi
+
+        if [[ -d "$target_path/$skill_name" ]]; then
+            case "$STRATEGY" in
+                skip)
+                    echo "  [SKIP] project skill already exists: $skill_name"
+                    continue
+                    ;;
+                backup)
+                    timestamp=$(date +%Y%m%d%H%M%S).$$
+                    mv "$target_path/$skill_name" "$target_path/$skill_name.bak.$timestamp"
+                    echo "  [BACKUP] backed up existing project skill: $skill_name"
+                    ;;
+                overwrite)
+                    if ! safe_remove_skill_dir "$target_path" "$skill_name"; then
+                        echo "  [FAIL] safe delete of project skill before overwrite failed: $skill_name"
+                        failed_count=$((failed_count + 1))
+                        continue
+                    fi
+                    ;;
+            esac
+        fi
+
+        # MED-S3 / MED-P3: skill bundles may carry config/env files with
+        # embedded credentials; redact the COPY (never the source).
+        # Fail-closed: on redaction failure remove the whole copied skill
+        # so no secret survives.
+        if cp -R "$skill_dir" "$target_path/$skill_name" 2>/dev/null; then
+            if redact_project_copy "$target_path/$skill_name" >/dev/null; then
+                echo "  [OK] migrated project skill: $skill_name"
+                migrated_count=$((migrated_count + 1))
+            else
+                rm -rf "${target_path:?}/$skill_name"
+                echo "  [FAIL] project skill redaction failed, deleted copy to prevent key leak: $skill_name"
+                failed_count=$((failed_count + 1))
+            fi
+        else
+            echo "  [FAIL] project skill migration failed: $skill_name"
+            failed_count=$((failed_count + 1))
+        fi
+    done
+
+        set_manual_step "skills" "project Skills: this run only writes target native directory $target_skills; compatibility directories, same-name priority, trust settings and external symlinks still need manual review" 
+    if [[ $failed_count -gt 0 ]]; then
+        set_status "skills" "partial"
+        set_message "skills" "project Skills succeeded $migrated_count, failed $failed_count" 
+        MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
+    else
+        set_status "skills" "success"
+        set_message "skills" "project Skills successfully migrated $migrated_count" 
+        MIGRATION_SUCCESS=$((MIGRATION_SUCCESS + 1))
+    fi
+}
+
+migrate_skills() {
+    local source_ide="$1"
+    local target_ide="$2"
+    local scope="${3:-global}"
+
+    case "$scope" in
+        global)
+            migrate_global_skills "$source_ide" "$target_ide"
+            ;;
+        project)
+            migrate_project_skills "$source_ide" "$target_ide"
+            ;;
+        both)
+            migrate_global_skills "$source_ide" "$target_ide"
+            migrate_project_skills "$source_ide" "$target_ide"
+            ;;
+        *)
+            set_status "skills" "failed"
+        set_message "skills" "unsupported Skills scope: $scope" 
+            MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
+            ;;
+    esac
 }
 
 migrate_rules() {
@@ -1287,8 +1456,8 @@ migrate_rules() {
 
     if [[ "$source_ide" == "blackbox" || "$target_ide" == "blackbox" ]]; then
         set_status "rules" "manual"
-        set_message "rules" "Blackbox 官方文档未定义可移植规则文件或目录；自动迁移不受支持"
-        set_manual_step "rules" "Blackbox: 不要推断 .blackbox/rules、.blackbox/instructions 或根规则文件；仅按官方项目 Skills 文档审查 .blackbox/skills/"
+        set_message "rules" "Blackbox official docs do not define portable rules file or directory; auto migration unsupported" 
+        set_manual_step "rules" "Blackbox: do not infer .blackbox/rules, .blackbox/instructions or root rules file; only review .blackbox/skills/ per official project Skills docs" 
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
     fi
@@ -1377,7 +1546,7 @@ migrate_rules() {
 
     if [[ "$source_ide" == "kiro" || "$target_ide" == "kiro" ]]; then
         set_status "rules" "manual"
-        set_message "rules" "Kiro steering 是目录且带 inclusion/frontmatter 语义；自动单文件迁移不受支持"
+        set_message "rules" "Kiro steering is a directory with inclusion/frontmatter semantics; auto single-file migration unsupported" 
         set_manual_step "rules" "Kiro: review ~/.kiro/steering/*.md and .kiro/steering/*.md; preserve inclusion (always/fileMatch/auto/manual) and file scope"
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
@@ -1385,7 +1554,7 @@ migrate_rules() {
 
     if [[ "$source_ide" == "augment-code" || "$target_ide" == "augment-code" ]]; then
         set_status "rules" "manual"
-        set_message "rules" "Augment rules 使用目录及 frontmatter；自动单文件迁移不受支持"
+        set_message "rules" "Augment rules use a directory and frontmatter; auto single-file migration unsupported" 
         set_manual_step "rules" "Augment: review ~/.augment/rules/ and .augment/rules/*.md plus .augment-guidelines; preserve always_apply/agent_requested/manual semantics"
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
@@ -1393,7 +1562,7 @@ migrate_rules() {
 
     if [[ "$source_ide" == "baidu-comate" || "$target_ide" == "baidu-comate" ]]; then
         set_status "rules" "manual"
-        set_message "rules" "Comate rules 使用 .mdr 目录和激活模式；自动单文件迁移不受支持"
+        set_message "rules" "Comate rules use .mdr directory and activation mode; auto single-file migration unsupported" 
         set_manual_step "rules" "Comate: review .comate/rules/*.mdr manually; preserve its Cursor-compatible frontmatter and activation mode"
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
@@ -1401,7 +1570,7 @@ migrate_rules() {
 
     if [[ "$source_ide" == "trae-cn" || "$target_ide" == "trae-cn" ]]; then
         set_status "rules" "manual"
-        set_message "rules" "Trae CN rules 使用 .trae/rules 目录；自动单文件迁移不受支持"
+        set_message "rules" "Trae CN rules use .trae/rules directory; auto single-file migration unsupported" 
         set_manual_step "rules" "Trae CN: review .trae/rules/ manually; preserve frontmatter alwaysApply, globs, description, and scene"
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
@@ -1441,14 +1610,14 @@ migrate_rules() {
 
     if [[ -z "$source_rules" ]]; then
         set_status "rules" "skipped"
-        set_message "rules" "源IDE不支持规则文件"
+        set_message "rules" "source IDE does not support rules files" 
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
     fi
 
     if [[ -z "$target_rules" ]]; then
         set_status "rules" "skipped"
-        set_message "rules" "目标IDE不支持规则文件"
+        set_message "rules" "target IDE does not support rules files" 
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
     fi
@@ -1492,14 +1661,14 @@ migrate_rules() {
         set_manual_step "rules" "Void: .voidrules is a workspace-root plaintext instruction file; automatic copy is limited to the selected project root, while global AI Instructions and multi-root ordering require manual review"
     fi
 
-    print_progress "MIGRATE" "迁移规则文件..."
+    print_progress "MIGRATE" "Migrating rules files..." 
 
     local source_path="$WORKSPACE_ROOT/$source_rules"
     local target_path="$WORKSPACE_ROOT/$target_rules"
 
     if [[ ! -f "$source_path" ]]; then
         set_status "rules" "skipped"
-        set_message "rules" "源规则文件不存在: $source_rules"
+        set_message "rules" "source rules file does not exist: $source_rules" 
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
     fi
@@ -1507,17 +1676,17 @@ migrate_rules() {
     if [[ $DRY_RUN -eq 1 ]]; then
         echo "  DRY-RUN: cp $source_path $target_path"
         set_status "rules" "success"
-        set_message "rules" "规则文件准备迁移"
+        set_message "rules" "rules file ready to migrate" 
     else
         mkdir -p "$(dirname "$target_path")"
         if cp "$source_path" "$target_path"; then
-            echo "  [OK] 迁移规则: $source_rules -> $target_rules"
+            echo "  [OK] migrated rule: $source_rules -> $target_rules" 
             set_status "rules" "success"
-            set_message "rules" "规则文件迁移成功"
+        set_message "rules" "rules file migration succeeded" 
             MIGRATION_SUCCESS=$((MIGRATION_SUCCESS + 1))
         else
             set_status "rules" "failed"
-            set_message "rules" "规则文件迁移失败"
+        set_message "rules" "rules file migration failed" 
             MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
         fi
     fi
@@ -1539,8 +1708,8 @@ migrate_prompts() {
 
     if [[ "$source_ide" == "blackbox" || "$target_ide" == "blackbox" ]]; then
         set_status "prompts" "manual"
-        set_message "prompts" "Blackbox 官方文档未定义可移植提示词模板目录；自动迁移不受支持"
-        set_manual_step "prompts" "Blackbox: /skill 是 CLI 会话命令，不是提示词文件目录；不要推断 .blackbox/prompts 或 commands 路径"
+        set_message "prompts" "Blackbox official docs do not define portable prompt template directory; auto migration unsupported" 
+        set_manual_step "prompts" "Blackbox: /skill is a CLI session command, not a prompt file directory; do not infer .blackbox/prompts or commands path" 
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
     fi
@@ -1620,14 +1789,14 @@ migrate_prompts() {
 
     if [[ -z "$source_prompts" ]]; then
         set_status "prompts" "skipped"
-        set_message "prompts" "源IDE不支持提示词模板"
+        set_message "prompts" "source IDE does not support prompt templates" 
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
     fi
 
     if [[ -z "$target_prompts" ]]; then
         set_status "prompts" "skipped"
-        set_message "prompts" "目标IDE不支持提示词模板"
+        set_message "prompts" "target IDE does not support prompt templates" 
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
     fi
@@ -1641,14 +1810,14 @@ migrate_prompts() {
         prompt_pattern="*.prompt.md"
     fi
 
-    print_progress "MIGRATE" "迁移提示词模板..."
+    print_progress "MIGRATE" "Migrating prompt templates..." 
 
     local source_path="$WORKSPACE_ROOT/$source_prompts"
     local target_path="$WORKSPACE_ROOT/$target_prompts"
 
     if [[ ! -d "$source_path" ]]; then
         set_status "prompts" "skipped"
-        set_message "prompts" "源提示词目录不存在: $source_prompts"
+        set_message "prompts" "source prompt directory does not exist: $source_prompts" 
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
     fi
@@ -1658,7 +1827,7 @@ migrate_prompts() {
 
     if [[ "$prompt_count" -eq 0 ]]; then
         set_status "prompts" "skipped"
-        set_message "prompts" "源提示词目录为空"
+        set_message "prompts" "source prompt directory is empty" 
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
     fi
@@ -1666,7 +1835,7 @@ migrate_prompts() {
     if [[ $DRY_RUN -eq 1 ]]; then
         echo "  DRY-RUN: copy $prompt_pattern files from $source_path to $target_path/"
         set_status "prompts" "success"
-        set_message "prompts" "$prompt_count 个提示词模板准备迁移"
+        set_message "prompts" "$prompt_count prompt templates ready to migrate" 
     else
         mkdir -p "$target_path"
         local prompt_file relative_prompt target_prompt
@@ -1681,13 +1850,13 @@ migrate_prompts() {
             fi
         done < <(find "$source_path" -name "$prompt_pattern" -type f -print0 2>/dev/null)
         if [[ "$prompt_copy_failed" -eq 0 ]]; then
-            echo "  [OK] 迁移提示词: $prompt_count 个文件"
+            echo "  [OK] migrated prompts: $prompt_count files" 
             set_status "prompts" "success"
-            set_message "prompts" "成功迁移 $prompt_count 个提示词模板"
+        set_message "prompts" "successfully migrated $prompt_count prompt templates" 
             MIGRATION_SUCCESS=$((MIGRATION_SUCCESS + 1))
         else
             set_status "prompts" "failed"
-            set_message "prompts" "提示词模板迁移失败"
+        set_message "prompts" "prompt template migration failed" 
             MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
         fi
     fi
@@ -1705,7 +1874,7 @@ convert_mcp_file() {
 
     if [[ ! -r "$src" ]]; then
         CONV_RESULT="failed"
-        CONV_DETAIL="源MCP配置不可读: $src"
+        CONV_DETAIL="source MCP config unreadable: $src" 
         return
     fi
 
@@ -2523,11 +2692,11 @@ PYEOF
         if [[ "$json_conversion_rc" -eq 0 ]]; then
             if MCP_REDACTED_COUNT=$(redact_secrets_in_file "$dst"); then
                 CONV_RESULT="success"
-                CONV_DETAIL="MCP配置已转换 (根键 ${src_key:-mcpServers} -> ${dst_key:-mcpServers})，密钥已清空"
+                CONV_DETAIL="MCP config converted (root key ${src_key:-mcpServers} -> ${dst_key:-mcpServers}), secrets cleared" 
             else
                 MCP_REDACTED_COUNT=0
                 CONV_RESULT="failed"
-                CONV_DETAIL="MCP配置脱敏失败，目标文件已删除以防密钥泄漏 (源文件未动)"
+                CONV_DETAIL="MCP config redaction failed, target file deleted to prevent secret leak (source file untouched)" 
             fi
             return
         fi
@@ -2591,7 +2760,7 @@ PYEOF
         fi
         if [[ "$json_conversion_rc" -eq 12 && ("$target_ide" == "kimiai" || "$target_ide" == "kiro" || "$target_ide" == "zcode") ]]; then
             CONV_RESULT="failed"
-            CONV_DETAIL="目标IDE的 MCP mcpServers/schema 无效或含歧义；请按官方 command/args 或 url/headers 格式手动审查"
+            CONV_DETAIL="target IDE's MCP mcpServers/schema is invalid or ambiguous; please review manually per official command/args or url/headers format" 
             return
         fi
         if [[ "$target_ide" == "workbuddy" && "$json_conversion_rc" -eq 16 ]]; then
@@ -2666,7 +2835,7 @@ PYEOF
 
     if [[ "$target_ide" == "kilocode" || "$target_ide" == "kimiai" || "$target_ide" == "kiro" || "$target_ide" == "workbuddy" || "$target_ide" == "jetbrains" || "$target_ide" == "void-editor" || "$target_ide" == "augment-code" || "$target_ide" == "baidu-comate" || "$target_ide" == "zcode" ]]; then
         CONV_RESULT="failed"
-        CONV_DETAIL="目标IDE的 MCP 文件需要 JSON/JSONC Schema 转换；当前源格式不受自动迁移支持"
+        CONV_DETAIL="target IDE's MCP file needs JSON/JSONC Schema conversion; current source format not supported for auto migration" 
         return
     fi
 
@@ -2679,26 +2848,26 @@ PYEOF
     # combination that cannot be truly converted is failed instead of copied.
     if [[ "${MCP_ALLOW_COPY_FALLBACK:-1}" -ne 1 ]]; then
         CONV_RESULT="failed"
-        CONV_DETAIL="源/目标 MCP 格式不直接兼容，且按原样复制回退已被禁用 (MCP_ALLOW_COPY_FALLBACK=0)"
+        CONV_DETAIL="source/target MCP format not directly compatible, and copy-as-is fallback is disabled (MCP_ALLOW_COPY_FALLBACK=0)" 
         return
     fi
     if cp "$src" "$dst"; then
         if [[ -s "$dst" ]]; then
             if MCP_REDACTED_COUNT=$(redact_secrets_in_file "$dst"); then
                 CONV_RESULT="copied"
-                CONV_DETAIL="MCP配置按原样复制 (源/目标格式不直接兼容，需手动调整根键 ${src_key:-?} -> ${dst_key:-?})，密钥已清空"
+                CONV_DETAIL="MCP config copied as-is (source/target format not directly compatible, manual root key adjustment ${src_key:-?} -> ${dst_key:-?} needed), secrets cleared" 
             else
                 MCP_REDACTED_COUNT=0
                 CONV_RESULT="failed"
-                CONV_DETAIL="MCP配置脱敏失败，目标文件已删除以防密钥泄漏 (源文件未动)"
+                CONV_DETAIL="MCP config redaction failed, target file deleted to prevent secret leak (source file untouched)" 
             fi
         else
             CONV_RESULT="failed"
-            CONV_DETAIL="MCP配置复制后为空"
+            CONV_DETAIL="MCP config empty after copy" 
         fi
     else
         CONV_RESULT="failed"
-        CONV_DETAIL="MCP配置复制失败"
+        CONV_DETAIL="MCP config copy failed" 
     fi
 }
 
@@ -2890,8 +3059,11 @@ def redact_one(file):
                 continue
         # ---- Vector ⑤: blank every "secretKey":"value" pair on the line
         line = re.sub(r'("?[A-Za-z0-9_.\-]+"?\s*:\s*)"([^"]*)"', redact_kv, line)
-        # ---- normal keyed-line handling (single key + arrays + argv)
-        m = re.match(r'^\s*["\']?([A-Za-z0-9_.\-]+)["\']?\s*[:=]\s*(.*)$', line)
+        # ---- normal keyed-line handling (single key + arrays + argv).
+        # Allow an optional `export ` prefix so POSIX-shell assignments like
+        # `export OPENAI_API_KEY="sk-..."` and `KEY="value"` match the same
+        # keyed-pair logic as JSON/TOML/YAML entries.
+        m = re.match(r'^\s*(?:export\s+)?["\']?([A-Za-z0-9_.\-]+)["\']?\s*[:=]\s*(.*)$', line)
         if m:
             key, rest = m.group(1), m.group(2).strip()
             key_secret = bool(SECRET_KEY_RE.search(key))
@@ -3040,15 +3212,15 @@ redact_secrets_in_file() {
     # cannot prove the COPY holds no secrets, so we must NOT leave it on disk
     # (and must NOT report "success"). Delete the copy and return non-zero;
     # every caller already treats a non-zero return as "secret-bearing copy
-    # removed, migration failed" (e.g. CONV_RESULT="failed" + "目标文件已删除").
+    # removed, migration failed" (e.g. CONV_RESULT="failed" + "target file deleted").
     if ! command -v python3 >/dev/null 2>&1; then
-        echo "  [SECURITY] 缺少 python3，无法对 $file 脱敏；已删除目标副本以防密钥泄漏（源文件未动）" >&2
+        echo "  [SECURITY] python3 missing, cannot redact $file; target copy deleted to prevent secret leak (source file untouched)" >&2
         rm -f "$file" 2>/dev/null || true
         echo 0
         return 1
     fi
     if ! ensure_redactor_script; then
-        echo "  [SECURITY] 无法生成脱敏引擎，已删除目标副本以防密钥泄漏（源文件未动）: $file" >&2
+        echo "  [SECURITY] cannot generate redaction engine, target copy deleted to prevent secret leak (source file untouched): $file" >&2
         rm -f "$file" 2>/dev/null || true
         echo 0
         return 1
@@ -3062,7 +3234,7 @@ redact_secrets_in_file() {
         # FAIL CLOSED (vector ②): python already removed the destination; make
         # doubly sure nothing secret-bearing survives, then signal failure.
         rm -f "$file" "${file}.redact.tmp" 2>/dev/null || true
-        echo "  [SECURITY] 密钥脱敏失败，已删除目标文件以防泄漏 (源文件未动): $file" >&2
+        echo "  [SECURITY] secret redaction failed, target file deleted to prevent leak (source file untouched): $file" >&2
         echo "-1"
         return 1
     fi
@@ -3073,6 +3245,9 @@ redact_secrets_in_file() {
 migrate_mcp() {
     local source_ide="$1"
     local target_ide="$2"
+    local scope="${3:-global}"
+    local scope_label="global/user"
+    [[ "$scope" == "project" ]] && scope_label="project"
 
     MIGRATION_TOTAL=$((MIGRATION_TOTAL + 1))
 
@@ -3093,43 +3268,43 @@ migrate_mcp() {
     # generic MCP workflow must validate its target schema and keep project
     # scope manual.
     if [[ "$source_ide" == "gemini-cli" || "$target_ide" == "gemini-cli" ]]; then
-        set_manual_step "mcp" "Gemini CLI: only user ~/.gemini/settings.json is mapped automatically; review project .gemini/settings.json manually and preserve the mcpServers endpoint schema plus project settings precedence"
+        set_manual_step "mcp" "Gemini CLI: selected ${scope_label} scope; review ~/.gemini/settings.json versus project .gemini/settings.json, preserve the mcpServers endpoint schema, and review project settings precedence"
     fi
 
     if [[ "$source_ide" == "opencode" || "$target_ide" == "opencode" ]]; then
-        set_manual_step "mcp" "OpenCode: only global ~/.config/opencode/opencode.json mcp entries are mapped automatically; review project opencode.json, JSONC files, merged precedence, OAuth/keychain state, and agent-specific MCP permissions manually"
+        set_manual_step "mcp" "OpenCode: selected ${scope_label} scope; review ~/.config/opencode/opencode.json versus project opencode.json, JSONC files, merged precedence, OAuth/keychain state, and agent-specific MCP permissions manually"
     fi
 
     if [[ "$source_ide" == "kimiai" || "$target_ide" == "kimiai" ]]; then
-        set_manual_step "mcp" "Kimi Code: only user ~/.kimi-code/mcp.json is mapped automatically; review project .kimi-code/mcp.json and KIMI_CODE_HOME precedence manually"
+        set_manual_step "mcp" "Kimi Code: selected ${scope_label} scope; review ~/.kimi-code/mcp.json versus project .kimi-code/mcp.json and KIMI_CODE_HOME precedence manually"
     fi
 
     if [[ "$source_ide" == "workbuddy" || "$target_ide" == "workbuddy" ]]; then
-        set_manual_step "mcp" "WorkBuddy: only user ~/.workbuddy/mcp.json is mapped automatically; review project .workbuddy/mcp.json and UI-managed precedence manually"
+        set_manual_step "mcp" "WorkBuddy: selected ${scope_label} scope; review ~/.workbuddy/mcp.json versus project .workbuddy/mcp.json and UI-managed precedence manually"
     fi
 
     if [[ "$source_ide" == "kiro" || "$target_ide" == "kiro" ]]; then
-        set_manual_step "mcp" "Kiro: only user ~/.kiro/settings/mcp.json is mapped automatically; review workspace .kiro/settings/mcp.json and Kiro CLI/IDE scope manually"
+        set_manual_step "mcp" "Kiro: selected ${scope_label} scope; review ~/.kiro/settings/mcp.json versus workspace .kiro/settings/mcp.json and Kiro CLI/IDE scope manually"
     fi
 
     if [[ "$source_ide" == "augment-code" || "$target_ide" == "augment-code" ]]; then
-        set_manual_step "mcp" "Augment: only user ~/.augment/settings.json is mapped automatically; review .augment/settings.json/.augment/settings.local.json precedence and credentials manually"
+        set_manual_step "mcp" "Augment: selected ${scope_label} scope; review ~/.augment/settings.json, .augment/settings.json/.augment/settings.local.json precedence, and credentials manually"
     fi
 
     if [[ "$source_ide" == "baidu-comate" || "$target_ide" == "baidu-comate" ]]; then
-        set_manual_step "mcp" "Comate: only user ~/.comate/mcp.json is mapped automatically; review .comate/mcp.json and experimental .comate/mcp.local.json precedence manually"
+        set_manual_step "mcp" "Comate: selected ${scope_label} scope; review ~/.comate/mcp.json, .comate/mcp.json, and experimental .comate/mcp.local.json precedence manually"
     fi
 
     if [[ "$source_ide" == "zcode" || "$target_ide" == "zcode" ]]; then
-        set_manual_step "mcp" "ZCode: only user ~/.zcode/cli/config.json is mapped automatically; review workspace .zcode/config.json and .agents/mcp.json fallback precedence manually"
+        set_manual_step "mcp" "ZCode: selected ${scope_label} scope; review ~/.zcode/cli/config.json, workspace .zcode/config.json, and .agents/mcp.json fallback precedence manually"
     fi
 
     if [[ "$source_ide" == "void-editor" || "$target_ide" == "void-editor" ]]; then
-        set_manual_step "mcp" "Void: only user ~/.void-editor/mcp.json is mapped automatically; inherited VS Code project .vscode/mcp.json uses a separate servers root and remains manual; custom mcpServers entries must use command/args/env or URL-only remote, while headers/auth require manual review"
+        set_manual_step "mcp" "Void: selected ${scope_label} scope; user ~/.void-editor/mcp.json and inherited VS Code project .vscode/mcp.json use separate stores/roots; custom mcpServers entries must use command/args/env or URL-only remote, while headers/auth require manual review"
     fi
 
     if [[ "$source_ide" == "jetbrains" || "$target_ide" == "jetbrains" ]]; then
-        set_manual_step "mcp" "Junie: only user ~/.junie/mcp/mcp.json is mapped automatically; review project .junie/mcp/mcp.json manually; automatic conversion accepts only the documented local command/args/env shape and leaves remote/unknown fields for review"
+        set_manual_step "mcp" "Junie: selected ${scope_label} scope; review ~/.junie/mcp/mcp.json versus project .junie/mcp/mcp.json; automatic conversion accepts only the documented local command/args/env shape and leaves remote/unknown fields for review"
     fi
 
     if [[ "$source_ide" == "amazon-q" || "$target_ide" == "amazon-q" ]]; then
@@ -3149,8 +3324,8 @@ migrate_mcp() {
     # server-root schema. Keep both directions manual.
     if [[ "$source_ide" == "blackbox" || "$target_ide" == "blackbox" ]]; then
         set_status "mcp" "manual"
-        set_message "mcp" "Blackbox 仅文档化内置 blackbox mcp 命令；没有可移植MCP文件或服务器Schema"
-        set_manual_step "mcp" "Blackbox: 使用官方 CLI/界面手动配置；不要推断 ~/.blackbox、.blackbox/mcp.json 或 mcpServers 根键"
+        set_message "mcp" "Blackbox only documents built-in blackbox mcp command; no portable MCP file or server Schema" 
+        set_manual_step "mcp" "Blackbox: use official CLI/UI to configure manually; do not infer ~/.blackbox, .blackbox/mcp.json or mcpServers root key" 
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
     fi
@@ -3233,21 +3408,31 @@ migrate_mcp() {
     fi
 
     local source_mcp
-    source_mcp=$(get_mcp_path "$source_ide")
     local target_mcp
-    target_mcp=$(get_mcp_path "$target_ide")
+    if [[ "$scope" == "project" ]]; then
+        source_mcp=$(get_project_mcp_path "$source_ide")
+        target_mcp=$(get_project_mcp_path "$target_ide")
+    else
+        source_mcp=$(get_mcp_path "$source_ide")
+        target_mcp=$(get_mcp_path "$target_ide")
+    fi
 
     # VS Code's user MCP file is profile/UI-managed and intentionally has no
     # portable path in this mapper. A workspace target is portable and is
     # safe to write under the explicitly selected workspace root.
-    if [[ -z "$source_mcp" && "$source_ide" == "vscode" ]]; then
+    if [[ "$scope" != "project" && -z "$source_mcp" && "$source_ide" == "vscode" ]]; then
         set_status "mcp" "manual"
         set_message "mcp" "VS Code user MCP path is not portable/documented for this mapper; no file was read"
         set_manual_step "mcp" "VS Code: use MCP: Open User Configuration for user MCP, or review the workspace .vscode/mcp.json (root servers) manually; do not use GitHub Copilot CLI mcpServers files"
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
     fi
-    if [[ "$target_ide" == "vscode" ]]; then
+    # VS Code's user MCP file is profile/UI-managed and intentionally has no
+    # portable path in this mapper. A workspace target is portable and is
+    # safe to write under the explicitly selected workspace root — but ONLY
+    # when the user actually requested project scope, otherwise `--scope
+    # global` to vscode would still write the workspace path.
+    if [[ "$target_ide" == "vscode" && "$scope" == "project" ]]; then
         target_mcp="$WORKSPACE_ROOT/.vscode/mcp.json"
     fi
 
@@ -3262,17 +3447,38 @@ migrate_mcp() {
 
     if [[ -z "$source_mcp" ]]; then
         set_status "mcp" "skipped"
-        set_message "mcp" "源IDE不支持MCP配置"
+        set_message "mcp" "source IDE does not support MCP configuration" 
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
     fi
 
     if [[ -z "$target_mcp" ]]; then
         set_status "mcp" "manual"
-        set_message "mcp" "目标IDE不支持MCP配置，需手动迁移"
-        set_manual_step "mcp" "目标IDE ($target_ide) 不支持自动MCP迁移，请参考 IDE Registry 手动配置"
+        set_message "mcp" "target IDE does not support MCP configuration, manual migration required"
+        set_manual_step "mcp" "target IDE ($target_ide) does not support automatic MCP migration, please refer to IDE Registry to configure manually"
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
+    fi
+
+    # Refuse to operate when source and target resolve to the same file.
+    # Several IDEs share project-MCP paths: claude/copilot/tencent-codebuddy
+    # all map to `.mcp.json`; trae/trae-cn both map to `.trae/mcp.json`.
+    # Without this guard, the overwrite strategy's `rm -f` would delete the
+    # only copy of the source; the backup strategy's `cp -r` would save a
+    # snapshot but then `convert_mcp_file` would overwrite the live source in
+    # place. Either path destroys or mutates the source.
+    if [[ "$(cd "$(dirname "$source_mcp")" 2>/dev/null && pwd -P)/$(basename "$source_mcp")" == "$(cd "$(dirname "$target_mcp")" 2>/dev/null && pwd -P)/$(basename "$target_mcp")" ]]; then
+        set_status "mcp" "manual"
+        set_message "mcp" "MCP source and target resolve to the same file; refusing to self-overwrite"
+        set_manual_step "mcp" "MCP: source and target IDEs share '$source_mcp' on this workspace; pick a different target or relocate the source manually before retrying"
+        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
+        return 0
+    fi
+
+    if [[ "$scope" == "project" ]]; then
+        set_manual_step "mcp" "project MCP: this run only processes explicit workspace file ${source_mcp} -> ${target_mcp}; review project priority, Workspace Trust, approval, OAuth/headers and same-name server conflicts" 
+    else
+        set_manual_step "mcp" "user MCP: this run only processes user-level file; project MCP, local scope, Workspace Trust and UI/profile state still need manual review" 
     fi
 
     # Claude Code exposes project MCP through .mcp.json and keeps local MCP
@@ -3282,15 +3488,15 @@ migrate_mcp() {
     # instead of pretending that settings.local.json or a project directory is
     # an interchangeable MCP target.
     if [[ "$source_ide" == "claude" || "$target_ide" == "claude" ]]; then
-        set_manual_step "mcp" "Claude Code: only user-scoped mcpServers in ~/.claude.json are mapped automatically; review project .mcp.json and local per-project entries in ~/.claude.json manually"
+        set_manual_step "mcp" "Claude Code: selected ${scope_label} scope; review ~/.claude.json user/local entries, project .mcp.json, and local per-project entries manually"
     fi
 
     if [[ "$source_ide" == "tabnine" || "$target_ide" == "tabnine" ]]; then
-        set_manual_step "mcp" "Tabnine: only global ~/.tabnine/mcp_servers.json is mapped automatically; review project .tabnine/mcp_servers.json and configure extension-managed permissions in Tabnine Settings manually"
+        set_manual_step "mcp" "Tabnine: selected ${scope_label} scope; review ~/.tabnine/mcp_servers.json versus project .tabnine/mcp_servers.json and configure extension-managed permissions in Tabnine Settings manually"
     fi
 
     if [[ "$source_ide" == "tencent-codebuddy" || "$target_ide" == "tencent-codebuddy" ]]; then
-        set_manual_step "mcp" "CodeBuddy Code: user ~/.codebuddy/.mcp.json is mapped automatically; review project .mcp.json, legacy ~/.codebuddy/mcp.json/~/.codebuddy.json, --mcp-config overrides, and .codebuddy/settings.json approval keys manually"
+        set_manual_step "mcp" "CodeBuddy Code: selected ${scope_label} scope; review ~/.codebuddy/.mcp.json, project .mcp.json, legacy ~/.codebuddy/mcp.json/~/.codebuddy.json, --mcp-config overrides, and .codebuddy/settings.json approval keys manually"
     fi
 
     # Copilot CLI has two project-level files with the same mcpServers root.
@@ -3298,14 +3504,14 @@ migrate_mcp() {
     # file, because choosing .mcp.json versus .github/mcp.json would alter
     # repository scope and precedence without user direction.
     if [[ "$source_ide" == "copilot" || "$target_ide" == "copilot" ]]; then
-        set_manual_step "mcp" "GitHub Copilot CLI: only user ~/.copilot/mcp-config.json is mapped automatically; review project .mcp.json and .github/mcp.json (both mcpServers) manually"
+        set_manual_step "mcp" "GitHub Copilot CLI: selected ${scope_label} scope; review ~/.copilot/mcp-config.json and project .mcp.json/.github/mcp.json (both mcpServers) manually"
     fi
 
-    print_progress "MIGRATE" "迁移MCP服务器配置..."
+    print_progress "MIGRATE" "Migrating MCP server configuration..." 
 
     if [[ ! -e "$source_mcp" ]]; then
         set_status "mcp" "absent"
-        set_message "mcp" "源MCP配置不存在: $source_mcp"
+        set_message "mcp" "source MCP config does not exist: $source_mcp" 
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
     fi
@@ -3316,23 +3522,23 @@ migrate_mcp() {
     # server manually in the correct trusted user/project config scope.
     if [[ "$source_ide" == "codex" || "$target_ide" == "codex" ]]; then
         set_status "mcp" "manual"
-        set_message "mcp" "Codex MCP 配置使用 TOML；自动迁移不受支持，需手动迁移"
-        set_manual_step "mcp" "在 Codex 用户 ~/.codex/config.toml 或受信任项目 .codex/config.toml 中使用 [mcp_servers.<server-name>] TOML 表重建服务器；stdio 使用 command，Streamable HTTP 使用 url"
+        set_message "mcp" "Codex MCP config uses TOML; auto migration unsupported, manual migration required" 
+        set_manual_step "mcp" "rebuild servers using [mcp_servers.<server-name>] TOML table in Codex user ~/.codex/config.toml or trusted project .codex/config.toml; stdio uses command, Streamable HTTP uses url" 
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
     fi
 
     local src_key dst_key
-    src_key=$(get_mcp_root_key "$source_ide")
-    dst_key=$(get_mcp_root_key "$target_ide")
+    src_key=$(get_mcp_root_key "$source_ide" "$scope")
+    dst_key=$(get_mcp_root_key "$target_ide" "$scope")
 
     if [[ $DRY_RUN -eq 1 ]]; then
-        echo "  DRY-RUN: 转换MCP配置"
-        echo "    源:   $source_mcp (根键: ${src_key:-无})"
-        echo "    目标: $target_mcp (根键: ${dst_key:-无})"
+        echo "  DRY-RUN: converting MCP config" 
+        echo "    source: $source_mcp (root key: ${src_key:-none})" 
+        echo "    target: $target_mcp (root key: ${dst_key:-none})" 
         # Dry-run only prints the plan; never mark success.
         set_status "mcp" "skipped"
-        set_message "mcp" "DRY-RUN: 计划转换MCP配置 (${src_key:-?} -> ${dst_key:-?})"
+        set_message "mcp" "DRY-RUN: planned MCP config conversion (${src_key:-?} -> ${dst_key:-?})" 
         return 0
     fi
 
@@ -3341,9 +3547,9 @@ migrate_mcp() {
     if [[ -e "$target_mcp" ]]; then
         case "$STRATEGY" in
             skip)
-                echo "  [SKIP] 目标MCP配置已存在: $target_mcp"
+                echo "  [SKIP] target MCP config already exists: $target_mcp" 
                 set_status "mcp" "skipped"
-                set_message "mcp" "目标MCP配置已存在，跳过 (策略: skip)"
+                set_message "mcp" "target MCP config already exists, skip (strategy: skip)" 
                 MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
                 return 0
                 ;;
@@ -3351,7 +3557,7 @@ migrate_mcp() {
                 local ts
                 ts="$(date +%Y%m%d%H%M%S).$$"
                 cp -r "$target_mcp" "$target_mcp.bak.$ts"
-                echo "  [BACKUP] 备份已有MCP配置: $target_mcp.bak.$ts"
+                echo "  [BACKUP] backed up existing MCP config: $target_mcp.bak.$ts" 
                 ;;
             overwrite)
                 rm -f "$target_mcp"
@@ -3363,34 +3569,34 @@ migrate_mcp() {
 
     case "$CONV_RESULT" in
         success)
-            echo "  [OK] 转换MCP配置: ${src_key:-mcpServers} -> ${dst_key:-mcpServers}"
+            echo "  [OK] converted MCP config: ${src_key:-mcpServers} -> ${dst_key:-mcpServers}" 
             if [[ ${MCP_REDACTED_COUNT:-0} -ne 0 ]]; then
-                echo "  [SECURITY] MCP 配置中的密钥/令牌/凭据已在写入目标前被清空 (仅保留键名)。请确认目标 IDE 的密钥来源 (如环境变量/密钥管理器) 后再启用。"
+            echo "  [SECURITY] secrets/tokens/credentials in MCP config were cleared before writing to target (only key names kept). Please confirm the target IDE's secret source (e.g. env vars/secret manager) before enabling." 
             fi
             set_status "mcp" "success"
             set_message "mcp" "$CONV_DETAIL"
             MIGRATION_SUCCESS=$((MIGRATION_SUCCESS + 1))
             ;;
         copied)
-            echo "  [COPY] 按原样复制MCP配置: $target_mcp"
+            echo "  [COPY] copied MCP config as-is: $target_mcp" 
             if [[ ${MCP_REDACTED_COUNT:-0} -ne 0 ]]; then
-                echo "  [SECURITY] MCP 配置中的密钥/令牌/凭据已在写入目标前被清空 (仅保留键名)。请确认目标 IDE 的密钥来源 (如环境变量/密钥管理器) 后再启用。"
+            echo "  [SECURITY] secrets/tokens/credentials in MCP config were cleared before writing to target (only key names kept). Please confirm the target IDE's secret source (e.g. env vars/secret manager) before enabling." 
             fi
             set_status "mcp" "copied"
             set_message "mcp" "$CONV_DETAIL"
-            set_manual_step "mcp" "检查MCP根键兼容性: ${src_key:-?} -> ${dst_key:-?}"
+            set_manual_step "mcp" "check MCP root key compatibility: ${src_key:-?} -> ${dst_key:-?}" 
             MIGRATION_SUCCESS=$((MIGRATION_SUCCESS + 1))
             ;;
         failed)
-            echo "  [FAIL] MCP配置迁移失败"
+            echo "  [FAIL] MCP config migration failed" 
             set_status "mcp" "failed"
             set_message "mcp" "$CONV_DETAIL"
             MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
             ;;
         *)
-            echo "  [FAIL] MCP配置迁移未知状态"
+            echo "  [FAIL] MCP config migration unknown state" 
             set_status "mcp" "failed"
-            set_message "mcp" "MCP配置迁移失败 (未知状态)"
+        set_message "mcp" "MCP config migration failed (unknown state)" 
             MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
             ;;
     esac
@@ -3439,7 +3645,7 @@ migrate_config() {
 
     if [[ "$source_ide" == "kimiai" || "$target_ide" == "kimiai" ]]; then
         set_status "config" "manual"
-        set_message "config" "Kimi Code config.toml 是目标特定的 TOML 配置；整文件自动迁移不受支持"
+        set_message "config" "Kimi Code config.toml is a target-specific TOML config; whole-file auto migration unsupported" 
         set_manual_step "config" "Kimi Code: review ~/.kimi-code/config.toml, KIMI_CODE_HOME, tui.toml, credentials, hooks, and provider settings manually; do not copy another IDE schema into TOML"
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
@@ -3455,7 +3661,7 @@ migrate_config() {
 
     if [[ "$source_ide" == "tencent-codebuddy" || "$target_ide" == "tencent-codebuddy" ]]; then
         set_status "config" "manual"
-        set_message "config" "CodeBuddy settings.json 是目标特定的分层安全配置；整文件自动迁移不受支持"
+        set_message "config" "CodeBuddy settings.json is a target-specific layered security config; whole-file auto migration unsupported" 
         set_manual_step "config" "CodeBuddy: review ~/.codebuddy/settings.json, .codebuddy/settings.json, .codebuddy/settings.local.json, permissions, hooks, and memory manually"
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
@@ -3463,7 +3669,7 @@ migrate_config() {
 
     if [[ "$source_ide" == "zcode" || "$target_ide" == "zcode" ]]; then
         set_status "config" "manual"
-        set_message "config" "ZCode config.json 是包含 MCP/插件/Agent 状态的目标特定配置；整文件自动迁移不受支持"
+        set_message "config" "ZCode config.json is a target-specific config containing MCP/plugin/Agent state; whole-file auto migration unsupported" 
         set_manual_step "config" "ZCode: review ~/.zcode/cli/config.json and .zcode/config.json manually; preserve mcp.servers, plugins, agents, hooks, and GUI-managed credentials"
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
@@ -3473,8 +3679,8 @@ migrate_config() {
     # published in the current first-party CLI docs.
     if [[ "$source_ide" == "blackbox" || "$target_ide" == "blackbox" ]]; then
         set_status "config" "manual"
-        set_message "config" "Blackbox configure 的存储路径和Schema未由官方文档公开；自动配置迁移不受支持"
-        set_manual_step "config" "Blackbox: 运行/审查官方 blackbox configure 流程；不要推断 ~/.blackbox 或复制 ~/.blackbox 私有状态"
+        set_message "config" "Blackbox configure's storage path and Schema are not disclosed in official docs; auto config migration unsupported" 
+        set_manual_step "config" "Blackbox: run/review official blackbox configure flow; do not infer ~/.blackbox or copy ~/.blackbox private state" 
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
     fi
@@ -3538,16 +3744,16 @@ migrate_config() {
     # (or copying it elsewhere) would be an unsafe format/precedence change.
     if [[ "$source_ide" == "aider" || "$target_ide" == "aider" ]]; then
         set_status "config" "manual"
-        set_message "config" "Aider .aider.conf.yml 是 YAML/CLI 配置，跨IDE自动迁移不受支持"
-        set_manual_step "config" "手动审查 Aider 的 .aider.conf.yml、AIDER_* 环境变量、.env、CLI flags 和 --config/--env-file；不要把其他IDE配置直接复制为 Aider YAML"
+        set_message "config" "Aider .aider.conf.yml is YAML/CLI config, cross-IDE auto migration unsupported" 
+        set_manual_step "config" "manually review Aider's .aider.conf.yml, AIDER_* env vars, .env, CLI flags and --config/--env-file; do not copy other IDE config directly as Aider YAML" 
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
     fi
 
     if [[ -z "$target_config" ]]; then
         set_status "config" "manual"
-        set_message "config" "目标IDE无特定配置文件，需手动迁移"
-        set_manual_step "config" "目标IDE ($target_ide) 不支持自动配置迁移，请手动处理"
+        set_message "config" "target IDE has no specific config file, manual migration required" 
+        set_manual_step "config" "target IDE ($target_ide) does not support automatic config migration, please handle manually" 
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
     fi
@@ -3559,8 +3765,8 @@ migrate_config() {
     # Keep the diagnostic config path, but fail closed for automatic migration.
     if [[ "$source_ide" == "neovim" || "$target_ide" == "neovim" ]]; then
         set_status "config" "manual"
-        set_message "config" "Neovim init.lua 是编辑器配置，跨IDE自动转换不受支持，需手动审查"
-        set_manual_step "config" "手动审查 ~/.config/nvim/init.lua（或 init.vim）；不要把其他IDE配置直接复制为 Neovim Lua，也不要用自动迁移覆盖现有配置"
+        set_message "config" "Neovim init.lua is editor config, cross-IDE auto conversion unsupported, manual review needed" 
+        set_manual_step "config" "manually review ~/.config/nvim/init.lua (or init.vim); do not copy other IDE config directly as Neovim Lua, and do not overwrite existing config with auto migration" 
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
     fi
@@ -3575,16 +3781,16 @@ migrate_config() {
 
     if [[ -z "$source_config" ]]; then
         set_status "config" "skipped"
-        set_message "config" "源IDE无特定配置文件"
+        set_message "config" "source IDE has no specific config file" 
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
     fi
 
-    print_progress "MIGRATE" "迁移IDE配置..."
+    print_progress "MIGRATE" "Migrating IDE config..." 
 
     if [[ ! -f "$source_config" ]]; then
         set_status "config" "absent"
-        set_message "config" "源配置文件不存在: $source_config"
+        set_message "config" "source config file does not exist: $source_config" 
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
     fi
@@ -3595,19 +3801,19 @@ migrate_config() {
     # Codex config migration manual; project config remains diagnostic-only.
     if [[ "$source_ide" == "codex" || "$target_ide" == "codex" ]]; then
         set_status "config" "manual"
-        set_message "config" "Codex config.toml 自动迁移不受支持，需手动迁移"
-        set_manual_step "config" "手动审查 Codex 用户 ~/.codex/config.toml 与受信任项目 .codex/config.toml；不要跨 IDE 复制 TOML、MCP 或 hooks 配置"
+        set_message "config" "Codex config.toml auto migration unsupported, manual migration required" 
+        set_manual_step "config" "manually review Codex user ~/.codex/config.toml and trusted project .codex/config.toml; do not copy TOML, MCP or hooks config across IDEs" 
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
     fi
 
     if [[ $DRY_RUN -eq 1 ]]; then
-        echo "  DRY-RUN: 复制配置文件"
-        echo "    源:   $source_config"
-        echo "    目标: $target_config"
+        echo "  DRY-RUN: copying config file" 
+        echo "    source: $source_config" 
+        echo "    target: $target_config" 
         # Dry-run only prints the plan; never mark success.
         set_status "config" "skipped"
-        set_message "config" "DRY-RUN: 计划复制配置文件"
+        set_message "config" "DRY-RUN: planned config file copy" 
         return 0
     fi
 
@@ -3616,9 +3822,9 @@ migrate_config() {
     if [[ -e "$target_config" ]]; then
         case "$STRATEGY" in
             skip)
-                echo "  [SKIP] 目标配置文件已存在: $target_config"
+                echo "  [SKIP] target config file already exists: $target_config" 
                 set_status "config" "skipped"
-                set_message "config" "目标配置文件已存在，跳过 (策略: skip)"
+                set_message "config" "target config file already exists, skip (strategy: skip)" 
                 MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
                 return 0
                 ;;
@@ -3626,7 +3832,7 @@ migrate_config() {
                 local ts
                 ts="$(date +%Y%m%d%H%M%S).$$"
                 cp -r "$target_config" "$target_config.bak.$ts"
-                echo "  [BACKUP] 备份已有配置文件: $target_config.bak.$ts"
+                echo "  [BACKUP] backed up existing config file: $target_config.bak.$ts" 
                 ;;
             overwrite)
                 rm -f "$target_config"
@@ -3640,36 +3846,36 @@ migrate_config() {
     # a no-op.
     if cp "$source_config" "$target_config"; then
         if [[ -s "$target_config" ]]; then
-            echo "  [COPY] 复制配置文件: $target_config"
+            echo "  [COPY] copied config file: $target_config" 
             # SECURITY: settings/config files routinely embed API keys and
             # tokens. Strip them from the COPY (never the source) — same
             # policy as MCP migration.
             local config_redacted
             if config_redacted=$(redact_secrets_in_file "$target_config"); then
                 if [[ "${config_redacted:-0}" -gt 0 ]]; then
-                    echo "  [SECURITY] 已清空 $config_redacted 处疑似密钥值，请在目标IDE中重新配置凭据"
-                    set_manual_step "config" "配置文件中 $config_redacted 处密钥已被清空，需在目标IDE重新填写"
+                    echo "  [SECURITY] cleared $config_redacted suspected secret values, please reconfigure credentials in target IDE" 
+                    set_manual_step "config" "config file's $config_redacted secrets have been cleared, need to re-enter in target IDE" 
                 fi
                 set_status "config" "copied"
-                set_message "config" "配置文件已复制 (可能需要手动调整格式，密钥已清空): $target_config"
-                set_manual_step "config" "检查并调整IDE配置文件格式 ($source_ide -> $target_ide)"
+                set_message "config" "config file copied (manual format adjustment may be needed, secrets cleared): $target_config" 
+                set_manual_step "config" "check and adjust IDE config file format ($source_ide -> $target_ide)" 
                 MIGRATION_SUCCESS=$((MIGRATION_SUCCESS + 1))
             else
-                echo "  [FAIL] 配置文件脱敏失败，目标副本已删除以防密钥泄漏"
+                echo "  [FAIL] config file redaction failed, target copy deleted to prevent secret leak" 
                 set_status "config" "failed"
-                set_message "config" "配置文件脱敏失败，目标副本已删除以防密钥泄漏 (源文件未动)"
+                set_message "config" "config file redaction failed, target copy deleted to prevent secret leak (source file untouched)" 
                 MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
             fi
         else
-            echo "  [FAIL] 配置文件复制后为空"
+            echo "  [FAIL] config file empty after copy" 
             set_status "config" "failed"
-            set_message "config" "配置文件复制后为空"
+        set_message "config" "config file empty after copy" 
             MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
         fi
     else
-        echo "  [FAIL] 配置文件复制失败"
+        echo "  [FAIL] config file copy failed" 
         set_status "config" "failed"
-        set_message "config" "配置文件复制失败"
+        set_message "config" "config file copy failed" 
         MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
     fi
 }
@@ -3690,7 +3896,8 @@ redact_project_copy() {
         files+=("$f")
     done < <(find "$root" -name '*.bak.*' -prune -o -type f \( \
         -name '*.json' -o -name '*.jsonc' -o -name '*.yaml' -o -name '*.yml' \
-        -o -name '*.toml' -o -name '*.env' -o -name '.env*' \) -print0 2>/dev/null)
+        -o -name '*.toml' -o -name '*.env' -o -name '.env*' \
+        -o -name '*.sh' -o -name '*.bash' -o -name '*.zsh' \) -print0 2>/dev/null)
 
     if [[ ${#files[@]} -eq 0 ]]; then
         echo 0
@@ -3699,13 +3906,13 @@ redact_project_copy() {
 
     # CR-002 fail-closed: no python3 -> we cannot prove the copies are clean.
     if ! command -v python3 >/dev/null 2>&1; then
-        echo "  [SECURITY] 缺少 python3，无法对项目副本脱敏；已删除候选文件以防密钥泄漏（源目录未动）" >&2
+        echo "  [SECURITY] python3 missing, cannot redact project copy; candidate file deleted to prevent secret leak (source directory untouched)" >&2
         for f in "${files[@]}"; do rm -f "$f" 2>/dev/null || true; done
         echo 0
         return 1
     fi
     if ! ensure_redactor_script; then
-        echo "  [SECURITY] 无法生成脱敏引擎，已删除候选文件以防密钥泄漏（源目录未动）" >&2
+        echo "  [SECURITY] cannot generate redaction engine, candidate file deleted to prevent secret leak (source directory untouched)" >&2
         for f in "${files[@]}"; do rm -f "$f" 2>/dev/null || true; done
         echo 0
         return 1
@@ -3717,7 +3924,7 @@ redact_project_copy() {
     rm -f "$pyout"
     if [[ $rc -ne 0 || -z "$total" || "$total" == "-1" ]]; then
         had_fail=1
-        echo "  [SECURITY] 项目副本脱敏存在失败项，失败文件已被删除以防泄漏 (源目录未动)" >&2
+        echo "  [SECURITY] project copy redaction has failures, failed files deleted to prevent leak (source directory untouched)" >&2
         [[ "$total" == "-1" || -z "$total" ]] && total=0
     fi
     echo "$total"
@@ -3768,8 +3975,8 @@ migrate_project() {
           "$source_ide" == "roo-code" || "$target_ide" == "roo-code" ||
           "$source_ide" == "void-editor" || "$target_ide" == "void-editor" ]]; then
         set_status "project" "manual"
-        set_message "project" "目标IDE的项目命名空间混合了 Skills、规则、MCP、Agent 或应用状态；整目录自动迁移不受支持"
-        set_manual_step "project" "分别审查项目对象：Roo .roo/、OpenCode .opencode/、Kilo .kilo/、Kimi .kimi-code/、WorkBuddy .workbuddy/、Kiro .kiro/、Augment .augment/、Comate .comate/、CodeBuddy .codebuddy/、ZCode .zcode/；Void 没有已验证的可移植项目目录；使用各自的 project-skills/project-mcp/rules 对象"
+        set_message "project" "target IDE's project namespace mixes Skills, rules, MCP, Agent or app state; whole-directory auto migration unsupported" 
+        set_manual_step "project" "review project objects separately: Roo .roo/, OpenCode .opencode/, Kilo .kilo/, Kimi .kimi-code/, WorkBuddy .workbuddy/, Kiro .kiro/, Augment .augment/, Comate .comate/, CodeBuddy .codebuddy/, ZCode .zcode/; Void has no verified portable project directory; use respective project-skills/project-mcp/rules objects" 
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
     fi
@@ -3789,8 +3996,8 @@ migrate_project() {
     # whole directory opaquely.
     if [[ "$source_ide" == "blackbox" || "$target_ide" == "blackbox" ]]; then
         set_status "project" "manual"
-        set_message "project" "Blackbox .blackbox 是混合工作区命名空间；整个项目目录自动迁移不受支持"
-        set_manual_step "project" "Blackbox: 仅按官方文档审查/迁移 .blackbox/skills/；不要复制整个 .blackbox 或推断其私有配置文件"
+        set_message "project" "Blackbox .blackbox is a mixed workspace namespace; whole project directory auto migration unsupported" 
+        set_manual_step "project" "Blackbox: only review/migrate .blackbox/skills/ per official docs; do not copy entire .blackbox or infer its private config files" 
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
     fi
@@ -3883,7 +4090,7 @@ migrate_project() {
     # opaquely; use the dedicated object paths and manual boundaries above.
     if [[ "$source_ide" == "trae" || "$target_ide" == "trae" || "$source_ide" == "trae-cn" || "$target_ide" == "trae-cn" ]]; then
         set_status "project" "manual"
-        set_message "project" "TRAE .trae 项目命名空间 mixes Skills, Rules, MCP, commands, agents, hooks, memory, and state"
+        set_message "project" "TRAE .trae project namespace mixes Skills, Rules, MCP, commands, agents, hooks, memory, and state" 
         set_manual_step "project" "TRAE: review .trae/ objects separately; migrate Skills, .trae/rules, .trae/commands, .trae/mcp.json, agents, hooks, memory, and skill-config.json by their documented scopes; do not copy the whole namespace"
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
@@ -3895,34 +4102,34 @@ migrate_project() {
     # deliberate manual translation.
     if [[ "$source_ide" == "aider" || "$target_ide" == "aider" ]]; then
         set_status "project" "manual"
-        set_message "project" "Aider .aider.conf.yml 项目配置需要手动审查，自动复制已禁用"
-        set_manual_step "project" "手动审查项目根目录 .aider.conf.yml；按 Aider 的 YAML 选项、read 列表、CLI 优先级和 AIDER_*/.env 来源重建，不要直接复制其他IDE配置"
+        set_message "project" "Aider .aider.conf.yml project config needs manual review, auto copy disabled" 
+        set_manual_step "project" "manually review project root .aider.conf.yml; rebuild per Aider's YAML options, read list, CLI priority and AIDER_*/.env sources, do not directly copy other IDE config" 
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
     fi
 
     if [[ -z "$source_project" ]]; then
         set_status "project" "skipped"
-        set_message "project" "源IDE不支持项目级配置"
+        set_message "project" "source IDE does not support project-level configuration" 
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
     fi
 
     if [[ -z "$target_project" ]]; then
         set_status "project" "skipped"
-        set_message "project" "目标IDE不支持项目级配置"
+        set_message "project" "target IDE does not support project-level configuration" 
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
     fi
 
-    print_progress "MIGRATE" "迁移项目级配置..."
+    print_progress "MIGRATE" "Migrating project-level configuration..." 
 
     local source_path="$WORKSPACE_ROOT/$source_project"
     local target_path="$WORKSPACE_ROOT/$target_project"
 
     if [[ ! -e "$source_path" ]]; then
         set_status "project" "skipped"
-        set_message "project" "源项目配置不存在: $source_project"
+        set_message "project" "source project config does not exist: $source_project" 
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
     fi
@@ -3934,16 +4141,16 @@ migrate_project() {
             echo "  DRY-RUN: cp $source_path $target_path"
         fi
         set_status "project" "success"
-        set_message "project" "项目配置准备迁移"
+        set_message "project" "project config ready to migrate" 
     else
         if [[ -d "$source_path" ]]; then
             # Apply the migration strategy to an EXISTING target (dir or file).
             if [[ -e "$target_path" ]]; then
                 case "$STRATEGY" in
                     skip)
-                        echo "  [SKIP] 目标项目配置已存在: $target_project"
+                        echo "  [SKIP] target project config already exists: $target_project" 
                         set_status "project" "skipped"
-                        set_message "project" "目标项目配置已存在，跳过 (策略: skip)"
+                        set_message "project" "target project config already exists, skip (strategy: skip)" 
                         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
                         return 0
                         ;;
@@ -3951,7 +4158,7 @@ migrate_project() {
                         local ts
                         ts="$(date +%Y%m%d%H%M%S).$$"
                         cp -r "$target_path" "$target_path.bak.$ts"
-                        echo "  [BACKUP] 备份已有项目配置: $target_project.bak.$ts"
+                        echo "  [BACKUP] backed up existing project config: $target_project.bak.$ts" 
                         ;;
                     overwrite)
                         rm -rf "$target_path"
@@ -3966,17 +4173,17 @@ migrate_project() {
             src_files=$(find "$source_path" -type f 2>/dev/null | wc -l | tr -d ' ')
             if [[ "${src_files:-0}" -eq 0 ]]; then
                 set_status "project" "skipped"
-                set_message "project" "源项目配置目录为空: $source_project"
+            set_message "project" "source project config directory is empty: $source_project" 
                 MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
                 return 0
             fi
             if cp -r "$source_path"/. "$target_path"/; then
                 if [[ $(find "$target_path" -type f 2>/dev/null | wc -l | tr -d ' ') -eq 0 ]]; then
                     set_status "project" "failed"
-                    set_message "project" "项目配置复制后为空"
+                    set_message "project" "project config empty after copy" 
                     MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
                 else
-                    echo "  [OK] 迁移项目配置目录"
+                    echo "  [OK] migrated project config directory" 
                     # SECURITY: project trees routinely bundle .env / .toml /
                     # json credentials (local service configs, etc.). Strip
                     # them from the COPY (never the source) — same policy as
@@ -3986,24 +4193,24 @@ migrate_project() {
                     local proj_redacted proj_rc=0
                     proj_redacted=$(redact_project_copy "$target_path") || proj_rc=$?
                     if [[ "$proj_rc" -ne 0 ]]; then
-                        echo "  [FAIL] 项目配置脱敏失败，目标副本已删除以防密钥泄漏"
+                        echo "  [FAIL] project config redaction failed, target copy deleted to prevent secret leak" 
                         rm -rf "$target_path"
                         set_status "project" "failed"
-                        set_message "project" "项目配置脱敏失败，目标副本已删除以防密钥泄漏 (源文件未动)"
+                    set_message "project" "project config redaction failed, target copy deleted to prevent secret leak (source file untouched)" 
                         MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
                     else
                         if [[ "${proj_redacted:-0}" -gt 0 ]]; then
-                            echo "  [SECURITY] 已清空 $proj_redacted 处疑似密钥值，请检查目标项目中的凭据并重新配置"
-                            set_manual_step "project" "项目配置中 $proj_redacted 处密钥已被清空，请在目标IDE重新填写 (如 .env / 配置文件)"
+                        echo "  [SECURITY] cleared $proj_redacted suspected secret values, check credentials in target project and reconfigure" 
+                        set_manual_step "project" "project config's $proj_redacted secrets have been cleared, please re-enter in target IDE (e.g. .env / config file)" 
                         fi
                         set_status "project" "success"
-                        set_message "project" "项目配置目录已迁移，密钥已清空: $target_project"
+                    set_message "project" "project config directory migrated, secrets cleared: $target_project" 
                         MIGRATION_SUCCESS=$((MIGRATION_SUCCESS + 1))
                     fi
                 fi
             else
                 set_status "project" "failed"
-                set_message "project" "项目配置迁移失败"
+                    set_message "project" "project config migration failed" 
                 MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
             fi
         else
@@ -4012,9 +4219,9 @@ migrate_project() {
             if [[ -e "$target_path" ]]; then
                 case "$STRATEGY" in
                     skip)
-                        echo "  [SKIP] 目标项目配置文件已存在: $target_project"
+                        echo "  [SKIP] target project config file already exists: $target_project" 
                         set_status "project" "skipped"
-                        set_message "project" "目标项目配置文件已存在，跳过 (策略: skip)"
+                        set_message "project" "target project config file already exists, skip (strategy: skip)" 
                         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
                         return 0
                         ;;
@@ -4022,7 +4229,7 @@ migrate_project() {
                         local ts
                         ts="$(date +%Y%m%d%H%M%S).$$"
                         cp "$target_path" "$target_path.bak.$ts"
-                        echo "  [BACKUP] 备份已有项目配置文件: $target_project.bak.$ts"
+                        echo "  [BACKUP] backed up existing project config file: $target_project.bak.$ts" 
                         ;;
                     overwrite)
                         rm -f "$target_path"
@@ -4033,35 +4240,66 @@ migrate_project() {
             if cp "$source_path" "$target_path"; then
                 if [[ ! -s "$target_path" ]]; then
                     set_status "project" "failed"
-                    set_message "project" "项目配置文件复制后为空"
+                    set_message "project" "project config file empty after copy" 
                     MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
                 else
-                    echo "  [OK] 迁移项目配置文件"
+                    echo "  [OK] migrated project config file" 
                     local proj_redacted proj_rc=0
                     proj_redacted=$(redact_project_copy "$target_path") || proj_rc=$?
                     if [[ "$proj_rc" -ne 0 ]]; then
-                        echo "  [FAIL] 项目配置脱敏失败，目标副本已删除以防密钥泄漏"
+                        echo "  [FAIL] project config redaction failed, target copy deleted to prevent secret leak" 
                         rm -f "$target_path"
                         set_status "project" "failed"
-                        set_message "project" "项目配置脱敏失败，目标副本已删除以防密钥泄漏 (源文件未动)"
+                    set_message "project" "project config redaction failed, target copy deleted to prevent secret leak (source file untouched)" 
                         MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
                     else
                         if [[ "${proj_redacted:-0}" -gt 0 ]]; then
-                            echo "  [SECURITY] 已清空 $proj_redacted 处疑似密钥值，请检查目标项目中的凭据并重新配置"
-                            set_manual_step "project" "项目配置中 $proj_redacted 处密钥已被清空，请在目标IDE重新填写"
+                        echo "  [SECURITY] cleared $proj_redacted suspected secret values, check credentials in target project and reconfigure" 
+                        set_manual_step "project" "project config's $proj_redacted secrets have been cleared, please re-enter in target IDE" 
                         fi
                         set_status "project" "success"
-                        set_message "project" "项目配置文件已迁移，密钥已清空: $target_project"
+                    set_message "project" "project config file migrated, secrets cleared: $target_project" 
                         MIGRATION_SUCCESS=$((MIGRATION_SUCCESS + 1))
                     fi
                 fi
             else
                 set_status "project" "failed"
-                set_message "project" "项目配置文件迁移失败"
+                    set_message "project" "project config file migration failed" 
                 MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
             fi
         fi
     fi
+}
+
+manual_only_object() {
+    local object="$1"
+    local source_ide="$2"
+    local target_ide="$3"
+
+    MIGRATION_TOTAL=$((MIGRATION_TOTAL + 1))
+    case "$object" in
+        agents)
+            set_status "agents" "manual"
+            set_message "agents" "Agents/Subagents are product-specific schema; currently diagnosis only, no auto conversion" 
+            set_manual_step "agents" "Agents ($source_ide -> $target_ide): review official surfaces like .github/agents, .claude/agents, .cursor/agents, .trae/agents, .kiro/agents, .codebuddy/agents, .zcode/agents separately; do not copy tools, permissions, hooks, handoffs or mcpServers fields across IDEs" 
+            ;;
+        hooks)
+            set_status "hooks" "manual"
+            set_message "hooks" "Hooks execute commands and each IDE's events/schema/scope differ; cross-IDE auto migration has no safe strict intersection" 
+            set_manual_step "hooks" "Hooks ($source_ide -> $target_ide): review .github/hooks, .trae/hooks.json, .kiro/hooks/*, .windsurf/hooks.json, Codex hooks.json or settings hooks; do not auto-execute, copy or rewrite commands from one shell to another" 
+            ;;
+        memory)
+            set_status "memory" "manual"
+            set_message "memory" "Memory is mostly local/cloud generated state, project identity encoding and schema are inconsistent; currently only listing manual handling boundaries" 
+            set_manual_step "memory" "Memory ($source_ide -> $target_ide): Trae/Claude/Codex/Windsurf generated memory, Replit replit.md, Amazon Q .amazonq/rules/memory-bank, Goose memory, CodeBuddy CODEBUDDY.md/Auto Memory, WorkBuddy UI/private memory need item-by-item review; copying entire memory directory is prohibited" 
+            ;;
+        *)
+            set_status "$object" "failed"
+            set_message "$object" "unsupported manual object: $object" 
+            MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
+            ;;
+    esac
+    MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
 }
 
 run_migration() {
@@ -4075,7 +4313,7 @@ run_migration() {
     for obj in "${OBJECT_LIST[@]}"; do
         case "$obj" in
             skills)
-                migrate_skills "$source_ide" "$target_ide"
+                migrate_skills "$source_ide" "$target_ide" "$SCOPE"
                 ;;
             rules)
                 migrate_rules "$source_ide" "$target_ide"
@@ -4084,7 +4322,31 @@ run_migration() {
                 migrate_prompts "$source_ide" "$target_ide"
                 ;;
             mcp)
-                migrate_mcp "$source_ide" "$target_ide"
+                if [[ "$SCOPE" == "both" ]]; then
+                    migrate_mcp "$source_ide" "$target_ide" "global"
+                    migrate_mcp "$source_ide" "$target_ide" "project"
+                else
+                    migrate_mcp "$source_ide" "$target_ide" "$SCOPE"
+                fi
+                ;;
+            project-mcp)
+                migrate_mcp "$source_ide" "$target_ide" "project"
+                # Keep the explicit object name visible in reports while
+                # reusing the MCP converter's status/detail and manual notes.
+                local project_mcp_status project_mcp_message project_mcp_steps project_mcp_step
+                project_mcp_status=$(get_status "mcp")
+                project_mcp_message=$(get_message "mcp")
+                [[ -n "$project_mcp_status" ]] && set_status "project-mcp" "$project_mcp_status"
+                [[ -n "$project_mcp_message" ]] && set_message "project-mcp" "$project_mcp_message"
+                project_mcp_steps=$(get_manual_steps "mcp")
+                if [[ -n "$project_mcp_steps" ]]; then
+                    while IFS= read -r project_mcp_step; do
+                        [[ -n "$project_mcp_step" ]] && set_manual_step "project-mcp" "$project_mcp_step"
+                    done <<< "$project_mcp_steps"
+                fi
+                ;;
+            agents|hooks|memory)
+                manual_only_object "$obj" "$source_ide" "$target_ide"
                 ;;
             config)
                 migrate_config "$source_ide" "$target_ide"
@@ -4093,7 +4355,7 @@ run_migration() {
                 migrate_project "$source_ide" "$target_ide"
                 ;;
             *)
-                echo "[WARN] 未知的内容类型: $obj"
+                echo "[WARN] unknown content type: $obj" 
                 ;;
         esac
     done
@@ -4105,25 +4367,37 @@ generate_report() {
     local report=""
 
     report+="========================================\n"
-    report+="       IDE 迁移报告\n"
+    report+="       IDE migration report
+" 
     report+="========================================\n"
     report+="\n"
-    report+="迁移详情:\n"
-    report+="  源IDE: $(get_ide_name "$source_ide") ($source_ide)\n"
-    report+="  目标IDE: $(get_ide_name "$target_ide") ($target_ide)\n"
-    report+="  工作区: $WORKSPACE_ROOT\n"
-    report+="  策略: $STRATEGY\n"
-    report+="  时间: $(date '+%Y-%m-%dT%H:%M:%S%z')\n"  # portable (BSD date lacks -Iseconds)
+    report+="Migration details:
+" 
+    report+="  source IDE: $(get_ide_name "$source_ide") ($source_ide)
+" 
+    report+="  target IDE: $(get_ide_name "$target_ide") ($target_ide)
+" 
+    report+="  workspace: $WORKSPACE_ROOT
+" 
+    report+="  strategy: $STRATEGY
+" 
+    report+="  time: $(date '+%Y-%m-%dT%H:%M:%S%z')\n"  # portable (BSD date lacks -Iseconds)
     report+="\n"
-    report+="统计:\n"
-    report+="  总操作数: $MIGRATION_TOTAL\n"
-    report+="  成功: $MIGRATION_SUCCESS\n"
-    report+="  失败: $MIGRATION_FAILED\n"
-    report+="  跳过: $MIGRATION_SKIPPED\n"
+    report+="Statistics:
+" 
+    report+="  total operations: $MIGRATION_TOTAL
+" 
+    report+="  succeeded: $MIGRATION_SUCCESS
+" 
+    report+="  failed: $MIGRATION_FAILED
+" 
+    report+="  skipped: $MIGRATION_SKIPPED
+" 
     report+="\n"
-    report+="详细结果:\n"
+    report+="Detailed results:
+" 
 
-    for obj in skills rules prompts mcp config project; do
+    for obj in skills rules prompts mcp project-mcp config project agents hooks memory; do
         local status
         status=$(get_status "$obj")
         if [[ -n "$status" ]]; then
@@ -4147,10 +4421,11 @@ generate_report() {
     done
 
     report+="\n"
-    report+="需要手动处理的步骤:\n"
+    report+="Steps requiring manual handling:
+" 
 
     local has_manual=0
-    for obj in skills rules prompts mcp config project; do
+    for obj in skills rules prompts mcp project-mcp config project agents hooks memory; do
         local steps
         steps=$(get_manual_steps "$obj")
         if [[ -n "$steps" ]]; then
@@ -4161,7 +4436,8 @@ generate_report() {
     done
 
     if [[ $has_manual -eq 0 ]]; then
-        report+="  无 - 所有迁移已自动完成\n"
+        report+="  none - all migrations completed automatically
+" 
     fi
 
     report+="\n"
@@ -4191,6 +4467,10 @@ main() {
                 OBJECTS="$2"
                 shift 2
                 ;;
+            --scope)
+                SCOPE="$2"
+                shift 2
+                ;;
             --strategy)
                 STRATEGY="$2"
                 shift 2
@@ -4217,7 +4497,7 @@ main() {
                 exit 0
                 ;;
             *)
-                echo "错误: 未知参数: $1" >&2
+            echo "Error: unknown argument: $1" >&2
                 usage >&2
                 exit 1
                 ;;
@@ -4232,8 +4512,8 @@ main() {
 
     if [[ -n "$PRINT_PATH_IDE" ]]; then
         if ! validate_ide "$PRINT_PATH_IDE"; then
-            echo "错误: 无效的IDE: $PRINT_PATH_IDE" >&2
-            echo "支持的IDE: $SUPPORTED_IDES" >&2
+            echo "Error: invalid IDE: $PRINT_PATH_IDE" >&2
+            echo "Supported IDEs: $SUPPORTED_IDES" >&2
             exit 1
         fi
 
@@ -4249,13 +4529,13 @@ main() {
             rules)   resolved=$(get_rules_file "$PRINT_PATH_IDE") ;;
             prompts|commands) resolved=$(get_prompts_path "$PRINT_PATH_IDE") ;;
             *)
-                echo "错误: 不支持的对象: $PRINT_PATH_OBJECT (可选: global, project, project-skills, mcp, project-mcp, project-config, config, rules, prompts|commands)" >&2
+            echo "Error: unsupported object: $PRINT_PATH_OBJECT (options: global, project, project-skills, mcp, project-mcp, project-config, config, rules, prompts|commands)" >&2
                 exit 1
                 ;;
         esac
 
         if [[ -z "$resolved" ]]; then
-            echo "错误: $PRINT_PATH_IDE 不支持对象: $PRINT_PATH_OBJECT" >&2
+            echo "Error: $PRINT_PATH_IDE does not support object: $PRINT_PATH_OBJECT" >&2
             exit 1
         fi
 
@@ -4268,9 +4548,9 @@ main() {
     fi
 
     if [[ -z "$SOURCE_IDE" ]]; then
-        echo "错误: 必须指定源IDE (--source)" >&2
+            echo "Error: source IDE must be specified (--source)" >&2
         echo "" >&2
-        echo "支持的IDE:" >&2
+            echo "Supported IDEs:" >&2
         for ide in $SUPPORTED_IDES; do
             printf "  - %-12s %s\n" "$ide" "$(get_ide_name "$ide")" >&2
         done
@@ -4278,9 +4558,9 @@ main() {
     fi
 
     if [[ -z "$TARGET_IDE" ]]; then
-        echo "错误: 必须指定目标IDE (--target)" >&2
+            echo "Error: target IDE must be specified (--target)" >&2
         echo "" >&2
-        echo "支持的IDE:" >&2
+            echo "Supported IDEs:" >&2
         for ide in $SUPPORTED_IDES; do
             printf "  - %-12s %s\n" "$ide" "$(get_ide_name "$ide")" >&2
         done
@@ -4288,19 +4568,28 @@ main() {
     fi
 
     if ! validate_ide "$SOURCE_IDE"; then
-        echo "错误: 无效的源IDE: $SOURCE_IDE" >&2
-        echo "支持的IDE: $SUPPORTED_IDES" >&2
+            echo "Error: invalid source IDE: $SOURCE_IDE" >&2
+            echo "Supported IDEs: $SUPPORTED_IDES" >&2
         exit 1
     fi
 
     if ! validate_ide "$TARGET_IDE"; then
-        echo "错误: 无效的目标IDE: $TARGET_IDE" >&2
-        echo "支持的IDE: $SUPPORTED_IDES" >&2
+            echo "Error: invalid target IDE: $TARGET_IDE" >&2
+            echo "Supported IDEs: $SUPPORTED_IDES" >&2
         exit 1
     fi
 
+    case "$SCOPE" in
+        global|project|both)
+            ;;
+        *)
+            echo "Error: invalid scope: ${SCOPE} (options: global, project, both)" >&2
+            exit 1
+            ;;
+    esac
+
     if [[ "$SOURCE_IDE" == "$TARGET_IDE" ]]; then
-        echo "错误: 源IDE和目标IDE不能相同" >&2
+            echo "Error: source IDE and target IDE cannot be the same" >&2
         exit 1
     fi
 
@@ -4309,64 +4598,65 @@ main() {
         if [[ -z "$OBJECTS" ]]; then
             OBJECTS="skills,rules,prompts"
         fi
-        echo "未指定 --objects：默认仅迁移低风险类型 (skills,rules,prompts)。" >&2
-        echo "如需迁移 mcp/config/project（可能含密钥），请显式指定 --objects 并确认已审查。" >&2
+        echo "No --objects specified: by default only low-risk types are migrated (skills,rules,prompts)." >&2
+        echo "To migrate mcp/config/project (which may contain secrets), please specify --objects explicitly and confirm reviewed." >&2
     fi
 
     if [[ "$OBJECTS" == *mcp* || "$OBJECTS" == *config* || "$OBJECTS" == *project* ]]; then
         echo "" >&2
-        echo "⚠️  SECURITY: 本次迁移包含 mcp/config/project，这些配置可能含有 API 密钥、令牌、" >&2
-        echo "    bearer 凭据或内嵌 URL 凭据。迁移时密钥会被自动清空 (仅保留键名)，目标 IDE" >&2
-        echo "    需另行配置密钥来源 (环境变量/密钥管理器)。请仅在你信任的源与目标间执行。" >&2
+        echo "⚠️  SECURITY: This migration includes mcp/config/project, which may contain API keys, tokens," >&2
+        echo "    bearer credentials or embedded URL credentials. During migration, secrets are automatically cleared (only key names kept), and the target IDE" >&2
+        echo "    needs a separate secret source configured (env vars/secret manager). Run only between sources and targets you trust." >&2
         echo "" >&2
     fi
 
     echo "========================================"
-    echo "迁移摘要"
+    echo "Migration summary" 
     echo "========================================"
     echo ""
-    echo "  源IDE: $(get_ide_name "$SOURCE_IDE")"
-    echo "  目标IDE: $(get_ide_name "$TARGET_IDE")"
-    echo "  工作区: $WORKSPACE_ROOT"
-    echo "  迁移内容: $OBJECTS"
-    echo "  策略: $STRATEGY"
+    echo "  source IDE: $(get_ide_name "$SOURCE_IDE")" 
+    echo "  target IDE: $(get_ide_name "$TARGET_IDE")" 
+    echo "  workspace: $WORKSPACE_ROOT" 
+    echo "  migration content: $OBJECTS" 
+    echo "  scope: $SCOPE (only applies to skills/mcp)" 
+    echo "  strategy: $STRATEGY" 
     echo ""
 
     if [[ $DRY_RUN -eq 1 ]]; then
-        echo "  模式: DRY-RUN (不会修改任何文件)"
+        echo "  mode: DRY-RUN (will not modify any files)" 
     fi
 
     echo ""
 
     if [[ $DRY_RUN -eq 0 && $ASSUME_YES -eq 0 ]]; then
         if [[ -t 0 ]]; then
-            printf '即将按上述摘要写入目标 IDE 配置。继续? [y/N] ' >&2
+        printf 'About to write target IDE config per above summary. Continue? [y/N] ' >&2
             read -r _confirm_reply
             case "$_confirm_reply" in
                 y|Y|yes|YES)
                     ;;
                 *)
-                    echo "已取消：未修改任何文件。可先用 --dry-run 预览。" >&2
+        echo "Cancelled: no files modified. You can preview with --dry-run first." >&2
                     exit 2
                     ;;
             esac
         else
-            echo "错误: 非交互环境且未指定 --yes，为安全起见拒绝写入。" >&2
-            echo "请先用 --dry-run 预览变更，确认后追加 --yes 执行。未修改任何文件。" >&2
+        echo "Error: non-interactive environment and --yes not specified, refusing to write for safety." >&2
+        echo "Please preview changes with --dry-run first, then append --yes to execute. No files modified." >&2
             exit 2
         fi
     fi
 
     init_migration_files
 
-    echo "[START] 开始迁移: $(get_ide_name "$SOURCE_IDE") -> $(get_ide_name "$TARGET_IDE")"
+    echo "[START] starting migration: $(get_ide_name "$SOURCE_IDE") -> $(get_ide_name "$TARGET_IDE")" 
     echo ""
 
     run_migration "$SOURCE_IDE" "$TARGET_IDE"
 
     echo ""
     echo "========================================"
-    echo "       迁移完成"
+    echo "       migration complete" 
     echo "========================================"
     echo ""
 
@@ -4375,7 +4665,7 @@ main() {
 
     if [[ -n "$REPORT_FILE" ]]; then
         echo "$report" > "$REPORT_FILE"
-        echo "报告已保存到: $REPORT_FILE"
+    echo "Report saved to: $REPORT_FILE" 
     fi
 }
 
