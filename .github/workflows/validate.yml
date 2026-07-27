@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Validate repository
+      - name: Validate repository & run full test suites
         run: bash validate-all.sh
       - name: Test installer without touching the runner profile
         run: |
@@ -22,5 +22,3 @@ jobs:
           bash install.sh --target "$target"
           test -f "$target/agent-skills-setup/SKILL.md"
 
-      - name: Regression — MCP secret redaction during migration
-        run: bash skills/agent-skills-setup/scripts/test-mcp-secret-redaction.sh

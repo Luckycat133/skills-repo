@@ -14,8 +14,14 @@ usage() {
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --target) TARGET_ROOT="$2"; shift 2 ;;
-    --skill) SKILL_NAME="$2"; shift 2 ;;
+    --target)
+      [[ $# -ge 2 ]] || { echo "ERROR: --target requires a directory argument" >&2; exit 2; }
+      TARGET_ROOT="$2"; shift 2
+      ;;
+    --skill)
+      [[ $# -ge 2 ]] || { echo "ERROR: --skill requires a skill name argument" >&2; exit 2; }
+      SKILL_NAME="$2"; shift 2
+      ;;
     --force) FORCE=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) usage >&2; exit 2 ;;

@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+#
+# pre-commit — lightweight drift guard for the repository-root SKILL.md mirror.
+#
+# The maintained copy of the skill lives at:
+#   skills/agent-skills-setup/SKILL.md
+# The repository-root SKILL.md is a GENERATED MIRROR of it (see
+# scripts/sync-root-mirror.sh). If anyone hand-edits the root mirror, this hook
+# blocks the commit so the drift cannot reach main. CI also enforces this via
+# validate-all.sh, but catching it locally is faster.
+#
+# Enable (one-time, repo-local):
+#   git config core.hooksPath "$(git rev-parse --show-toplevel)/scripts/git-hooks"
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+if [[ -f scripts/sync-root-mirror.sh ]]; then
+  if ! bash scripts/sync-root-mirror.sh --check; then
+    echo "" >&2
+    echo "❌ 提交被拦截：仓库根 SKILL.md 与真源 (skills/agent-skills-setup/SKILL.md) 不同步。" >&2
+    echo "   修复：运行  bash scripts/sync-root-mirror.sh" >&2
+    echo "   然后把更新后的根 SKILL.md 一起 git add 再提交。" >&2
+    exit 1
+  fi
+fi

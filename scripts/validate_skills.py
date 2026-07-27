@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -11,9 +12,46 @@ ROOT = Path(__file__).resolve().parents[1]
 SKILLS = ROOT / "skills"
 errors: list[str] = []
 
-SECRET = re.compile(r"(?:sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|tvly-[A-Za-z0-9_-]{16,})")
+# Provider-key value formats (CR-001 fix). Kept in sync with the runtime
+# redactor in skills/agent-skills-setup/scripts/smart-ide-migration.sh so the
+# publish-time validator and the migration-time redactor never drift. These
+# shapes never carry a secret-like KEY name, so the key-name heuristics miss
+# them; we match the credential value directly.
+SECRET = re.compile(
+    r"(?:sk-[A-Za-z0-9_-]{16,}"
+    r"|gh[pousr]_[A-Za-z0-9]{20,}"
+    r"|tvly-[A-Za-z0-9_-]{16,}"
+    r"|AKIA[0-9A-Z]{16}"
+    r"|ASIA[0-9A-Z]{16}"
+    r"|xox[baprs]-[A-Za-z0-9-]{10,}"
+    r"|ya29\.[A-Za-z0-9_-]+"
+    r"|AIza[0-9A-Za-z_-]{35}"
+    r"|sk_live_[A-Za-z0-9]{16,})"
+)
 PRIVATE_PATH = re.compile(r"(?:/Users/[^/\s]+|/home/[^/\s]+|[A-Za-z]:\\Users\\[^\\\s]+)")
 LINK = re.compile(r"!?(?:\[[^\]]*\])\(([^)]+)\)")
+
+
+def get_files_to_scan() -> list[Path]:
+    try:
+        res = subprocess.run(
+            ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        files = []
+        for rel_path in res.stdout.splitlines():
+            p = ROOT / rel_path
+            if p.is_file():
+                files.append(p)
+        return files
+    except Exception:
+        return [
+            p for p in ROOT.rglob("*")
+            if p.is_file() and not any(part.startswith(".") for part in p.relative_to(ROOT).parts)
+        ]
 
 
 def frontmatter(text: str, path: Path) -> dict[str, str]:
@@ -56,7 +94,11 @@ def validate_skill(skill_dir: Path) -> None:
 
     if name != skill_dir.name:
         errors.append(f"{path.relative_to(ROOT)}: name must match directory ({skill_dir.name})")
-    if not description and "description:" not in text.split("---", 2)[1]:
+    # MED-P5: guard the split — a SKILL.md without frontmatter delimiters
+    # would raise IndexError on [1] and crash the whole validation run.
+    fm_parts = text.split("---", 2)
+    fm_body = fm_parts[1] if len(fm_parts) > 1 else ""
+    if not description and "description:" not in fm_body:
         errors.append(f"{path.relative_to(ROOT)}: description is required")
     if SECRET.search(text):
         errors.append(f"{path.relative_to(ROOT)}: possible secret detected")
@@ -77,6 +119,17 @@ def validate_skill(skill_dir: Path) -> None:
             errors.append(f"{path.relative_to(ROOT)}: broken relative link: {target}")
 
 
+def _is_test_file(path: Path) -> bool:
+    # Test/fixture files intentionally contain secret-shaped strings and
+    # absolute paths (e.g. redaction fixtures, provider-key samples). They are
+    # not publishable skill content, so scanning them would only produce false
+    # positives. Skip them — same spirit as gitleaks path exclusions.
+    name = path.name
+    if name.startswith(("test-", "test_")) or name == "conftest.py":
+        return True
+    return "tests" in path.parts
+
+
 def main() -> int:
     if not SKILLS.is_dir():
         print("ERROR: skills/ directory is missing", file=sys.stderr)
@@ -90,10 +143,12 @@ def main() -> int:
     for skill_dir in skill_dirs:
         validate_skill(skill_dir)
 
-    for path in ROOT.rglob("*"):
-        if not path.is_file() or ".git" in path.parts or path.resolve() == Path(__file__).resolve():
+    for path in get_files_to_scan():
+        if path.resolve() == Path(__file__).resolve():
             continue
-        if path.suffix.lower() not in {".md", ".sh", ".py", ".yml", ".yaml"}:
+        if _is_test_file(path):
+            continue
+        if path.suffix.lower() not in {".md", ".sh", ".py", ".yml", ".yaml", ".json", ".toml"}:
             continue
         text = path.read_text(encoding="utf-8", errors="replace")
         if SECRET.search(text):

@@ -48,27 +48,33 @@ MIRROR_COMMENT='<!--
 # Build the mirror content: MIRROR comment + link-rewritten canonical.
 build_mirror() {
   printf '%s\n\n' "$MIRROR_COMMENT"
-  sed -e 's#references/ide-registry.md#skills/agent-skills-setup/references/ide-registry.md#g' \
-      -e 's#`scripts/auto-configure-openclaw-skills.sh`#`skills/agent-skills-setup/scripts/auto-configure-openclaw-skills.sh`#g' \
-      -e 's#`scripts/smart-ide-migration.sh`#`skills/agent-skills-setup/scripts/smart-ide-migration.sh`#g' \
-      -e 's#bash scripts/smart-ide-migration.sh#bash skills/agent-skills-setup/scripts/smart-ide-migration.sh#g' \
-      "$CANONICAL"
+  python3 -c '
+import re, sys
+with open(sys.argv[1], "r", encoding="utf-8") as f:
+    text = f.read()
+# Prefix-based rewrite: any references/, scripts/, assets/ followed by a filename with extension
+rewritten = re.sub(r"(?<!skills/agent-skills-setup/)\b(references|scripts|assets)/([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)", r"skills/agent-skills-setup/\1/\2", text)
+sys.stdout.write(rewritten)
+' "$CANONICAL"
 }
 
 if [[ "${1:-}" == "--check" ]]; then
   tmp="$(mktemp)"
+  trap 'rm -f "$tmp"' EXIT
   build_mirror > "$tmp"
   if diff -q "$tmp" "$ROOT_MIRROR" >/dev/null 2>&1; then
     echo "root SKILL.md is in sync with the canonical copy."
-    rm -f "$tmp"
     exit 0
   else
     echo "ERROR: root SKILL.md is OUT OF SYNC with skills/agent-skills-setup/SKILL.md" >&2
     echo "Run: bash scripts/sync-root-mirror.sh" >&2
-    rm -f "$tmp"
     exit 1
   fi
 fi
 
-build_mirror > "$ROOT_MIRROR"
+# Atomic write via temporary file
+tmp_write="$(mktemp "${ROOT_MIRROR}.tmp.XXXXXX")"
+trap 'rm -f "$tmp_write"' EXIT
+build_mirror > "$tmp_write"
+mv "$tmp_write" "$ROOT_MIRROR"
 echo "Regenerated $ROOT_MIRROR from canonical ($(wc -l < "$CANONICAL") lines)."
