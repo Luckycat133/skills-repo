@@ -36,8 +36,11 @@ mkdir -p "$TEST_HOME"
 printf '%s\n' '{"mcpServers":{"fixture":{"command":"node","args":["server.js"]}}}' > "$TEST_HOME/.claude.json"
 
 OUTPUT="$TMP_ROOT/migration.txt"
+mkdir -p "$TMP_ROOT/workspace"
+# --scope project reads the project .mcp.json, so place the source there.
+cp "$TEST_HOME/.claude.json" "$TMP_ROOT/workspace/.mcp.json"
 HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
-    --source claude --target vscode --objects mcp --yes --strategy backup \
+    --source claude --target vscode --objects mcp --scope project --yes --strategy backup \
     --workspace "$TMP_ROOT/workspace" > "$OUTPUT" 2>&1
 
 python3 - "$TMP_ROOT/workspace/.vscode/mcp.json" <<'PYEOF'
@@ -48,8 +51,9 @@ assert data["servers"]["fixture"]["command"] == "node"
 PYEOF
 
 printf '%s\n' '{"mcpServers":{"ambiguous":{"url":"https://example.invalid/mcp"}}}' > "$TEST_HOME/.claude.json"
+cp "$TEST_HOME/.claude.json" "$TMP_ROOT/workspace/.mcp.json"
 HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
-    --source claude --target vscode --objects mcp --yes --strategy backup \
+    --source claude --target vscode --objects mcp --scope project --yes --strategy backup \
     --workspace "$TMP_ROOT/workspace" > "$TMP_ROOT/ambiguous.txt" 2>&1
 grep -Fq 'VS Code MCP server schema/transport is ambiguous or unsupported' "$TMP_ROOT/ambiguous.txt"
 
@@ -61,9 +65,10 @@ assert "ambiguous" not in data["servers"]
 PYEOF
 
 INVALID_WORKSPACE="$TMP_ROOT/invalid-workspace"
-printf '%s' 'not-json' > "$TEST_HOME/.claude.json"
+mkdir -p "$INVALID_WORKSPACE"
+printf '%s' 'not-json' > "$INVALID_WORKSPACE/.mcp.json"
 HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
-    --source claude --target vscode --objects mcp --yes --strategy overwrite \
+    --source claude --target vscode --objects mcp --scope project --yes --strategy overwrite \
     --workspace "$INVALID_WORKSPACE" > "$TMP_ROOT/invalid-source.txt" 2>&1 || true
 grep -Fq 'VS Code MCP requires a JSON `servers` conversion' "$TMP_ROOT/invalid-source.txt"
 [[ ! -e "$INVALID_WORKSPACE/.vscode/mcp.json" ]] || {
@@ -86,5 +91,66 @@ HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     echo "FAIL: non-prompt Markdown file was copied from VS Code prompts" >&2
     exit 1
 }
+
+# Project Skills use an explicit scope and preserve the complete skill
+# directory (entrypoint plus supporting resources). This must not touch the
+# user-global source/target roots.
+SKILL_WORKSPACE="$TMP_ROOT/project-skills-workspace"
+mkdir -p "$SKILL_WORKSPACE/.cursor/skills/demo-skill/scripts" "$SKILL_WORKSPACE/.cursor/skills/demo-skill/references"
+printf '%s\n' '---' 'name: demo-skill' 'description: project fixture' '---' 'Use the fixture.' > "$SKILL_WORKSPACE/.cursor/skills/demo-skill/SKILL.md"
+printf '%s\n' '#!/usr/bin/env bash' 'exit 0' > "$SKILL_WORKSPACE/.cursor/skills/demo-skill/scripts/check.sh"
+printf '%s\n' 'supporting reference' > "$SKILL_WORKSPACE/.cursor/skills/demo-skill/references/README.md"
+HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+    --source cursor --target vscode --workspace "$SKILL_WORKSPACE" \
+    --objects skills --scope project --yes --strategy overwrite > "$TMP_ROOT/project-skills.txt" 2>&1
+[[ -f "$SKILL_WORKSPACE/.github/skills/demo-skill/SKILL.md" ]] || {
+    echo "FAIL: project skill entrypoint was not migrated" >&2
+    exit 1
+}
+[[ -f "$SKILL_WORKSPACE/.github/skills/demo-skill/scripts/check.sh" && \
+   -f "$SKILL_WORKSPACE/.github/skills/demo-skill/references/README.md" ]] || {
+    echo "FAIL: project skill supporting files were not preserved" >&2
+    exit 1
+}
+[[ ! -e "$TEST_HOME/.github" && ! -e "$TEST_HOME/.copilot/skills" ]] || {
+    echo "FAIL: project Skills scope touched a user-global path" >&2
+    exit 1
+}
+
+# Explicit project-mcp uses the workspace file resolver rather than the
+# user-level ~/.claude.json path. Both Claude and Cursor use mcpServers here.
+PROJECT_MCP_WORKSPACE="$TMP_ROOT/project-mcp-workspace"
+mkdir -p "$PROJECT_MCP_WORKSPACE"
+printf '%s\n' '{"mcpServers":{"project-fixture":{"command":"node","args":["server.js"]}}}' > "$PROJECT_MCP_WORKSPACE/.mcp.json"
+HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+    --source claude --target cursor --workspace "$PROJECT_MCP_WORKSPACE" \
+    --objects project-mcp --yes --strategy overwrite > "$TMP_ROOT/project-mcp.txt" 2>&1
+python3 - "$PROJECT_MCP_WORKSPACE/.cursor/mcp.json" <<'PYEOF'
+import json, sys
+data = json.load(open(sys.argv[1]))
+assert data["mcpServers"]["project-fixture"]["command"] == "node"
+PYEOF
+[[ ! -e "$TEST_HOME/.cursor/mcp.json" ]] || {
+    echo "FAIL: project MCP scope touched the user-global Cursor path" >&2
+    exit 1
+}
+
+# Agents, hooks, and memory are explicit diagnostic/manual objects. They must
+# report their boundaries without creating guessed directories or executing
+# hook commands.
+MANUAL_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+    --source cursor --target vscode --workspace "$TMP_ROOT/manual-workspace" \
+    --objects agents,hooks,memory --dry-run 2>&1)"
+grep -Fq 'agents: Agents/Subagents' <<< "$MANUAL_OUTPUT"
+grep -Fq 'hooks: Hooks' <<< "$MANUAL_OUTPUT"
+grep -Fq 'memory: Memory' <<< "$MANUAL_OUTPUT"
+[[ ! -e "$TMP_ROOT/manual-workspace/.github" ]] || {
+    echo "FAIL: manual-only objects created a project target" >&2
+    exit 1
+}
+
+INVALID_SCOPE_OUTPUT="$({ HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+    --source cursor --target vscode --objects skills --scope unsupported --dry-run; } 2>&1 || true)"
+grep -Fq 'invalid scope' <<< "$INVALID_SCOPE_OUTPUT"
 
 echo "VS Code mapping fixture test passed"

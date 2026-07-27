@@ -21,6 +21,7 @@ assert_path project '.cursor'
 assert_path project-skills '.cursor/skills'
 assert_path rules '.cursor/rules'
 assert_path mcp '~/.cursor/mcp.json'
+assert_path project-mcp '.cursor/mcp.json'
 assert_path config ''
 
 python3 - "$PATHS_FILE" <<'PYEOF'
@@ -31,6 +32,7 @@ expected = {
     "project_skills": ".cursor/skills",
     "rules": ".cursor/rules",
     "mcp": "~/.cursor/mcp.json",
+    "project_mcp": ".cursor/mcp.json",
     "config": "",
 }
 if cursor != expected:

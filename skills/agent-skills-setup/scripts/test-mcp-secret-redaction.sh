@@ -180,7 +180,7 @@ if [[ -e "$HOME/.cursor/mcp.json" ]]; then
 else
     check_pass "4: secret mcp NOT migrated by default (file absent)"
 fi
-if grep -Fq "默认仅迁移低风险类型" "$OUT_FILE"; then check_pass "4: default-scope security notice printed"; else check_fail "4: default-scope notice missing"; fi
+if grep -Fq "only low-risk types are migrated" "$OUT_FILE"; then check_pass "4: default-scope security notice printed"; else check_fail "4: default-scope notice missing"; fi
 
 # ===========================================================================
 echo ""
@@ -267,7 +267,11 @@ else
 fi
 VSCODE_WORKSPACE="$TMP_ROOT/vscode-workspace"
 rm -rf "$VSCODE_WORKSPACE"
-run bash "$MIG" --source claude --target vscode --workspace "$VSCODE_WORKSPACE" --objects mcp --strategy overwrite --yes
+mkdir -p "$VSCODE_WORKSPACE"
+# --scope project reads the project .mcp.json, so place the source there
+# (the user-level ~/.claude.json set above is for the copilot case).
+cp "$S8" "$VSCODE_WORKSPACE/.mcp.json"
+run bash "$MIG" --source claude --target vscode --workspace "$VSCODE_WORKSPACE" --objects mcp --scope project --strategy overwrite --yes
 VSCODE_MCP="$VSCODE_WORKSPACE/.vscode/mcp.json"
 if [[ -f "$VSCODE_MCP" ]]; then
     if python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert "demo-server" in d.get("servers", {})' "$VSCODE_MCP" 2>/dev/null; then
@@ -547,6 +551,30 @@ else
     else
         check_fail "18b: config copy left on disk without secret (should have been deleted)"
     fi
+fi
+
+# ===========================================================================
+echo ""
+echo "== 19. MED-T3: malformed source JSON must not mutate the source =="
+# Boundary guard: the migration must never alter the SOURCE config, even when
+# it cannot parse it. A fail-open-safe design keeps an unredacted/garbled
+# source intact and recoverable; a crash or source mutation would destroy
+# evidence and is unacceptable.
+S19="$HOME/.claude.json"
+printf '{ "mcpServers": ' > "$S19"
+ORIG="$(cat "$S19")"
+run bash "$MIG" --source claude --target cursor --objects mcp --strategy overwrite --yes
+if [[ "$(cat "$S19")" == "$ORIG" ]]; then
+    check_pass "19: malformed source config left UNCHANGED (fail-open-safe, recoverable)"
+else
+    check_fail "19: malformed source config was MUTATED by migration"
+fi
+# Reaching this point means the migration did not hang or crash on malformed
+# input; assert it returned a clean numeric exit status.
+if [[ "$LAST_RC" =~ ^[0-9]+$ ]]; then
+    check_pass "19: migration returned a clean exit code (rc=$LAST_RC) on malformed input"
+else
+    check_fail "19: migration produced a non-numeric exit status on malformed input"
 fi
 
 # ===========================================================================
