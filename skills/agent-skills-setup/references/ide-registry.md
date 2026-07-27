@@ -34,7 +34,7 @@ Detailed per-IDE paths for all migration objects. Read this when executing STEP 
 - **rules**: canonical project directory `.cursor/rules/*.mdc` · frontmatter includes `description`, `globs`, and `alwaysApply`; root `.cursorrules` is legacy/deprecated compatibility
 - **skills**: project `.cursor/skills/<name>/SKILL.md` · global `~/.cursor/skills/<name>/SKILL.md`; `.agents/skills/` is a separate cross-tool compatibility location, not the Cursor canonical project path
 - **commands**: project `.cursor/commands/*.md` · plain Markdown commands; command-to-skill conversion is not performed automatically here
-- **agents**: Cursor supports subagents, but this registry does not claim a portable file path or schema; manual/unsupported
+- **agents**: project `.cursor/agents/*.md`, `.claude/agents/*.md`, or `.codex/agents/*.md`; user `~/.cursor/agents/*.md`, `~/.claude/agents/*.md`, or `~/.codex/agents/*.md`; Markdown frontmatter/body is documented, but tools, MCP inheritance, permissions, and model fields are surface-specific and manual in this mapper
 - **hooks**: `.cursor/hooks.json` project and `~/.cursor/hooks.json` global are documented; hook schema/events are not converted by this mapper, so manual/unsupported
 - **plugins**: Cursor supports plugins, but this registry does not claim a portable package path or `plugin.json` schema; manual/unsupported
 - **memory**: Cursor Memories are managed by Cursor and scoped to repositories; no portable file migration target is claimed
@@ -188,7 +188,7 @@ Detailed per-IDE paths for all migration objects. Read this when executing STEP 
 - **memory**: documented but not an automatic migration object: global `~/.trae-cn/memory/user_profile.md`; project `~/.trae-cn/memory/projects/{project_path}/project_memory.md`. The `{project_path}` encoding/keying is not specified, so review/copy manually.
 - **hooks**: documented but not an automatic migration object: global `~/.trae-cn/hooks.json`; project `.trae/hooks.json`. The JSON root is `version` plus `hooks`; hook commands execute arbitrary shell commands, so never copy or run them automatically.
 - **product boundary**: do not merge TRAE CLI (`trae_cli.yaml`/YAML MCP), TRAE Plugin, or TRAE Work/Desktop paths into this IDE entry.
-- **sources**: [TRAE CN Skills](https://docs.trae.cn/ide/skills), [TRAE CN Rules](https://docs.trae.cn/ide/rules), [TRAE CN MCP](https://docs.trae.cn/ide/add-mcp-servers), [TRAE CN Commands](https://docs.trae.cn/ide/slash-commands), [TRAE CN Memory](https://docs.trae.cn/ide/memories), [TRAE CN Hooks](https://docs.trae.cn/ide/hook-configuration-reference), [TRAE CN Subagents](https://docs.trae.cn/ide_subagents), [TRAE CN changelog](https://docs.trae.cn/ide_changelog).
+- **sources**: [TRAE CN Skills](https://docs.trae.cn/ide/skills), [TRAE CN Rules](https://docs.trae.cn/ide/rules), [TRAE CN MCP](https://docs.trae.cn/ide/add-mcp-servers), [TRAE CN Commands](https://docs.trae.cn/ide/slash-commands), [TRAE CN Memory](https://docs.trae.cn/ide_memories), [TRAE CN Hooks](https://docs.trae.cn/ide/hook-configuration-reference), [TRAE CN Subagents](https://docs.trae.cn/ide_subagents), [TRAE CN changelog](https://docs.trae.cn/ide_changelog).
 
 ### jetbrains (Junie in JetBrains IDEs; not JetBrains AI Assistant)
 - **detect**: `~/.junie/` is a Junie home heuristic; IDE settings themselves are managed by JetBrains UI and have no verified portable file path
@@ -206,10 +206,11 @@ Detailed per-IDE paths for all migration objects. Read this when executing STEP 
 - **mcp**: global `~/.kiro/settings/mcp.json` · project `.kiro/settings/mcp.json` · root_key `mcpServers` · JSON · stdio+HTTP+OAuth
 - **rules**: project `.kiro/steering/*.md` · global `~/.kiro/steering/*.md` · frontmatter: inclusion (always|fileMatch|auto|manual)
 - **skills**: global `~/.kiro/skills/<name>/SKILL.md` · project `.kiro/skills/<name>/SKILL.md`
-- **agents**: `.kiro/agents/*.json` · fields: name, description, prompt, mcpServers, tools, allowedTools, hooks, model
-- **hooks**: `.kiro/hooks/*.kiro.hook` · when.type: fileEdited/userTriggered/preToolUse/postToolUse · then.type: runCommand/askAgent · version: "1.0.0"
+- **agents (IDE)**: project `.kiro/agents/*.md` · user `~/.kiro/agents/*.md` · Markdown/YAML frontmatter; current IDE custom-agent files use prompt/body plus Kiro-specific tool tags and permissions, so only identity/body is potentially reusable and the mapper keeps them manual
+- **agents (CLI)**: Kiro CLI custom agents use a separate JSON configuration under the CLI agent surface; fields can include prompt, tools, allowedTools, toolAliases, mcpServers, hooks, resources, and model. Do not convert CLI JSON to IDE Markdown or treat the two paths as one contract
+- **hooks**: current IDE `.kiro/hooks/*.json` uses the v1 hook-object schema (`version: "v1"`, `trigger`, `action`); older `.kiro/hooks/*.kiro.hook` files use the legacy `when`/`then` schema. Kiro 1.0 also documents global hooks, but the reviewed page does not publish a stable literal user path; the two formats/events and global scope are therefore manual and are not silently converted.
 - **specs**: `.kiro/specs/<feature>/{requirements,design,tasks}.md` — spec-driven dev docs
-- **sources**: [Kiro Skills](https://kiro.dev/docs/skills/), [Kiro MCP](https://kiro.dev/docs/mcp/configuration/), [Kiro steering](https://kiro.dev/docs/steering/)
+- **sources**: [Kiro Skills](https://kiro.dev/docs/skills/), [Kiro MCP](https://kiro.dev/docs/mcp/configuration/), [Kiro steering](https://kiro.dev/docs/steering/), [Kiro IDE custom agents](https://kiro.dev/docs/custom-agents/), [Kiro CLI custom-agent configuration](https://kiro.dev/docs/cli/custom-agents/configuration-reference/), [Kiro IDE hooks](https://kiro.dev/docs/hooks/), [Kiro IDE changelog](https://kiro.dev/changelog/ide/)
 
 ---
 
@@ -240,7 +241,7 @@ Detailed per-IDE paths for all migration objects. Read this when executing STEP 
 - **detect**: no officially documented IDE installation-detection path. Do not infer one from Antigravity IDE app data such as `~/.gemini/antigravity-ide/`.
 - **mcp**: global `~/.gemini/config/mcp_config.json` · workspace `.agents/mcp_config.json` · root_key `mcpServers` · JSON · remote uses `serverUrl` (NOT `url`). The global file is shared by Antigravity 2.0, IDE, and CLI; the workspace file is an IDE-supported project scope.
 - **rules**: global `~/.gemini/GEMINI.md` · workspace `.agents/rules/` (legacy `.agent/rules/` remains supported). Do not invent `.agents/AGENTS.md`.
-- **skills**: global `~/.gemini/antigravity/skills/<name>/` · workspace `.agents/skills/<name>/SKILL.md` (legacy `.agent/skills/` remains supported). The global scope is available across IDE workspaces; the workspace scope is project-only.
+- **skills**: global `~/.gemini/antigravity/skills/<name>/` · workspace `.agents/skills/<name>/SKILL.md` (legacy `.agent/skills/` remains supported).. The global scope is available across IDE workspaces; the workspace scope is project-only.
 - **workflows**: global `~/.gemini/config/global_workflows/<name>.md` · workspace `.agents/workflows/`
 - **plugins**: global `~/.gemini/config/plugins/<plugin>/` · workspace `.agents/plugins/<plugin>/` or `_agents/plugins/<plugin>/`. A plugin requires `plugin.json` and may contain `mcp_config.json`, `hooks.json`, `skills/<skill>/SKILL.md`, and `rules/<rule>.md`.
 - **hooks**: global `~/.gemini/config/hooks.json` · workspace `.agents/hooks.json` · JSON object keyed by hook name. Supported events are `PreToolUse`, `PostToolUse`, `PreInvocation`, `PostInvocation`, and `Stop`.
@@ -258,7 +259,8 @@ Detailed per-IDE paths for all migration objects. Read this when executing STEP 
 - **agents/MCP (CLI)**: global `~/.aws/amazonq/cli-agents/` · separate CLI custom-agent/MCP scope; manual only and never confused with generic AWS CLI configuration or IDE `default.json`
 - **skills**: no official Amazon Q Agent Skills path was found in the primary AWS docs reviewed; registry and automatic mapper leave global/project skills empty
 - **product boundary**: Q CLI agent files `~/.aws/amazonq/cli-agents/*.json` / `.amazonq/cli-agents/*.json` are historical CLI state, distinct from IDE `agents/default.json`; Q CLI is now superseded by Kiro.
-- **config/hooks/memory**: no portable path/schema established for this mapper; keep manual/empty
+- **memory bank (IDE)**: project `.amazonq/rules/memory-bank/` · generated Markdown under the project-rules namespace. The path is official, but generated content/lifecycle is not a portable cross-IDE memory contract; keep it manual and never copy the whole directory automatically.
+- **config/hooks**: no portable whole-config or standalone hook path/schema established for this mapper; keep manual/empty
 - **sources**: [MCP in the IDE](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/mcp-ide.html) · [project rules](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/context-project-rules.html) · [saved prompts](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/context-prompt-library.html) · [memory bank](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/context-memory-bank.html) · [MCP with Amazon Q / CLI and IDE scopes](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/qdev-mcp.html) · [AWS language-server MCP source](https://raw.githubusercontent.com/aws/language-servers/main/server/aws-lsp-codewhisperer/src/language-server/agenticChat/tools/mcp/mcpUtils.ts) · [CLI agent locations](https://raw.githubusercontent.com/aws/amazon-q-developer-cli/main/docs/agent-file-locations.md) · [Amazon Q CLI repository](https://github.com/aws/amazon-q-developer-cli)
 
 ### opencode
@@ -452,16 +454,17 @@ Detailed per-IDE paths for all migration objects. Read this when executing STEP 
 - **sources**: [Comate Skills](https://cloud.baidu.com/doc/COMATE/s/Nmma28iqe), [Comate MCP.json](https://cloud.baidu.com/doc/COMATE/s/Ymir0x2ye)
 
 ### tencent-codebuddy
+- **product boundary**: this mapper ID is **CodeBuddy Code CLI**. The standalone CodeBuddy IDE is the separate `tencent-codebuddy-ide` section below and is not a `SUPPORTED_IDES` target; never reuse the CLI's `.mcp.json`/settings paths for the IDE UI.
 - **detect**: `~/.codebuddy/`
 - **mcp**: user `~/.codebuddy/.mcp.json` (recommended; legacy `~/.codebuddy/mcp.json` and `~/.codebuddy.json` are fallback locations) · project `.mcp.json` (legacy `mcp.json` fallback) · root_key `mcpServers` · JSON. The generic mapper auto-handles only the recommended user file; project/legacy/`--mcp-config` precedence remains manual.
-- **rules/memory**: project/user `CODEBUDDY.md`; global `~/.codebuddy/settings.json`, project `.codebuddy/settings.json`, and `.codebuddy/settings.local.json` are security/config scopes
+- **rules**: project/user `CODEBUDDY.md`; global `~/.codebuddy/settings.json`, project `.codebuddy/settings.json`, and `.codebuddy/settings.local.json` are separate security/config scopes
 - **skills**: project `.codebuddy/skills/<name>/SKILL.md` · global `~/.codebuddy/skills/` · frontmatter: name, description, allowed-tools, context, agent, model, hooks
 - **commands**: project `.codebuddy/commands/`
 - **agents**: project `.codebuddy/agents/*.md` · global `~/.codebuddy/agents/*.md` · frontmatter: name, description, tools, model
-- **memory**: `CODEBUDDY.md` (project/user) · `settings.json` autoMemoryEnabled, typedMemory
-- **hooks**: SDK hooks + SKILL.md hooks field
+- **memory**: CLI static context `CODEBUDDY.md`; CLI auto memory `~/.codebuddy/memories/{project-id}/` and `global/` is generated state; CodeBuddy IDE memory is UI-managed. Do not copy either memory store automatically.
+- **hooks**: CLI settings JSON hooks in `~/.codebuddy/settings.json`, `.codebuddy/settings.json`, or local settings; IDE hooks/events are a separate UI/product schema. Do not copy or execute hooks automatically.
 - **other**: `settings.json` / `settings.local.json`
-- **sources**: [CodeBuddy Skills](https://www.codebuddy.cn/docs/cli/skills), [CodeBuddy settings](https://www.workbuddy.ai/docs/cli/settings), [CodeBuddy MCP configuration](https://www.codebuddy.cn/docs/cli/mcp), [CodeBuddy CLI reference](https://www.workbuddy.ai/docs/cli/reference)
+- **sources**: [CodeBuddy CLI Skills](https://www.codebuddy.cn/docs/cli/skills), [CodeBuddy CLI MCP](https://www.codebuddy.cn/docs/cli/mcp), [CodeBuddy CLI Memory](https://www.codebuddy.cn/docs/cli/memory), [CodeBuddy CLI Hooks](https://www.codebuddy.cn/docs/cli/hooks), [CodeBuddy CLI Sub-agents](https://www.codebuddy.cn/docs/cli/sub-agents), [CodeBuddy IDE Skills](https://www.codebuddy.cn/docs/ide/Features/Skills), [CodeBuddy IDE MCP](https://www.codebuddy.cn/docs/ide/User-guide/MCP), [CodeBuddy IDE Subagents](https://www.codebuddy.cn/docs/ide/Features/Subagents)
 
 ### kimi-code (Moonshot AI)
 - **detect**: `~/.kimi-code/` (env var `KIMI_CODE_HOME` overrides; legacy kimi-cli used `~/.kimi/` with `KIMI_SHARE_DIR`)
@@ -469,7 +472,7 @@ Detailed per-IDE paths for all migration objects. Read this when executing STEP 
 - **rules**: global `~/.kimi-code/AGENTS.md` · project `AGENTS.md` (also `.kimi-code/AGENTS.md`, any subdir) · `/init` auto-generates
 - **skills**: global `~/.kimi-code/skills/` / `~/.agents/skills/` · project `.kimi-code/skills/` / `.agents/skills/` · extra dirs via `config.toml extra_skill_dirs`
 - **commands**: built-in slash commands (`/mcp`, `/init`, `/skill:<name>`, `/hooks`, `/config`) · plugin commands (`<plugin>:<cmd>`) · NO standalone commands dir
-- **agents**: built-in `default`, `okabe` · custom via `--agent-file <path.yaml>` (YAML: extend, name, system_prompt_path, tools, exclude_tools, subagents) · subagents: coder, explore, plan
+- **agents**: current custom agents are recursively discovered Markdown files in `$KIMI_CODE_HOME/agents/` (default `~/.kimi-code/agents/`) and project `.kimi-code/agents/` / `.agents/agents/`; generic user `~/.agents/agents/` also remains supported. Frontmatter requires `description` and may include `name`, `whenToUse`, `override`, `model_preference`, `tools`, `disallowedTools`, and `subagents`. Explicit `--agent-file` Markdown has highest priority; older YAML/`system_prompt_path` agent-file formats are legacy and manual.
 - **hooks**: `~/.kimi-code/config.toml` `[[hooks]]` array · 13 events (PreToolUse, PostToolUse, PostToolUseFailure, UserPromptSubmit, Stop, StopFailure, SessionStart, SessionEnd, SubagentStart, SubagentStop, PreCompact, PostCompact, Notification) · blocking: PreToolUse, Stop, UserPromptSubmit
 - **memory**: no native memory · sessions at `~/.kimi-code/sessions/<workDirKey>/<id>/` (context.jsonl, wire.jsonl, state.json) · plans at `~/.kimi-code/plans/<slug>.md`
 - **other**: `~/.kimi-code/config.toml` (main config, TOML NOT JSON) · `~/.kimi-code/tui.toml` · `~/.kimi-code/credentials/` · `~/.kimi-code/mcp-oauth/`
@@ -479,8 +482,9 @@ Detailed per-IDE paths for all migration objects. Read this when executing STEP 
 - **detect**: `~/.workbuddy/`
 - **mcp**: global `~/.workbuddy/mcp.json` · project `.workbuddy/mcp.json` · root_key `mcpServers` · JSON · the official desktop example is local command-based (`command`, optional `args`, optional `env`); remote URL/headers/type/transport fields are not established by the desktop docs and are rejected by automatic conversion; configured in the WorkBuddy UI
 - **skills**: built-in/marketplace Skills and local Skill-package import through the Skills UI; the official desktop docs describe `skill.yml` packages and import/install flows but publish no portable global/project Skills directory
+- **memory**: generated private memory is managed in the WorkBuddy UI; the official page documents nightly summaries and an interactive import flow, not a portable filesystem path or schema. Keep memory manual and never copy generated state.
 - **settings**: UI-managed; the official release notes confirm an independent `.workbuddy/` namespace but do not establish a portable whole-settings file for this mapper
-- **sources**: [WorkBuddy MCP](https://www.workbuddy.ai/docs/zh/workbuddy/From-Beginner-to-Expert-Guide/Function-Description/MCP-Guide), [WorkBuddy Skills](https://www.workbuddy.ai/docs/zh/workbuddy/From-Beginner-to-Expert-Guide/Function-Description/Skills-Market), [WorkBuddy custom Skills](https://www.workbuddy.ai/docs/zh/workbuddy/From-Beginner-to-Expert-Guide/Practice-Cases/Create-Skills), [WorkBuddy task bar/OpenClaw import](https://www.workbuddy.ai/docs/zh/workbuddy/From-Beginner-to-Expert-Guide/Function-Description/Task-Bar), [CodeBuddy/WorkBuddy config separation](https://www.workbuddy.ai/docs/cli/release-notes/v2.48.0)
+- **sources**: [WorkBuddy MCP](https://www.workbuddy.ai/docs/zh/workbuddy/From-Beginner-to-Expert-Guide/Function-Description/MCP-Guide), [WorkBuddy Skills](https://www.workbuddy.ai/docs/zh/workbuddy/From-Beginner-to-Expert-Guide/Function-Description/Skills-Market), [WorkBuddy custom Skills](https://www.workbuddy.ai/docs/zh/workbuddy/From-Beginner-to-Expert-Guide/Practice-Cases/Create-Skills), [WorkBuddy memory](https://www.workbuddy.ai/docs/zh/workbuddy/From-Beginner-to-Expert-Guide/Function-Description/Memory), [WorkBuddy task bar/OpenClaw import](https://www.workbuddy.ai/docs/zh/workbuddy/From-Beginner-to-Expert-Guide/Function-Description/Task-Bar), [CodeBuddy/WorkBuddy config separation](https://www.workbuddy.ai/docs/cli/release-notes/v2.48.0)
 
 ### zcode (Zhipu AI)
 - **detect**: `~/.zcode/`
@@ -488,12 +492,12 @@ Detailed per-IDE paths for all migration objects. Read this when executing STEP 
 - **rules**: global `~/.zcode/AGENTS.md` · project `AGENTS.md` (uses AGENTS.md NOT CLAUDE.md; onboarding one-time CLAUDE.md import only)
 - **skills**: global `~/.zcode/skills/<name>/SKILL.md`; project import target is UI-managed and no stable project Skills path is published in the reviewed docs
 - **commands**: user-level + project-level commands dirs (Markdown)
-- **agents**: global `~/.zcode/agents/` · project `.zcode/agents/` (Markdown)
-- **hooks**: settings.json `hooks` field (JSON)
-- **memory**: agent-memory dirs (global + project, Markdown)
+- **agents**: user-only `~/.zcode/agents/<name>.md` (Markdown); current Beta Settings flow does not provide a stable project `.zcode/agents/` creation path. Plugin-bundled subagents are managed by the plugin/UI and are not a portable project-agent directory.
+- **hooks**: plugin-bundled/UI automation; no stable standalone global/project hooks file was established in the reviewed ZCode docs, so hooks remain manual-only
+- **memory**: no stable portable memory directory/schema was established in the reviewed official docs; treat any agent-memory/UI state as manual
 - **other**: API Key config via GUI (BigModel / Z.AI / Anthropic / OpenRouter / custom)
 - **note**: Root key `mcp.servers` (dot notation); uses `AGENTS.md` not `CLAUDE.md`; ZCode ≠ CodeGeeX (CodeGeeX has NO MCP/skills/rules)
-- **sources**: [ZCode Skills](https://zcode.z.ai/en/docs/skill), [ZCode MCP](https://zcode.z.ai/cn/docs/mcp-services), [ZCode Agent instructions](https://zcode.z.ai/en/docs/agents)
+- **sources**: [ZCode Skills](https://zcode.z.ai/en/docs/skill), [ZCode MCP](https://zcode.z.ai/cn/docs/mcp-services), [ZCode Agent instructions](https://zcode.z.ai/en/docs/agents), [ZCode Subagents](https://zcode.z.ai/en/docs/subagents), [ZCode Plugins](https://zcode.z.ai/en/docs/plugin)
 
 ### minimax-code (MiniMax)
 - **detect**: MiniMax Code desktop app (user data dir, path not publicly documented)

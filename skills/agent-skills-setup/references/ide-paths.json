@@ -38,6 +38,7 @@
     "project_skills": ".cursor/skills",
     "rules": ".cursor/rules",
     "mcp": "~/.cursor/mcp.json",
+    "project_mcp": ".cursor/mcp.json",
     "config": ""
   },
   "windsurf": {

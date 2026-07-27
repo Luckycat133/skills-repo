@@ -100,7 +100,7 @@ Use the bundled import script:
 
 ```bash
 bash scripts/import-agent-skill.sh \
-    ~/.gemini/antigravity/skills/agent-skills-setup \
+    ~/.gemini/config/skills/agent-skills-setup \
     agent-skills-setup
 ```
 

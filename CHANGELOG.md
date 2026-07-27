@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security (project-scope skill/MCP migration hardening)
+- **Project skill copy is now redaction-wrapped, fail-closed** (`smart-ide-migration.sh` `migrate_project_skills`). Mirrors the global-skill pattern: `redact_project_copy` runs on the COPY (never the source); on redaction failure the entire copied tree is removed and the migration is marked `failed`. Redactor file-glob now covers shell scripts (`*.sh`/`*.bash`/`*.zsh`) in addition to `*.json`/`*.yaml`/`*.toml`/`*.env`; the inline redactor accepts an optional `export ` prefix so POSIX-shell assignments (`export OPENAI_API_KEY="..."`) match the same keyed-pair logic as JSON/TOML/YAML.
+- **Source==target guard for project skills.** antigravity/codex/zed all resolve to `.agents/skills`; claude/copilot/tencent-codebuddy share `.mcp.json`; trae/trae-cn share `.trae/mcp.json`. Without the guard, the backup strategy's `mv` renamed the source in place before the copy could read it, and the overwrite strategy `rm -rf`'d the source with no backup. Both branches now short-circuit to `manual` status with a clear message when canonical source_path == canonical target_path.
+- **Source==target guard for project MCP.** Same shape: `rm -f "$target"` and `cp -r "$target" "$target.bak"` now abort before destructive operations when source and target resolve to the same file.
+
+### Correctness (scope-aware MCP root keys + vscode workspace gating)
+- **`get_mcp_root_key` is now scope-aware.** Void Editor's project MCP path is the inherited VS Code `.vscode/mcp.json` which uses `servers` (not the Void-global `mcpServers`); the function returns `servers` for `void-editor` at `project` scope, `mcpServers` at user scope. All other IDEs unchanged.
+- **vscode workspace MCP override is gated on `scope == project`.** Previously unconditional (`if [[ "$target_ide" == "vscode" ]]; then target_mcp="$WORKSPACE_ROOT/.vscode/mcp.json"`) — so `--scope global` to vscode wrote the workspace path. Now only fires when the user explicitly requested project scope.
+
+### CI / Tests
+- **`test-ide-paths.sh` regression: 1/446 drift check (cursor/project_mcp).** `ide-paths.json` gained `cursor.project_mcp` = `.cursor/mcp.json`; `--print-path cursor project-mcp` now returns `.cursor/mcp.json` and the registry cross-check passes (446/446).
+- **`test-cursor-mapping.sh`** expected dict now includes the new `project_mcp` key.
+- **`test-vscode-mapping.sh` and `test-mcp-secret-redaction.sh`** updated to use `--scope project` (placing the source `.mcp.json` in the workspace) for the `claude → vscode` MCP path, matching the new gating behavior.
+- All 17 `test-*.sh` scripts and `validate-all.sh` (446 + 70 + 80 + 851 checks) green.
+
 ## [0.5.8] - 2026-07-27
 
 ### IDE Support Expansion (40 IDEs & Ecosystems)
