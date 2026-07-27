@@ -60,7 +60,7 @@ HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
 RC=$?
 set -e
 
-if [[ $RC -eq 0 ]] && ! grep -Fq 'MCP配置迁移失败' "$OUTPUT"; then
+if [[ $RC -eq 0 ]] && ! grep -Fq 'MCP config migration failed' "$OUTPUT"; then
     echo "FAIL: unsupported Copilot CLI MCP transport was not rejected" >&2
     cat "$OUTPUT" >&2
     exit 1

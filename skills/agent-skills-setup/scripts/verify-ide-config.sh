@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
-# 验证各 IDE 配置路径是否与 IDE Registry 一致 (real path validation)。
+# Verify each IDE's config paths against the IDE Registry (real path validation).
 #
-# 通过调用 smart-ide-migration.sh 的只读诊断标志 --print-path 获取每个
-# IDE/对象类型解析出的真实路径，并与 registry 规范值逐一精确比对。
-# 任何不匹配都会打印 FAIL 行，并在结束时以非 0 退出码返回。
+# Uses smart-ide-migration.sh's read-only diagnostic flag --print-path to resolve
+# the real path for each IDE/object type, then compares it exactly against the registry.
+# Any mismatch prints a FAIL line and the script exits non-zero at the end.
 
 set -uo pipefail
 
@@ -12,11 +12,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MIGRATION_SCRIPT="${SCRIPT_DIR}/smart-ide-migration.sh"
 
 if [[ ! -f "$MIGRATION_SCRIPT" ]]; then
-    echo "错误: 找不到迁移脚本: $MIGRATION_SCRIPT" >&2
+    echo "ERROR: migration script not found: $MIGRATION_SCRIPT" >&2
     exit 1
 fi
 
-# 期望的 registry 规范路径。格式: "ide|object|expected"。
+# Expected registry canonical paths. Format: "ide|object|expected".
 # object ∈ global|project|project-skills|mcp|project-mcp|project-config|config|rules
 EXPECTED=(
     "antigravity|global|~/.gemini/antigravity/skills"
@@ -255,7 +255,7 @@ failures=0
 checks=0
 
 echo "========================================"
-echo "验证 IDE 配置路径 (real validation)"
+echo "Verifying IDE config paths (real validation)"
 echo "========================================"
 echo ""
 
@@ -281,7 +281,7 @@ for entry in "${EXPECTED[@]}"; do
     fi
 
     if [[ $rc -ne 0 ]]; then
-        echo "FAIL: ${ide}/${object} - 脚本退出非零 (无法解析路径)"
+        echo "FAIL: ${ide}/${object} - script exited non-zero (cannot resolve path)"
         failures=$((failures + 1))
         continue
     fi
@@ -310,11 +310,11 @@ done
 echo ""
 echo "========================================"
 if [[ $failures -eq 0 ]]; then
-    echo "全部通过 (PASS): ${checks} 项检查全部与 registry 一致"
+    echo "PASS: all ${checks} checks match the registry"
     echo "========================================"
     exit 0
 else
-    echo "验证失败 (FAIL): ${failures}/${checks} 项不匹配"
+    echo "FAIL: ${failures}/${checks} checks mismatched"
     echo "========================================"
     exit 1
 fi

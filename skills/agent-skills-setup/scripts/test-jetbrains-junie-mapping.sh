@@ -31,7 +31,7 @@ assert_unsupported() {
 assert_path global "~/.junie/skills"
 assert_path project ".junie"
 assert_path project-skills ".junie/skills"
-assert_path rules "AGENTS.md"
+assert_path rules ".junie/AGENTS.md"
 assert_path mcp "~/.junie/mcp/mcp.json"
 assert_path project-mcp ".junie/mcp/mcp.json"
 assert_unsupported config
@@ -44,7 +44,7 @@ entry = json.load(open(sys.argv[1], encoding="utf-8"))["jetbrains"]
 expected = {
     "global_skills": "~/.junie/skills",
     "project_skills": ".junie/skills",
-    "rules": "AGENTS.md",
+    "rules": ".junie/AGENTS.md",
     "mcp": "~/.junie/mcp/mcp.json",
     "project_mcp": ".junie/mcp/mcp.json",
     "config": "",
@@ -52,7 +52,7 @@ expected = {
 assert entry == expected, (entry, expected)
 PYEOF
 
-for path in '~/.junie/skills' '.junie/skills' 'AGENTS.md' '~/.junie/mcp/mcp.json' '.junie/mcp/mcp.json'; do
+for path in '~/.junie/skills' '.junie/skills' '.junie/AGENTS.md' '~/.junie/mcp/mcp.json' '.junie/mcp/mcp.json'; do
     grep -Fq "$path" "$REGISTRY_FILE"
 done
 

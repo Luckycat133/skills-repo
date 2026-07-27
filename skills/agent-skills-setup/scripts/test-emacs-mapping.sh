@@ -26,10 +26,10 @@ if ! output=$(bash "$MIGRATION_SCRIPT" \
     exit 1
 fi
 
-grep -Fq '目标IDE无全局技能目录' <<<"$output"
-grep -Fq '目标IDE不支持规则文件' <<<"$output"
-grep -Fq '目标IDE不支持MCP配置' <<<"$output"
-grep -Fq '目标IDE无特定配置文件' <<<"$output"
-grep -Fq '目标IDE不支持项目级配置' <<<"$output"
+grep -Fq 'target IDE has no global skills directory' <<<"$output"
+grep -Fq 'target IDE does not support rules files' <<<"$output"
+grep -Fq 'target IDE does not support MCP configuration' <<<"$output"
+grep -Fq 'target IDE has no specific config file' <<<"$output"
+grep -Fq 'target IDE does not support project-level configuration' <<<"$output"
 
 echo "Emacs mapping boundary test passed"

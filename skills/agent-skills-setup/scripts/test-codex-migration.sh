@@ -53,7 +53,7 @@ if [[ -e "$TARGET_MCP" ]]; then
     exit 1
 fi
 
-grep -Fq '需手动迁移' "$OUTPUT"
+grep -Fq 'manual migration required' "$OUTPUT"
 
 mkdir -p "$(dirname "$SOURCE_CONFIG")"
 printf '%s\n' \
@@ -75,5 +75,5 @@ if [[ -e "$TARGET_CONFIG" ]]; then
     exit 1
 fi
 
-grep -Fq '需手动迁移' "$CONFIG_OUTPUT"
+grep -Fq 'manual migration required' "$CONFIG_OUTPUT"
 echo "Codex migration mapping test passed"

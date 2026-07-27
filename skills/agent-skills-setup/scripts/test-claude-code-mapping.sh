@@ -50,6 +50,7 @@ expected = {
     "rules": "CLAUDE.md",
     "mcp": "~/.claude.json",
     "project_mcp": ".mcp.json",
+    "project_config": ".claude/settings.json",
     "config": "~/.claude/settings.json",
 }
 if claude != expected:
@@ -84,7 +85,7 @@ printf '%s\n' '{"mcpServers":{"fixture":{"command":"echo"}}}' > "$FIXTURE_HOME/.
 printf '%s\n' '{"editor.fontSize":14}' > "$FIXTURE_HOME/Library/Application Support/Cursor/User/settings.json"
 
 MCP_SCOPE_OUTPUT="$(HOME="$FIXTURE_HOME" bash "$MIGRATION_SCRIPT" --source cursor --target claude --workspace "$FIXTURE_WORKSPACE" --objects mcp --dry-run 2>&1)"
-if grep -Fq 'only user-scoped mcpServers in ~/.claude.json' <<< "$MCP_SCOPE_OUTPUT" && grep -Fq 'project .mcp.json' <<< "$MCP_SCOPE_OUTPUT"; then
+if grep -Fq 'selected global/user scope' <<< "$MCP_SCOPE_OUTPUT" && grep -Fq 'project .mcp.json' <<< "$MCP_SCOPE_OUTPUT"; then
     echo "PASS: Claude MCP fixture preserves project and local scopes for manual review"
 else
     echo "FAIL: Claude MCP fixture must label project/local scopes manual" >&2

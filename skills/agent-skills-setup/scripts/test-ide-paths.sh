@@ -159,7 +159,7 @@ mkdir -p "$COPILOT_PROMPT_WORKSPACE/.github/prompts"
 printf '%s\n' '---' 'description: test prompt' '---' > "$COPILOT_PROMPT_WORKSPACE/.github/prompts/test.prompt.md"
 COPILOT_PROMPT_OUTPUT="$(bash "$MIGRATION_SCRIPT" --source copilot --target cursor --workspace "$COPILOT_PROMPT_WORKSPACE" --objects prompts --dry-run 2>&1)"
 checks=$((checks + 1))
-if grep -Fq "源IDE不支持提示词模板" <<< "$COPILOT_PROMPT_OUTPUT"; then
+if grep -Fq "source IDE does not support prompt templates" <<< "$COPILOT_PROMPT_OUTPUT"; then
     echo "PASS: copilot CLI prompt migration is unsupported"
 else
     echo "FAIL: copilot CLI must not migrate IDE-only prompt files"

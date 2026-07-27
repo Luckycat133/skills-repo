@@ -142,10 +142,10 @@ assert_contains "$OUT_FILE" "config"  "A1: plan mentions config"
 # conversion. Kimi's whole config is intentionally manual because its target
 # schema is TOML, so the config object must report the manual boundary instead
 # of pretending to be a copy plan.
-assert_contains "$OUT_FILE" "DRY-RUN: 转换MCP配置"      "A1: mcp plan printed in dry-run"
-assert_not_contains "$OUT_FILE" "MCP配置已转换"          "A1: mcp NOT marked success in dry-run (C1)"
+assert_contains "$OUT_FILE" "DRY-RUN: converting MCP config" "A1: mcp plan printed in dry-run"
+assert_not_contains "$OUT_FILE" "MCP config converted"     "A1: mcp NOT marked success in dry-run (C1)"
 assert_contains "$OUT_FILE" "Kimi Code config.toml"       "A1: config manual boundary printed"
-assert_not_contains "$OUT_FILE" "配置文件已复制"         "A1: config NOT marked success in dry-run (C2)"
+assert_not_contains "$OUT_FILE" "config file copied"       "A1: config NOT marked success in dry-run (C2)"
 
 # --- A2. Real execution lands in correct locations (3 targets) --------------
 for target in kimiai copilot codex; do

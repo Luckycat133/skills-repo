@@ -107,7 +107,7 @@ assert_path void-editor config ""
 VOID_SKILLS_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source void-editor --target claude --workspace "$PROJECT" \
     --objects skills --dry-run 2>&1)"
-grep -Fq 'Void: `.voidrules` 是规则文件，不是 Agent Skills' <<< "$VOID_SKILLS_OUTPUT"
+grep -Fq 'Void: `.voidrules` is a rules file, not Agent Skills' <<< "$VOID_SKILLS_OUTPUT"
 
 assert_path baidu-comate global "~/.comate/skills"
 assert_path baidu-comate project-skills ".comate/skills"
@@ -169,7 +169,7 @@ run_mcp() {
     HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
         --source claude --target "$target" --workspace "$PROJECT" \
         --objects mcp --yes --strategy overwrite > "$OUTPUT" 2>&1
-    assert_contains "$OUTPUT" "MCP配置"
+    assert_contains "$OUTPUT" "MCP config"
 }
 
 for target in opencode kilocode kimiai jetbrains workbuddy void-editor kiro augment-code zcode tencent-codebuddy; do
@@ -288,7 +288,7 @@ printf '%s\n' '{"mcpServers":{"ambiguous":{"command":["node","server.js"],"args"
 HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source claude --target zcode --workspace "$PROJECT" \
     --objects mcp --yes --strategy overwrite > "$OUTPUT" 2>&1 || true
-assert_contains "$OUTPUT" '目标IDE的 MCP mcpServers/schema 无效'
+assert_contains "$OUTPUT" 'MCP mcpServers/schema is invalid'
 [[ ! -e "$TEST_HOME/.zcode/cli/config.json" ]] || {
     echo "FAIL: invalid args fixture wrote a ZCode target" >&2
     exit 1
@@ -351,13 +351,13 @@ for source in roo-code void-editor trae trae-cn jetbrains opencode kilocode kimi
         --objects project --dry-run 2>&1)"
     case "$source" in
         trae|trae-cn)
-            grep -Fq 'TRAE .trae 项目命名空间' <<< "$PROJECT_OUTPUT"
+            grep -Fq 'TRAE .trae project namespace' <<< "$PROJECT_OUTPUT"
             ;;
         jetbrains)
             grep -Fq 'JetBrains .junie is a mixed Junie namespace' <<< "$PROJECT_OUTPUT"
             ;;
         *)
-            grep -Fq '项目命名空间' <<< "$PROJECT_OUTPUT"
+            grep -Fq 'project namespace' <<< "$PROJECT_OUTPUT"
             ;;
     esac
 done

@@ -39,11 +39,11 @@ mkdir -p "$TMP_ROOT/codeium-project/.codeium/skills/legacy-skill"
 printf '%s\n' '---' 'name: legacy-skill' 'description: legacy fixture' '---' > "$TMP_ROOT/codeium-project/.codeium/skills/legacy-skill/SKILL.md"
 CODEIUM_SKILLS_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source codeium --target cursor --workspace "$TMP_ROOT/codeium-project" --objects skills --dry-run 2>&1)"
-grep -Fq '源目录不存在:' <<< "$CODEIUM_SKILLS_OUTPUT"
+grep -Fq 'source directory does not exist:' <<< "$CODEIUM_SKILLS_OUTPUT"
 
 CODEIUM_PROJECT_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source codeium --target cursor --workspace "$TMP_ROOT/codeium-project" --objects project --dry-run 2>&1)"
-grep -Fq '源IDE不支持项目级配置' <<< "$CODEIUM_PROJECT_OUTPUT"
+grep -Fq 'source IDE does not support project-level configuration' <<< "$CODEIUM_PROJECT_OUTPUT"
 
 # Pieces is a PiecesOS-backed MCP server/provider, not a file-backed IDE
 # configuration host. Exercise every path object and the unsupported object
@@ -340,7 +340,7 @@ BLACKBOX_TARGET_OUTPUT="$(HOME="$BLACKBOX_HOME" bash "$SCRIPT_DIR/smart-ide-migr
     --source codex --target blackbox --workspace "$BLACKBOX_TARGET" \
     --objects skills,rules,prompts,mcp,config,project --yes --strategy overwrite 2>&1)"
 grep -Fq 'Blackbox' <<< "$BLACKBOX_TARGET_OUTPUT"
-grep -Fq '项目 .blackbox/skills' <<< "$BLACKBOX_TARGET_OUTPUT"
+grep -Fq 'project .blackbox/skills' <<< "$BLACKBOX_TARGET_OUTPUT"
 [[ ! -e "$BLACKBOX_TARGET/.blackbox" ]] || {
     echo "FAIL: unsupported Blackbox target created an opaque .blackbox namespace"
     exit 1
@@ -395,7 +395,7 @@ printf '%s\n' '---' 'name: demo-skill' 'description: project fixture skill.' '--
 
 GEMINI_SKILLS_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source gemini-cli --target cursor --workspace "$GEMINI_PROJECT" --objects skills --dry-run 2>&1)"
-grep -Fq '成功迁移 1 个技能' <<< "$GEMINI_SKILLS_OUTPUT"
+grep -Fq 'successfully migrated 1 skills' <<< "$GEMINI_SKILLS_OUTPUT"
 grep -Fq "$TEST_HOME/.gemini/skills/demo-skill" <<< "$GEMINI_SKILLS_OUTPUT"
 
 GEMINI_RULE_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
@@ -819,7 +819,7 @@ grep -Fq '.trae/commands/*' <<< "$CN_PROMPT_OUTPUT"
 grep -Eq '(Cursor rules|Trae CN rules)' <<< "$CN_PROMPT_OUTPUT"
 
 CN_CONFIG_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --source trae-cn --target cursor --workspace "$TMP_ROOT/project" --objects config --dry-run 2>&1)"
-grep -Fq '目标IDE无特定配置文件' <<< "$CN_CONFIG_OUTPUT"
+grep -Fq 'target IDE has no specific config file' <<< "$CN_CONFIG_OUTPUT"
 
 if ! grep -Fq '**config**: unsupported' "$SCRIPT_DIR/../references/ide-registry.md"; then
     echo "FAIL: Trae registry must mark config unsupported" >&2
@@ -903,5 +903,5 @@ if grep -Fq "$PRIVATE_STATE" "$OUTPUT"; then
     exit 1
 fi
 
-grep -Fq '成功迁移 1 个技能' "$OUTPUT"
+grep -Fq 'successfully migrated 1 skills' "$OUTPUT"
 echo "Smart IDE migration isolation test passed"

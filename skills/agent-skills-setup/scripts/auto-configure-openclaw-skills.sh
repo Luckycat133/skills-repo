@@ -126,7 +126,7 @@ check_prerequisites() {
     fi
 
     if [[ ${#missing[@]} -gt 0 ]]; then
-        die "缺少必要的前置工具：${missing[*]}。请先安装后再运行本脚本（例如 macOS: brew install curl rsync gnu-tar node；node 也可从 nodejs.org 下载安装；解压工具需要 tar 或 unzip 之一）。"
+        die "Missing required prerequisite tools: ${missing[*]}. Install them before running this script (e.g. macOS: brew install curl rsync gnu-tar node; node can also be installed from nodejs.org; extraction requires tar or unzip)."
     fi
 }
 
@@ -245,7 +245,7 @@ while [[ $# -gt 0 ]]; do
             # MED-S2: literal secret values on the command line leak via ps,
             # shell history, and CI logs. Warn and point to --env-file.
             if printf '%s' "$2" | grep -Eq '(sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|tvly-[A-Za-z0-9_-]{16,}|AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}|ya29\.[A-Za-z0-9_-]+|AIza[0-9A-Za-z_-]{35}|sk_live_[A-Za-z0-9]{16,})'; then
-                log "WARNING: --env 的值疑似真实密钥。命令行参数会出现在 ps 输出与 shell 历史中；建议改用 --env-file <file>（文件权限 600）传递。"
+                log "WARNING: the --env value looks like a real secret. Command-line arguments appear in ps output and shell history; prefer passing it via --env-file <file> (file mode 600)."
             fi
             ENV_ASSIGNMENTS+=("$2")
             shift 2
@@ -350,28 +350,28 @@ install_openclaw_if_needed() {
             fi
 
             if [[ $YES -ne 1 ]]; then
-                die "即将安装外部运行时 OpenClaw（会修改你的系统）。请使用 --yes 显式授权后重试。"
+                die "About to install the external OpenClaw runtime (this modifies your system). Re-run with --yes to authorize explicitly."
             fi
 
-            log "WARNING: 即将执行外部安装脚本 install.sh（来源 https://openclaw.ai/install.sh）"
-            log "         该脚本会修改你的系统；仅当你明确授权（--yes）且已核对校验和后才应继续。"
+            log "WARNING: about to execute the external install script install.sh (from https://openclaw.ai/install.sh)"
+            log "         This script modifies your system; proceed only with explicit authorization (--yes) and a verified checksum."
 
             local tmp_install actual_sha256 expected
             tmp_install="$(mktemp "/tmp/openclaw-install.XXXXXX.sh")"
             GLOBAL_TMP_PATHS+=("$tmp_install")
-            curl -fsSL https://openclaw.ai/install.sh -o "$tmp_install" || die "下载 OpenClaw install.sh 失败"
+            curl -fsSL https://openclaw.ai/install.sh -o "$tmp_install" || die "Failed to download OpenClaw install.sh"
             actual_sha256="$(sha256_file "$tmp_install")"
 
             if [[ -z "${OPENCLAW_INSTALL_SHA256:-}" ]]; then
                 rm -f "$tmp_install"
-                die "安全策略：运行 OpenClaw install.sh 前必须设置 OPENCLAW_INSTALL_SHA256（从该脚本发布页获取其 SHA-256）。未设置则拒绝执行，以防供应链篡改。"
+                die "Security policy: OPENCLAW_INSTALL_SHA256 must be set before running OpenClaw install.sh (get its SHA-256 from the release page). Refusing to run without it to prevent supply-chain tampering."
             fi
             expected="$(printf '%s' "$OPENCLAW_INSTALL_SHA256" | tr '[:upper:]' '[:lower:]')"
             if [[ "$(printf '%s' "$actual_sha256" | tr '[:upper:]' '[:lower:]')" != "$expected" ]]; then
                 rm -f "$tmp_install"
-                die "OpenClaw install.sh 校验和不符：期望 $expected，实际 $actual_sha256"
+                die "OpenClaw install.sh checksum mismatch: expected $expected, got $actual_sha256"
             fi
-            log "install.sh 校验和已验证"
+            log "install.sh checksum verified"
 
             run_cmd bash "$tmp_install" --no-onboard --no-prompt
             rm -f "$tmp_install"
@@ -427,10 +427,10 @@ install_clawhub_if_needed() {
     fi
 
     if [[ $YES -ne 1 ]]; then
-        die "即将安装外部包 ClawHub（${NODE_MANAGER} install -g，会修改你的系统）。请使用 --yes 显式授权后重试。"
+        die "About to install the external ClawHub package (${NODE_MANAGER} install -g, modifies your system). Re-run with --yes to authorize explicitly."
     fi
 
-    log "WARNING: 即将通过 ${NODE_MANAGER} install -g 安装 ClawHub（会修改你的系统）；仅当你明确授权（--yes）后才应继续。"
+    log "WARNING: about to install ClawHub via ${NODE_MANAGER} install -g (modifies your system); proceed only with explicit authorization (--yes)."
 
     if ! command_exists "$NODE_MANAGER"; then
         die "Required node manager not found on PATH: $NODE_MANAGER"
@@ -640,11 +640,11 @@ install_download_spec() {
 
     if [[ $YES -ne 1 ]]; then
         rm -rf "$tmp_dir"
-        die "即将下载并安装外部依赖（${skill_name} 的 download 类型安装器，会修改你的系统）。请使用 --yes 显式授权后重试。"
+        die "About to download and install an external dependency (download-type installer for ${skill_name}, modifies your system). Re-run with --yes to authorize explicitly."
     fi
 
     mkdir -p "$extract_dir" "$BIN_DIR"
-    curl -fsSL "$url" -o "$archive_path" || { rm -rf "$tmp_dir"; die "下载失败: $url"; }
+    curl -fsSL "$url" -o "$archive_path" || { rm -rf "$tmp_dir"; die "Download failed: $url"; }
 
     if [[ -n "$expected_sha256" ]]; then
         actual_sha256="$(sha256_file "$archive_path")"

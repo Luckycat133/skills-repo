@@ -89,8 +89,8 @@ fi
 
 mkdir -p "$OUTPUT_DIR"
 if [[ -e "$OUTPUT_DIR/$SKILL_NAME" && -n "$(ls -A "$OUTPUT_DIR/$SKILL_NAME" 2>/dev/null)" && $FORCE -ne 1 ]]; then
-    echo "ERROR: $OUTPUT_DIR/$SKILL_NAME 已存在且非空；rsync --delete 会删除其中的额外文件。" >&2
-    echo "        请加 --force 确认，或用 --dry-run 预览将要删除/新增的内容。" >&2
+    echo "ERROR: $OUTPUT_DIR/$SKILL_NAME already exists and is not empty; rsync --delete would remove extra files inside it." >&2
+    echo "        Re-run with --force to confirm, or use --dry-run to preview what would be deleted/added." >&2
     exit 1
 fi
 # MED-P8: rsync is required for the --delete mirror semantics used here.
