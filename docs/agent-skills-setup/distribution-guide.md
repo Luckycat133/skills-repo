@@ -1,5 +1,18 @@
 # Distribution Guide / 分发与曝光指南
 
+> **文档元信息** ｜ 更新日期：2026-07-28 ｜ 作者：skills-repo 维护组 ｜ 类型：发布分发指南 ｜ 状态：已发布
+
+## 目录
+
+- [Language Snapshots / 多语言摘要](#language-snapshots--多语言摘要)
+- [Goal / 目标](#goal--目标)
+- [Channel Matrix / 渠道矩阵](#channel-matrix--渠道矩阵)
+- [Recommended Release Order / 推荐发布顺序](#recommended-release-order--推荐发布顺序)
+- [Assets To Prepare / 需要准备的素材](#assets-to-prepare--需要准备的素材)
+- [Suggested Launch Copy / 建议的发布文案](#suggested-launch-copy--建议的发布文案)
+- [Post-Release Visibility / 发布后的曝光动作](#post-release-visibility--发布后的曝光动作)
+
+
 This document turns the publishing research into an execution plan for AI Assistant Capabilities (formerly skills).
 
 这份文档把 AI Assistant Capabilities（原 skills）的发布调研结果整理成可执行的落地方案。

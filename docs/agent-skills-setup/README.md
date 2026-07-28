@@ -1,5 +1,7 @@
 # agent-skills-setup Development Docs
 
+> **文档元信息** ｜ 更新日期：2026-07-28 ｜ 作者：skills-repo 维护组 ｜ 类型：开发文档索引 ｜ 状态：已发布
+
 `agent-skills-setup` 的开发文档集中在这里，用于规划、验证、发布和持续迭代。
 
 This folder collects planning, validation, release, and iteration material for `agent-skills-setup`.
@@ -33,6 +35,8 @@ Español: Esta carpeta reúne la planificación, validación, publicación e ite
 - `clawhub-release.md`：ClawHub 发布命令和元数据说明
 - `cross-ide-capabilities-migration.md`: full migration playbook across capabilities, prompts, configurations, rules, and workflows
 - `cross-ide-capabilities-migration.md`：覆盖 capabilities、prompts、configurations、rules、workflows 的跨 IDE 迁移总指南
+- `HI-001-ide-paths-single-source.md`: design note on single-source-of-truth for IDE paths (drives `scripts/ide-paths.json` + `test-ide-paths.sh`)
+- `HI-001-ide-paths-single-source.md`：IDE 路径单一真源（single-source-of-truth）的架构设计说明（驱动 `scripts/ide-paths.json` 与 `test-ide-paths.sh`）
 - `code-review-2026-07-26.md`: full multi-reviewer audit (31 findings: 3 Critical / 4 High / 17 Medium / 7 Low)
 - `code-review-2026-07-26.md`：完整多维度审查归档（31 项：3 Critical / 4 High / 17 Medium / 7 Low）
 

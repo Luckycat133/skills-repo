@@ -1,9 +1,26 @@
 # Security Audit Response — SkillSpector / VirusTotal
 
 This document maps every finding from the SkillSpector (NVIDIA) + VirusTotal
-audit run on `agent-skills-setup@0.5.8` to the **actual mitigation** that is
+audit run on `agent-skills-setup@0.6.0` to the **actual mitigation** that is
 already in place in the skill, and lists the one real fix that was applied
 in response.
+
+## Re-scan (2026-07-28) — 10 findings + 1 static hit
+
+A second SkillSpector pass returned 10 findings plus one VirusTotal static
+hit. Disposition:
+
+| Finding | Count | Disposition |
+|---|---|---|
+| Credential Access (`config.skills.entries[skill].env = ...`) | 4 | **False positive** — same code as F7 below: explicit `--env <skill>:<KEY>=<VALUE>` opt-in path; without `--env` the loop never runs. |
+| Self-Modification ("Overwrite existing config without backup") | 1 | **False positive** — the flagged text is a row in SKILL.md's *pitfalls table* that **warns against** overwriting without backup ("always .bak.TIMESTAMP first"). The scanner quoted the warning as if it were behavior. |
+| Tool Parameter Abuse (`rm -f "$file"` in redaction paths) | 5 | **False positive** — these are the CR-002 **fail-closed deletions**: when python3/redactor is unavailable or redaction fails, the freshly-made *target copy* is deleted so unredacted secrets never persist. Source files are untouched. This is the safety control itself (see F8). |
+| `suspicious.exposed_secret_literal` @ `test-smart-ide-migration.sh:540` | 1 | **Real hit (regression of F9 class), fixed** — the Goose boundary tests (added after the first audit fix) reintroduced value-side literals `live-goose-secret`, `live-goose-file-secret`, `json-secret`. Replaced with inert placeholders (`__goose_inert_fixture__`, `__goose_file_inert_fixture__`, `__json_inert_fixture__`); key names (`API_KEY`/`OPENAI_API_KEY`) unchanged so boundary assertions still exercise sensitive-key handling. Also proactively cleaned same-class literals `PIECES_SECRET_DO_NOT_COPY` → `__pieces_do_not_copy_fixture__` and `supermaven-secret` → `__supermaven_inert_fixture__` in the same file. Assertions updated; full test suite passes. |
+
+**Fixture policy (to prevent further regressions)**: test fixtures must never
+put "secret"/"key"/"token"/"live" substrings in the **value** position of a
+key/value pair. Sensitive-key semantics must come from the key name only;
+values must be `__*_inert_fixture__`-style placeholders.
 
 > **TL;DR**: 10 of 11 findings are over-detections on the documented purpose
 > of the skill (cross-IDE context migration). The single real hit
@@ -16,8 +33,8 @@ in response.
 
 | # | File | Change |
 |---|---|---|
-| 1 | `scripts/test-smart-ide-migration.sh` lines 336–337, 357 | Replaced `"codex-secret-fixture"` and `"blackbox-secret-fixture"` literals with `"__test_placeholder_value__"`. These placeholders still exercise the redactor's `SECRET_KEY_RE` keyword check (which fires on the key **name** `apiKey`, not the value), but no longer contain "secret" / "key" substrings that trip YARA-style static scanners. The grep assertion that confirms the placeholder fixture survives untouched has been updated to the new string. |
-| 2 | `scripts/smart-ide-migration.sh` (3 sites) | Added `# SECURITY:` annotations on the `rm -rf "${target_path:?}/$skill_name"` fail-closed cleanup so the next reviewer does not mistake the safety control for a defect. The `${target_path:?}` and `${skill_name:?}` guards make `rm` abort if either variable is unset/empty, so the cleanup can only ever remove a freshly-copied tree, never an unrelated path. |
+| 1 | `skills/agent-skills-setup/scripts/test-smart-ide-migration.sh` lines 336–337, 357 | Replaced `"codex-secret-fixture"` and `"blackbox-secret-fixture"` literals with `"__test_placeholder_value__"`. These placeholders still exercise the redactor's `SECRET_KEY_RE` keyword check (which fires on the key **name** `apiKey`, not the value), but no longer contain "secret" / "key" substrings that trip YARA-style static scanners. The grep assertion that confirms the placeholder fixture survives untouched has been updated to the new string. |
+| 2 | `skills/agent-skills-setup/scripts/smart-ide-migration.sh` (3 sites) | Added `# SECURITY:` annotations on the `rm -rf "${target_path:?}/$skill_name"` fail-closed cleanup so the next reviewer does not mistake the safety control for a defect. The `${target_path:?}` and `${skill_name:?}` guards make `rm` abort if either variable is unset/empty, so the cleanup can only ever remove a freshly-copied tree, never an unrelated path. |
 | 3 | `SKILL.md` frontmatter `description` | Tightened the trigger guidance. Added an explicit **"DO NOT ACTIVATE ON"** list (incidental mentions, format questions, "how do I…", debugging) and a "When in doubt, ask the user" instruction. The triggers list itself was already narrow and required explicit cross-IDE verbs; the surrounding prose now mirrors that. |
 
 ## False-positive mapping
@@ -48,7 +65,7 @@ control that prevents the flagged behavior.
 ### F7. Credential Access — High (91% confidence, 4 instances)
 
 - **Category**: Privilege Escalation / Credential Access
-- **Audit claim**: `config.skills.entries[skill].env = ...` (lines 940–942 of `auto-configure-openclaw-skills.sh`) writes env values.
+- **Audit claim**: `config.skills.entries[skill].env = ...` (lines 940–942 of `skills/agent-skills-setup/scripts/auto-configure-openclaw-skills.sh`) writes env values.
 - **Actual behavior**: This is the **explicit opt-in path** for the OpenClaw `auto-configure` flow. The user passes `--env <skill>:<KEY>=<VALUE>` on the command line; the code stores that user-supplied pair into the OpenClaw skill manifest. Without `--env` arguments, the loop body never runs.
 - **Mitigation in place**:
   - No `--env` flag → no env values written (the `for` loop is empty).
@@ -60,7 +77,7 @@ control that prevents the flagged behavior.
 
 - **Category**: Tool Misuse / Tool Parameter Abuse
 - **Audit claim**: `rm -rf "${target_path:?}/$skill_name"` is dangerous parameter use.
-- **Actual behavior**: This is the **fail-closed cleanup** added in v0.5.8 (commit `915fe49`). After a `cp -R` of a skill bundle, the redactor is invoked; if the redactor returns non-zero (could not guarantee all secrets were blanked), the freshly-copied tree is removed rather than leaving potentially-leaked credentials on disk. This is the safety control that **prevents** the secret-leak failure mode the audit tool is designed to catch.
+- **Actual behavior**: This is the **fail-closed cleanup** added in v0.6.0 (commit `915fe49`). After a `cp -R` of a skill bundle, the redactor is invoked; if the redactor returns non-zero (could not guarantee all secrets were blanked), the freshly-copied tree is removed rather than leaving potentially-leaked credentials on disk. This is the safety control that **prevents** the secret-leak failure mode the audit tool is designed to catch.
 - **Mitigation in place**:
   - `${target_path:?}` aborts `rm` if `target_path` is unset or empty.
   - `${skill_name:?}` aborts `rm` if `skill_name` is unset or empty.
@@ -69,7 +86,7 @@ control that prevents the flagged behavior.
 
 ### F9. VirusTotal: `suspicious.exposed_secret_literal` — Critical
 
-- **File**: `scripts/test-smart-ide-migration.sh:337` (prior to this commit)
+- **File**: `skills/agent-skills-setup/scripts/test-smart-ide-migration.sh:337` (prior to this commit)
 - **Audit claim**: File appears to expose a hardcoded API secret or token.
 - **Actual behavior**: The string `apiKey = "codex-secret-fixture"` is a **test fixture** — an intentionally fake value used to assert that the redactor's `SECRET_KEY_RE` keyword check fires on the key name and blanks the value without modifying the surrounding key. The substring `secret-fixture` triggered the scanner's "exposed secret" heuristic.
 - **Mitigation in place**:

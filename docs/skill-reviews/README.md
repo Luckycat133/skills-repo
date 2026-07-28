@@ -1,5 +1,7 @@
 # Skill Reviews / 技能审查
 
+> **文档元信息** ｜ 更新日期：2026-07-28 ｜ 作者：skills-repo 维护组 ｜ 类型：审查索引 ｜ 状态：已发布
+
 This folder archives review reports for **user-level skills** (installed under
 `~/.workbuddy/skills/`), kept separate from `docs/agent-skills-setup/` which holds
 development and planning docs for this repository's own publishable skill.

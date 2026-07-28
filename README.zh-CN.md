@@ -71,15 +71,15 @@ skills-repo/
 
 跨 IDE 迁移范围现已涵盖能力、提示词、配置、规则与工作流。
 
-现已覆盖的主流 IDE 生态包含 40 个 IDE 与智能体（Copilot, Cursor, Windsurf, JetBrains, Claude Code, Claude Desktop, Codex, OpenClaw, Trae, Trae CN, Antigravity, Kimi AI, Amazon Q, Gemini CLI, Zed, VS Code, Goose CLI, OpenCode, Continue, Roo Code, Cline, Kilo Code, Kiro, Augment Code, Baidu Comate, Tencent CodeBuddy, ZCode, Void Editor, Aider, Tabnine, Replit, Blackbox, Neovim, Emacs, Cody, Supermaven, Codeium, PearAI, Pieces）。
+现已覆盖的主流 IDE 生态包含 40 个 IDE 与智能体（Copilot, Cursor, Windsurf, JetBrains, Claude Code, Claude Desktop, Codex, OpenClaw, Trae, Trae CN, Antigravity, Kimi AI, Amazon Q, Gemini CLI, Zed, VS Code, Goose CLI, OpenCode, Continue, Roo Code, Cline, Kilo Code, Kiro, Augment Code, Baidu Comate, Tencent CodeBuddy, ZCode, Void Editor, Aider, Tabnine, Replit, Blackbox, Neovim, Emacs, Cody, Supermaven, Codeium, PearAI, Pieces, WorkBuddy）。
 
 ## 开发工作流
 
 1. 在 GitHub 分支下编辑 `skills/` 中的技能。
 2. 运行 `bash validate-all.sh`。
 3. 针对 `agent-skills-setup` 的改动，还需运行聚焦的验证套件：
-   - `bash skills/agent-skills-setup/scripts/verify-ide-config.sh` — 断言已解析的 IDE 路径与 `references/ide-registry.md` 一致（215 项检查）。
-   - `bash skills/agent-skills-setup/scripts/test-ide-paths.sh` — `references/ide-paths.json` 与脚本之间的漂移测试（415 项检查）。
+   - `bash skills/agent-skills-setup/scripts/verify-ide-config.sh` — 断言已解析的 IDE 路径与 `references/ide-registry.md` 一致（235 项检查）。
+   - `bash skills/agent-skills-setup/scripts/test-ide-paths.sh` — `references/ide-paths.json` 与脚本之间的漂移测试（450 项检查）。
    - `bash skills/agent-skills-setup/scripts/test-migration.sh` — 迁移 + 全局同步引擎测试（80 项检查，隔离的临时 HOME）。
 4. 仅在验证工作流通过后合并。
 5. 将合并后的版本安装到智能体环境中：
@@ -120,6 +120,6 @@ bash scripts/import-agent-skill.sh \
 - GitHub 仓库作为规范的公开来源。
 - ClawHub 用于 OpenClaw 原生发布与带版本更新。
 - `skills.sh` 用于跨智能体发现。
-- `github/awesome-copilot` 用于精选的 Copilot 曝光。
+- the awesome-copilot 社区列表，用于精选的 Copilot 曝光（作为独立的分发通道跟踪）。
 
 发布前，请运行 `bash validate-all.sh`、审阅 `THIRD_PARTY_NOTICES.md`，并确认仓库不包含任何私有路径、本地密钥或机器相关的假设。

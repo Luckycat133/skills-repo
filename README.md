@@ -71,15 +71,15 @@ skills-repo/
 
 Cross-IDE migration scope now includes capabilities, prompts, configurations, rules, and workflows.
 
-Covered mainstream IDE ecosystems now include 40 IDEs & agents (Copilot, Cursor, Windsurf, JetBrains, Claude Code, Claude Desktop, Codex, OpenClaw, Trae, Trae CN, Antigravity, Kimi AI, Amazon Q, Gemini CLI, Zed, VS Code, Goose CLI, OpenCode, Continue, Roo Code, Cline, Kilo Code, Kiro, Augment Code, Baidu Comate, Tencent CodeBuddy, ZCode, Void Editor, Aider, Tabnine, Replit, Blackbox, Neovim, Emacs, Cody, Supermaven, Codeium, PearAI, Pieces).
+Covered mainstream IDE ecosystems now include 40 IDEs & agents (Copilot, Cursor, Windsurf, JetBrains, Claude Code, Claude Desktop, Codex, OpenClaw, Trae, Trae CN, Antigravity, Kimi AI, Amazon Q, Gemini CLI, Zed, VS Code, Goose CLI, OpenCode, Continue, Roo Code, Cline, Kilo Code, Kiro, Augment Code, Baidu Comate, Tencent CodeBuddy, ZCode, Void Editor, Aider, Tabnine, Replit, Blackbox, Neovim, Emacs, Cody, Supermaven, Codeium, PearAI, Pieces, WorkBuddy).
 
 ## Development Workflow
 
 1. Edit the skill under `skills/` in a GitHub branch.
 2. Run `bash validate-all.sh`.
 3. For `agent-skills-setup` changes, also run the focused verification suite:
-   - `bash skills/agent-skills-setup/scripts/verify-ide-config.sh` — asserts resolved IDE paths match `references/ide-registry.md` (215 checks).
-   - `bash skills/agent-skills-setup/scripts/test-ide-paths.sh` — drift test between `references/ide-paths.json` and the script (415 checks).
+   - `bash skills/agent-skills-setup/scripts/verify-ide-config.sh` — asserts resolved IDE paths match `references/ide-registry.md` (235 checks).
+   - `bash skills/agent-skills-setup/scripts/test-ide-paths.sh` — drift test between `references/ide-paths.json` and the script (450 checks).
    - `bash skills/agent-skills-setup/scripts/test-migration.sh` — migration + global-sync engine tests (80 checks, isolated temp HOME).
 4. Merge only after the validation workflow passes.
 5. Install the merged version into an agent environment:
@@ -120,6 +120,6 @@ Current distribution lanes:
 - GitHub repository as the canonical public source.
 - ClawHub for OpenClaw-native publishing and versioned updates.
 - `skills.sh` for cross-agent discovery.
-- `github/awesome-copilot` for curated Copilot visibility.
+- The awesome-copilot community list, for curated Copilot visibility (tracked as a separate distribution lane).
 
 Before publishing, run `bash validate-all.sh`, review `THIRD_PARTY_NOTICES.md`, and confirm the repository contains no private paths, local secrets, or machine-specific assumptions.

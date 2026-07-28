@@ -1,5 +1,18 @@
 # Code Review — `agent-skills-setup` (2026-07-26)
 
+> **文档元信息** ｜ 更新日期：2026-07-28 ｜ 作者：skills-repo 维护组 ｜ 类型：代码审查报告 ｜ 状态：已归档
+
+## 目录
+
+- [Executive Summary](#executive-summary)
+- [Critical Findings (3)](#critical-findings-3)
+- [High Findings (4)](#high-findings-4)
+- [Medium Findings (17)](#medium-findings-17)
+- [Low Findings (7)](#low-findings-7)
+- [Summary](#summary)
+- [Recommendation (prioritized)](#recommendation-prioritized)
+
+
 > 本文件是 `agent-skills-setup` 全量审查（multi-reviewer-patterns）的**完整归档**。
 > 审查方法：4 个隔离只读子代理并行审 Security / Architecture / Testing / Performance&Robustness，结果人工去重并统一校准严重度。
 > 分流跟踪：安全与测试闸门进 [`release-checklist.md`](./release-checklist.md)；架构重构与技术债 backlog 进 [`roadmap.md`](./roadmap.md)。

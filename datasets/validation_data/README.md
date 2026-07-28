@@ -30,8 +30,8 @@
 ## 4. 划分方法（Split Method）
 - **方法**：分层随机抽样，与训练/测试保持同一标签分布。
 - **随机种子**：`42`
-- **生成命令**：见根目录 `scripts/split_dataset.py`
-- **一致性校验**：`scripts/verify_distribution.py`
+- **生成命令**：`python scripts/split_dataset.py --seed 42`（参数与步骤详见根目录 `DATA_USAGE_GUIDE.md`）
+- **一致性校验**：`python scripts/verify_distribution.py --seed 42`
 
 ## 5. 使用约束
 - 可多次用于调参与早停；调参完成后建议将验证集并回训练集重训最终模型（可选策略）。

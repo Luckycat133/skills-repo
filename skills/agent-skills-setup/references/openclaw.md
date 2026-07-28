@@ -61,7 +61,7 @@ All OpenClaw skill settings live under the `skills` key in `~/.openclaw/openclaw
     allowBundled: ["peekaboo", "gifgrep"],
     load: {
       extraDirs: [
-        "~/.gemini/antigravity/skills",
+        "~/.gemini/config/skills",
         "~/Projects/internal-openclaw-skill-pack/skills",
       ],
       watch: true,
@@ -75,7 +75,7 @@ All OpenClaw skill settings live under the `skills` key in `~/.openclaw/openclaw
       "agent-skills-setup": {
         enabled: true,
         env: {
-          OPENCLAW_SKILLS_SOURCE: "~/.gemini/antigravity/skills",
+          OPENCLAW_SKILLS_SOURCE: "~/.gemini/config/skills",
         },
         config: {
           preferredScope: "managed",
@@ -196,7 +196,7 @@ OpenClaw extends skill metadata under `metadata.openclaw`.
 name: gifgrep
 description: Search GIF providers with CLI/TUI, download results, and extract stills/sheets.
 homepage: https://gifgrep.com
-metadata: {"open_claw":{"emoji":"🧲","requires":{"bins":["gifgrep"]},"install":[{"id":"brew","kind":"brew","formula":"steipete/tap/gifgrep","bins":["gifgrep"],"label":"Install gifgrep (brew)"}]}}
+metadata: {"openclaw":{"emoji":"🧲","requires":{"bins":["gifgrep"]},"install":[{"id":"brew","kind":"brew","formula":"steipete/tap/gifgrep","bins":["gifgrep"],"label":"Install gifgrep (brew)"}]}}
 ---
 ```
 
@@ -222,14 +222,14 @@ Notes:
 This repository includes a dedicated helper:
 
 ```bash
-bash skills/agent-skills-setup/scripts/auto-configure-openclaw-skills.sh \
+bash ../scripts/auto-configure-openclaw-skills.sh \
   --yes \
   --scope both \
   --agent home:~/.openclaw/workspace-home \
   --agent work:~/.openclaw/workspace-work \
   --default-agent home \
   --node-manager npm \
-  --env agent-skills-setup:OPENCLAW_SKILLS_SOURCE=~/.gemini/antigravity/skills
+  --env agent-skills-setup:OPENCLAW_SKILLS_SOURCE=~/.gemini/config/skills
 ```
 
 What it does:
@@ -265,7 +265,7 @@ ClawHub stores install state in `.clawhub/lock.json` and compares local content 
 ### 6.3 Local mirror updates
 
 ```bash
-bash skills/agent-skills-setup/scripts/update-openclaw-skills.sh
+bash ../scripts/update-openclaw-skills.sh
 ```
 
 This helper combines:
@@ -305,7 +305,7 @@ Recommended model:
 ### 9.1 Automated smoke test
 
 ```bash
-bash skills/agent-skills-setup/scripts/test-openclaw-support.sh
+bash ../scripts/test-openclaw-support.sh
 ```
 
 This covers managed sync, workspace sync, config patching, dependency install flow, and update refresh behavior.
@@ -318,7 +318,7 @@ Use isolated state roots when testing on a machine that already has OpenClaw ins
 OPENCLAW_STATE_DIR=/tmp/openclaw-test-state \
 OPENCLAW_CONFIG_PATH=/tmp/openclaw-test-state/openclaw.json \
 AGENT_SKILLS_OPENCLAW_DIR=/tmp/openclaw-test-state/skills \
-bash skills/agent-skills-setup/scripts/auto-configure-openclaw-skills.sh --dry-run
+bash ../scripts/auto-configure-openclaw-skills.sh --dry-run
 ```
 
 The script refuses global installs, config writes, and replacement syncs unless `--yes` is supplied. Review `--dry-run` output first; existing skill directories and config files receive timestamped `.bak.*` copies before replacement.

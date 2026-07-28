@@ -1,5 +1,7 @@
 # Review — agent-team-orchestration
 
+> **文档元信息** ｜ 更新日期：2026-07-28 ｜ 作者：skills-repo 维护组 ｜ 类型：技能审查报告 ｜ 状态：已归档
+
 user-level skill 全量内容审查报告。来源：2026-07-26 全量审查（SKILL.md + `_skillhub_meta.json` + 4 个 references）。
 本文件仅记录问题，未改动 skill 实际内容。修复待用户批准。
 

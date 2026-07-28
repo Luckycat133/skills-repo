@@ -1,5 +1,7 @@
 # Release Checklist
 
+> **文档元信息** ｜ 更新日期：2026-07-28 ｜ 作者：skills-repo 维护组 ｜ 类型：发布清单 ｜ 状态：已发布
+
 ## 中文
 
 - 确认 `SKILL.md` 的描述足够具体、准确，并能触发正确的使用场景。
@@ -13,7 +15,7 @@
 - 确认 ClawHub、`skills.sh`、Awesome Copilot 的发布说明与当前官方行为一致。
 - 确认 ClawHub 发布命令、slug、版本号和 changelog 文案已经准备完成。
 - 确认 README、CHANGELOG 和分发文档已更新为中英双语。
-- 确认 `bash validate-all.sh` 在干净本地 checkout 上通过（已完成 R1 修复：校验器过滤 `.gitignore` 忽略的文件）。
+- 确认 `bash validate-all.sh` 在干净本地 checkout 上通过（已完成 R1 修复：校验器通过 `git ls-files` 跳过被忽略的路径）。
 - 确认脱敏覆盖 provider-key 值格式（`sk-`/`ghp_`/`AKIA`/`xoxb`/`ya29`/`AIza`），且 `test-mcp-secret-redaction.sh` 含这些值的 fixture（CR-001，详见 `code-review-2026-07-26.md`）。
 - 确认无 `python3` 时 `redact_secrets_in_file` 走 fail-closed（拒绝复制或报错），绝不返“成功”却零脱敏（CR-002）。
 - 确认 CI 实际执行全量测试套件（已完成 R3 修复：`validate-all.sh` 聚合全部 `verify-ide-config.sh`、`test-ide-paths.sh`、`test-migration.sh`、`test-smart-ide-migration.sh` 及 `test-mcp-secret-redaction.sh`）。

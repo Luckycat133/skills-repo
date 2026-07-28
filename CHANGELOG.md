@@ -49,11 +49,9 @@ Both bugs were pre-existing — failing on every CI push since `e498302` (2026-0
 - **`test-vscode-mapping.sh` and `test-mcp-secret-redaction.sh`** updated to use `--scope project` (placing the source `.mcp.json` in the workspace) for the `claude → vscode` MCP path, matching the new gating behavior.
 - All 17 `test-*.sh` scripts and `validate-all.sh` (446 + 70 + 80 + 851 checks) green.
 
-## [0.5.8] - 2026-07-27
-
 ### IDE Support Expansion (40 IDEs & Ecosystems)
 - **Expanded cross-IDE migration and synchronization engine (`smart-ide-migration.sh`) to 40 supported IDEs & AI agent environments**, covering capabilities/skills, rules, prompts, MCP config, settings, and project config:
-  - Mainstream IDEs & Agents: Copilot, Cursor, Windsurf, JetBrains (Junie), Claude Code, Claude Desktop, Codex, OpenClaw, Trae, Trae CN, Antigravity, Kimi AI, Amazon Q, Gemini CLI, Zed, VS Code, Goose CLI, OpenCode, Continue, Roo Code, Cline, Kilo Code, Kiro, Augment Code, Baidu Comate, Tencent CodeBuddy, ZCode, Void Editor, Aider, Tabnine, Replit, Blackbox, Neovim, Emacs, Cody, Supermaven, Codeium, PearAI, Pieces.
+  - Mainstream IDEs & Agents: Copilot, Cursor, Windsurf, JetBrains (Junie), Claude Code, Claude Desktop, Codex, OpenClaw, Trae, Trae CN, Antigravity, Kimi AI, Amazon Q, Gemini CLI, Zed, VS Code, Goose CLI, OpenCode, Continue, Roo Code, Cline, Kilo Code, Kiro, Augment Code, Baidu Comate, Tencent CodeBuddy, ZCode, Void Editor, Aider, Tabnine, Replit, Blackbox, Neovim, Emacs, Cody, Supermaven, Codeium, PearAI, Pieces, WorkBuddy.
 - **Added 17 dedicated IDE mapping & migration regression test suites** (`test-claude-code-mapping.sh`, `test-cursor-mapping.sh`, `test-copilot-mapping.sh`, `test-antigravity-migration.sh`, `test-codex-migration.sh`, `test-zed-mapping.sh`, `test-remaining-ide-mappings.sh`, etc.), asserting 415 path checks against canonical `ide-paths.json` and `ide-registry.md`.
 
 ### Security & Scanner Alignment

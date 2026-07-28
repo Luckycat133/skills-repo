@@ -71,15 +71,15 @@ skills-repo/
 
 El alcance de migración entre IDE ahora incluye capacidades, prompts, configuraciones, reglas y flujos de trabajo.
 
-Los ecosistemas de IDE principales cubiertos ahora incluyen 40 IDEs y agentes (Copilot, Cursor, Windsurf, JetBrains, Claude Code, Claude Desktop, Codex, OpenClaw, Trae, Trae CN, Antigravity, Kimi AI, Amazon Q, Gemini CLI, Zed, VS Code, Goose CLI, OpenCode, Continue, Roo Code, Cline, Kilo Code, Kiro, Augment Code, Baidu Comate, Tencent CodeBuddy, ZCode, Void Editor, Aider, Tabnine, Replit, Blackbox, Neovim, Emacs, Cody, Supermaven, Codeium, PearAI, Pieces).
+Los ecosistemas de IDE principales cubiertos ahora incluyen 40 IDEs y agentes (Copilot, Cursor, Windsurf, JetBrains, Claude Code, Claude Desktop, Codex, OpenClaw, Trae, Trae CN, Antigravity, Kimi AI, Amazon Q, Gemini CLI, Zed, VS Code, Goose CLI, OpenCode, Continue, Roo Code, Cline, Kilo Code, Kiro, Augment Code, Baidu Comate, Tencent CodeBuddy, ZCode, Void Editor, Aider, Tabnine, Replit, Blackbox, Neovim, Emacs, Cody, Supermaven, Codeium, PearAI, Pieces, WorkBuddy).
 
 ## Flujo de Desarrollo
 
 1. Edita la skill en `skills/` en una rama de GitHub.
 2. Ejecuta `bash validate-all.sh`.
 3. Para cambios en `agent-skills-setup`, ejecuta también la suite de verificación enfocada:
-   - `bash skills/agent-skills-setup/scripts/verify-ide-config.sh` — verifica que las rutas de IDE resueltas coincidan con `references/ide-registry.md` (215 comprobaciones).
-   - `bash skills/agent-skills-setup/scripts/test-ide-paths.sh` — prueba de deriva entre `references/ide-paths.json` y el script (415 comprobaciones).
+   - `bash skills/agent-skills-setup/scripts/verify-ide-config.sh` — verifica que las rutas de IDE resueltas coincidan con `references/ide-registry.md` (235 comprobaciones).
+   - `bash skills/agent-skills-setup/scripts/test-ide-paths.sh` — prueba de deriva entre `references/ide-paths.json` y el script (450 comprobaciones).
    - `bash skills/agent-skills-setup/scripts/test-migration.sh` — pruebas del motor de migración y sincronización global (80 comprobaciones, HOME temporal aislado).
 4. Fusiona solo después de que el flujo de validación pase.
 5. Instala la versión fusionada en un entorno de agente:
@@ -120,6 +120,6 @@ Canales de distribución actuales:
 - Repositorio de GitHub como fuente pública canónica.
 - ClawHub para publicación nativa de OpenClaw y actualizaciones versionadas.
 - `skills.sh` para descubrimiento multiagente.
-- `github/awesome-copilot` para visibilidad curada de Copilot.
+- la lista comunitaria awesome-copilot, para visibilidad curada de Copilot (seguimiento como canal de distribución independiente).
 
 Antes de publicar, ejecuta `bash validate-all.sh`, revisa `THIRD_PARTY_NOTICES.md` y confirma que el repositorio no contiene rutas privadas, secretos locales ni supuestos específicos de la máquina.

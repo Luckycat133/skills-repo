@@ -1,5 +1,25 @@
 # Cross-IDE AI Assistant Capabilities Migration Guide
 
+> **文档元信息** ｜ 更新日期：2026-07-28 ｜ 作者：skills-repo 维护组 ｜ 类型：设计稿 / 迁移指南 ｜ 状态：草稿（设计中）
+
+## 目录
+
+- [1. Terminology and Compatibility](#1-terminology-and-compatibility)
+- [2. Mainstream IDE Coverage](#2-mainstream-ide-coverage)
+- [3. Migration Objects and Platform Mapping](#3-migration-objects-and-platform-mapping)
+- [4. Preconditions](#4-preconditions)
+- [5. Safe Migration Mode (No-Break Default)](#5-safe-migration-mode-no-break-default)
+- [6. Automated Migration (Planned)](#6-automated-migration-planned)
+- [7. Migration Procedures by Object Type](#7-migration-procedures-by-object-type)
+- [8. Quality Standard and Real Validation](#8-quality-standard-and-real-validation)
+- [9. Publishing and Distribution Requirements](#9-publishing-and-distribution-requirements)
+- [9.1 GitHub canonical source](#91-github-canonical-source)
+- [9.2 ClawHub](#92-clawhub)
+- [9.3 skills.sh and awesome-copilot](#93-skillssh-and-awesome-copilot)
+- [10. Maintenance Guide](#10-maintenance-guide)
+- [11. Implementation Status in This Repo](#11-implementation-status-in-this-repo)
+
+
 This guide expands migration scope from skills-only to a complete AI Assistant Capabilities model:
 
 - Capabilities (formerly skills)
@@ -33,7 +53,7 @@ Why this naming strategy works:
 
 ## 2. Mainstream IDE Coverage
 
-This implementation now covers these mainstream AI IDE ecosystems:
+This design targets these mainstream AI IDE ecosystems (see §11 for current in-repo implementation status):
 
 1. VS Code + GitHub Copilot
 2. Cursor

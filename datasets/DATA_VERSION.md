@@ -27,6 +27,8 @@
 - 建立划分脚本、分布校验脚本与清单机制。
 - 划分口径：test=25%（占总量），validation=18%（占剩余训练池），seed=42，分层抽样。
 
+> 注：v1.0.0 的清单快照（`.manifests/manifest_v1.0.0_*.json`）将在数据定版后由 `compute_manifest.py --version v1.0.0` 生成并提交；当前 `.manifests/` 仅含占位 `.gitkeep`。
+
 <!--
 新版本按如下模板追加（置于最上方，倒序排列）：
 

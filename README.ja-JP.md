@@ -42,7 +42,7 @@ npx skills add Luckycat133/skills-repo
 
 ## 概要
 
-| Language | Summary |
+| 言語 | 概要 |
 | --- | --- |
 | 日本語 | ローカル優先のワークフロー、OpenClaw 自動化、公開配布の手引きを通じて、再利用可能なエージェントスキルを構築・公開します。 |
 
@@ -71,15 +71,15 @@ skills-repo/
 
 クロス IDE 移行の対象範囲には、機能、プロンプト、設定、ルール、ワークフローが含まれるようになりました。
 
-現在カバーしている主流の IDE エコシステムは 40 の IDE およびエージェント（Copilot、Cursor、Windsurf、JetBrains、Claude Code、Claude Desktop、Codex、OpenClaw、Trae、Trae CN、Antigravity、Kimi AI、Amazon Q、Gemini CLI、Zed、VS Code、Goose CLI、OpenCode、Continue、Roo Code、Cline、Kilo Code、Kiro、Augment Code、Baidu Comate、Tencent CodeBuddy、ZCode、Void Editor、Aider、Tabnine、Replit、Blackbox、Neovim、Emacs、Cody、Supermaven、Codeium、PearAI、Pieces）です。
+現在カバーしている主流の IDE エコシステムは 40 の IDE およびエージェント（Copilot、Cursor、Windsurf、JetBrains、Claude Code、Claude Desktop、Codex、OpenClaw、Trae、Trae CN、Antigravity、Kimi AI、Amazon Q、Gemini CLI、Zed、VS Code、Goose CLI、OpenCode、Continue、Roo Code、Cline、Kilo Code、Kiro、Augment Code、Baidu Comate、Tencent CodeBuddy、ZCode、Void Editor、Aider、Tabnine、Replit、Blackbox、Neovim、Emacs、Cody、Supermaven、Codeium、PearAI、Pieces、WorkBuddy）です。
 
 ## 開発ワークフロー
 
 1. GitHub のブランチ上で `skills/` 配下のスキルを編集します。
 2. `bash validate-all.sh` を実行します。
 3. `agent-skills-setup` の変更については、以下の焦点を絞った検証スイートも実行します。
-   - `bash skills/agent-skills-setup/scripts/verify-ide-config.sh` — 解決された IDE パスが `references/ide-registry.md` と一致することを検証します（215 件のチェック）。
-   - `bash skills/agent-skills-setup/scripts/test-ide-paths.sh` — `references/ide-paths.json` とスクリプト間のドリフト（乖離）テストを行います（415 件のチェック）。
+   - `bash skills/agent-skills-setup/scripts/verify-ide-config.sh` — 解決された IDE パスが `references/ide-registry.md` と一致することを検証します（235 件のチェック）。
+   - `bash skills/agent-skills-setup/scripts/test-ide-paths.sh` — `references/ide-paths.json` とスクリプト間のドリフト（乖離）テストを行います（450 件のチェック）。
    - `bash skills/agent-skills-setup/scripts/test-migration.sh` — 移行およびグローバル同期エンジンのテストを行います（80 件のチェック、分離された一時 HOME）。
 4. 検証ワークフローが通過してからのみ、マージします。
 5. マージ済みのバージョンをエージェント環境にインストールします。
@@ -120,6 +120,6 @@ bash scripts/import-agent-skill.sh \
 - 正規の公開ソースとしての GitHub リポジトリ。
 - OpenClaw ネイティブな公開とバージョン管理された更新のための ClawHub。
 - クロスエージェントな発見のための `skills.sh`。
-- 厳選された Copilot の露出のための `github/awesome-copilot`。
+- 厳選された Copilot の露出のための awesome-copilot コミュニティリスト（独立した配布チャネルとして追跡）。
 
 公開前に、`bash validate-all.sh` を実行し、`THIRD_PARTY_NOTICES.md` を確認し、リポジトリにプライベートなパス、ローカルのシークレット、またはマシン固有の前提が含まれていないことを確認してください。

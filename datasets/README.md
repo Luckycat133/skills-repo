@@ -55,10 +55,12 @@ datasets/
 | 项目 | 规范 | 示例 |
 |------|------|------|
 | 顶层数据集目录 | 小写 + 下划线，语义明确 | `train_data` / `validation_data` / `test_data` |
-| 数据文件 | `<数据集>_<版本>_<切片>.<扩展名>` | `test_v1.2.0.csv` |
+| 划分产出文件（split_dataset.py）| `<切片>_seed<seed>.<扩展名>` | `test_seed42.csv` |
 | 版本号 | 语义化版本 SemVer | `v1.0.0`（详见 DATA_VERSION.md） |
 | 随机种子 | 固定并记录在配置与文件名 | `seed42` |
 | 目录/文件 | 全小写、避免空格与中文、用下划线 | `feature_dictionary.md` |
+
+> 注：`split_dataset.py` 产出的切分文件以 `seed` 命名（如 `test_seed42.csv`）；数据集版本由 `compute_manifest.py --version` 与 `.manifests/` 清单追踪，不写入切分文件名。
 
 ---
 

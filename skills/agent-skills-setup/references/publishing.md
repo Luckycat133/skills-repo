@@ -60,7 +60,7 @@ skill_view(name="your-skill-name")
 ### From GitHub
 
 ```
-Load skill from Luckycat133/skills-repo/your-skill
+Load skill from <your-username>/<your-repo>/<your-skill>
 ```
 
 ## Best Practices

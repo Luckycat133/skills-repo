@@ -1,5 +1,7 @@
 # Roadmap
 
+> **文档元信息** ｜ 更新日期：2026-07-28 ｜ 作者：skills-repo 维护组 ｜ 类型：规划 ｜ 状态：进行中
+
 ## Near Term / 近期
 
 - improve the repository export workflow and produce cleaner public release bundles

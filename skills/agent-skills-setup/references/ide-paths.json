@@ -1,6 +1,6 @@
 {
   "antigravity": {
-    "global_skills": "~/.gemini/antigravity/skills",
+    "global_skills": "~/.gemini/config/skills",
     "project_skills": ".agents/skills",
     "rules": ".agents/rules",
     "mcp": "~/.gemini/config/mcp_config.json",
@@ -83,7 +83,11 @@
     "global_skills": "~/.copilot/skills",
     "project_skills": ".github/skills",
     "rules": ".github/copilot-instructions.md",
-    "mcp": "",
+    "mcp": {
+      "darwin": "~/Library/Application Support/Code/User/mcp.json",
+      "linux": "~/.config/Code/User/mcp.json",
+      "windows": "${APPDATA}/Code/User/mcp.json"
+    },
     "project_mcp": ".vscode/mcp.json",
     "config": ""
   },
@@ -137,18 +141,15 @@
     "global_skills": "~/.cline/skills",
     "project_skills": ".cline/skills",
     "rules": ".clinerules",
-    "mcp": {
-      "darwin": "~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
-      "linux": "~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
-      "windows": "${APPDATA}/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"
-    },
+    "mcp": "~/.cline/data/settings/cline_mcp_settings.json",
+    "project_mcp": ".cline/mcp.json",
     "config": ""
   },
   "amazon-q": {
     "global_skills": "",
     "project_skills": "",
     "rules": ".amazonq/rules",
-    "mcp": "",
+    "mcp": "~/.aws/amazonq/default.json",
     "project_mcp": ".amazonq/default.json",
     "config": ""
   },
@@ -267,7 +268,11 @@
     "global_skills": "",
     "project_skills": "",
     "rules": "",
-    "mcp": "",
+    "mcp": {
+      "darwin": "~/Library/Application Support/Claude/claude_desktop_config.json",
+      "linux": "",
+      "windows": "%APPDATA%\\Claude\\claude_desktop_config.json"
+    },
     "config": ""
   },
   "kiro": {
