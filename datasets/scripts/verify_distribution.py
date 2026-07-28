@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-verify_distribution.py — 校验 train/validation/test 三集合的标签分布一致性
+verify_distribution.py - Verify label-distribution consistency across the
+train / validation / test splits.
 
-指标:
-  1) 各集合的每类占比表；
-  2) 与训练集相比，验证集/测试集的最大占比偏差（max abs deviation）；
-  3) PSI（Population Stability Index），衡量分布漂移：
-        PSI < 0.10  分布稳定（一致性良好）
-        0.10-0.25   轻微漂移（需关注）
-        > 0.25      显著漂移（划分可能有问题）
+Metrics:
+  1) Per-class proportion table for each split;
+  2) Max absolute proportion deviation of validation/test vs train;
+  3) PSI (Population Stability Index), measuring distribution drift:
+        PSI < 0.10  stable distribution (good consistency)
+        0.10-0.25  mild drift (worth watching)
+        > 0.25     significant drift (split likely problematic)
 
-零第三方依赖，仅标准库。
+Zero third-party dependencies; standard library only.
 """
 import argparse
 import csv
@@ -29,7 +30,7 @@ def load_labels(path, label_col):
     with open(path, "r", encoding="utf-8", newline="") as f:
         reader = csv.DictReader(f)
         if label_col not in (reader.fieldnames or []):
-            sys.exit(f"[ERROR] 标签列 '{label_col}' 不在 {path}")
+            sys.exit(f"[ERROR] label column '{label_col}' not found in {path}")
         return [row[label_col] for row in reader]
 
 
@@ -49,7 +50,8 @@ def psi(expected, actual, classes, eps=1e-6):
 
 
 def main():
-    p = argparse.ArgumentParser(description="校验各数据集标签分布一致性")
+    p = argparse.ArgumentParser(
+        description="Verify label-distribution consistency across dataset splits")
     p.add_argument("--label-col", required=True)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--root", default=DEFAULT_ROOT)
@@ -69,14 +71,14 @@ def main():
     for split, path in files.items():
         labels = load_labels(path, args.label_col)
         if labels is None:
-            sys.exit(f"[ERROR] 找不到 {split} 文件: {path}\n"
-                     "        请先运行 split_dataset.py")
+            sys.exit(f"[ERROR] cannot find {split} file: {path}\n"
+                     "        run split_dataset.py first")
         data[split] = labels
 
     classes = sorted(set().union(*[set(v) for v in data.values()]), key=str)
     props = {s: proportions(labels, classes) for s, labels in data.items()}
 
-    # 打印占比表
+    # Print the proportion table
     print(f"{'label':<16}" + "".join(f"{s:>12}" for s in files))
     print("-" * (16 + 12 * len(files)))
     for k in classes:
@@ -84,8 +86,8 @@ def main():
     print("-" * (16 + 12 * len(files)))
     print(f"{'N (count)':<16}" + "".join(f"{len(data[s]):>12}" for s in files))
 
-    # 与 train 对比
-    print("\n[分布一致性 vs train]")
+    # Compare against train
+    print("\n[Distribution consistency vs train]")
     ok = True
     for split in ("validation", "test"):
         max_dev = max(abs(props[split][k] - props["train"][k]) for k in classes)
@@ -93,11 +95,12 @@ def main():
         status = "OK" if val_psi < args.psi_threshold else "WARN"
         if val_psi >= args.psi_threshold:
             ok = False
-        print(f"  {split:<11} 最大占比偏差={max_dev*100:5.2f}%  "
+        print(f"  {split:<11} max prop deviation={max_dev*100:5.2f}%  "
               f"PSI={val_psi:.4f}  [{status}]")
 
-    print("\n[结论] " + ("分布一致性良好，可放心使用。" if ok else
-          "存在分布漂移，建议检查数据来源或重新分层划分。"))
+    print("\n[Conclusion] " + ("Distribution consistency is good; safe to use."
+          if ok else
+          "Distribution drift detected; check the data source or re-run the stratified split."))
     sys.exit(0 if ok else 2)
 
 

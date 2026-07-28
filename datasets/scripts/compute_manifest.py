@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-compute_manifest.py — 生成数据集清单（版本控制 + 完整性校验）
+compute_manifest.py - Generate a dataset manifest (version control +
+integrity verification).
 
-功能:
-  - 遍历 train_data / validation_data / test_data 下的数据文件，
-    计算每个文件的 SHA-256、大小、修改时间；
-  - 输出到 .manifests/manifest_<version>_<timestamp>.json；
-  - 该清单是数据版本控制的核心：不把大文件塞进 Git，而是提交轻量清单，
-    通过校验和确认"某版本的数据"未被篡改、可复现。
+What it does:
+  - Walk the data files under train_data / validation_data / test_data,
+    computing each file's SHA-256, size, and modification time;
+  - Write the result to .manifests/manifest_<version>_<timestamp>.json;
+  - This manifest is the core of dataset version control: instead of
+    committing large files to Git, commit the lightweight manifest and use
+    its checksums to confirm a given version's data is untampered and
+    reproducible.
 
-用法:
+Usage:
     python compute_manifest.py --version v1.0.0
-    # 验证当前数据是否与某清单一致：
+    # Verify the current data matches a manifest:
     python compute_manifest.py --verify .manifests/manifest_v1.0.0_xxx.json
 """
 import argparse
@@ -24,7 +27,7 @@ from datetime import datetime
 
 DEFAULT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DATA_DIRS = ("train_data", "validation_data", "test_data")
-# 忽略占位与元数据无关文件
+# Skip placeholder and metadata-irrelevant files
 IGNORE_NAMES = {".gitkeep", ".DS_Store"}
 
 
@@ -80,21 +83,21 @@ def verify(root, manifest_path):
     for rel in current:
         if rel not in old:
             added.append(rel)
-    print(f"[VERIFY] 基于清单 {os.path.basename(manifest_path)} (version={manifest.get('version')})")
+    print(f"[VERIFY] against manifest {os.path.basename(manifest_path)} (version={manifest.get('version')})")
     for tag, lst in (("changed", changed), ("added", added), ("removed", removed)):
         for rel in lst:
             print(f"  [{tag.upper():<7}] {rel}")
     if not (changed or added or removed):
-        print("  [OK] 数据与清单完全一致，未发生变更。")
+        print("  [OK] data matches the manifest exactly; no changes.")
         return 0
-    print(f"  变更: {len(changed)} 修改 / {len(added)} 新增 / {len(removed)} 删除")
+    print(f"  Changes: {len(changed)} modified / {len(added)} added / {len(removed)} removed")
     return 3
 
 
 def main():
-    p = argparse.ArgumentParser(description="生成/校验数据集清单")
-    p.add_argument("--version", help="语义化版本号，如 v1.0.0（生成模式）")
-    p.add_argument("--verify", help="校验模式：给定清单 json 路径")
+    p = argparse.ArgumentParser(description="Generate/verify a dataset manifest")
+    p.add_argument("--version", help="semantic version, e.g. v1.0.0 (generation mode)")
+    p.add_argument("--verify", help="verification mode: path to a manifest json")
     p.add_argument("--root", default=DEFAULT_ROOT)
     args = p.parse_args()
 
@@ -102,7 +105,7 @@ def main():
         sys.exit(verify(args.root, args.verify))
 
     if not args.version:
-        sys.exit("[ERROR] 生成模式需 --version，如 --version v1.0.0")
+        sys.exit("[ERROR] generation mode requires --version, e.g. --version v1.0.0")
 
     manifest = build_manifest(args.root, args.version)
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -115,9 +118,9 @@ def main():
         os.chmod(out, 0o640)
     except OSError:
         pass
-    print(f"[OK] 清单已生成: {out}")
-    print(f"     文件数={manifest['file_count']}  总大小={manifest['total_bytes']} bytes")
-    print("     请将该清单提交至 Git，并在 DATA_VERSION.md 记录本次版本。")
+    print(f"[OK] manifest generated: {out}")
+    print(f"     file_count={manifest['file_count']}  total_bytes={manifest['total_bytes']} bytes")
+    print("     Commit this manifest to Git and record the version in DATA_VERSION.md.")
 
 
 if __name__ == "__main__":
