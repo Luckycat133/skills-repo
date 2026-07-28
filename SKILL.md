@@ -23,6 +23,11 @@ description: >
   "copy agents between IDEs". The skill previews every change with --dry-run and never
   writes files without an explicit --yes confirmation; it must not activate on vague
   or unrelated prompts.
+  DO NOT ACTIVATE ON: incidental mentions of MCP, skills, rules, or IDE names;
+  questions about MCP/skill format; debugging requests; "how do I…" / "what is…"
+  questions; or any prompt that does not explicitly request a cross-IDE migration.
+  When in doubt, ask the user to confirm the source IDE, target IDE, and the
+  migration objects they want before reading or writing any config.
 triggers:
   - migrate mcp config
   - move skills from cursor to claude
