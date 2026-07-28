@@ -16,6 +16,22 @@ if [[ ! -f "$MIGRATION_SCRIPT" ]]; then
     exit 1
 fi
 
+# Resolve platform-specific EXPECTED entries. Some IDE paths (e.g. Cline's MCP
+# store under the VS Code extension's user/globalStorage) differ between macOS,
+# Linux, and Windows. Compute the value for the current runner before any
+# array initialization so the EXPECTED entry below can reference it.
+case "$(uname -s)" in
+    Darwin)
+        CLINE_MCP_PATH='~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json'
+        ;;
+    Linux)
+        CLINE_MCP_PATH='~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json'
+        ;;
+    *)
+        CLINE_MCP_PATH='${APPDATA}/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json'
+        ;;
+esac
+
 # Expected registry canonical paths. Format: "ide|object|expected".
 # object ∈ global|project|project-skills|mcp|project-mcp|project-config|config|rules
 EXPECTED=(
@@ -135,7 +151,7 @@ EXPECTED=(
     "cline|project|"
     "cline|project-skills|.cline/skills"
     "cline|rules|.clinerules"
-    "cline|mcp|~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"
+    "cline|mcp|${CLINE_MCP_PATH}"
     "cline|config|"
     "cody|global|"
     "cody|project|"
