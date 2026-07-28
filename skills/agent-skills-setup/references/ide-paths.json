@@ -137,7 +137,11 @@
     "global_skills": "~/.cline/skills",
     "project_skills": ".cline/skills",
     "rules": ".clinerules",
-    "mcp": "~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
+    "mcp": {
+      "darwin": "~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
+      "linux": "~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
+      "windows": "${APPDATA}/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"
+    },
     "config": ""
   },
   "amazon-q": {

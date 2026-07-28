@@ -35,17 +35,24 @@ checks=0
 
 # Map JSON object keys -> --print-path object names and emit rows as
 # TAB-separated: ide <TAB> json_key <TAB> script_object <TAB> expected
+#
+# When a JSON value is an object with a "paths_per_os" / "darwin"/"linux"/
+# "windows" key, the value for the current OS is selected so the test
+# matches the same platform-specific path the migration script returns.
 dump_rows() {
     python3 - "$JSON_FILE" "$@" <<'PYEOF'
-import json, sys
+import json, sys, platform
 data = json.load(open(sys.argv[1]))
 keymap = {"global_skills":"global","project_skills":"project-skills","rules":"rules","mcp":"mcp","project_mcp":"project-mcp","project_config":"project-config","config":"config"}
 key_filter = set(sys.argv[2:]) if len(sys.argv) > 2 else None
+os_key = {"Darwin": "darwin", "Linux": "linux"}.get(platform.system(), "windows")
 for ide in sorted(data.keys()):
     if key_filter is not None and ide not in key_filter:
         continue
     for jk in keymap:
         val = data[ide].get(jk, "")
+        if isinstance(val, dict):
+            val = val.get(os_key, "")
         print(f"{ide}\t{jk}\t{keymap[jk]}\t{val}")
 PYEOF
 }
