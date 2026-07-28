@@ -265,6 +265,17 @@ for entry in "${EXPECTED[@]}"; do
     object="${rest%%|*}"
     expected="${rest#*|}"
 
+    # cline/mcp resolves to a platform-specific VS Code globalStorage path.
+    # Override the static registry entry so the assertion matches the platform
+    # this validation runs on (mirrors smart-ide-migration.sh --print-path).
+    if [[ "$ide" == "cline" && "$object" == "mcp" ]]; then
+        case "$(uname -s)" in
+            Darwin) expected="~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json" ;;
+            Linux)  expected="~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json" ;;
+            *)      expected="~/AppData/Roaming/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json" ;;
+        esac
+    fi
+
     checks=$((checks + 1))
 
     actual="$(bash "$MIGRATION_SCRIPT" --print-path "$ide" "$object" 2>/dev/null)"
