@@ -11,7 +11,7 @@
 #
 set -euo pipefail
 
-SOURCE_ROOT="${AGENT_SKILLS_SOURCE_DIR:-${HOME}/.gemini/antigravity/skills}"
+SOURCE_ROOT="${AGENT_SKILLS_SOURCE_DIR:-${HOME}/.gemini/config/skills}"
 TEMPLATE_PATH="${SOURCE_ROOT}/agent-skills-setup/assets/public-repo-readme-template.md"
 SKILL_NAME=""
 OUTPUT_DIR=""
@@ -26,7 +26,7 @@ Usage: export-public-skill.sh --skill <skill-name> --output <directory> --repo <
 Exports a skill from Antigravity's global skill store into a standalone public repository layout.
 
 Options:
-  --skill <name>        Skill folder name under ~/.gemini/antigravity/skills
+  --skill <name>        Skill folder name under ~/.gemini/config/skills
   --output <dir>        Destination repository directory to create or update
   --repo <owner/repo>   Public repository name used in generated install docs
   --dry-run             Preview rsync --delete changes without writing

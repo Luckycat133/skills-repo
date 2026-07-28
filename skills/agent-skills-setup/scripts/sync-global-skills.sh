@@ -4,7 +4,7 @@ set -euo pipefail
 
 # SOURCE OF TRUTH: skills/agent-skills-setup/references/ide-registry.md (and ide-paths.json).
 # Keep these functions in sync with that file. Drift is caught by test-ide-paths.sh.
-SOURCE_DIR="${AGENT_SKILLS_SOURCE_DIR:-${HOME}/.gemini/antigravity/skills}"
+SOURCE_DIR="${AGENT_SKILLS_SOURCE_DIR:-${HOME}/.gemini/config/skills}"
 CLAUDE_DIR="${AGENT_SKILLS_CLAUDE_DIR:-${HOME}/.claude/skills}"
 CODEX_DIR="${AGENT_SKILLS_CODEX_DIR:-${HOME}/.agents/skills}"
 COPILOT_DIR="${AGENT_SKILLS_COPILOT_DIR:-${HOME}/.copilot/skills}"

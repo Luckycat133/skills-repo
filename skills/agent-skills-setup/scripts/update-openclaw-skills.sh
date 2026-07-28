@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-SOURCE_DIR="${AGENT_SKILLS_SOURCE_DIR:-${HOME}/.gemini/antigravity/skills}"
+SOURCE_DIR="${AGENT_SKILLS_SOURCE_DIR:-${HOME}/.gemini/config/skills}"
 STATE_DIR="${OPENCLAW_STATE_DIR:-${HOME}/.openclaw}"
 MANAGED_DIR="${AGENT_SKILLS_OPENCLAW_DIR:-${STATE_DIR}/skills}"
 DRY_RUN=0
@@ -23,7 +23,7 @@ Usage: update-openclaw-skills.sh [options]
 Update the OpenClaw runtime, registry-managed skills, and mirrored local skills.
 
 Options:
-  --source <dir>          Source skill root. Default: ~/.gemini/antigravity/skills
+  --source <dir>          Source skill root. Default: ~/.gemini/config/skills
   --managed-dir <dir>     Managed OpenClaw skill directory. Default: ~/.openclaw/skills
   --workspace <dir>       Run ClawHub/mirror updates for this workspace. Repeatable.
   --agent <id:workspace>  Add a workspace via agent notation. Repeatable.

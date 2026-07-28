@@ -131,6 +131,8 @@ assert_path zcode mcp "~/.zcode/cli/config.json"
 assert_path zcode project-mcp ".zcode/config.json"
 assert_path zcode project-config ".zcode/config.json"
 assert_path zcode config "~/.zcode/cli/config.json"
+assert_path roo-code project-mcp ".roo/mcp.json"
+assert_path roo-code mcp ""
 
 write_claude_fixture() {
     printf '%s\n' '{"mcpServers":{"local":{"command":"node","args":["server.js","--token","live-token"],"env":{"API_KEY":"live-api-key"}},"remote":{"type":"sse","url":"https://example.invalid/mcp","headers":{"Authorization":"Bearer live-bearer"}}}}' > "$TEST_HOME/.claude.json"
@@ -154,6 +156,7 @@ mcp_target_path() {
         kiro) echo "$TEST_HOME/.kiro/settings/mcp.json" ;;
         augment-code) echo "$TEST_HOME/.augment/settings.json" ;;
         zcode) echo "$TEST_HOME/.zcode/cli/config.json" ;;
+        roo-code) echo "$PROJECT/.roo/mcp.json" ;;
         baidu-comate) echo "$TEST_HOME/.comate/mcp.json" ;;
         tencent-codebuddy) echo "$TEST_HOME/.codebuddy/.mcp.json" ;;
     esac
@@ -185,6 +188,20 @@ for target in opencode kilocode kimiai jetbrains workbuddy void-editor kiro augm
     assert_not_contains "$target_file" "live-bearer"
 done
 
+# Roo Code's project MCP file is officially documented and can be migrated in
+# explicit project scope. Global Roo MCP remains UI-managed/manual.
+printf '%s\n' '{"mcpServers":{"roo-project":{"command":"node","args":["server.js"],"env":{"API_KEY":"__roo_project_inert_fixture__"}}}}' > "$PROJECT/.mcp.json"
+HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+    --source claude --target roo-code --workspace "$PROJECT" \
+    --scope project --objects mcp --yes --strategy overwrite > "$OUTPUT" 2>&1
+assert_contains "$OUTPUT" "MCP config"
+python3 -m json.tool "$PROJECT/.roo/mcp.json" >/dev/null
+assert_contains "$PROJECT/.roo/mcp.json" '"roo-project"'
+assert_not_contains "$PROJECT/.roo/mcp.json" "__roo_project_inert_fixture__"
+ROO_GLOBAL_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+    --source claude --target roo-code --objects mcp --dry-run 2>&1)"
+grep -Fq 'Roo Code global MCP is extension-storage/UI managed' <<< "$ROO_GLOBAL_OUTPUT"
+
 assert_contains "$(mcp_target_path opencode)" '"mcp"'
 assert_contains "$(mcp_target_path opencode)" '"type": "local"'
 assert_contains "$(mcp_target_path opencode)" '"command": ['
@@ -206,7 +223,7 @@ assert_contains "$(mcp_target_path tencent-codebuddy)" '"mcpServers"'
 # WorkBuddy desktop does not have first-party evidence for portable remote
 # URL/SSE/headers entries. The converter must fail closed and leave no target.
 rm -f "$(mcp_target_path workbuddy)"
-printf '%s\n' '{"mcpServers":{"remote":{"type":"sse","url":"https://example.invalid/mcp","headers":{"Authorization":"Bearer workbuddy-secret"}}}}' > "$TEST_HOME/.claude.json"
+printf '%s\n' '{"mcpServers":{"remote":{"type":"sse","url":"https://example.invalid/mcp","headers":{"Authorization":"Bearer __workbuddy_inert_fixture__"}}}}' > "$TEST_HOME/.claude.json"
 HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source claude --target workbuddy --workspace "$PROJECT" \
     --objects mcp --yes --strategy overwrite > "$OUTPUT" 2>&1
@@ -219,7 +236,7 @@ assert_contains "$OUTPUT" "WorkBuddy desktop MCP schema"
 # Void's custom MCP store has the same fail-closed boundary for authenticated
 # remote entries: the archived runtime does not establish header forwarding.
 rm -f "$(mcp_target_path void-editor)"
-printf '%s\n' '{"mcpServers":{"remote":{"url":"https://example.invalid/mcp","headers":{"Authorization":"Bearer void-secret"}}}}' > "$TEST_HOME/.claude.json"
+printf '%s\n' '{"mcpServers":{"remote":{"url":"https://example.invalid/mcp","headers":{"Authorization":"Bearer __void_inert_fixture__"}}}}' > "$TEST_HOME/.claude.json"
 HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source claude --target void-editor --workspace "$PROJECT" \
     --objects mcp --yes --strategy overwrite > "$OUTPUT" 2>&1
@@ -241,7 +258,7 @@ assert_contains "$(mcp_target_path void-editor)" '"url": "https://example.invali
 # Junie has no verified portable remote target shape in the reviewed IDE
 # docs; reject foreign remote/type/headers data instead of writing it.
 rm -f "$(mcp_target_path jetbrains)"
-printf '%s\n' '{"mcpServers":{"remote":{"type":"sse","url":"https://example.invalid/mcp","headers":{"Authorization":"Bearer junie-secret"}}}}' > "$TEST_HOME/.claude.json"
+printf '%s\n' '{"mcpServers":{"remote":{"type":"sse","url":"https://example.invalid/mcp","headers":{"Authorization":"Bearer __junie_inert_fixture__"}}}}' > "$TEST_HOME/.claude.json"
 HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source claude --target jetbrains --workspace "$PROJECT" \
     --objects mcp --yes --strategy overwrite > "$OUTPUT" 2>&1
@@ -251,14 +268,14 @@ assert_contains "$OUTPUT" "Junie MCP schema"
     exit 1
 }
 
-printf '%s\n' '{"mcpServers":{"local":{"type":"stdio","command":"node","args":["server.js"],"env":{"API_KEY":"comate-secret"}},"remote":{"type":"sse","url":"https://example.invalid/mcp","headers":{"Authorization":"Bearer comate-secret"}}}}' > "$TEST_HOME/.claude.json"
+printf '%s\n' '{"mcpServers":{"local":{"type":"stdio","command":"node","args":["server.js"],"env":{"API_KEY":"__comate_inert_fixture__"}},"remote":{"type":"sse","url":"https://example.invalid/mcp","headers":{"Authorization":"Bearer __comate_inert_fixture__"}}}}' > "$TEST_HOME/.claude.json"
 HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source claude --target baidu-comate --workspace "$PROJECT" \
     --objects mcp --yes --strategy overwrite > "$OUTPUT" 2>&1
 python3 -m json.tool "$TEST_HOME/.comate/mcp.json" >/dev/null
 assert_contains "$TEST_HOME/.comate/mcp.json" '"type": "stdio"'
 assert_contains "$TEST_HOME/.comate/mcp.json" '"type": "sse"'
-assert_not_contains "$TEST_HOME/.comate/mcp.json" "comate-secret"
+assert_not_contains "$TEST_HOME/.comate/mcp.json" "__comate_inert_fixture__"
 
 # Exercise the JSONC reader with Kilo's documented comments/trailing-comma
 # format, then convert its native `mcp` root into OpenCode's JSON config.

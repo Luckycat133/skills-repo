@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-SOURCE_DIR="${AGENT_SKILLS_SOURCE_DIR:-${HOME}/.gemini/antigravity/skills}"
+SOURCE_DIR="${AGENT_SKILLS_SOURCE_DIR:-${HOME}/.gemini/config/skills}"
 STATE_DIR="${OPENCLAW_STATE_DIR:-${HOME}/.openclaw}"
 CONFIG_PATH="${OPENCLAW_CONFIG_PATH:-${STATE_DIR}/openclaw.json}"
 MANAGED_DIR="${STATE_DIR}/skills"
@@ -49,7 +49,7 @@ Usage: auto-configure-openclaw-skills.sh [options]
 Install and configure OpenClaw skill support from the Antigravity source-of-truth.
 
 Options:
-  --source <dir>                Source skill root. Default: ~/.gemini/antigravity/skills
+  --source <dir>                Source skill root. Default: ~/.gemini/config/skills
   --config <file>               OpenClaw config file. Default: ~/.openclaw/openclaw.json
   --managed-dir <dir>           Shared managed skill directory. Default: ~/.openclaw/skills
   --workspace <dir>             Sync skills into <dir>/skills. Repeatable.

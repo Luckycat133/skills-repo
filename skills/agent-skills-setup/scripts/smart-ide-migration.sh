@@ -4,6 +4,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Unified, agent-readable output helpers (logging, status tokens, JSON).
+source "${SCRIPT_DIR}/common.sh"
+
 SOURCE_IDE=""
 TARGET_IDE=""
 WORKSPACE_ROOT="$(pwd)"
@@ -79,10 +82,21 @@ get_ide_name() {
 get_global_path() {
     local ide="$1"
     case "$ide" in
-        # Antigravity IDE global Skills live at ~/.gemini/antigravity/skills
-        # per the official IDE skills docs. ~/.gemini/config/ holds MCP,
-        # hooks, plugins, and workflows, not skills.
-        antigravity) echo "${HOME}/.gemini/antigravity/skills" ;;
+        # Antigravity publishes two product/version surfaces with different
+        # global Skills paths: the IDE Skills page names
+        # ~/.gemini/antigravity/skills, while the current shared 2.0 Skills
+        # page names ~/.gemini/config/skills. Prefer an explicit override;
+        # otherwise preserve an existing legacy IDE tree and use the current
+        # shared path for a fresh install. Never merge both trees implicitly.
+        antigravity)
+            if [[ -n "${ANTIGRAVITY_SKILLS_DIR:-}" ]]; then
+                echo "${ANTIGRAVITY_SKILLS_DIR}"
+            elif [[ -d "${HOME}/.gemini/antigravity/skills" && ! -d "${HOME}/.gemini/config/skills" ]]; then
+                echo "${HOME}/.gemini/antigravity/skills"
+            else
+                echo "${HOME}/.gemini/config/skills"
+            fi
+            ;;
         claude)      echo "${HOME}/.claude/skills" ;;
         codex)       echo "${HOME}/.agents/skills" ;;
         copilot)     echo "${HOME}/.copilot/skills" ;;
@@ -349,6 +363,25 @@ get_project_skills_path() {
 # configuration directory and the user/local MCP store. This resolver is used
 # by the explicit `--scope project` / `--objects project-mcp` path; entries whose
 # schema or precedence is not safe remain guarded as manual in migrate_mcp().
+get_amazon_q_project_mcp_path() {
+    local project_root="${WORKSPACE_ROOT:-$(pwd)}"
+    local default_path="${project_root}/.amazonq/default.json"
+    local legacy_path="${project_root}/.amazonq/mcp.json"
+
+    # The current IDE guide names .amazonq/default.json. Preserve an existing
+    # legacy file when a workspace was already configured. The separate
+    # .amazonq/agents/default.json path is documented by another Q surface but
+    # AWS does not publish a version/implementation discriminator; it is
+    # handled as an explicit manual boundary below rather than guessed here.
+    if [[ -f "$default_path" ]]; then
+        echo ".amazonq/default.json"
+    elif [[ -f "$legacy_path" ]]; then
+        echo ".amazonq/mcp.json"
+    else
+        echo ".amazonq/default.json"
+    fi
+}
+
 get_project_mcp_path() {
     local ide="$1"
     case "$ide" in
@@ -373,9 +406,13 @@ get_project_mcp_path() {
         # Roo documents project MCP at .roo/mcp.json. Its global MCP is still
         # extension-settings/UI managed, so this project path remains manual.
         roo-code) echo ".roo/mcp.json" ;;
-        # Workspace MCP is documented, but the generic mapper handles only
-        # the user file; preserve this as a diagnostic/manual path.
-        amazon-q) echo ".amazonq/default.json" ;;
+        # Cline's CLI reference documents a project .cline/mcp.json file with
+        # the mcpServers root. It is separate from the global MCP stores.
+        cline) echo ".cline/mcp.json" ;;
+        # Current Amazon Q IDE workspaces use .amazonq/default.json. If an
+        # existing agents/default.json or legacy mcp.json is present, retain
+        # that configured store; see get_amazon_q_project_mcp_path().
+        amazon-q) echo "$(get_amazon_q_project_mcp_path)" ;;
         # Continue's project MCP path is a directory of standalone YAML/JSON
         # blocks, not one MCP file. This is diagnostic/manual only.
         continue) echo ".continue/mcpServers" ;;
@@ -550,6 +587,10 @@ get_prompts_path() {
         # ~/.config/opencode/commands and are outside this project-relative
         # object; migrate_prompts handles only the documented project files.
         opencode)    echo ".opencode/commands" ;;
+        # Roo Code slash commands are documented Markdown files. They are
+        # exposed through the prompts object with a manual semantic review;
+        # this does not claim that Roo modes or command permissions convert.
+        roo-code)    echo ".roo/commands" ;;
         trae|trae-cn) echo ".trae/commands" ;;
         # Pieces prompt and memory workflows are handled by PiecesOS/host UI,
         # not a portable prompt-template directory.
@@ -578,17 +619,24 @@ get_mcp_path() {
         # Continue's global file is YAML and its mcpServers value is an
         # array. The generic mapper exposes this path for diagnosis only.
         continue)    echo "${HOME}/.continue/config.yaml" ;;
-        # Cline's VS Code extension stores the shared mcpServers map in its
-        # extension globalStorage. The CLI uses the same JSON schema at
-        # ~/.cline/data/settings/cline_mcp_settings.json; this resolver is
-        # intentionally extension-scoped and records the CLI path as manual
-        # in the registry so the two scopes are never conflated.
+        # Current Cline docs publish two global MCP locations: the Config
+        # layout uses ~/.cline/data/settings/cline_mcp_settings.json, while
+        # the MCP page names ~/.cline/mcp.json for the CLI. Prefer an explicit
+        # override, preserve an existing alternative file, and use the
+        # current Config-layout path for a fresh install. migrate_mcp() fails
+        # closed when both documented files exist without an override.
         cline)
-            case "$(uname -s)" in
-                Darwin) echo "${HOME}/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json" ;;
-                Linux) echo "${HOME}/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json" ;;
-                *) echo "${APPDATA:-${HOME}/AppData/Roaming}/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json" ;;
-            esac ;;
+            local cline_primary="${HOME}/.cline/data/settings/cline_mcp_settings.json"
+            local cline_alternative="${HOME}/.cline/mcp.json"
+            if [[ -n "${CLINE_MCP_PATH:-}" ]]; then
+                echo "${CLINE_MCP_PATH}"
+            elif [[ -n "${CLINE_DATA_DIR:-}" ]]; then
+                echo "${CLINE_DATA_DIR}/settings/cline_mcp_settings.json"
+            elif [[ -f "$cline_alternative" && ! -f "$cline_primary" ]]; then
+                echo "$cline_alternative"
+            else
+                echo "$cline_primary"
+            fi ;;
         cursor)      echo "${HOME}/.cursor/mcp.json" ;;
         # Roo's official docs identify the global extension settings directory
         # but do not publish a stable literal filesystem path. Do not guess
@@ -611,17 +659,34 @@ get_mcp_path() {
         # mcpServers (project .mcp.json ALSO uses mcpServers, unlike VS Code).
         copilot)     echo "${HOME}/.copilot/mcp-config.json" ;;
         # VS Code user MCP is opened through MCP: Open User Configuration in
-        # the active profile. The official docs do not publish a portable
-        # filesystem path, so never guess one here.
-        vscode)      echo "" ;;
+        # the active profile. The default profile's mcp.json follows the
+        # standard VS Code user-config base across platforms; named profiles
+        # live under <User>/profiles/<profile-id>/mcp.json (see Microsoft
+        # docs /configure/profiles). Insiders builds use "Code - Insiders".
+        vscode)
+            case "$(uname -s)" in
+                Darwin)  echo "${HOME}/Library/Application Support/Code/User/mcp.json" ;;
+                Linux)   echo "${HOME}/.config/Code/User/mcp.json" ;;
+                *)       [[ -n "${APPDATA:-}" ]] && echo "${APPDATA}/Code/User/mcp.json" || echo "" ;;
+            esac
+            ;;
         zed)         echo "${HOME}/.config/zed/settings.json" ;;
         opencode)    echo "${HOME}/.config/opencode/opencode.json" ;;
-        # AWS currently has two conflicting official descriptions for the
-        # IDE-global file: mcp-ide.html says default.json, while qdev-mcp.html
-        # says agents/default.json. Until AWS reconciles them, global Q MCP is
-        # manual-only. The project default.json path remains diagnostic-only
-        # through get_project_mcp_path.
-        amazon-q)    echo "" ;;
+        # The current IDE guide names default.json; the overview page and
+        # language-server source also expose agents/default.json, while
+        # mcp.json is a documented legacy store. Prefer the current file for a
+        # fresh install, but preserve whichever configured file already exists.
+        amazon-q)
+            local q_default="${HOME}/.aws/amazonq/default.json"
+            local q_legacy="${HOME}/.aws/amazonq/mcp.json"
+            if [[ -f "$q_default" ]]; then
+                echo "$q_default"
+            elif [[ -f "$q_legacy" ]]; then
+                echo "$q_legacy"
+            else
+                echo "$q_default"
+            fi
+            ;;
         # PearAI MCP storage/schema is not published by its official
         # repositories; UI/extension-managed settings are manual only.
         pearai)      echo "" ;;
@@ -638,11 +703,22 @@ get_mcp_path() {
         # documented standalone file. Keep automatic file migration empty.
         cody)        echo "" ;;
         tabnine)     echo "${HOME}/.tabnine/mcp_servers.json" ;;
-        # Claude Desktop's current official local-MCP workflow is Settings >
-        # Extensions (with .mcpb packages); remote MCP is Settings >
-        # Connectors. The legacy JSON mechanism has no current portable path
-        # contract for this mapper, so keep it manual-only.
-        claude-desktop) echo "" ;;
+        # Claude Desktop's legacy local MCP JSON path is officially documented
+        # for macOS and Windows. Linux Desktop has no equivalently documented
+        # path in the current local-MCP guide, so it remains UI/manual there.
+        claude-desktop)
+            case "$(uname -s)" in
+                Darwin)
+                    echo "${HOME}/Library/Application Support/Claude/claude_desktop_config.json"
+                    ;;
+                MINGW*|MSYS*|CYGWIN*)
+                    echo "${APPDATA:-${HOME}/AppData/Roaming}/Claude/claude_desktop_config.json"
+                    ;;
+                *)
+                    echo ""
+                    ;;
+            esac
+            ;;
         kiro)              echo "${HOME}/.kiro/settings/mcp.json" ;;
         augment-code)      echo "${HOME}/.augment/settings.json" ;;
         # Void's first-party source resolves MCP to userHome/dataFolderName/
@@ -740,7 +816,7 @@ get_mcp_root_key() {
         return 0
     fi
     case "$ide" in
-        claude|cursor|windsurf|gemini-cli|trae|trae-cn|continue|cline|roo-code|antigravity|amazon-q|kimiai|workbuddy|copilot|kiro|augment-code|void-editor|baidu-comate|tencent-codebuddy|cody|tabnine|jetbrains)
+        claude|claude-desktop|cursor|windsurf|gemini-cli|trae|trae-cn|continue|cline|roo-code|antigravity|amazon-q|kimiai|workbuddy|copilot|kiro|augment-code|void-editor|baidu-comate|tencent-codebuddy|cody|tabnine|jetbrains)
             echo "mcpServers" ;;
         codex)       echo "mcp_servers" ;;
         goose-cli)   echo "extensions" ;;
@@ -1119,8 +1195,8 @@ migrate_global_skills() {
 
     if [[ "$source_ide" == "workbuddy" || "$target_ide" == "workbuddy" ]]; then
         set_status "skills" "manual"
-        set_message "skills" "WorkBuddy officially documents Skills Marketplace/UI and local skill package import; no verifiable portable Skills directory" 
-        set_manual_step "skills" "WorkBuddy: upload local Skill package via official Skills Marketplace/skills bar, install, enable/disable or uninstall; do not infer ~/.workbuddy/skills or .workbuddy/skills" 
+        set_message "skills" "WorkBuddy has an official local-package/UI import, but no stable installed Skills directory or complete package schema"
+        set_manual_step "skills" "WorkBuddy: open the left 技能 panel → 添加技能 → 上传技能, then choose the local package and verify it in the Skills list. WorkBuddy also documents OpenClaw community-skill import through this Skills entry point. Its custom package examples use skill.yml + implementation files + README, but the package extension/root and full schema are not published; do not treat SKILL.md as a guaranteed WorkBuddy package and do not infer ~/.workbuddy/skills or .workbuddy/skills"
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
     fi
@@ -1296,7 +1372,7 @@ migrate_global_skills() {
 project_skills_manual_only() {
     local ide="$1"
     case "$ide" in
-        amazon-q|blackbox|claude-desktop|codeium|cody|continue|emacs|neovim|pearai|pieces|replit|supermaven|tabnine|trae|trae-cn|void-editor|workbuddy|zcode)
+        amazon-q|blackbox|claude-desktop|codeium|cody|continue|emacs|neovim|pearai|pieces|replit|supermaven|tabnine|void-editor|workbuddy|zcode)
             return 0
             ;;
         *)
@@ -1316,6 +1392,22 @@ migrate_project_skills() {
         set_status "skills" "manual"
         set_message "skills" "project Skills compatibility directory/priority or official path still needs manual review" 
         set_manual_step "skills" "project Skills: only review native project path; do not blindly merge between compatibility directories, unclear-version or UI-only IDEs; preserve SKILL.md, scripts, references, assets and symlink boundaries" 
+        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
+        return 0
+    fi
+
+    if [[ "$source_ide" == "zcode" || "$target_ide" == "zcode" ]]; then
+        set_status "skills" "manual"
+        set_message "skills" "ZCode project Skills use an official UI import target without a published stable project directory"
+        set_manual_step "skills" "ZCode: open Settings → Skills → Import, select the external skill, choose Copy or Symlink, then choose Project for the current workspace (or Global for all workspaces). Do not infer .zcode/skills as a project path; the documented filesystem path is user-level ~/.zcode/skills"
+        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
+        return 0
+    fi
+
+    if [[ "$source_ide" == "workbuddy" || "$target_ide" == "workbuddy" ]]; then
+        set_status "skills" "manual"
+        set_message "skills" "WorkBuddy project Skills are imported through the Skills UI; no stable project directory or complete package schema is published"
+        set_manual_step "skills" "WorkBuddy: left 技能 → 添加技能 → 上传技能, select the reviewed local package, then verify/enable it in the Skills list; OpenClaw community skills use the same import surface. Do not infer a project Skills directory"
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
     fi
@@ -1707,6 +1799,14 @@ migrate_prompts() {
 
     MIGRATION_TOTAL=$((MIGRATION_TOTAL + 1))
 
+    if [[ "$source_ide" == "amazon-q" || "$target_ide" == "amazon-q" ]]; then
+        set_status "prompts" "manual"
+        set_message "prompts" "Amazon Q saved prompts have an official global library path but no cross-IDE prompt converter"
+        set_manual_step "prompts" "Amazon Q: global prompts are ~/.aws/amazonq/prompts/*.md and are created from the IDE with @ → Prompts → Create a new prompt; project prompt scope is not documented as a portable path. Recreate or review prompt frontmatter/aliases manually"
+        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
+        return 0
+    fi
+
     if [[ "$source_ide" == "pieces" || "$target_ide" == "pieces" ]]; then
         set_status "prompts" "manual"
         set_message "prompts" "Pieces has no documented portable prompt-template directory"
@@ -1791,6 +1891,10 @@ migrate_prompts() {
         set_manual_step "prompts" 'OpenCode: project .opencode/commands/*.md is copied as Markdown only; review global ~/.config/opencode/commands/, command entries in opencode.json, frontmatter, and $ARGUMENTS/!`cmd`/@file templates manually'
     fi
 
+    if [[ "$source_ide" == "roo-code" || "$target_ide" == "roo-code" ]]; then
+        set_manual_step "prompts" "Roo Code: project slash commands are .roo/commands/*.md; review command names, mode permissions, and invocation semantics manually after copying. Do not treat .roomodes or global custom_modes.yaml/json as prompt files"
+    fi
+
     local source_prompts
     source_prompts=$(get_prompts_path "$source_ide")
     local target_prompts
@@ -1811,7 +1915,7 @@ migrate_prompts() {
     fi
 
     if [[ "$source_ide" == "vscode" || "$target_ide" == "vscode" ]]; then
-        set_manual_step "prompts" "VS Code: workspace .github/prompts/*.prompt.md is migrated; user-profile prompt files remain UI/profile-managed and must be reviewed manually"
+        set_manual_step "prompts" "VS Code: workspace .github/prompts/*.prompt.md is migrated; user prompts live in the active Profile's user-data and must be created/reviewed with Chat: New Prompt File, /prompts, or Chat: Run Prompt. Do not guess a cross-platform user path"
     fi
 
     local prompt_pattern="*.md"
@@ -3289,7 +3393,7 @@ migrate_mcp() {
     fi
 
     if [[ "$source_ide" == "workbuddy" || "$target_ide" == "workbuddy" ]]; then
-        set_manual_step "mcp" "WorkBuddy: selected ${scope_label} scope; review ~/.workbuddy/mcp.json versus project .workbuddy/mcp.json and UI-managed precedence manually"
+        set_manual_step "mcp" "WorkBuddy: selected ${scope_label} scope; the official files are ~/.workbuddy/mcp.json and project .workbuddy/mcp.json. Review the merged mcpServers map in 插件 → MCP 服务器 → 配置 MCP, keep only local command/args/env for automatic conversion, and configure remote URL/OAuth/headers plus enablement in the UI"
     fi
 
     if [[ "$source_ide" == "kiro" || "$target_ide" == "kiro" ]]; then
@@ -3305,11 +3409,24 @@ migrate_mcp() {
     fi
 
     if [[ "$source_ide" == "zcode" || "$target_ide" == "zcode" ]]; then
-        set_manual_step "mcp" "ZCode: selected ${scope_label} scope; review ~/.zcode/cli/config.json, workspace .zcode/config.json, and .agents/mcp.json fallback precedence manually"
+        set_manual_step "mcp" "ZCode: selected ${scope_label} scope; review ~/.zcode/cli/config.json or workspace .zcode/config.json (root mcp.servers), or use Settings → MCP Servers → Import to select external Claude/Codex/OpenCode/.agents servers. The mapper leaves source files untouched and does not guess .agents precedence"
+    fi
+
+    if [[ "$source_ide" == "trae" || "$target_ide" == "trae" ||
+          "$source_ide" == "trae-cn" || "$target_ide" == "trae-cn" ]]; then
+        if [[ "$scope" == "project" ]]; then
+            set_manual_step "mcp" "TRAE: project MCP is .trae/mcp.json with root mcpServers; review command/args/env, URL/headers, workspace variables, and enablement after the narrow merge. Global MCP is configured through the IDE Settings → MCP Servers/raw JSON UI"
+        else
+            set_status "mcp" "manual"
+            set_message "mcp" "TRAE global MCP has an official settings/raw-JSON method but no stable published filesystem path"
+            set_manual_step "mcp" "TRAE: open Settings → MCP Servers (or the MCP settings/raw JSON editor), recreate or import the global mcpServers entries there, and review enablement/credentials. Project scope is the documented .trae/mcp.json file; do not infer ~/.trae/mcp.json or ~/.trae-cn/mcp.json"
+            MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
+            return 0
+        fi
     fi
 
     if [[ "$source_ide" == "void-editor" || "$target_ide" == "void-editor" ]]; then
-        set_manual_step "mcp" "Void: selected ${scope_label} scope; user ~/.void-editor/mcp.json and inherited VS Code project .vscode/mcp.json use separate stores/roots; custom mcpServers entries must use command/args/env or URL-only remote, while headers/auth require manual review"
+        set_manual_step "mcp" "Void is deprecated/archived: selected ${scope_label} scope uses legacy ~/.void-editor/mcp.json for the custom store, while inherited VS Code project .vscode/mcp.json uses servers. Automatic conversion is limited to local command/args/env or URL-only remote; headers/auth and migration to Kilo Code require manual review"
     fi
 
     if [[ "$source_ide" == "jetbrains" || "$target_ide" == "jetbrains" ]]; then
@@ -3317,15 +3434,34 @@ migrate_mcp() {
     fi
 
     if [[ "$source_ide" == "amazon-q" || "$target_ide" == "amazon-q" ]]; then
-        # AWS currently publishes two incompatible IDE-global paths. The
-        # dedicated IDE page says ~/.aws/amazonq/default.json, while the
-        # overview page says ~/.aws/amazonq/agents/default.json. Do not read
-        # or write either one automatically until the first-party docs agree.
-        set_status "mcp" "manual"
-        set_message "mcp" "Amazon Q IDE global MCP path is officially conflicting; automatic global migration is disabled"
-        set_manual_step "mcp" "Amazon Q: review the current IDE UI and AWS docs for ~/.aws/amazonq/default.json versus ~/.aws/amazonq/agents/default.json; project .amazonq/{default.json,agents/default.json,mcp.json}, personas, useLegacyMcpJson, and legacy CLI agents require separate manual scope review"
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
+        local q_global_default="${HOME}/.aws/amazonq/default.json"
+        local q_global_legacy="${HOME}/.aws/amazonq/mcp.json"
+        local q_global_agent="${HOME}/.aws/amazonq/agents/default.json"
+        local q_project_default="${WORKSPACE_ROOT}/.amazonq/default.json"
+        local q_project_legacy="${WORKSPACE_ROOT}/.amazonq/mcp.json"
+        local q_project_agent="${WORKSPACE_ROOT}/.amazonq/agents/default.json"
+
+        # The dedicated IDE guide documents default.json/mcp.json, while an
+        # overview page and another Q surface mention agents/default.json.
+        # AWS publishes no version discriminator. Never guess that the latter
+        # is the same standard IDE store; require the user to choose it.
+        if [[ "$scope" == "project" ]]; then
+            if [[ -f "$q_project_agent" && ! -f "$q_project_default" && ! -f "$q_project_legacy" ]]; then
+                set_status "mcp" "manual"
+                set_message "mcp" "Amazon Q project agents/default.json exists but its IDE/CLI surface is ambiguous"
+                set_manual_step "mcp" "Amazon Q: .amazonq/agents/default.json is documented by another Q surface but is not version-mapped to the IDE .amazonq/default.json file. Choose the active Q product manually, then use the Q panel tools icon or edit the selected mcpServers file; do not overwrite it automatically"
+                MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
+                return 0
+            fi
+        elif [[ -f "$q_global_agent" && ! -f "$q_global_default" && ! -f "$q_global_legacy" ]]; then
+            set_status "mcp" "manual"
+            set_message "mcp" "Amazon Q agents/default.json exists but its IDE/CLI surface is ambiguous"
+            set_manual_step "mcp" "Amazon Q: ~/.aws/amazonq/agents/default.json is documented by another Q surface but is not version-mapped to the IDE ~/.aws/amazonq/default.json file. Choose the active Q product manually, then use the Q panel tools icon or edit the selected mcpServers file; do not overwrite it automatically"
+            MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
+            return 0
+        fi
+
+        set_manual_step "mcp" "Amazon Q: standard IDE MCP uses ~/.aws/amazonq/default.json and .amazonq/default.json; existing legacy mcp.json is retained only as a legacy source/target. Workspace configuration takes precedence. Review useLegacyMcpJson, permissions, OAuth, CLI agent files, and the Q panel tools icon after this narrow mcpServers merge"
     fi
 
     # The first-party Blackbox CLI docs describe `blackbox mcp` as running
@@ -3390,30 +3526,49 @@ migrate_mcp() {
 
     # Roo has a documented project file (.roo/mcp.json), but its global MCP
     # file lives in an extension-managed settings directory whose exact path
-    # is not published by Roo's official docs. This mapper has no project/
-    # global scope selector, so never auto-convert Roo MCP; fail closed with
-    # an explicit manual instruction instead of confusing it with Cline or
-    # VS Code MCP storage.
+    # is not published by Roo's official docs. Project scope is safe to
+    # convert through the documented mcpServers JSON file; global scope stays
+    # manual and must never be confused with Cline or VS Code storage.
     if [[ "$source_ide" == "roo-code" || "$target_ide" == "roo-code" ]]; then
-        set_status "mcp" "manual"
-        set_message "mcp" "Roo Code global MCP is extension-storage/UI managed; project MCP is .roo/mcp.json and requires manual scope/schema review"
-        set_manual_step "mcp" "Roo Code: review project .roo/mcp.json (root mcpServers) manually and configure global MCP through Roo's MCP settings UI; do not infer a VS Code globalStorage or Cline path"
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
+        if [[ "$scope" != "project" ]]; then
+            set_status "mcp" "manual"
+            set_message "mcp" "Roo Code global MCP is extension-storage/UI managed; no stable official filesystem path is published"
+            set_manual_step "mcp" "Roo Code: configure global MCP through the Roo MCP settings UI; do not infer a VS Code globalStorage or Cline path. Project MCP is separately documented at .roo/mcp.json"
+            MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
+            return 0
+        fi
+        set_manual_step "mcp" "Roo Code: project scope uses .roo/mcp.json with root mcpServers; review mode permissions, remote headers/auth, and extension behavior after the narrow JSON merge. Global MCP remains UI-managed"
     fi
 
-    # Claude Desktop has two intentionally separate MCP workflows. Local MCP
-    # is installed through Settings > Extensions (or the legacy local-only
-    # claude_desktop_config.json mechanism), while remote MCP is configured
-    # through Settings > Connectors. Current official docs do not provide a
-    # portable path/schema that this generic file mapper can safely write, so
-    # neither importing from nor exporting to Claude Desktop is automatic.
+    # Cline's official docs currently publish both a shared Config-layout file
+    # and a CLI MCP file. Preserve an existing single choice, honor explicit
+    # overrides, and refuse an ambiguous global migration when both exist.
+    if [[ "$source_ide" == "cline" || "$target_ide" == "cline" ]]; then
+        if [[ "$scope" != "project" ]]; then
+            local cline_primary="${HOME}/.cline/data/settings/cline_mcp_settings.json"
+            local cline_alternative="${HOME}/.cline/mcp.json"
+            if [[ -z "${CLINE_MCP_PATH:-}" && -z "${CLINE_DATA_DIR:-}" && -f "$cline_primary" && -f "$cline_alternative" ]]; then
+                set_status "mcp" "manual"
+                set_message "mcp" "Cline has two documented global MCP files and both are present; the active product scope is ambiguous"
+                set_manual_step "mcp" "Cline: choose one documented global file, ~/.cline/data/settings/cline_mcp_settings.json or ~/.cline/mcp.json, or set CLINE_MCP_PATH/CLINE_DATA_DIR explicitly. The CLI also supports cline mcp, cline config mcp, --config, and --data-dir; the project file is .cline/mcp.json. Do not use a guessed VS Code globalStorage path"
+                MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
+                return 0
+            fi
+            set_manual_step "mcp" "Cline: global MCP uses the current Config-layout ~/.cline/data/settings/cline_mcp_settings.json; the MCP guide also documents ~/.cline/mcp.json for CLI. Existing alternative files are preserved, CLINE_MCP_PATH/CLINE_DATA_DIR and --config/--data-dir can relocate state, and cline mcp or cline config mcp can verify the active store. Project MCP is .cline/mcp.json"
+        else
+            set_manual_step "mcp" "Cline: project MCP is .cline/mcp.json with mcpServers; review IDE/CLI precedence and validate with the Cline MCP panel or cline mcp after the narrow merge"
+        fi
+    fi
+
     if [[ "$source_ide" == "claude-desktop" || "$target_ide" == "claude-desktop" ]]; then
-        set_status "mcp" "manual"
-        set_message "mcp" "Claude Desktop local MCP configuration is manual; use Settings > Extensions for local extensions, the legacy local-only claude_desktop_config.json mechanism only at its documented location, and Settings > Connectors for remote MCP"
-        set_manual_step "mcp" "Claude Desktop local MCP configuration is manual: do not copy an MCP file. Install local extensions in Settings > Extensions or configure the legacy local-only claude_desktop_config.json mechanism at its documented platform location; add remote MCP only through Settings > Connectors. See references/ide-registry.md."
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
+        if [[ -z "$(get_mcp_path claude-desktop)" ]]; then
+            set_status "mcp" "manual"
+            set_message "mcp" "Claude Desktop has no confirmed legacy JSON path on this platform"
+            set_manual_step "mcp" "Claude Desktop: on macOS use ~/Library/Application Support/Claude/claude_desktop_config.json; on native Windows use %APPDATA%\\Claude\\claude_desktop_config.json but do not guess MSIX virtualized paths; on Linux use Settings → Extensions or verify the current Developer path manually. For all platforms, install .mcpb through Settings → Extensions → Advanced settings → Install Extension; configure remote MCP through Settings → Connectors. Claude Code can import supported Desktop entries with claude mcp add-from-claude-desktop on macOS/WSL."
+            MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
+            return 0
+        fi
+        set_manual_step "mcp" "Claude Desktop legacy local MCP JSON is migrated only at the documented platform path; install modern local servers as .mcpb via Settings → Extensions → Advanced settings → Install Extension, and configure remote MCP via Settings → Connectors. Claude Code's official claude mcp add-from-claude-desktop remains the supported interactive import on macOS/WSL."
     fi
 
     local source_mcp
@@ -3431,8 +3586,8 @@ migrate_mcp() {
     # safe to write under the explicitly selected workspace root.
     if [[ "$scope" != "project" && -z "$source_mcp" && "$source_ide" == "vscode" ]]; then
         set_status "mcp" "manual"
-        set_message "mcp" "VS Code user MCP path is not portable/documented for this mapper; no file was read"
-        set_manual_step "mcp" "VS Code: use MCP: Open User Configuration for user MCP, or review the workspace .vscode/mcp.json (root servers) manually; do not use GitHub Copilot CLI mcpServers files"
+        set_message "mcp" "VS Code user MCP is profile-managed; no absolute path was guessed"
+        set_manual_step "mcp" "VS Code: use MCP: Open User Configuration or MCP: Add Server in the active Profile; code --add-mcp is also documented. For a workspace use .vscode/mcp.json with root servers. Do not use GitHub Copilot CLI ~/.copilot/mcp-config.json or its mcpServers root as a VS Code file"
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
     fi
@@ -4105,6 +4260,17 @@ migrate_project() {
         return 0
     fi
 
+    # Antigravity's .agents project namespace mixes Skills, rules, MCP,
+    # hooks, plugins, and other product state. Dedicated object mappings are
+    # available, but opaque whole-project copying would cross those schemas.
+    if [[ "$source_ide" == "antigravity" || "$target_ide" == "antigravity" ]]; then
+        set_status "project" "manual"
+        set_message "project" "Antigravity .agents project namespace mixes Skills, rules, MCP, hooks, plugins, and product state"
+        set_manual_step "project" "Antigravity: review .agents/skills, .agents/rules, .agents/mcp_config.json, .agents/hooks.json, and .agents/plugins separately; the IDE and CLI share some locations but are different product surfaces; do not copy .agents opaquely"
+        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
+        return 0
+    fi
+
     # Aider's project file is YAML with Aider-specific option names and
     # precedence. Do not byte-copy another IDE's project config into it, or
     # export it as another IDE's project format; both directions require a
@@ -4415,13 +4581,13 @@ generate_report() {
             local status_icon
 
             case "$status" in
-                success) status_icon="✓" ;;
-                copied)  status_icon="✓" ;;
-                manual)  status_icon="⚠" ;;
-                partial) status_icon="⚠" ;;
-                failed)  status_icon="✗" ;;
-                absent)  status_icon="○" ;;
-                skipped) status_icon="○" ;;
+                success) status_icon="OK" ;;
+                copied)  status_icon="OK" ;;
+                manual)  status_icon="WARN" ;;
+                partial) status_icon="WARN" ;;
+                failed)  status_icon="FAIL" ;;
+                absent)  status_icon="-" ;;
+                skipped) status_icon="-" ;;
                 *)       status_icon="?" ;;
             esac
 
@@ -4452,8 +4618,42 @@ generate_report() {
     report+="\n"
     report+="========================================\n"
 
-    echo -e "$report"
+    if [[ "${MIGRATE_JSON:-}" == "1" ]]; then
+        _emit_json_report "$source_ide" "$target_ide"
+    else
+        printf '%b' "$report"
+    fi
 }
+
+# Emit a machine-readable JSON summary (used when MIGRATE_JSON=1 / --json).
+_emit_json_report() {
+    local source_ide="$1"
+    local target_ide="$2"
+    local entries=()
+
+    for obj in skills rules prompts mcp project-mcp config project agents hooks memory; do
+        local status message token steps
+        status=$(get_status "$obj")
+        [[ -n "$status" ]] || continue
+        message=$(get_message "$obj")
+        token=$(status_token "$status")
+        entries+=("$(printf '{"object":"%s","status":"%s","token":"%s","message":"%s"}' \
+            "$obj" "$status" "$token" "$(json_escape "$message")")")
+        steps=$(get_manual_steps "$obj")
+        if [[ -n "$steps" ]]; then
+            entries+=("$(printf '{"object":"%s","status":"manual","token":"WARN","steps":"%s"}' \
+                "$obj" "$(json_escape "$steps")")")
+        fi
+    done
+
+    local entries_json
+    entries_json=$(IFS=,; echo "${entries[*]}")
+    printf '{"source_ide":"%s","target_ide":"%s","strategy":"%s","statistics":{"total":%s,"succeeded":%s,"failed":%s,"skipped":%s},"results":[%s]}\n' \
+        "$source_ide" "$target_ide" "$STRATEGY" \
+        "$MIGRATION_TOTAL" "$MIGRATION_SUCCESS" "$MIGRATION_FAILED" "$MIGRATION_SKIPPED" \
+        "$entries_json"
+}
+
 
 main() {
     trap cleanup_migration_files EXIT
@@ -4492,6 +4692,10 @@ main() {
                 DRY_RUN=1
                 shift
                 ;;
+            --json)
+                MIGRATE_JSON=1
+                shift
+                ;;
             --yes|-y)
                 ASSUME_YES=1
                 shift
@@ -4512,6 +4716,11 @@ main() {
                 ;;
         esac
     done
+
+    if [[ "${MIGRATE_JSON:-}" == "1" ]]; then
+        exec 3>&1
+        exec 1>&2
+    fi
 
     # Suppress the banner in read-only diagnostic mode so --print-path emits only
     # the resolved path on stdout (keeps verify-ide-config.sh comparisons exact).
@@ -4613,9 +4822,9 @@ main() {
 
     if [[ "$OBJECTS" == *mcp* || "$OBJECTS" == *config* || "$OBJECTS" == *project* ]]; then
         echo "" >&2
-        echo "⚠️  SECURITY: This migration includes mcp/config/project, which may contain API keys, tokens," >&2
-        echo "    bearer credentials or embedded URL credentials. During migration, secrets are automatically cleared (only key names kept), and the target IDE" >&2
-        echo "    needs a separate secret source configured (env vars/secret manager). Run only between sources and targets you trust." >&2
+        log_warn "SECURITY: This migration includes mcp/config/project, which may contain API keys, tokens," >&2
+        log_warn "bearer credentials or embedded URL credentials. During migration, secrets are automatically cleared (only key names kept), and the target IDE"
+        log_warn "needs a separate secret source configured (env vars/secret manager). Run only between sources and targets you trust."
         echo "" >&2
     fi
 
@@ -4669,12 +4878,20 @@ main() {
     echo "========================================"
     echo ""
 
+    if [[ "${MIGRATE_JSON:-}" == "1" ]]; then
+        exec 1>&3
+    fi
+
     report=$(generate_report "$SOURCE_IDE" "$TARGET_IDE")
     echo "$report"
 
     if [[ -n "$REPORT_FILE" ]]; then
         echo "$report" > "$REPORT_FILE"
-    echo "Report saved to: $REPORT_FILE" 
+        if [[ "${MIGRATE_JSON:-}" == "1" ]]; then
+            echo "Report saved to: $REPORT_FILE" >&2
+        else
+            echo "Report saved to: $REPORT_FILE"
+        fi
     fi
 }
 

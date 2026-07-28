@@ -5,7 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TMP_ROOT="$(mktemp -d /tmp/agent-skills-openclaw-test.XXXXXX)"
 TEST_HOME="$TMP_ROOT/home"
-SOURCE_DIR="$TEST_HOME/.gemini/antigravity/skills"
+SOURCE_DIR="$TEST_HOME/.gemini/config/skills"
 OPENCLAW_DIR="$TEST_HOME/.openclaw/skills"
 WORKSPACE_DIR="$TMP_ROOT/workspace-home"
 FAKE_BIN="$TMP_ROOT/bin"

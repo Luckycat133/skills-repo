@@ -20,11 +20,22 @@ assert_path() {
     [[ "$actual" == "$expected" ]]
 }
 
-assert_path global "~/.gemini/antigravity/skills"
+assert_path global "~/.gemini/config/skills"
 assert_path project ".agents"
 assert_path project-skills ".agents/skills"
 assert_path rules ".agents/rules"
 assert_path mcp "~/.gemini/config/mcp_config.json"
+
+# The IDE-specific Skills page also documents a legacy-only global tree. The
+# resolver preserves it when it is the only existing tree, while a fresh home
+# uses the current shared config path asserted above.
+LEGACY_HOME="$TMP_ROOT/legacy-home"
+mkdir -p "$LEGACY_HOME/.gemini/antigravity/skills"
+LEGACY_SKILLS_PATH="$(HOME="$LEGACY_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --print-path antigravity global)"
+[[ "$LEGACY_SKILLS_PATH" == "~/.gemini/antigravity/skills" ]] || {
+    echo "FAIL: Antigravity legacy Skills tree was not preserved" >&2
+    exit 1
+}
 
 if HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --print-path antigravity config >/dev/null 2>&1; then
     echo "FAIL: Antigravity IDE unexpectedly exposes a standalone config migration target" >&2
@@ -43,6 +54,16 @@ RULES_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --objects rules \
     --dry-run 2>&1)"
 grep -Fq "Antigravity IDE rules use a directory; manual migration required" <<< "$RULES_OUTPUT"
+
+# `.agents` is a mixed project namespace. Whole-project migration must stop
+# even though dedicated Skills/MCP mappings are available.
+PROJECT_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+    --source antigravity \
+    --target cursor \
+    --workspace "$WORKSPACE" \
+    --objects project \
+    --dry-run 2>&1)"
+grep -Fq "Antigravity .agents project namespace mixes" <<< "$PROJECT_OUTPUT"
 
 mkdir -p "$(dirname "$CURSOR_MCP")"
 printf '%s\n' \

@@ -16,26 +16,30 @@ if [[ ! -f "$MIGRATION_SCRIPT" ]]; then
     exit 1
 fi
 
-# Resolve platform-specific EXPECTED entries. Some IDE paths (e.g. Cline's MCP
-# store under the VS Code extension's user/globalStorage) differ between macOS,
-# Linux, and Windows. Compute the value for the current runner before any
-# array initialization so the EXPECTED entry below can reference it.
+# Resolve platform-specific EXPECTED entries. Claude Desktop's documented
+# legacy JSON path differs by platform; Cline's current shared/CLI path is
+# platform-neutral and its documented alternative is handled by the mapper's
+# existing-file resolver. VS Code stores its default-profile user MCP config
+# under the same XDG/standard user-config base across platforms.
 case "$(uname -s)" in
     Darwin)
-        CLINE_MCP_PATH='~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json'
+        CLAUDE_DESKTOP_MCP_PATH='~/Library/Application Support/Claude/claude_desktop_config.json'
+        VSCODE_MCP_PATH='~/Library/Application Support/Code/User/mcp.json'
         ;;
     Linux)
-        CLINE_MCP_PATH='~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json'
+        CLAUDE_DESKTOP_MCP_PATH=''
+        VSCODE_MCP_PATH='~/.config/Code/User/mcp.json'
         ;;
     *)
-        CLINE_MCP_PATH='${APPDATA}/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json'
+        CLAUDE_DESKTOP_MCP_PATH='${APPDATA}/Claude/claude_desktop_config.json'
+        VSCODE_MCP_PATH='${APPDATA}/Code/User/mcp.json'
         ;;
 esac
 
 # Expected registry canonical paths. Format: "ide|object|expected".
 # object ∈ global|project|project-skills|mcp|project-mcp|project-config|config|rules
 EXPECTED=(
-    "antigravity|global|~/.gemini/antigravity/skills"
+    "antigravity|global|~/.gemini/config/skills"
     "antigravity|project|.agents"
     "antigravity|project-skills|.agents/skills"
     "antigravity|rules|.agents/rules"
@@ -70,13 +74,13 @@ EXPECTED=(
     "claude|project-mcp|.mcp.json"
     "claude|project-config|.claude/settings.json"
     "claude|config|~/.claude/settings.json"
-    "claude-desktop|mcp|"
+    "claude-desktop|mcp|${CLAUDE_DESKTOP_MCP_PATH}"
     "claude-desktop|config|"
     "amazon-q|global|"
     "amazon-q|project|.amazonq"
     "amazon-q|project-skills|"
     "amazon-q|rules|.amazonq/rules"
-    "amazon-q|mcp|"
+    "amazon-q|mcp|~/.aws/amazonq/default.json"
     "amazon-q|project-mcp|.amazonq/default.json"
     "amazon-q|config|"
     "gemini-cli|global|~/.gemini/skills"
@@ -139,7 +143,7 @@ EXPECTED=(
     "vscode|project-skills|.github/skills"
     "vscode|rules|.github/copilot-instructions.md"
     "vscode|project-mcp|.vscode/mcp.json"
-    "vscode|mcp|"
+    "vscode|mcp|${VSCODE_MCP_PATH}"
     "vscode|config|"
     "zed|global|~/.agents/skills"
     "zed|project-skills|.agents/skills"
@@ -151,7 +155,8 @@ EXPECTED=(
     "cline|project|"
     "cline|project-skills|.cline/skills"
     "cline|rules|.clinerules"
-    "cline|mcp|${CLINE_MCP_PATH}"
+    "cline|mcp|~/.cline/data/settings/cline_mcp_settings.json"
+    "cline|project-mcp|.cline/mcp.json"
     "cline|config|"
     "cody|global|"
     "cody|project|"

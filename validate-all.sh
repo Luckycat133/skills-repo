@@ -37,4 +37,6 @@ if [[ -d "$SETUP_SCRIPTS" ]]; then
   bash "$SETUP_SCRIPTS/test-smart-ide-migration.sh"
   echo "Running test-mcp-secret-redaction.sh..."
   bash "$SETUP_SCRIPTS/test-mcp-secret-redaction.sh"
+  echo "Running test-trae-boundary.sh..."
+  bash "$SETUP_SCRIPTS/test-trae-boundary.sh"
 fi

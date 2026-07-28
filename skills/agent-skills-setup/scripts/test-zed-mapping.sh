@@ -26,7 +26,7 @@ assert_path mcp '~/.config/zed/settings.json'
 assert_path project-mcp '.zed/settings.json'
 assert_path config ''
 
-printf '%s\n' '{"mcpServers":{"local":{"command":"node","args":["server.js"],"env":{"TOKEN":"secret-token"}},"remote":{"url":"https://example.invalid/mcp","headers":{"Authorization":"Bearer secret-token"}}}}' > "$TEST_HOME/.cursor/mcp.json"
+printf '%s\n' '{"mcpServers":{"local":{"command":"node","args":["server.js"],"env":{"TOKEN":"__zed_inert_fixture__"}},"remote":{"url":"https://example.invalid/mcp","headers":{"Authorization":"Bearer __zed_inert_fixture__"}}}}' > "$TEST_HOME/.cursor/mcp.json"
 HOME="$TEST_HOME" bash "$SCRIPT" --source cursor --target zed --objects mcp --yes --strategy overwrite >/dev/null
 python3 - "$TEST_HOME/.config/zed/settings.json" <<'PY'
 import json, sys
