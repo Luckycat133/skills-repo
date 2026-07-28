@@ -1191,7 +1191,7 @@ migrate_global_skills() {
             if [[ -f "$skill_dir/SKILL.md" ]]; then
                 if [[ $DRY_RUN -eq 1 ]]; then
                     echo "  DRY-RUN: cp -r $skill_dir $target_global/$skill_name"
-                    ((migrated_count++))
+                    ((migrated_count++)) || true
                 else
                     strategy_rc=0
                     apply_skill_strategy "$target_global" "$skill_name" || strategy_rc=$?
@@ -1209,7 +1209,7 @@ migrate_global_skills() {
                         # the whole copied skill so no secret survives.
                         if redact_project_copy "$target_global/$skill_name" >/dev/null; then
                             echo "  [OK] migrated skill: $skill_name"
-                            ((migrated_count++))
+                            ((migrated_count++)) || true
                         else
                             # SECURITY: fail-closed — if redaction cannot be
                             # guaranteed, delete the unredacted COPY rather
@@ -1218,11 +1218,11 @@ migrate_global_skills() {
                             # this safe: an empty variable aborts before rm.
                             rm -rf "${target_global:?}/${skill_name:?}"
                             echo "  [FAIL] skill copy redaction failed, deleted copy to prevent key leak: $skill_name"
-                            ((failed_count++))
+                            ((failed_count++)) || true
                         fi
                     else
                         echo "  [FAIL] migration failed: $skill_name" 
-                        ((failed_count++))
+                        ((failed_count++)) || true
                     fi
                 fi
             fi
@@ -1244,7 +1244,7 @@ migrate_global_skills() {
 
             if [[ $DRY_RUN -eq 1 ]]; then
                 echo "  DRY-RUN: cp -r $skill_dir $target_global/$skill_name"
-                ((migrated_count++))
+                ((migrated_count++)) || true
             else
                 strategy_rc=0
                 apply_skill_strategy "$target_global" "$skill_name" || strategy_rc=$?
@@ -1259,16 +1259,16 @@ migrate_global_skills() {
                     # MED-S3: redact the copied skill bundle (fail-closed).
                     if redact_project_copy "$target_global/$skill_name" >/dev/null; then
                         echo "  [OK] migrated skill: $skill_name"
-                        ((migrated_count++))
+                        ((migrated_count++)) || true
                     else
                         # SECURITY: fail-closed — see fail-closed note above.
                         rm -rf "${target_global:?}/${skill_name:?}"
                         echo "  [FAIL] skill copy redaction failed, deleted copy to prevent key leak: $skill_name"
-                        ((failed_count++))
+                        ((failed_count++)) || true
                     fi
                 else
                     echo "  [FAIL] migration failed: $skill_name" 
-                    ((failed_count++))
+                    ((failed_count++)) || true
                 fi
             fi
         done
