@@ -1208,11 +1208,16 @@ migrate_global_skills() {
                         # source). Fail-closed: on redaction failure remove
                         # the whole copied skill so no secret survives.
                         if redact_project_copy "$target_global/$skill_name" >/dev/null; then
-                            echo "  [OK] migrated skill: $skill_name" 
+                            echo "  [OK] migrated skill: $skill_name"
                             ((migrated_count++))
                         else
+                            # SECURITY: fail-closed — if redaction cannot be
+                            # guaranteed, delete the unredacted COPY rather
+                            # than risk leaking embedded credentials. The
+                            # ${target_global:?} / ${skill_name:?} guards make
+                            # this safe: an empty variable aborts before rm.
                             rm -rf "${target_global:?}/${skill_name:?}"
-                            echo "  [FAIL] skill copy redaction failed, deleted copy to prevent key leak: $skill_name" 
+                            echo "  [FAIL] skill copy redaction failed, deleted copy to prevent key leak: $skill_name"
                             ((failed_count++))
                         fi
                     else
@@ -1253,11 +1258,12 @@ migrate_global_skills() {
                 if cp -r "$skill_dir" "$target_global/$skill_name"; then
                     # MED-S3: redact the copied skill bundle (fail-closed).
                     if redact_project_copy "$target_global/$skill_name" >/dev/null; then
-                        echo "  [OK] migrated skill: $skill_name" 
+                        echo "  [OK] migrated skill: $skill_name"
                         ((migrated_count++))
                     else
+                        # SECURITY: fail-closed — see fail-closed note above.
                         rm -rf "${target_global:?}/${skill_name:?}"
-                        echo "  [FAIL] skill copy redaction failed, deleted copy to prevent key leak: $skill_name" 
+                        echo "  [FAIL] skill copy redaction failed, deleted copy to prevent key leak: $skill_name"
                         ((failed_count++))
                     fi
                 else
@@ -1394,6 +1400,9 @@ migrate_project_skills() {
                 echo "  [OK] migrated project skill: $skill_name"
                 migrated_count=$((migrated_count + 1))
             else
+                # SECURITY: fail-closed — delete the unredacted COPY rather
+                # than risk leaking embedded credentials. ${target_path:?}
+                # and $skill_name (non-empty by loop guard) make rm safe.
                 rm -rf "${target_path:?}/$skill_name"
                 echo "  [FAIL] project skill redaction failed, deleted copy to prevent key leak: $skill_name"
                 failed_count=$((failed_count + 1))

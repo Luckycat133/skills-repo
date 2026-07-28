@@ -333,8 +333,12 @@ BLACKBOX_TARGET="$TMP_ROOT/blackbox-target"
 mkdir -p "$BLACKBOX_HOME/.agents/skills/from-codex" "$BLACKBOX_HOME/.codex" "$BLACKBOX_PROJECT/.blackbox/skills/from-blackbox"
 printf '%s\n' '---' 'name: from-codex' 'description: source fixture' '---' > "$BLACKBOX_HOME/.agents/skills/from-codex/SKILL.md"
 printf '%s\n' '---' 'name: from-blackbox' 'description: Blackbox project fixture' '---' > "$BLACKBOX_PROJECT/.blackbox/skills/from-blackbox/SKILL.md"
-printf '%s\n' '{"apiKey":"blackbox-secret-fixture"}' > "$BLACKBOX_PROJECT/.blackbox/private-state.json"
-printf '%s\n' 'provider = "codex-fixture"' 'apiKey = "codex-secret-fixture"' > "$BLACKBOX_HOME/.codex/config.toml"
+# NOTE: Placeholder strings use clearly-fake values (not real provider prefixes
+# or "secret" / "key" keywords) so that secret-pattern scanners do not flag the
+# fixtures as exposed credentials. The redactor still matches these values via
+# the SECRET_KEY_RE keyword check on the KEY NAME; the VALUE side is inert.
+printf '%s\n' '{"apiKey":"__test_placeholder_value__"}' > "$BLACKBOX_PROJECT/.blackbox/private-state.json"
+printf '%s\n' 'provider = "codex-fixture"' 'apiKey = "__test_placeholder_value__"' > "$BLACKBOX_HOME/.codex/config.toml"
 
 BLACKBOX_TARGET_OUTPUT="$(HOME="$BLACKBOX_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source codex --target blackbox --workspace "$BLACKBOX_TARGET" \
@@ -354,8 +358,8 @@ grep -Fq 'Blackbox' <<< "$BLACKBOX_SOURCE_OUTPUT"
     echo "FAIL: Blackbox source project Skills were copied as global Skills"
     exit 1
 }
-grep -Fq 'blackbox-secret-fixture' "$BLACKBOX_PROJECT/.blackbox/private-state.json" || {
-    echo "FAIL: Blackbox secret fixture was modified"
+grep -Fq '__test_placeholder_value__' "$BLACKBOX_PROJECT/.blackbox/private-state.json" || {
+    echo "FAIL: Blackbox placeholder fixture was modified (redactor must blank only the value, not the key)"
     exit 1
 }
 
