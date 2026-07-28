@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-07-28
+
+### Security audit hardening (SkillSpector / VirusTotal re-scan)
+- **Fail-closed surface unified** (`smart-ide-migration.sh`, `redact_project_copy`): the two remaining inline `for f ... rm -f "$f"` sites in the project-copy redaction path now route through the existing `delete_copy_only()` helper (`rm -f -- "$@"`), matching `redact_secrets_in_file()`. This closes an option-injection gap where a copied filename beginning with `-` could be parsed as `rm` options, and makes the entire CR-002 fail-closed surface uniform. The 5 SkillSpector "Tool Parameter Abuse" findings on `rm -f` were confirmed false positives (they are the safety control itself); this hardening makes the intent unambiguous.
+- **`--env` opt-in path annotated** (`auto-configure-openclaw-skills.sh`): added a `// SECURITY:` annotation on the defensive `env` object initialization so the keep-if-object / else `{}` pattern is not mistaken for credential harvesting. The 4 SkillSpector "Credential Access" findings were confirmed false positives (explicit `--env <skill:KEY=VALUE>` opt-in; values written to local OpenClaw config, not exfiltrated).
+
+### Cline MCP path correction (落地 0.6.1 描述但代码未生效的修复)
+- **`cline/mcp` now resolves to the VS Code extension globalStorage path** (`smart-ide-migration.sh` `get_mcp_path` + `migrate_mcp`, `ide-paths.json`, `ide-registry.md`, `SKILL.md`, `verify-ide-config.sh`, `test-smart-ide-migration.sh`). Cline stores `cline_mcp_settings.json` under `saoudrizwan.claude-dev/settings/` in the VS Code user-data dir (confirmed by docs.cline.bot/mcp and 5 independent sources, 2026-07): macOS `~/Library/Application Support/Code/User/globalStorage/...`, Linux `~/.config/Code/User/globalStorage/...`, Windows `%APPDATA%\Code\User\globalStorage\...`. The prior `~/.cline/data/settings/` primary had no external evidence and was a prior-session misread (the 0.6.1 changelog even claimed the migration script "already returned the correct path", but the code actually returned `~/.cline/data/`). The legacy `~/.cline/mcp.json` CLI alternative is preserved as an ambiguity trigger; `CLINE_MCP_PATH` overrides everything for non-standard installs (Insiders/VSCodium/relocated `--user-data-dir`). Fixes the `cline/mcp` drift in `validate-all.sh`.
+
+### Verification
+- `validate-all.sh`: all green (no FAIL), including the previously-failing `cline/mcp` check.
+- `test-migration.sh`: 80/80 checks pass. `test-mcp-secret-redaction.sh`: 70/70 checks pass (CR-002 fail-closed cases 18a/18b verified).
+
 ## [0.6.2] - 2026-07-28
 
 ### Documentation & i18n (P0-P3 audit follow-up)

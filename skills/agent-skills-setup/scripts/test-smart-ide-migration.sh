@@ -622,10 +622,19 @@ grep -Fq 'Aider .aider.conf.yml' <<< "$AIDER_CONFIG_OUTPUT"
     exit 1
 }
 
-# Cline's current docs publish a shared Config-layout global file and a CLI
-# alternative, both using mcpServers. Check the documented fresh target and
-# project file, preserve an existing alternative, and fail closed when both
-# global files are present without an explicit override.
+# Cline stores MCP settings in the VS Code extension globalStorage
+# (cline_mcp_settings.json under saoudrizwan.claude-dev/settings/). A legacy
+# ~/.cline/mcp.json CLI alternative may exist; when both are present without
+# CLINE_MCP_PATH, global migration is manual. Project MCP is .cline/mcp.json.
+case "$(uname -s)" in
+    Darwin) CLINE_MCP_EXPECTED="~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"
+            CLINE_MCP_TARGET="$TEST_HOME/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json" ;;
+    Linux)  CLINE_MCP_EXPECTED="~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"
+            CLINE_MCP_TARGET="$TEST_HOME/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json" ;;
+    *)      CLINE_MCP_EXPECTED="~/AppData/Roaming/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"
+            CLINE_MCP_TARGET="$TEST_HOME/AppData/Roaming/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json" ;;
+esac
+
 assert_cline_path() {
     local object="$1"
     local expected="$2"
@@ -643,8 +652,7 @@ assert_cline_path project-skills ".cline/skills"
 assert_cline_path rules ".clinerules"
 assert_cline_path project-mcp ".cline/mcp.json"
 assert_cline_path config ""
-assert_cline_path mcp "~/.cline/data/settings/cline_mcp_settings.json"
-CLINE_MCP_TARGET="$TEST_HOME/.cline/data/settings/cline_mcp_settings.json"
+assert_cline_path mcp "$CLINE_MCP_EXPECTED"
 
 printf '%s\n' '{"mcpServers":{"local":{"command":"node","args":["server.js"],"env":{"API_KEY":"do-not-copy"}},"remote":{"url":"https://example.invalid/mcp","transportType":"sse"}}}' > "$TEST_HOME/.claude.json"
 HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
@@ -670,30 +678,18 @@ grep -Fq 'Cline MCP mcpServers schema is invalid or ambiguous' <<< "$INVALID_CLI
     exit 1
 }
 
-# If only the alternative CLI file exists, the resolver preserves it rather
-# than silently creating a second global store.
+# When both the globalStorage MCP settings and the legacy ~/.cline/mcp.json CLI
+# alternative exist, the mapper refuses an ambiguous global migration.
 rm -f "$CLINE_MCP_TARGET"
-mkdir -p "$TEST_HOME/.cline"
+mkdir -p "$(dirname "$CLINE_MCP_TARGET")"
 CLINE_ALT_TARGET="$TEST_HOME/.cline/mcp.json"
-printf '%s\n' '{"mcpServers":{}}' > "$CLINE_ALT_TARGET"
-printf '%s\n' '{"mcpServers":{"alternative":{"command":"node","args":["server.js"]}}}' > "$TEST_HOME/.claude.json"
-HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
-    --source claude --target cline --objects mcp --yes --strategy overwrite >/dev/null
-python3 - "$CLINE_ALT_TARGET" <<'PY'
-import json, sys
-assert "alternative" in json.load(open(sys.argv[1]))["mcpServers"]
-PY
-[[ ! -e "$CLINE_MCP_TARGET" ]] || {
-    echo "FAIL: Cline alternative-file migration created a second global store" >&2
-    exit 1
-}
-
-# Both documented global files require explicit scope selection.
+mkdir -p "$TEST_HOME/.cline"
 printf '%s\n' '{"mcpServers":{}}' > "$CLINE_MCP_TARGET"
+printf '%s\n' '{"mcpServers":{}}' > "$CLINE_ALT_TARGET"
 AMBIGUOUS_CLINE_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source claude --target cline --objects mcp --yes --strategy overwrite 2>&1)"
-grep -Fq 'Cline has two documented global MCP files' <<< "$AMBIGUOUS_CLINE_OUTPUT" || {
-    echo "FAIL: Cline dual-file ambiguity was not reported" >&2
+grep -Fq 'Cline has both the globalStorage MCP settings' <<< "$AMBIGUOUS_CLINE_OUTPUT" || {
+    echo "FAIL: Cline globalStorage+alternative ambiguity was not reported" >&2
     exit 1
 }
 rm -f "$CLINE_MCP_TARGET" "$CLINE_ALT_TARGET"

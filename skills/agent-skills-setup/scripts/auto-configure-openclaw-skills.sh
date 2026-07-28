@@ -933,6 +933,12 @@ for (const skill of requestedSkills) {
   }
 }
 
+// SECURITY: this loop ONLY runs when the user explicitly passes
+// --env <skill:KEY=VALUE> on the command line (envAssignments is empty
+// otherwise). The two defensive initializations below preserve any existing
+// object shape (keep-if-object, else {}); they do NOT read, harvest, or
+// transmit credentials. The user-supplied value is written to the local
+// OpenClaw config file (see fs.writeFileSync below), not exfiltrated.
 for (const item of envAssignments) {
   const match = /^([^:]+):([^=]+)=(.*)$/.exec(item);
   if (!match) continue;

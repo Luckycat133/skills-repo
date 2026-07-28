@@ -155,7 +155,7 @@ EXPECTED=(
     "cline|project|"
     "cline|project-skills|.cline/skills"
     "cline|rules|.clinerules"
-    "cline|mcp|~/.cline/data/settings/cline_mcp_settings.json"
+    "cline|mcp|~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"
     "cline|project-mcp|.cline/mcp.json"
     "cline|config|"
     "cody|global|"

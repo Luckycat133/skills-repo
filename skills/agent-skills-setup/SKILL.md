@@ -1,6 +1,6 @@
 ---
 name: agent-skills-setup
-version: 0.6.2
+version: 0.6.3
 license: MIT
 description: >
   Migrate AI assistant context between IDEs — MCP servers, rules/instructions,
@@ -314,7 +314,7 @@ without equivalent explicit consent and integrity verification.
 | JetBrains Junie | Canonical project instructions are `.junie/AGENTS.md` (root `AGENTS.md`/legacy guidelines are fallbacks); MCP auto-conversion is local `command`/optional `args`/`env` only, while remote/whole `.junie` migration is manual |
 | Replit Agent | Project Skills are `.agents/skills`; `.local/secondary_skills` is a separate compatibility directory; `replit.md` is a living Agent-maintained document and must never be overwritten automatically; MCP is cloud/UI-managed |
 | Kiro | MCP path has `settings/` subdir: `.kiro/settings/mcp.json`; current IDE hooks use `.kiro/hooks/*.json` v1, while `.kiro/hooks/*.kiro.hook` is legacy; IDE custom agents are Markdown and Kiro CLI custom agents are separate JSON |
-| Cline | Current Config docs use `~/.cline/data/settings/cline_mcp_settings.json`; MCP docs also name `~/.cline/mcp.json`; project is `.cline/mcp.json`; all use `mcpServers`, and both global files present requires manual selection |
+| Cline | MCP settings live in VS Code globalStorage `saoudrizwan.claude-dev/settings/cline_mcp_settings.json` (macOS `~/Library/Application Support/Code/User/globalStorage/...`); legacy `~/.cline/mcp.json` CLI alternative may exist; project is `.cline/mcp.json`; all use `mcpServers`, and both global files present requires manual selection |
 | Antigravity IDE/shared surface | Skills have an official-path conflict: fresh mapper target `~/.gemini/config/skills/`, legacy IDE-only tree `~/.gemini/antigravity/skills/`, workspace `.agents/skills/`; MCP `~/.gemini/config/mcp_config.json` / `.agents/mcp_config.json`, remote uses `serverUrl`; CLI Skills and plugins are separate product surfaces, and whole `.agents` copy remains manual |
 | PearAI | Official PearAI repositories document VS Code/Continue forks but no portable skills, rules, prompts, MCP, or config paths/schema; automatic migration is disabled and UI/extension-managed settings require manual review |
 | Blackbox AI | Official CLI Skills live at project `.blackbox/skills/`; the generic `skills` operation only handles global directories, so Blackbox project Skills require manual review. Rules, prompts, MCP, whole-project `.blackbox`, and `blackbox configure` storage are manual/unsupported because current first-party docs publish no portable path/schema. Sources: [Skills Management](https://docs.blackbox.ai/features/blackbox-cli/skills), [Commands reference](https://docs.blackbox.ai/features/blackbox-cli/commands-reference), [CLI getting started](https://docs.blackbox.ai/features/blackbox-cli/getting-started), [VS Code Agent key features](https://docs.blackbox.ai/features/vscode-agent/key-features) |
@@ -360,7 +360,7 @@ without equivalent explicit consent and integrity verification.
 | VS Code Copilot | Command Palette → "MCP: List Servers" |
 | Windsurf | GUI: Settings → MCP panel |
 | Trae | GUI: Settings → MCP; do not infer a global MCP file or `argv.json` path |
-| Cline | Cline panel → MCP Servers; CLI: `cline mcp` / `cline config mcp`; static mapper target is `~/.cline/data/settings/cline_mcp_settings.json`, with documented `~/.cline/mcp.json` alternative and project `.cline/mcp.json` |
+| Cline | Cline panel → MCP Servers; CLI: `cline mcp`; static mapper target is the VS Code globalStorage `cline_mcp_settings.json` (resolve with `--print-path cline mcp`), with a legacy `~/.cline/mcp.json` CLI alternative and project `.cline/mcp.json` |
 | Supermaven | Manual: verify settings in the host editor or `supermaven-nvim` `setup()` configuration; this skill has no automatic Supermaven file target |
 | ZCode | GUI: Settings → MCP Servers |
 | WorkBuddy | GUI: Settings → MCP; no verified portable CLI verifier |

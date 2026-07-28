@@ -619,23 +619,24 @@ get_mcp_path() {
         # Continue's global file is YAML and its mcpServers value is an
         # array. The generic mapper exposes this path for diagnosis only.
         continue)    echo "${HOME}/.continue/config.yaml" ;;
-        # Current Cline docs publish two global MCP locations: the Config
-        # layout uses ~/.cline/data/settings/cline_mcp_settings.json, while
-        # the MCP page names ~/.cline/mcp.json for the CLI. Prefer an explicit
-        # override, preserve an existing alternative file, and use the
-        # current Config-layout path for a fresh install. migrate_mcp() fails
-        # closed when both documented files exist without an override.
+        # Cline's MCP settings live in the VS Code extension globalStorage
+        # (confirmed by docs.cline.bot/mcp and multiple independent sources,
+        # 2026-07: the file is cline_mcp_settings.json under
+        # saoudrizwan.claude-dev/settings/ in the VS Code user-data dir). The
+        # legacy ~/.cline/mcp.json CLI alternative is detected by migrate_mcp()
+        # and reported for manual selection when both files exist; --print-path
+        # returns the authoritative globalStorage path. CLINE_MCP_PATH overrides
+        # everything for non-standard installs (e.g. VS Code Insiders, VSCodium,
+        # or a relocated --user-data-dir).
         cline)
-            local cline_primary="${HOME}/.cline/data/settings/cline_mcp_settings.json"
-            local cline_alternative="${HOME}/.cline/mcp.json"
             if [[ -n "${CLINE_MCP_PATH:-}" ]]; then
                 echo "${CLINE_MCP_PATH}"
-            elif [[ -n "${CLINE_DATA_DIR:-}" ]]; then
-                echo "${CLINE_DATA_DIR}/settings/cline_mcp_settings.json"
-            elif [[ -f "$cline_alternative" && ! -f "$cline_primary" ]]; then
-                echo "$cline_alternative"
             else
-                echo "$cline_primary"
+                case "$(uname -s)" in
+                    Darwin) echo "${HOME}/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json" ;;
+                    Linux)  echo "${HOME}/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json" ;;
+                    *)      echo "${HOME}/AppData/Roaming/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json" ;;
+                esac
             fi ;;
         cursor)      echo "${HOME}/.cursor/mcp.json" ;;
         # Roo's official docs identify the global extension settings directory
@@ -3318,6 +3319,16 @@ sys.exit(4 if failed else 0)
 PYEOF
 }
 
+# SECURITY: CR-002 fail-closed deletion helper.
+# Removes freshly-made MIGRATION COPIES / temp files ONLY — never the source
+# config. The `--` terminator stops a copied filename that begins with `-`
+# (e.g. a malicious "-rf" entry inside a migrated project tree) from being
+# parsed as rm(1) options. Every caller passes a path it just `cp`'d into the
+# target IDE; source paths are never handed here.
+delete_copy_only() {
+    rm -f -- "$@" 2>/dev/null || true
+}
+
 redact_secrets_in_file() {
     local file="$1"
     [[ -f "$file" ]] || { echo 0; return 0; }
@@ -3328,13 +3339,13 @@ redact_secrets_in_file() {
     # removed, migration failed" (e.g. CONV_RESULT="failed" + "target file deleted").
     if ! command -v python3 >/dev/null 2>&1; then
         echo "  [SECURITY] python3 missing, cannot redact $file; target copy deleted to prevent secret leak (source file untouched)" >&2
-        rm -f "$file" 2>/dev/null || true
+        delete_copy_only "$file"
         echo 0
         return 1
     fi
     if ! ensure_redactor_script; then
         echo "  [SECURITY] cannot generate redaction engine, target copy deleted to prevent secret leak (source file untouched): $file" >&2
-        rm -f "$file" 2>/dev/null || true
+        delete_copy_only "$file"
         echo 0
         return 1
     fi
@@ -3346,7 +3357,7 @@ redact_secrets_in_file() {
     if [[ $rc -ne 0 || -z "$n" || "$n" == "-1" ]]; then
         # FAIL CLOSED (vector ②): python already removed the destination; make
         # doubly sure nothing secret-bearing survives, then signal failure.
-        rm -f "$file" "${file}.redact.tmp" 2>/dev/null || true
+        delete_copy_only "$file" "${file}.redact.tmp"
         echo "  [SECURITY] secret redaction failed, target file deleted to prevent leak (source file untouched): $file" >&2
         echo "-1"
         return 1
@@ -3540,21 +3551,24 @@ migrate_mcp() {
         set_manual_step "mcp" "Roo Code: project scope uses .roo/mcp.json with root mcpServers; review mode permissions, remote headers/auth, and extension behavior after the narrow JSON merge. Global MCP remains UI-managed"
     fi
 
-    # Cline's official docs currently publish both a shared Config-layout file
-    # and a CLI MCP file. Preserve an existing single choice, honor explicit
-    # overrides, and refuse an ambiguous global migration when both exist.
+    # Cline's MCP settings live in the VS Code extension globalStorage
+    # (cline_mcp_settings.json under saoudrizwan.claude-dev/settings/). A
+    # legacy ~/.cline/mcp.json CLI alternative may also exist; when both are
+    # present without an explicit CLINE_MCP_PATH override, refuse an ambiguous
+    # global migration and ask the user to choose. Project scope is separate.
     if [[ "$source_ide" == "cline" || "$target_ide" == "cline" ]]; then
         if [[ "$scope" != "project" ]]; then
-            local cline_primary="${HOME}/.cline/data/settings/cline_mcp_settings.json"
+            local cline_primary
+            cline_primary="$(get_mcp_path cline)"
             local cline_alternative="${HOME}/.cline/mcp.json"
-            if [[ -z "${CLINE_MCP_PATH:-}" && -z "${CLINE_DATA_DIR:-}" && -f "$cline_primary" && -f "$cline_alternative" ]]; then
+            if [[ -z "${CLINE_MCP_PATH:-}" && -f "$cline_primary" && -f "$cline_alternative" ]]; then
                 set_status "mcp" "manual"
-                set_message "mcp" "Cline has two documented global MCP files and both are present; the active product scope is ambiguous"
-                set_manual_step "mcp" "Cline: choose one documented global file, ~/.cline/data/settings/cline_mcp_settings.json or ~/.cline/mcp.json, or set CLINE_MCP_PATH/CLINE_DATA_DIR explicitly. The CLI also supports cline mcp, cline config mcp, --config, and --data-dir; the project file is .cline/mcp.json. Do not use a guessed VS Code globalStorage path"
+                set_message "mcp" "Cline has both the globalStorage MCP settings and the ~/.cline/mcp.json CLI alternative; the active store is ambiguous"
+                set_manual_step "mcp" "Cline: choose one global MCP store — the VS Code globalStorage cline_mcp_settings.json (resolve with --print-path cline mcp) or the ~/.cline/mcp.json CLI file — or set CLINE_MCP_PATH explicitly. VS Code Insiders/VSCodium/relocated --user-data-dir change the globalStorage base. The project file is .cline/mcp.json"
                 MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
                 return 0
             fi
-            set_manual_step "mcp" "Cline: global MCP uses the current Config-layout ~/.cline/data/settings/cline_mcp_settings.json; the MCP guide also documents ~/.cline/mcp.json for CLI. Existing alternative files are preserved, CLINE_MCP_PATH/CLINE_DATA_DIR and --config/--data-dir can relocate state, and cline mcp or cline config mcp can verify the active store. Project MCP is .cline/mcp.json"
+            set_manual_step "mcp" "Cline: global MCP writes to the VS Code globalStorage cline_mcp_settings.json (saoudrizwan.claude-dev/settings/). A legacy ~/.cline/mcp.json CLI alternative may exist; CLINE_MCP_PATH overrides the target for non-standard installs. Verify with the Cline MCP panel or 'cline mcp'. Project MCP is .cline/mcp.json"
         else
             set_manual_step "mcp" "Cline: project MCP is .cline/mcp.json with mcpServers; review IDE/CLI precedence and validate with the Cline MCP panel or cline mcp after the narrow merge"
         fi
@@ -4069,15 +4083,18 @@ redact_project_copy() {
     fi
 
     # CR-002 fail-closed: no python3 -> we cannot prove the copies are clean.
+    # SECURITY: route through delete_copy_only() so the `--` terminator guards
+    # against a copied filename beginning with `-` being parsed as rm options,
+    # and the fail-closed surface is uniform with redact_secrets_in_file.
     if ! command -v python3 >/dev/null 2>&1; then
         echo "  [SECURITY] python3 missing, cannot redact project copy; candidate file deleted to prevent secret leak (source directory untouched)" >&2
-        for f in "${files[@]}"; do rm -f "$f" 2>/dev/null || true; done
+        delete_copy_only "${files[@]}"
         echo 0
         return 1
     fi
     if ! ensure_redactor_script; then
         echo "  [SECURITY] cannot generate redaction engine, candidate file deleted to prevent secret leak (source directory untouched)" >&2
-        for f in "${files[@]}"; do rm -f "$f" 2>/dev/null || true; done
+        delete_copy_only "${files[@]}"
         echo 0
         return 1
     fi
