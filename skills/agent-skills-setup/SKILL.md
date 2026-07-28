@@ -1,6 +1,6 @@
 ---
 name: agent-skills-setup
-version: 0.6.0
+version: 0.6.1
 license: MIT
 description: >
   Migrate AI assistant context between IDEs — MCP servers, rules/instructions,

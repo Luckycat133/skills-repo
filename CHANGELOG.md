@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-07-28
+
+### CI fixes (Linux runner compatibility)
+- **platform-aware `cline/mcp` path in `ide-paths.json` and `verify-ide-config.sh`**. The Cline VS Code extension stores its MCP config under a path that differs per OS — macOS uses `~/Library/Application Support/Code/User/globalStorage/...`, Linux uses `~/.config/Code/User/globalStorage/...`, Windows uses `%APPDATA%/...`. The migration script already returned the correct path per `uname -s` (smart-ide-migration.sh lines 586-590), but `ide-paths.json` and `verify-ide-config.sh` both had the macOS path hardcoded, so Linux CI runners failed the drift test. `ide-paths.json` now stores `{darwin, linux, windows}` for the entry; `verify-ide-config.sh` resolves `CLINE_MCP_PATH` via `uname -s` before initializing the EXPECTED array.
+- **`((count++))` no longer triggers `set -e` on bash 5.x** (smart-ide-migration.sh, 8 sites in `migrate_global_skills`). The post-increment expression `((count++))` evaluates to the pre-increment value, so when `count=0` the expression result is 0 and `((...))` reports exit code 1. bash 3.2 (macOS) ignores this under `set -e`; bash 5.x (GitHub Actions Ubuntu runner) aborts the entire migration. Appended `|| true` to all eight post-increments so the result can never propagate as a non-zero exit.
+
+Both bugs were pre-existing — failing on every CI push since `e498302` (2026-07-27 16:18 UTC). Local macOS validation missed them because the platform and bash version differ.
+
+### Verification
+- `gh actions run 30326526486` (push to `959af42`): ✓ Validate skills in 32s.
+- `bash validate-all.sh` (macOS): 446 + 70 + 80 + 851 + 22 = 1469 checks pass.
+- All 17 `test-*.sh` scripts pass.
+
 ## [0.6.0] - 2026-07-28
 
 ### Security (SkillSpector / VirusTotal audit response)
