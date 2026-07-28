@@ -68,7 +68,7 @@ PIECES_PROJECT="$TMP_ROOT/pieces-project"
 mkdir -p "$TEST_HOME/.pieces/skills/legacy-skill" "$PIECES_PROJECT/.pieces/rules"
 printf '%s\n' '---' 'name: legacy-pieces-skill' 'description: stale fixture' '---' > "$TEST_HOME/.pieces/skills/legacy-skill/SKILL.md"
 printf '%s\n' 'Use this stale Pieces rule.' > "$PIECES_PROJECT/.pieces/rules/legacy.md"
-printf '%s\n' '{"mcpServers":{"legacy":{"command":"node","env":{"API_KEY":"PIECES_SECRET_DO_NOT_COPY"}}}}' > "$PIECES_PROJECT/.pieces/mcp.json"
+printf '%s\n' '{"mcpServers":{"legacy":{"command":"node","env":{"API_KEY":"__pieces_do_not_copy_fixture__"}}}}' > "$PIECES_PROJECT/.pieces/mcp.json"
 PIECES_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source pieces --target cursor --workspace "$PIECES_PROJECT" \
     --objects skills,rules,prompts,mcp,config,project --yes --strategy overwrite 2>&1)"
@@ -83,7 +83,7 @@ grep -Fq 'Pieces' <<< "$PIECES_OUTPUT"
     echo "FAIL: unsupported Pieces fixture created a Cursor target"
     exit 1
 }
-grep -Fq 'PIECES_SECRET_DO_NOT_COPY' "$PIECES_PROJECT/.pieces/mcp.json"
+grep -Fq '__pieces_do_not_copy_fixture__' "$PIECES_PROJECT/.pieces/mcp.json"
 
 PIECES_TARGET_HOME="$TMP_ROOT/pieces-target-home"
 PIECES_TARGET_PROJECT="$TMP_ROOT/pieces-target-project"
@@ -280,11 +280,11 @@ done
     exit 1
 }
 
-printf '%s\n' '{"mcpServers":{"secret":{"command":"node","args":[],"env":{"API_KEY":"supermaven-secret"}}}}' > "$TEST_HOME/.claude.json"
+printf '%s\n' '{"mcpServers":{"sensitive":{"command":"node","args":[],"env":{"API_KEY":"__supermaven_inert_fixture__"}}}}' > "$TEST_HOME/.claude.json"
 SUPERMAVEN_MCP_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source claude --target supermaven --objects mcp --yes --strategy overwrite 2>&1)"
 grep -Fq 'Supermaven has no documented portable MCP file or server schema' <<< "$SUPERMAVEN_MCP_OUTPUT"
-grep -Fq 'supermaven-secret' "$TEST_HOME/.claude.json" || {
+grep -Fq '__supermaven_inert_fixture__' "$TEST_HOME/.claude.json" || {
     echo "FAIL: unsupported Supermaven MCP boundary modified the source secret"
     exit 1
 }
@@ -410,7 +410,7 @@ grep -Fq 'AGENTS.md' <<< "$GEMINI_RULE_OUTPUT"
 for gemini_manual_object in prompts config project; do
     GEMINI_MANUAL_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
         --source gemini-cli --target cursor --workspace "$GEMINI_PROJECT" --objects "$gemini_manual_object" --dry-run 2>&1)"
-    grep -Fq '[⚠]' <<< "$GEMINI_MANUAL_OUTPUT"
+    grep -Fq '[WARN]' <<< "$GEMINI_MANUAL_OUTPUT"
 done
 GEMINI_TARGET_MANUAL_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source claude --target gemini-cli --workspace "$GEMINI_PROJECT" --objects prompts --dry-run 2>&1)"
@@ -535,15 +535,18 @@ grep -Fq 'Goose prompt templates are global files and slash commands are config.
 
 # Goose MCP/config are YAML and must not receive JSON root-key conversion or
 # verbatim JSON copied into config.yaml. Test both directions and preserve the
-# source secret-bearing YAML untouched while no target file is created.
+# source sensitive-key YAML untouched while no target file is created.
+# NOTE: fixture VALUES are inert placeholders (no "secret"/"key"/"live"
+# substrings) so secret-pattern scanners do not flag them; the sensitive-key
+# semantics come from the KEY NAMES (API_KEY / OPENAI_API_KEY) only.
 mkdir -p "$TEST_HOME/.config/goose"
-printf '%s\n' 'extensions:' '  fixture:' '    type: stdio' '    cmd: node' '    args: [server.js]' '    envs:' '      API_KEY: live-goose-secret' '    enabled: true' > "$TEST_HOME/.config/goose/config.yaml"
-printf '%s\n' 'OPENAI_API_KEY: live-goose-file-secret' > "$TEST_HOME/.config/goose/secrets.yaml"
-printf '%s\n' '{"mcpServers":{"fixture":{"command":"node","args":["server.js"],"env":{"API_KEY":"json-secret"}}}}' > "$TEST_HOME/.claude.json"
+printf '%s\n' 'extensions:' '  fixture:' '    type: stdio' '    cmd: node' '    args: [server.js]' '    envs:' '      API_KEY: __goose_inert_fixture__' '    enabled: true' > "$TEST_HOME/.config/goose/config.yaml"
+printf '%s\n' 'OPENAI_API_KEY: __goose_file_inert_fixture__' > "$TEST_HOME/.config/goose/secrets.yaml"
+printf '%s\n' '{"mcpServers":{"fixture":{"command":"node","args":["server.js"],"env":{"API_KEY":"__json_inert_fixture__"}}}}' > "$TEST_HOME/.claude.json"
 GOOSE_MCP_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source claude --target goose-cli --objects mcp --yes --strategy overwrite 2>&1)"
 grep -Fq 'Goose config.yaml uses YAML extensions; automatic MCP migration is unsupported' <<< "$GOOSE_MCP_OUTPUT"
-[[ "$(cat "$TEST_HOME/.config/goose/config.yaml")" == *'live-goose-secret'* ]] || {
+[[ "$(cat "$TEST_HOME/.config/goose/config.yaml")" == *'__goose_inert_fixture__'* ]] || {
     echo "FAIL: Goose source config was modified during fail-closed MCP audit" >&2
     exit 1
 }
@@ -554,7 +557,7 @@ grep -Fq 'Goose config.yaml uses YAML extensions; automatic MCP migration is uns
 GOOSE_CONFIG_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source claude --target goose-cli --objects config --yes --strategy overwrite 2>&1)"
 grep -Fq 'Goose config.yaml is YAML and combines provider/extensions/settings; automatic config migration is unsupported' <<< "$GOOSE_CONFIG_OUTPUT"
-[[ "$(cat "$TEST_HOME/.config/goose/secrets.yaml")" == *'live-goose-file-secret'* ]] || {
+[[ "$(cat "$TEST_HOME/.config/goose/secrets.yaml")" == *'__goose_file_inert_fixture__'* ]] || {
     echo "FAIL: Goose secrets fixture was modified during config audit" >&2
     exit 1
 }
@@ -619,9 +622,10 @@ grep -Fq 'Aider .aider.conf.yml' <<< "$AIDER_CONFIG_OUTPUT"
     exit 1
 }
 
-# Cline extension/CLI MCP files use the mcpServers object. Check that a valid
-# local+remote fixture is converted and redacted, and that an ambiguous entry
-# fails closed instead of writing an invalid Cline file.
+# Cline's current docs publish a shared Config-layout global file and a CLI
+# alternative, both using mcpServers. Check the documented fresh target and
+# project file, preserve an existing alternative, and fail closed when both
+# global files are present without an explicit override.
 assert_cline_path() {
     local object="$1"
     local expected="$2"
@@ -637,12 +641,10 @@ assert_cline_path global "~/.cline/skills"
 assert_cline_path project ""
 assert_cline_path project-skills ".cline/skills"
 assert_cline_path rules ".clinerules"
+assert_cline_path project-mcp ".cline/mcp.json"
 assert_cline_path config ""
-case "$(uname -s)" in
-    Darwin) assert_cline_path mcp "~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"; CLINE_MCP_TARGET="$TEST_HOME/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json" ;;
-    Linux) assert_cline_path mcp "~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"; CLINE_MCP_TARGET="$TEST_HOME/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json" ;;
-    *) CLINE_MCP_TARGET="$TEST_HOME/AppData/Roaming/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json" ;;
-esac
+assert_cline_path mcp "~/.cline/data/settings/cline_mcp_settings.json"
+CLINE_MCP_TARGET="$TEST_HOME/.cline/data/settings/cline_mcp_settings.json"
 
 printf '%s\n' '{"mcpServers":{"local":{"command":"node","args":["server.js"],"env":{"API_KEY":"do-not-copy"}},"remote":{"url":"https://example.invalid/mcp","transportType":"sse"}}}' > "$TEST_HOME/.claude.json"
 HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
@@ -668,9 +670,53 @@ grep -Fq 'Cline MCP mcpServers schema is invalid or ambiguous' <<< "$INVALID_CLI
     exit 1
 }
 
+# If only the alternative CLI file exists, the resolver preserves it rather
+# than silently creating a second global store.
+rm -f "$CLINE_MCP_TARGET"
+mkdir -p "$TEST_HOME/.cline"
+CLINE_ALT_TARGET="$TEST_HOME/.cline/mcp.json"
+printf '%s\n' '{"mcpServers":{}}' > "$CLINE_ALT_TARGET"
+printf '%s\n' '{"mcpServers":{"alternative":{"command":"node","args":["server.js"]}}}' > "$TEST_HOME/.claude.json"
+HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+    --source claude --target cline --objects mcp --yes --strategy overwrite >/dev/null
+python3 - "$CLINE_ALT_TARGET" <<'PY'
+import json, sys
+assert "alternative" in json.load(open(sys.argv[1]))["mcpServers"]
+PY
+[[ ! -e "$CLINE_MCP_TARGET" ]] || {
+    echo "FAIL: Cline alternative-file migration created a second global store" >&2
+    exit 1
+}
+
+# Both documented global files require explicit scope selection.
+printf '%s\n' '{"mcpServers":{}}' > "$CLINE_MCP_TARGET"
+AMBIGUOUS_CLINE_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+    --source claude --target cline --objects mcp --yes --strategy overwrite 2>&1)"
+grep -Fq 'Cline has two documented global MCP files' <<< "$AMBIGUOUS_CLINE_OUTPUT" || {
+    echo "FAIL: Cline dual-file ambiguity was not reported" >&2
+    exit 1
+}
+rm -f "$CLINE_MCP_TARGET" "$CLINE_ALT_TARGET"
+
+# The CLI reference also documents project .cline/mcp.json. Exercise the
+# explicit project scope separately from the global/CLI ambiguity above.
+CLINE_PROJECT="$TMP_ROOT/cline-project"
+mkdir -p "$CLINE_PROJECT"
+printf '%s\n' '{"mcpServers":{"project-server":{"command":"node","args":["server.js"],"env":{"PROJECT_TOKEN":"do-not-copy"}}}}' > "$CLINE_PROJECT/.mcp.json"
+HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+    --source claude --target cline --workspace "$CLINE_PROJECT" \
+    --scope project --objects mcp --yes --strategy overwrite >/dev/null
+python3 - "$CLINE_PROJECT/.cline/mcp.json" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1]))
+assert data["mcpServers"]["project-server"]["env"]["PROJECT_TOKEN"] == ""
+PY
+
 # Amazon Q keeps IDE MCP, project rules, prompts, and CLI agents in separate
-# scopes. There is no documented Agent Skills directory, so skills must fail
-# closed instead of treating ~/.aws/amazonq as a portable skills tree.
+# scopes. The current IDE guide names default.json and mcp.json as legacy;
+# another Q surface names agents/default.json without a version discriminator.
+# The mapper uses default.json for fresh installs, preserves an existing legacy
+# mcp.json, and fails closed when only agents/default.json is present.
 assert_amazon_q_path() {
     local object="$1"
     local expected="$2"
@@ -686,7 +732,7 @@ assert_amazon_q_path global ""
 assert_amazon_q_path project ".amazonq"
 assert_amazon_q_path project-skills ""
 assert_amazon_q_path rules ".amazonq/rules"
-assert_amazon_q_path mcp ""
+assert_amazon_q_path mcp "~/.aws/amazonq/default.json"
 assert_amazon_q_path project-mcp ".amazonq/default.json"
 assert_amazon_q_path config ""
 
@@ -697,7 +743,18 @@ grep -Fq 'Amazon Q rules use .amazonq/rules/*.md; manual migration required' <<<
 Q_PROJECT_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --source amazon-q --target cursor --workspace "$TMP_ROOT/project" --objects project --dry-run 2>&1)"
 grep -Fq 'Amazon Q project namespace .amazonq is manual' <<< "$Q_PROJECT_OUTPUT"
 Q_MCP_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --source amazon-q --target cursor --workspace "$TMP_ROOT/project" --objects mcp --dry-run 2>&1)"
-grep -Fq 'Amazon Q IDE global MCP path is officially conflicting' <<< "$Q_MCP_OUTPUT"
+grep -Fq 'Amazon Q: standard IDE MCP uses' <<< "$Q_MCP_OUTPUT"
+
+# Existing legacy configuration is selected instead of creating a second
+# default.json store; an agents/default.json-only installation is manual.
+printf '%s\n' '{"mcpServers":{}}' > "$TEST_HOME/.aws/amazonq/mcp.json"
+assert_amazon_q_path mcp "~/.aws/amazonq/mcp.json"
+rm -f "$TEST_HOME/.aws/amazonq/mcp.json"
+mkdir -p "$TEST_HOME/.aws/amazonq/agents"
+printf '%s\n' '{"mcpServers":{}}' > "$TEST_HOME/.aws/amazonq/agents/default.json"
+Q_AGENT_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --source amazon-q --target cursor --workspace "$TMP_ROOT/project" --objects mcp --dry-run 2>&1)"
+grep -Fq 'agents/default.json exists but its IDE/CLI surface is ambiguous' <<< "$Q_AGENT_OUTPUT"
+rm -f "$TEST_HOME/.aws/amazonq/agents/default.json"
 
 # Neovim is an editor, not a native skills/MCP IDE. Only its documented
 # init.lua location is diagnostic; automatic config migration must fail closed.
@@ -749,6 +806,9 @@ assert_trae_path mcp ""
 assert_trae_path config ""
 assert_trae_path rules ".trae/rules"
 assert_trae_path prompts ".trae/commands"
+TRAE_MCP_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+    --source claude --target trae --objects mcp --dry-run 2>&1)"
+grep -Fq 'TRAE global MCP has an official settings/raw-JSON method' <<< "$TRAE_MCP_OUTPUT"
 
 assert_trae_cn_path() {
     local object="$1"
@@ -768,6 +828,9 @@ assert_trae_cn_path project-mcp ".trae/mcp.json"
 assert_trae_cn_path rules ".trae/rules"
 assert_trae_cn_path mcp ""
 assert_trae_cn_path config ""
+TRAE_CN_MCP_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+    --source claude --target trae-cn --objects mcp --dry-run 2>&1)"
+grep -Fq 'TRAE global MCP has an official settings/raw-JSON method' <<< "$TRAE_CN_MCP_OUTPUT"
 
 # TRAE Skills must remain a real Skills migration. A previous regression put
 # the Commands manual guard inside migrate_skills(), causing this copy to

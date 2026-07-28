@@ -11,15 +11,25 @@ PATHS_FILE="${SCRIPT_DIR}/../references/ide-paths.json"
 REGISTRY_FILE="${SCRIPT_DIR}/../references/ide-registry.md"
 SKILL_FILE="${SCRIPT_DIR}/../SKILL.md"
 
-if actual="$(bash "$MIGRATION_SCRIPT" --print-path claude-desktop mcp 2>/dev/null)"; then
-    echo "FAIL: Claude Desktop unexpectedly has an automatic MCP-file target: ${actual}" >&2
-    exit 1
-fi
-
-if [[ -n "$actual" ]]; then
-    echo "FAIL: unsupported Claude Desktop MCP target printed: ${actual}" >&2
-    exit 1
-fi
+case "$(uname -s)" in
+    Darwin|MINGW*|MSYS*|CYGWIN*)
+        actual="$(bash "$MIGRATION_SCRIPT" --print-path claude-desktop mcp 2>/dev/null)"
+        [[ -n "$actual" && "$actual" == *claude_desktop_config.json ]] || {
+            echo "FAIL: Claude Desktop documented platform path was not resolved: ${actual}" >&2
+            exit 1
+        }
+        ;;
+    *)
+        if actual="$(bash "$MIGRATION_SCRIPT" --print-path claude-desktop mcp 2>/dev/null)"; then
+            echo "FAIL: Claude Desktop unexpectedly exposed an unconfirmed platform path: ${actual}" >&2
+            exit 1
+        fi
+        [[ -z "$actual" ]] || {
+            echo "FAIL: unsupported Claude Desktop MCP target printed: ${actual}" >&2
+            exit 1
+        }
+        ;;
+esac
 
 python3 - "$PATHS_FILE" <<'PYEOF'
 import json
@@ -28,17 +38,20 @@ import sys
 with open(sys.argv[1], encoding="utf-8") as handle:
     entry = json.load(handle)["claude-desktop"]
 
-assert entry == {
-    "global_skills": "",
-    "project_skills": "",
-    "rules": "",
-    "mcp": "",
-    "config": "",
-}
+assert entry["global_skills"] == ""
+assert entry["project_skills"] == ""
+assert entry["rules"] == ""
+assert entry["config"] == ""
+assert isinstance(entry["mcp"], dict)
+assert entry["mcp"]["darwin"] == "~/Library/Application Support/Claude/claude_desktop_config.json"
+assert entry["mcp"]["linux"] == ""
+assert entry["mcp"]["windows"] == "%APPDATA%\\Claude\\claude_desktop_config.json"
 PYEOF
 
 section="$(sed -n '/^### claude-desktop (Claude Desktop app)$/,/^### claude (Claude Code)$/p' "$REGISTRY_FILE")"
 for required in \
+    'https://modelcontextprotocol.io/docs/develop/connect-local-servers' \
+    'https://claude.com/docs/connectors/building/mcpb' \
     'https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop' \
     'https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp'; do
     if ! grep -Fq "$required" <<< "$section"; then
@@ -47,8 +60,8 @@ for required in \
     fi
 done
 
-if grep -Fq '~/.config/Claude/' <<< "$section" || grep -Fq '%APPDATA%\\Claude\\' <<< "$section"; then
-    echo "FAIL: Claude Desktop registry still claims an undocumented platform path" >&2
+if ! grep -Fq 'claude_desktop_config.json' <<< "$section"; then
+    echo "FAIL: Claude Desktop registry is missing the documented legacy JSON path" >&2
     exit 1
 fi
 
@@ -66,17 +79,33 @@ mkdir -p "$TMP_ROOT/home" "$TMP_ROOT/workspace"
 target_output="$(HOME="$TMP_ROOT/home" bash "$MIGRATION_SCRIPT" \
     --source claude --target claude-desktop --workspace "$TMP_ROOT/workspace" \
     --objects mcp --dry-run 2>&1)"
-if ! grep -Fq 'Claude Desktop local MCP configuration is manual' <<< "$target_output"; then
-    echo "FAIL: Claude Desktop MCP target must provide its documented manual-only guidance" >&2
-    exit 1
-fi
-
 source_output="$(HOME="$TMP_ROOT/home" bash "$MIGRATION_SCRIPT" \
     --source claude-desktop --target cursor --workspace "$TMP_ROOT/workspace" \
     --objects mcp --dry-run 2>&1)"
-if ! grep -Fq 'Claude Desktop local MCP configuration is manual' <<< "$source_output"; then
-    echo "FAIL: Claude Desktop MCP source must provide its documented manual-only guidance" >&2
-    exit 1
+case "$(uname -s)" in
+    Darwin|MINGW*|MSYS*|CYGWIN*)
+        grep -Fq 'legacy local MCP JSON' <<< "$target_output"
+        grep -Fq 'legacy local MCP JSON' <<< "$source_output"
+        ;;
+    *)
+        grep -Fq 'no confirmed legacy JSON path' <<< "$target_output"
+        grep -Fq 'no confirmed legacy JSON path' <<< "$source_output"
+        ;;
+esac
+
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    DESKTOP_CONFIG="$TMP_ROOT/home/Library/Application Support/Claude/claude_desktop_config.json"
+    mkdir -p "$(dirname "$DESKTOP_CONFIG")"
+    printf '%s\n' '{"mcpServers":{"desktop-local":{"command":"node","args":["server.js"],"env":{"API_KEY":"__desktop_inert_fixture__"}}}}' > "$DESKTOP_CONFIG"
+    HOME="$TMP_ROOT/home" bash "$MIGRATION_SCRIPT" \
+        --source claude-desktop --target cursor --workspace "$TMP_ROOT/workspace" \
+        --objects mcp --yes --strategy overwrite >/dev/null 2>&1
+    python3 - "$TMP_ROOT/home/.cursor/mcp.json" <<'PYEOF'
+import json, sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+assert data["mcpServers"]["desktop-local"]["command"] == "node"
+assert data["mcpServers"]["desktop-local"]["env"]["API_KEY"] == ""
+PYEOF
 fi
 
 echo "Claude Desktop mapping test passed"
