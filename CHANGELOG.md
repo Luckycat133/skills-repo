@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-07-28
+
+### Documentation & i18n (P0-P3 audit follow-up)
+- **English i18n for scripts and tests** (`smart-ide-migration.sh`, `common.sh`, and test harnesses). User-facing messages and test output translated to English; added `common.sh` and `test-trae-boundary.sh`; aggregated full test suites into `validate-all.sh`.
+- **Test secret literal replacement** (`test-claude-desktop-mapping.sh`, `test-smart-ide-migration.sh`): live secret literals replaced with `__*_inert_fixture__` placeholders so static secret scanners no longer flag test fixtures; sensitive key names preserved.
+- **Documentation professionalism pass** (P0-P3 audit): corrected factual errors (OpenClaw key name, ClawHub version reference, validation ratio caliber, release-checklist mechanism, cross-IDE status wording); aligned IDE count to 40 (added WorkBuddy); added doc metadata headers + TOCs; registered HI-001 in the audit index; added audit report and IDE-boundary verification artifacts.
+
+### Verification
+- All 17 `test-*.sh` scripts pass; `validate-all.sh` remains green.
+
 ## [0.6.1] - 2026-07-28
 
 ### CI fixes (Linux runner compatibility)

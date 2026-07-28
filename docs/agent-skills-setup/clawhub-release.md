@@ -29,8 +29,8 @@ Español: Este documento resume el flujo exacto y los metadatos recomendados par
 - skill 目录中包含有效的 `SKILL.md`。
 - Release docs and changelog are already updated.
 - 发布文档和 changelog 已更新。
-- The `--version` must equal the current `version:` field in `skills/agent-skills-setup/SKILL.md` (currently `0.6.1`); update it on every release.
-- `--version` 必须与 `skills/agent-skills-setup/SKILL.md` 中当前的 `version:` 一致（当前为 `0.6.1`），每次发布时同步更新。
+- The `--version` must equal the current `version:` field in `skills/agent-skills-setup/SKILL.md` (currently `0.6.2`); update it on every release.
+- `--version` 必须与 `skills/agent-skills-setup/SKILL.md` 中当前的 `version:` 一致（当前为 `0.6.2`），每次发布时同步更新。
 
 ## Recommended Commands / 推荐命令
 
@@ -43,7 +43,7 @@ bash skills/agent-skills-setup/scripts/prepare-clawhub-release.sh \
     --skill-dir skills/agent-skills-setup \
     --slug agent-skills-setup \
     --name "Agent Skills Setup" \
-    --version 0.6.1 \
+    --version 0.6.2 \
     --tags latest,setup,skills,openclaw,cross-ide \
     --changelog "Add cross-IDE capability migration scripts, strict validation gates, staging-first rollout defaults, and expanded mainstream IDE coverage."
 ```
@@ -57,7 +57,7 @@ bash skills/agent-skills-setup/scripts/prepare-clawhub-release.sh \
     --skill-dir skills/agent-skills-setup \
     --slug agent-skills-setup \
     --name "Agent Skills Setup" \
-    --version 0.6.1 \
+    --version 0.6.2 \
     --tags latest,setup,skills,openclaw,cross-ide \
     --changelog "Add cross-IDE capability migration scripts, strict validation gates, staging-first rollout defaults, and expanded mainstream IDE coverage." \
     --publish
