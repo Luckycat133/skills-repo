@@ -60,7 +60,8 @@
 - **HI-002** ~118 个近重复 per-IDE guard 块 → 数据驱动表 + `apply_manual_guards`
 - **HI-003** 脱敏算法实现两份且漂移 → 抽共享脱敏模块
 - **MED-A1** 策略/拷贝逻辑重复 4–5× → `apply_strategy` helper
-- **MED-A2** `convert_mcp_file` 隐式顺序相关退出码分支 → 显式 `ALLOW_FALLBACK`/`FAIL_CLOSED` 表
+- **MED-A2（部分完成，2026-07-29）** `--source-mcp-file` 已使用显式 fail-closed 契约并禁止 copy-as-is fallback；通用 `convert_mcp_file` 的退出码分支仍待重构为 `ALLOW_FALLBACK`/`FAIL_CLOSED` 表
+- ✅ **MCP-OVERRIDE-001** 非 canonical MCP 输入支持严格 dry-run/schema 校验、symlink 同源保护、Cursor→OpenCode 环境引用转换及混合凭据 URL 回归（2026-07-29）
 - **MED-A3** 死代码 `get_project_mcp_path` / `get_project_config_file` → 实现或删除
 
 ### Performance & Robustness / 性能与健壮性

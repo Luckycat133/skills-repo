@@ -22,6 +22,9 @@
 - 确认 OpenClaw 配置 / `.env` 写入权限为 `600`，无明文密钥泄漏到世界可读文件（MED-S1）。
 - 确认非 MCP 对象（skills/agents/hooks/memory）复制时也经脱敏或至少扫描告警（MED-S3）。
 - 确认 root `SKILL.md` 镜像写入为原子操作（已完成 G4/MED-P4 修复：临时文件 + `mv` 替换，且采用前缀 link 自动重写）。
+- 确认 `--source-mcp-file` 的正常输入、错误 root/schema、符号链接同源和 `--scope both` 拒绝场景均有回归；dry-run 会真实解析但不写 workspace/target。
+- 确认字面凭据与混合/复杂表达式 fail-closed，而精确 Cursor `${env:NAME}` 引用转换为 OpenCode `{env:NAME}`；canonical `SKILL.md` 更新后通过同步脚本生成 root 镜像。
+- 确认 Eval 4 在隔离 workspace 中实际执行 dry-run/apply，并以目标文件和 source digest 证明零预览写入、正确转换及源不变，而不是只检查回答文字。
 
 ## English
 
@@ -43,3 +46,6 @@
 - Confirm OpenClaw config / `.env` are written `600`, with no plaintext secrets leaking to world-readable files (MED-S1).
 - Confirm non-MCP objects (skills/agents/hooks/memory) are also redacted on copy, or at least scanned with a warning (MED-S3).
 - Confirm the root `SKILL.md` mirror write is atomic (G4/MED-P4 resolved: temp file + `mv` with prefix-based link rewriting).
+- Confirm `--source-mcp-file` covers valid input, wrong root/schema, symlink self-target, and rejected `--scope both`; dry-run must parse the source without writing workspace/target output.
+- Confirm literal credentials and mixed/complex expressions fail closed, exact Cursor `${env:NAME}` references become OpenCode `{env:NAME}`, and the root mirror is generated from the canonical `SKILL.md`.
+- Confirm Eval 4 actually executes dry-run/apply in an isolated workspace and uses target-file plus source-digest evidence, rather than grading response text alone.

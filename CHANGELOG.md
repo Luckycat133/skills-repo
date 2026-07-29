@@ -5,7 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.6.4] - 2026-07-29
+
+### MCP explicit-source correctness and security
+- Added `--source-mcp-file <file>` for reviewed MCP exports outside an IDE's canonical path. The override changes only the source location: `--source` still determines schema/root and the target remains registry-resolved. It is restricted to one MCP scope, resolves symlinks, strictly parses JSON/JSONC and endpoint shape during dry-run, and returns non-zero on rejected conversion.
+- Disabled copy-as-is fallback for explicit inputs and added source/target identity protection before target backup/removal. Dry-run consumes and validates the chosen file while creating no workspace/target output and never printing configuration values.
+- Distinguished exact environment references from live credentials. Cursor `${env:NAME}` references convert to OpenCode `{env:NAME}`; literal credentials, unsupported/complex expansions, and mixed URLs containing an additional provider credential are blanked or fail closed.
+- Expanded `test-mcp-secret-redaction.sh` with non-canonical input, dry-run/apply, wrong root/schema, scope misuse, JSONC string/comment handling, symlink self-target, unsupported references, and mixed-credential URL coverage.
+
+### Documentation and evaluation
+- Updated the canonical skill, IDE registry, migration/security guidance, release checklist, roadmap, security audit, and root README. The root `SKILL.md` remains generated from the canonical copy.
+- Corrected Eval 2 so its exact preview/apply commands must use the supplied fixture through `--source-mcp-file`; the fixture now covers documented Cursor references plus an inert literal credential. Added Eval 4 as an executable integration check for fixture consumption, dry-run target absence, apply output semantics, and source digest stability.
+
+### Security audit hardening (SkillSpector 2026-07-29 re-scan, 9 findings)
+- **`rm -rf` fail-closed guard completed** (`smart-ide-migration.sh`, `redact_project_copy`). The v0.6.0 audit response (F8) documented `${skill_name:?}` as a parameter-expansion guard on the fail-closed cleanup, but the actual code used `$skill_name` (no `:?`) with only a loop-invariant non-empty guarantee. Added `${skill_name:?}` so `rm -rf "${target_path:?}/${skill_name:?}"` now aborts if either variable is unset or empty — making the documented claim literally true. Defense-in-depth only; normal path unchanged.
+- **Comment reworded to clear Direct Prompt Extraction false positive** (`smart-ide-migration.sh`, 2 sites). The comments `# Some supported IDEs expose rules as a directory` (line 1017) and `# Pieces does not expose a portable project rules file` (line 549) tripped the "expose"+"rules" keyword co-occurrence heuristic. Reworded to `store rules in a directory` / `does not provide a portable project rules file`. Pure comment change; no behavior change.
+- **`SECURITY-AUDIT.md` updated**: added a "Re-scan (2026-07-29) — 9 findings" section mapping all 9 findings (3 MCP Config Access on WorkBuddy/TRAE/Void `set_manual_step` guidance strings, 4 Credential Access on the `--env` opt-in loop, 1 Direct Prompt Extraction on the reworded comment, 1 Tool Parameter Abuse on the `rm -rf` site). 2 real hardenings applied (above); 7 confirmed structural false positives. F2–F6 extended to name TRAE explicitly; F7 opt-in chain re-verified end-to-end (`--env` → `ENV_ASSIGNMENTS` → `ENV_ASSIGNMENTS_JSON` default `[]` → `for` loop never runs without the flag), plus the previously-undocumented real-secret pattern detector at `auto-configure-openclaw-skills.sh:247` that steers users to `--env-file` (mode 600).
 
 ## [0.6.3] - 2026-07-28
 

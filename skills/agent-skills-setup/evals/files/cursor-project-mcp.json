@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "local-search": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@acme/search-mcp"
+      ],
+      "env": {
+        "ACME_API_KEY": "${env:ACME_API_KEY}",
+        "LITERAL_TOKEN": "__test_placeholder_value__",
+        "LOG_LEVEL": "info"
+      }
+    },
+    "remote-docs": {
+      "url": "https://mcp.acme.example/rpc?api_key=${env:ACME_QUERY_KEY}",
+      "headers": {
+        "Authorization": "Bearer ${env:ACME_BEARER_TOKEN}",
+        "X-Workspace": "acme"
+      }
+    }
+  }
+}

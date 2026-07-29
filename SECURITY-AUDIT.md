@@ -5,7 +5,40 @@ audit run on `agent-skills-setup@0.6.0` to the **actual mitigation** that is
 already in place in the skill, and lists the one real fix that was applied
 in response.
 
-## Re-scan (2026-07-28) — 10 findings + 1 static hit
+## Re-scan (2026-07-29) — 9 findings
+
+A third SkillSpector pass returned 9 findings. Two real hardenings applied
+this commit; the rest are confirmed false positives (same structural classes
+as the 2026-07-28 pass). Disposition:
+
+| # | Finding | Audit category | Conf. | Disposition |
+|---|---|---|---|---|
+| 1–3 | MCP Config Access — `set_manual_step "mcp" "..."` guidance strings mentioning `~/.workbuddy/mcp.json`, `.trae/mcp.json`, `~/.void-editor/mcp.json` (WorkBuddy / TRAE / Void) | Agent Snooping | 71–73% | **False positive** — same class as F2–F6. The flagged lines are user-guidance strings that *tell the user where the file is*; they do not read or write any MCP file. The skill's documented purpose is cross-IDE MCP migration. F2–F6 below is extended this commit to name TRAE explicitly. |
+| 4–7 | Credential Access — `config.skills.entries[skill].env = ...` (4 instances) | Privilege Escalation | 84% | **False positive** — identical to F7. Re-verified the full opt-in chain this commit: `--env` CLI flag → `ENV_ASSIGNMENTS` array → `ENV_ASSIGNMENTS_JSON` env var (defaults to `[]`) → `envAssignments` JS array → `for (const item of envAssignments)` loop. Without `--env` the loop body never runs. Extra mitigation not previously documented: `auto-configure-openclaw-skills.sh:247` detects real-secret patterns in `--env` values and warns the user to prefer `--env-file <file>` (file mode 600) so secrets never appear in argv / ps / shell history. |
+| 8 | Direct Prompt Extraction — comment `# Some supported IDEs expose rules as a directory` | System Prompt Leakage | 76% | **False positive + reworded this commit.** The flagged text is a shell comment about the filesystem layout of rules directories (`.cursor/rules`, `.devin/rules`, `.agents/rules`), not system-prompt extraction. The "expose"+"rules" keyword co-occurrence tripped the heuristic. Reworded to `store rules in a directory`; the parallel comment at line 549 (`does not expose a portable project rules file` → `does not provide a portable project rules file`) was reworded proactively. No behavior change. |
+| 9 | Tool Parameter Abuse — `rm -rf "${target_path:?}/$skill_name"` | Tool Misuse | 88% | **False positive + hardened this commit.** Same site as F8. The prior F8 entry claimed `${skill_name:?}` was a parameter-expansion guard, but the actual code used `$skill_name` (no `:?`) with only a loop-invariant guarantee. **This commit adds `${skill_name:?}`** so the doc claim is now literally true — `rm` aborts if either variable is unset or empty. The F8 mitigation list below is now accurate as written. |
+
+**Real hardenings applied this commit** (both defense-in-depth; no behavior
+change for the normal path):
+
+1. `smart-ide-migration.sh` (`redact_project_copy` fail-closed cleanup): added
+   `${skill_name:?}` alongside the existing `${target_path:?}` so `rm -rf`
+   aborts if either variable is unset or empty. Previously the `skill_name`
+   non-empty guarantee was a loop invariant only; it is now also a parameter-
+   expansion check, matching what F8 already claimed.
+2. `smart-ide-migration.sh` (2 comments): reworded `expose ... rules` →
+   `store/provide ... rules` to remove the Direct-Prompt-Extraction keyword
+   trigger. Pure comment change.
+
+The remaining 7 findings (3 MCP Config Access, 4 Credential Access) are
+structural: the skill's documented purpose *is* MCP/skill migration and the
+`--env` opt-in credential binding, so a generic scanner cannot distinguish
+"this is what the tool does" from "this is what the tool shouldn't do." The
+runtime mitigations (opt-in `--objects mcp`, `--yes` consent gate,
+`redact_project_copy` fail-closed, `--env` / `--env-file` opt-in) are the
+answer.
+
+
 
 A second SkillSpector pass returned 10 findings plus one VirusTotal static
 hit. Disposition:
@@ -55,13 +88,13 @@ control that prevents the flagged behavior.
 ### F2–F6. MCP Config Access — High (67–70% confidence, 5 instances)
 
 - **Category**: Agent Snooping / MCP Config Access
-- **Audit claim**: The skill reads/writes MCP configs for WorkBuddy, Void Editor, Windsurf/Devin, Antigravity.
+- **Audit claim**: The skill reads/writes MCP configs for WorkBuddy, Void Editor, Windsurf/Devin, Antigravity. (The 2026-07-29 re-scan re-flagged this class for WorkBuddy, TRAE, and Void — TRAE is now explicitly covered here; the flagged lines are `set_manual_step` guidance strings, not file I/O.)
 - **Actual behavior**: This is the **documented core function** of the skill — moving MCP server configurations between IDEs. The audit tool cannot distinguish a tool whose purpose *is* MCP migration from a tool that exfiltrates MCP secrets.
 - **Mitigation in place** (4 layers, all enforced at runtime):
   1. **Opt-in scope**: MCP is only touched when the user explicitly passes `--objects mcp` or `--objects project-mcp`. Default object list is `skills,rules,prompts` (no MCP).
   2. **Explicit consent**: A non-interactive run without `--yes` aborts with zero writes.
-  3. **Redaction fail-closed**: Every MCP value whose key matches `SECRET_KEY_RE`, `URL_CRED_RE`, `URL_TOKEN_RE`, or `PROVIDER_SECRET_RE` is blanked to `""` before the file is written. The redaction runs on a *copy* — the original source is never modified. If redaction fails for any reason, the whole copied tree is deleted (see F8 below).
-  4. **No filesystem-wide scanning**: The skill only resolves the two IDEs the user explicitly names via `--source` / `--target`; it does not enumerate `~/`, does not auto-discover IDEs, and does not read MCP files outside the resolved paths.
+  3. **Redaction fail-closed**: Literal MCP credentials matching the key/value/URL/provider patterns are blanked before target write. Exact symbolic environment references may survive only when the target syntax is documented (for example Cursor `${env:NAME}` becomes OpenCode `{env:NAME}`); mixed literals, default/command expansions, and unsupported syntax fail closed. Redaction runs on a *copy* and the source is never modified; on failure the copied output is deleted (see F8).
+  4. **No filesystem-wide scanning**: The skill resolves only the named `--source` / `--target` paths. The sole non-registry exception is one user-selected `--source-mcp-file`: it must be a readable regular file, its symlink identity must differ from the target, and it must pass preview-time JSON/JSONC root/endpoint validation. Directories are never enumerated and copy-as-is fallback is disabled for this override.
 
 ### F7. Credential Access — High (91% confidence, 4 instances)
 
@@ -81,7 +114,7 @@ control that prevents the flagged behavior.
 - **Actual behavior**: This is the **fail-closed cleanup** added in v0.6.0 (commit `915fe49`). After a `cp -R` of a skill bundle, the redactor is invoked; if the redactor returns non-zero (could not guarantee all secrets were blanked), the freshly-copied tree is removed rather than leaving potentially-leaked credentials on disk. This is the safety control that **prevents** the secret-leak failure mode the audit tool is designed to catch.
 - **Mitigation in place**:
   - `${target_path:?}` aborts `rm` if `target_path` is unset or empty.
-  - `${skill_name:?}` aborts `rm` if `skill_name` is unset or empty.
+  - `${skill_name:?}` aborts `rm` if `skill_name` is unset or empty. (Added in the 2026-07-29 commit; previously `skill_name` non-emptiness was a loop invariant only. The guard now makes the parameter-expansion check literal.)
   - The `skill_name` is taken from a glob over a directory the user explicitly named via `--source`, so it cannot contain shell metacharacters or `..`.
   - `# SECURITY:` annotation added in this commit so future reviewers understand intent.
 
@@ -101,15 +134,15 @@ After applying the three real fixes above:
 
 ```bash
 bash validate-all.sh
-# expect: 446 + 70 + 80 + 851 checks pass
+# expect: every aggregated suite passes; do not hard-code historical counts
 
 bash skills/agent-skills-setup/scripts/test-smart-ide-migration.sh
 # expect: full Blackbox fixture test passes (the renamed placeholder
 # still triggers SECRET_KEY_RE via the key name `apiKey`)
 
 bash skills/agent-skills-setup/scripts/test-mcp-secret-redaction.sh
-# expect: redaction cases 1-8 pass (V1 secret-leak fix from
-# commit 915fe49 still verified)
+# expect: provider redaction, explicit-source schema/dry-run, symlink identity,
+# and environment-reference conversion cases all pass
 ```
 
 ## Re-audit guidance

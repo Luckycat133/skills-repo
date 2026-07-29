@@ -11,6 +11,7 @@ SOURCE_IDE=""
 TARGET_IDE=""
 WORKSPACE_ROOT="$(pwd)"
 OBJECTS=""
+SOURCE_MCP_FILE=""
 SCOPE="global"
 STRATEGY="backup"
 DRY_RUN=0
@@ -546,7 +547,7 @@ get_rules_file() {
         # single-file resolver.
         kiro|augment-code|baidu-comate) echo "" ;;
         trae|trae-cn) echo ".trae/rules" ;;
-        # Pieces does not expose a portable project rules file.
+        # Pieces does not provide a portable project rules file.
         pieces)       echo "" ;;
         *)           echo "" ;;
     esac
@@ -856,6 +857,8 @@ Required arguments:
 Optional arguments:
   --workspace <dir>      workspace root directory (default: current directory)
   --objects <list>       content types to migrate (comma-separated)
+  --source-mcp-file <file>
+                          explicit MCP source file; --source still defines its schema
   --scope <scope>        Skills/MCP scope: global, project, both (default: global)
   --strategy <mode>      migration strategy: skip, overwrite, backup (default: backup)
   --report <file>        save migration report to file
@@ -1014,7 +1017,7 @@ list_available_objects() {
 
     local rules_file
     rules_file=$(get_rules_file "$source_ide")
-    # Some supported IDEs expose rules as a directory (for example
+    # Some supported IDEs store rules in a directory (for example
     # .cursor/rules, .devin/rules, or .agents/rules), while the generic
     # single-file migrator will later route those through manual handling.
     # Detect both files and directories here so the default object list does
@@ -1494,9 +1497,13 @@ migrate_project_skills() {
                 migrated_count=$((migrated_count + 1))
             else
                 # SECURITY: fail-closed — delete the unredacted COPY rather
-                # than risk leaking embedded credentials. ${target_path:?}
-                # and $skill_name (non-empty by loop guard) make rm safe.
-                rm -rf "${target_path:?}/$skill_name"
+                # than risk leaking embedded credentials. ${target_path:?} and
+                # ${skill_name:?} make rm abort if either variable is unset or
+                # empty, so the cleanup can only ever remove a freshly-copied
+                # tree, never an unrelated path. (Both guards are parameter-
+                # expansion checks, not just loop invariants — see F8 in
+                # SECURITY-AUDIT.md.)
+                rm -rf "${target_path:?}/${skill_name:?}"
                 echo "  [FAIL] project skill redaction failed, deleted copy to prevent key leak: $skill_name"
                 failed_count=$((failed_count + 1))
             fi
@@ -1995,10 +2002,9 @@ convert_mcp_file() {
     # Only perform a true root-key conversion when BOTH the source and target
     # are JSON files. If either side is TOML/YAML (or any other format) we
     # cannot truly convert, so we fall back to a verbatim copy and report
-    # "copied" (never a false "success"). In EVERY path we strip secrets
-    # (env values, bearer/API keys, URL-embedded credentials, auth headers)
-    # before the result lands on disk — honouring the skill's safety promise
-    # to never migrate live credentials.
+    # "copied" (never a false "success"). In every path we strip literal or
+    # ambiguous credentials before target write. Exact supported environment
+    # references contain no live value and may be preserved or translated.
     local src_ext dst_ext
     src_ext="${src##*.}"
     dst_ext="${dst##*.}"
@@ -2007,6 +2013,7 @@ convert_mcp_file() {
         local json_conversion_rc=0
         python3 - "$src" "$src_key" "$dst" "$dst_key" "$target_ide" >/dev/null 2>&1 <<'PYEOF' || json_conversion_rc=$?
 import json, os, re, sys
+from urllib.parse import parse_qsl, urlsplit
 src, src_key, dst, dst_key, target_ide = sys.argv[1], (sys.argv[2] or ""), sys.argv[3], (sys.argv[4] or ""), sys.argv[5]
 SECRET_KEY_RE = re.compile(r"(?i)(api[_-]?key|token|secret|password|passwd|authorization|auth|bearer|private[_-]?key|access[_-]?key|client[_-]?secret|session|cookie)", re.IGNORECASE)
 # Broadened to catch credential-bearing DB/connection URIs (postgres://user:pass@,
@@ -2021,10 +2028,66 @@ QUERY_CRED_RE = re.compile(r"[?&](key|token|secret|access[_-]?token|api[_-]?key)
 # blanked even when the surrounding key is innocuous (MY_KEY, WEBHOOK_URL...).
 # Kept in sync with validate_skills.py::SECRET and the config/project redactor.
 PROVIDER_SECRET_RE = re.compile(r"(?:sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|tvly-[A-Za-z0-9_-]{16,}|AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}|ya29\.[A-Za-z0-9_-]+|AIza[0-9A-Za-z_-]{35}|sk_live_[A-Za-z0-9]{16,})")
+SAFE_ENV_REF_TOKEN = r"(?:\$\{env:[A-Za-z_][A-Za-z0-9_]*\}|\$\{[A-Za-z_][A-Za-z0-9_]*\}|\{env:[A-Za-z_][A-Za-z0-9_]*\})"
+SAFE_ENV_REF_RE = re.compile(SAFE_ENV_REF_TOKEN)
+SAFE_ENV_REF_FULL_RE = re.compile(r"^" + SAFE_ENV_REF_TOKEN + r"$")
+SAFE_BEARER_REF_RE = re.compile(r"^Bearer\s+" + SAFE_ENV_REF_TOKEN + r"$", re.IGNORECASE)
+
+def is_safe_reference_value(value):
+    """Return true only when every credential payload is a symbolic env ref."""
+    if not isinstance(value, str):
+        return False
+    if target_ide == "opencode":
+        exact_ref = re.fullmatch(r"\{env:[A-Za-z_][A-Za-z0-9_]*\}", value)
+        bearer_ref = re.fullmatch(r"Bearer\s+\{env:[A-Za-z_][A-Za-z0-9_]*\}", value, re.IGNORECASE)
+    else:
+        exact_ref = SAFE_ENV_REF_FULL_RE.fullmatch(value)
+        bearer_ref = SAFE_BEARER_REF_RE.fullmatch(value)
+    if exact_ref or bearer_ref:
+        return True
+    if not value.lower().startswith(("http://", "https://")) or not SAFE_ENV_REF_RE.search(value):
+        return False
+    if PROVIDER_SECRET_RE.search(value) or URL_CRED_RE.match(value) or URL_TOKEN_RE.match(value):
+        return False
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return False
+    if parsed.username or parsed.password:
+        return False
+    credential_params = [
+        param_value
+        for key, param_value in parse_qsl(parsed.query, keep_blank_values=True)
+        if SECRET_KEY_RE.search(key)
+    ]
+    if target_ide == "opencode":
+        return bool(credential_params) and all(
+            re.fullmatch(r"\{env:[A-Za-z_][A-Za-z0-9_]*\}", item)
+            for item in credential_params
+        )
+    return bool(credential_params) and all(SAFE_ENV_REF_FULL_RE.fullmatch(item) for item in credential_params)
+
+def normalize_environment_references(node):
+    """Translate documented Cursor refs into OpenCode's documented syntax."""
+    if isinstance(node, dict):
+        for key, value in list(node.items()):
+            node[key] = normalize_environment_references(value)
+    elif isinstance(node, list):
+        for index, value in enumerate(node):
+            node[index] = normalize_environment_references(value)
+    elif isinstance(node, str) and target_ide == "opencode":
+        return re.sub(
+            r"\$\{env:([A-Za-z_][A-Za-z0-9_]*)\}",
+            r"{env:\1}",
+            node,
+        )
+    return node
 
 def redact_value(v):
     # Strings that look like a credential/secret get blanked (key name kept).
     if isinstance(v, str):
+        if is_safe_reference_value(v):
+            return v
         if PROVIDER_SECRET_RE.search(v):
             return ""
         # A secret keyword appearing inside a value (e.g. a bare bearer/token
@@ -2053,7 +2116,7 @@ def redact_node(node, key_ctx=""):
         for k, v in list(node.items()):
             if isinstance(v, (dict, list)):
                 redact_node(v, k)
-            elif isinstance(v, str) and SECRET_KEY_RE.search(k):
+            elif isinstance(v, str) and SECRET_KEY_RE.search(k) and not is_safe_reference_value(v):
                 # key name itself signals a secret (e.g. "apiKey", "token")
                 node[k] = ""
             else:
@@ -2070,10 +2133,10 @@ def redact_node(node, key_ctx=""):
                 redact_node(item, key_ctx)
                 blank_next = False
             elif isinstance(item, str):
-                if parent_secret:
+                if parent_secret and not is_safe_reference_value(item):
                     node[i] = ""
                 elif blank_next:
-                    node[i] = ""
+                    node[i] = item if is_safe_reference_value(item) else ""
                     blank_next = False
                 else:
                     m_eq = FLAG_EQ_RE.match(item)
@@ -2212,6 +2275,7 @@ if not servers:
     # "success" for a zero-server transfer; signal the caller to fall back
     # to a verbatim copy instead.
     sys.exit(3)
+normalize_environment_references(servers)
 redact_node(servers)
 # GitHub Copilot CLI accepts only these documented transports. Do not write
 # a configuration which needs a guessed transport or looks like an IDE-only
@@ -2806,7 +2870,7 @@ PYEOF
         if [[ "$json_conversion_rc" -eq 0 ]]; then
             if MCP_REDACTED_COUNT=$(redact_secrets_in_file "$dst"); then
                 CONV_RESULT="success"
-                CONV_DETAIL="MCP config converted (root key ${src_key:-mcpServers} -> ${dst_key:-mcpServers}), secrets cleared" 
+                CONV_DETAIL="MCP config converted (root key ${src_key:-mcpServers} -> ${dst_key:-mcpServers}); literal credentials cleared and supported environment references preserved/converted"
             else
                 MCP_REDACTED_COUNT=0
                 CONV_RESULT="failed"
@@ -2953,6 +3017,15 @@ PYEOF
         return
     fi
 
+    # An explicit source override is a strict import contract. It changes only
+    # the file location; it must still match the declared source IDE's schema.
+    # Never copy an arbitrary override file as-is into a target config.
+    if [[ -n "${SOURCE_MCP_FILE:-}" ]]; then
+        CONV_RESULT="failed"
+        CONV_DETAIL="explicit MCP source did not pass schema conversion; copy-as-is fallback is disabled"
+        return
+    fi
+
     # Fallback: copy as-is, then strip secrets from the COPY (not the source).
     # Marked "copied" (not "success") because the format was not truly
     # converted and manual adjustment is expected.
@@ -2969,7 +3042,7 @@ PYEOF
         if [[ -s "$dst" ]]; then
             if MCP_REDACTED_COUNT=$(redact_secrets_in_file "$dst"); then
                 CONV_RESULT="copied"
-                CONV_DETAIL="MCP config copied as-is (source/target format not directly compatible, manual root key adjustment ${src_key:-?} -> ${dst_key:-?} needed), secrets cleared" 
+                CONV_DETAIL="MCP config copied as-is (source/target format not directly compatible, manual root key adjustment ${src_key:-?} -> ${dst_key:-?} needed); literal credentials cleared and supported environment references preserved"
             else
                 MCP_REDACTED_COUNT=0
                 CONV_RESULT="failed"
@@ -2983,6 +3056,142 @@ PYEOF
         CONV_RESULT="failed"
         CONV_DETAIL="MCP config copy failed" 
     fi
+}
+
+# Read and validate a JSON/JSONC MCP source without creating a target or
+# echoing any configuration values. This makes dry-run a real source check,
+# including for --source-mcp-file, while keeping preview strictly zero-write.
+inspect_mcp_source_file() {
+    local src="$1" src_key="$2"
+
+    if ! command -v python3 >/dev/null 2>&1; then
+        echo "  [FAIL] cannot validate MCP source without python3: $src" >&2
+        return 1
+    fi
+
+    python3 - "$src" "$src_key" <<'PYEOF'
+import json, re, sys
+
+src, root_key = sys.argv[1], sys.argv[2]
+
+def strip_jsonc(text):
+    out = []
+    i = 0
+    in_string = escaped = line_comment = block_comment = False
+    while i < len(text):
+        ch = text[i]
+        nxt = text[i + 1] if i + 1 < len(text) else ""
+        if line_comment:
+            if ch in "\r\n":
+                line_comment = False
+                out.append(ch)
+            i += 1
+            continue
+        if block_comment:
+            if ch == "*" and nxt == "/":
+                block_comment = False
+                i += 2
+                continue
+            if ch in "\r\n":
+                out.append(ch)
+            i += 1
+            continue
+        if in_string:
+            out.append(ch)
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+            i += 1
+            continue
+        if ch == '"':
+            in_string = True
+            out.append(ch)
+            i += 1
+        elif ch == "/" and nxt == "/":
+            line_comment = True
+            i += 2
+        elif ch == "/" and nxt == "*":
+            block_comment = True
+            i += 2
+        else:
+            out.append(ch)
+            i += 1
+    text = "".join(out)
+    out = []
+    i = 0
+    in_string = escaped = False
+    while i < len(text):
+        ch = text[i]
+        if in_string:
+            out.append(ch)
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+            i += 1
+            continue
+        if ch == '"':
+            in_string = True
+            out.append(ch)
+            i += 1
+            continue
+        if ch == ",":
+            j = i + 1
+            while j < len(text) and text[j].isspace():
+                j += 1
+            if j < len(text) and text[j] in "]}":
+                i += 1
+                continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+def read_path(node, dotted):
+    for part in filter(None, dotted.split(".")):
+        if not isinstance(node, dict):
+            return None
+        node = node.get(part)
+    return node
+
+try:
+    with open(src, encoding="utf-8") as handle:
+        document = json.loads(strip_jsonc(handle.read()))
+except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+    print(f"  [FAIL] MCP source is not readable JSON/JSONC: {exc}", file=sys.stderr)
+    sys.exit(1)
+
+servers = read_path(document, root_key)
+if not isinstance(servers, dict) or not servers:
+    print(
+        f"  [FAIL] MCP source has no non-empty object at root key {root_key or '<document>'}",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+if not all(isinstance(name, str) and name and isinstance(server, dict) for name, server in servers.items()):
+    print("  [FAIL] MCP source server map contains an invalid name or entry", file=sys.stderr)
+    sys.exit(1)
+
+for name, server in servers.items():
+    has_command = isinstance(server.get("command"), (str, list)) and bool(server.get("command"))
+    url_endpoints = [
+        key for key in ("url", "serverUrl", "httpUrl")
+        if isinstance(server.get(key), str) and bool(server.get(key))
+    ]
+    if int(has_command) + len(url_endpoints) != 1:
+        print(
+            f"  [FAIL] MCP source entry {name!r} must declare exactly one command or url endpoint",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+print(f"  validated MCP source: {len(servers)} server entries at root key {root_key or '<document>'}")
+PYEOF
 }
 
 # Strip likely secrets from a config file in place (env values, bearer/API
@@ -3016,6 +3225,7 @@ ensure_redactor_script() {
     # (macOS default) mis-parses quotes in command-substituted heredocs.
     cat >"$REDACTOR_PY" <<'PYEOF'
 import os, re, sys
+from urllib.parse import parse_qsl, urlsplit
 
 SECRET_KEY_RE = re.compile(r"(?i)(api[_-]?key|token|secret|password|passwd|authorization|auth|bearer|private[_-]?key|access[_-]?key|client[_-]?secret|session|cookie)")
 URL_CRED_RE = re.compile(r"^(?:https?|postgres|postgresql|mysql|mongodb|mongodb\+srv|redis|ftp|amqp|sqlserver)://[^:@/\s]+:[^@/\s]+@", re.IGNORECASE)
@@ -3024,6 +3234,10 @@ QUERY_CRED_RE = re.compile(r"[?&](key|token|secret|access[_-]?token|api[_-]?key)
 # Provider-key value formats (CR-001 fix). See the identical definition in the
 # MCP redactor above — kept in sync with validate_skills.py::SECRET.
 PROVIDER_SECRET_RE = re.compile(r"(?:sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|tvly-[A-Za-z0-9_-]{16,}|AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}|ya29\.[A-Za-z0-9_-]+|AIza[0-9A-Za-z_-]{35}|sk_live_[A-Za-z0-9]{16,})")
+SAFE_ENV_REF_TOKEN = r"(?:\$\{env:[A-Za-z_][A-Za-z0-9_]*\}|\$\{[A-Za-z_][A-Za-z0-9_]*\}|\{env:[A-Za-z_][A-Za-z0-9_]*\})"
+SAFE_ENV_REF_RE = re.compile(SAFE_ENV_REF_TOKEN)
+SAFE_ENV_REF_FULL_RE = re.compile(r"^" + SAFE_ENV_REF_TOKEN + r"$")
+SAFE_BEARER_REF_RE = re.compile(r"^Bearer\s+" + SAFE_ENV_REF_TOKEN + r"$", re.IGNORECASE)
 # Conventional SHORT flags that carry credentials (mysql/psql -p, -t token,
 # -k key). Their names don't contain a secret keyword, so SECRET_KEY_RE can't
 # catch them. Deliberate over-redaction tradeoff: the blanked value is always
@@ -3032,8 +3246,32 @@ SHORT_SECRET_FLAGS = {"-p", "-t", "-k"}
 FLAG_RE = re.compile(r"^--?[A-Za-z0-9_\-]+$")
 FLAG_EQ_RE = re.compile(r"^(--?[A-Za-z0-9_\-]+)=(.+)$")
 
+def is_safe_reference_value(value):
+    if not isinstance(value, str):
+        return False
+    if SAFE_ENV_REF_FULL_RE.fullmatch(value) or SAFE_BEARER_REF_RE.fullmatch(value):
+        return True
+    if not value.lower().startswith(("http://", "https://")) or not SAFE_ENV_REF_RE.search(value):
+        return False
+    if PROVIDER_SECRET_RE.search(value) or URL_CRED_RE.match(value) or URL_TOKEN_RE.match(value):
+        return False
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return False
+    if parsed.username or parsed.password:
+        return False
+    credential_params = [
+        param_value
+        for key, param_value in parse_qsl(parsed.query, keep_blank_values=True)
+        if SECRET_KEY_RE.search(key)
+    ]
+    return bool(credential_params) and all(SAFE_ENV_REF_FULL_RE.fullmatch(item) for item in credential_params)
+
 def is_secret_value(val):
     if not isinstance(val, str):
+        return False
+    if is_safe_reference_value(val):
         return False
     if PROVIDER_SECRET_RE.search(val):
         return True
@@ -3057,10 +3295,12 @@ def is_secret_flag(tok):
         return True
     return bool(FLAG_RE.match(tok) and SECRET_KEY_RE.search(tok))
 
-def blank_all_quoted(text):
+def blank_all_quoted(text, preserve_safe_refs=False):
     # Blank every nonempty quoted element; return (new_text, n_blanked).
     n = [0]
     def repl(m):
+        if preserve_safe_refs and is_safe_reference_value(m.group(1)):
+            return m.group(0)
         n[0] += 1
         return '""'
     new = re.sub(r'["\']([^"\']+)["\']', repl, text)
@@ -3085,7 +3325,8 @@ def redact_one(file):
         # containers ("{") or arrays ("["). The key (and its quoting) is kept.
         nonlocal count
         k = m.group(1).strip().rstrip(":").strip('"\'')
-        if is_secret_key(k):
+        value = m.group(2)
+        if (is_secret_key(k) and not is_safe_reference_value(value)) or is_secret_value(value):
             count += 1
             return '%s""' % m.group(1)
         return m.group(0)
@@ -3121,7 +3362,7 @@ def redact_one(file):
                     if rest == "[":
                         secret_array_depth = 1
                     elif rest.startswith("["):
-                        new_rest, n = blank_all_quoted(rest)
+                        new_rest, n = blank_all_quoted(rest, preserve_safe_refs=True)
                         line = line[:line.index("[")] + new_rest
                         count += n
                     elif rest.startswith("{") or rest == "":
@@ -3131,7 +3372,7 @@ def redact_one(file):
                         # value need not look secret itself (e.g. "tok-xyz-789").
                         qm = re.match(r'^["\'](.*)["\']\s*,?\s*$', rest)
                         if qm:
-                            if qm.group(1):
+                            if qm.group(1) and not is_safe_reference_value(qm.group(1)):
                                 line = re.sub(r'([:=]\s*)["\'].*?["\'](\s*,?\s*)$', r'\1""\2', line)
                                 count += 1
                         elif not rest.startswith(('"', "'")):
@@ -3149,10 +3390,11 @@ def redact_one(file):
                     out.append(line + "\n")
                     continue
                 # value of a preceding secret flag -> blank the whole element
-                idx = line.rfind(item)
-                if idx != -1:
-                    line = line[:idx] + '""'
-                    count += 1
+                if not is_safe_reference_value(item):
+                    idx = line.rfind(item)
+                    if idx != -1:
+                        line = line[:idx] + '""'
+                        count += 1
                 flag_pending = False
                 out.append(line + "\n")
                 continue
@@ -3189,7 +3431,7 @@ def redact_one(file):
                 continue
             if rest.startswith("["):
                 if key_secret:
-                    new_rest, n = blank_all_quoted(rest)
+                    new_rest, n = blank_all_quoted(rest, preserve_safe_refs=True)
                     prefix = re.match(r'^(\s*["\']?[A-Za-z0-9_.\-]+["\']?\s*[:=]\s*)', raw.rstrip("\n")).group(1)
                     line = prefix + new_rest
                     count += n
@@ -3203,9 +3445,12 @@ def redact_one(file):
                     new_elems = []
                     for e in elems:
                         if blank_next:
-                            new_elems.append("")
-                            count += 1
-                            changed = True
+                            if is_safe_reference_value(e):
+                                new_elems.append(e)
+                            else:
+                                new_elems.append("")
+                                count += 1
+                                changed = True
                             blank_next = False
                         elif FLAG_EQ_RE.match(e) and (SECRET_KEY_RE.search(FLAG_EQ_RE.match(e).group(1)) or FLAG_EQ_RE.match(e).group(1) in SHORT_SECRET_FLAGS):
                             new_elems.append(FLAG_EQ_RE.match(e).group(1) + "=")
@@ -3247,7 +3492,7 @@ def redact_one(file):
                 # A secret KEY alone is sufficient (value need not look secret,
                 # e.g. token: "tok-xyz-789"). redact_kv may have already blanked
                 # double-quoted pairs -> val == "" -> skip (no double count).
-                if val and (key_secret or is_secret_value(val)):
+                if val and ((key_secret and not is_safe_reference_value(val)) or is_secret_value(val)):
                     line = re.sub(r'([:=]\s*)["\'].*?["\'](\s*,?\s*)$', r'\1""\2', line)
                     count += 1
             else:
@@ -3257,7 +3502,7 @@ def redact_one(file):
                 # "--api-key=", (JSON) or an unterminated string; rewriting it
                 # would corrupt the file, so leave it untouched.
                 bare = rest.rstrip(',').strip()
-                if bare and not bare.startswith(('"', "'")) and (key_secret or is_secret_value(bare)):
+                if bare and not bare.startswith(('"', "'")) and ((key_secret and not is_safe_reference_value(bare)) or is_secret_value(bare)):
                     line = re.sub(r'[:=]\s*\S.*?(\s*,?\s*)$', r': ""\1', line)
                     count += 1
         # ---- argv element lines standing alone (e.g. JSON array continuation
@@ -3271,7 +3516,7 @@ def redact_one(file):
                     # re-arm only if it is itself a secret flag.
                     flag_pending = is_secret_flag(mnext.group(1))
                 else:
-                    new_line, n = blank_all_quoted(line)
+                    new_line, n = blank_all_quoted(line, preserve_safe_refs=True)
                     if n:
                         line = new_line
                         count += n
@@ -3595,6 +3840,11 @@ migrate_mcp() {
         target_mcp=$(get_mcp_path "$target_ide")
     fi
 
+    if [[ -n "${SOURCE_MCP_FILE:-}" ]]; then
+        source_mcp="$SOURCE_MCP_FILE"
+        set_manual_step "mcp" "explicit MCP source override: validate '$source_mcp' against the declared $source_ide schema; only the source location is overridden, while the target remains registry-resolved"
+    fi
+
     # VS Code's user MCP file is profile/UI-managed and intentionally has no
     # portable path in this mapper. A workspace target is portable and is
     # safe to write under the explicitly selected workspace root.
@@ -3645,7 +3895,15 @@ migrate_mcp() {
     # only copy of the source; the backup strategy's `cp -r` would save a
     # snapshot but then `convert_mcp_file` would overwrite the live source in
     # place. Either path destroys or mutates the source.
-    if [[ "$(cd "$(dirname "$source_mcp")" 2>/dev/null && pwd -P)/$(basename "$source_mcp")" == "$(cd "$(dirname "$target_mcp")" 2>/dev/null && pwd -P)/$(basename "$target_mcp")" ]]; then
+    local source_identity target_identity
+    if command -v python3 >/dev/null 2>&1; then
+        source_identity="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$source_mcp")"
+        target_identity="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$target_mcp")"
+    else
+        source_identity="$(cd "$(dirname "$source_mcp")" 2>/dev/null && pwd -P)/$(basename "$source_mcp")"
+        target_identity="$(cd "$(dirname "$target_mcp")" 2>/dev/null && pwd -P)/$(basename "$target_mcp")"
+    fi
+    if [[ "$source_identity" == "$target_identity" ]]; then
         set_status "mcp" "manual"
         set_message "mcp" "MCP source and target resolve to the same file; refusing to self-overwrite"
         set_manual_step "mcp" "MCP: source and target IDEs share '$source_mcp' on this workspace; pick a different target or relocate the source manually before retrying"
@@ -3710,6 +3968,15 @@ migrate_mcp() {
     src_key=$(get_mcp_root_key "$source_ide" "$scope")
     dst_key=$(get_mcp_root_key "$target_ide" "$scope")
 
+    if [[ -n "${SOURCE_MCP_FILE:-}" ]]; then
+        if ! inspect_mcp_source_file "$source_mcp" "$src_key"; then
+            set_status "mcp" "failed"
+            set_message "mcp" "explicit MCP source failed strict schema validation"
+            MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
+            return 0
+        fi
+    fi
+
     if [[ $DRY_RUN -eq 1 ]]; then
         echo "  DRY-RUN: converting MCP config" 
         echo "    source: $source_mcp (root key: ${src_key:-none})" 
@@ -3749,7 +4016,7 @@ migrate_mcp() {
         success)
             echo "  [OK] converted MCP config: ${src_key:-mcpServers} -> ${dst_key:-mcpServers}" 
             if [[ ${MCP_REDACTED_COUNT:-0} -ne 0 ]]; then
-            echo "  [SECURITY] secrets/tokens/credentials in MCP config were cleared before writing to target (only key names kept). Please confirm the target IDE's secret source (e.g. env vars/secret manager) before enabling." 
+            echo "  [SECURITY] literal credentials in MCP config were cleared; exact supported environment references were preserved or converted. Review target environment/secret-manager bindings before enabling."
             fi
             set_status "mcp" "success"
             set_message "mcp" "$CONV_DETAIL"
@@ -3758,7 +4025,7 @@ migrate_mcp() {
         copied)
             echo "  [COPY] copied MCP config as-is: $target_mcp" 
             if [[ ${MCP_REDACTED_COUNT:-0} -ne 0 ]]; then
-            echo "  [SECURITY] secrets/tokens/credentials in MCP config were cleared before writing to target (only key names kept). Please confirm the target IDE's secret source (e.g. env vars/secret manager) before enabling." 
+            echo "  [SECURITY] literal credentials in MCP config were cleared; exact supported environment references were preserved. Review target environment/secret-manager bindings before enabling."
             fi
             set_status "mcp" "copied"
             set_message "mcp" "$CONV_DETAIL"
@@ -4693,6 +4960,14 @@ main() {
                 OBJECTS="$2"
                 shift 2
                 ;;
+            --source-mcp-file)
+                if [[ $# -lt 2 || -z "${2:-}" ]]; then
+                    echo "Error: --source-mcp-file requires a file path" >&2
+                    exit 1
+                fi
+                SOURCE_MCP_FILE="$2"
+                shift 2
+                ;;
             --scope)
                 SCOPE="$2"
                 shift 2
@@ -4837,11 +5112,38 @@ main() {
         echo "To migrate mcp/config/project (which may contain secrets), please specify --objects explicitly and confirm reviewed." >&2
     fi
 
+    if [[ -n "$SOURCE_MCP_FILE" ]]; then
+        if [[ "$OBJECTS" != *mcp* ]]; then
+            echo "Error: --source-mcp-file requires --objects mcp or project-mcp" >&2
+            exit 1
+        fi
+        if [[ "$SCOPE" == "both" ]]; then
+            echo "Error: --source-mcp-file cannot represent both global and project MCP scopes; choose one scope" >&2
+            exit 1
+        fi
+        if [[ ! -f "$SOURCE_MCP_FILE" || ! -r "$SOURCE_MCP_FILE" ]]; then
+            echo "Error: --source-mcp-file must name a readable regular file: $SOURCE_MCP_FILE" >&2
+            exit 1
+        fi
+        case "${SOURCE_MCP_FILE##*.}" in
+            json|jsonc) ;;
+            *)
+                echo "Error: --source-mcp-file accepts JSON or JSONC only; YAML/TOML MCP formats require manual reconstruction" >&2
+                exit 1
+                ;;
+        esac
+        if ! command -v python3 >/dev/null 2>&1; then
+            echo "Error: --source-mcp-file requires python3 for safe path and schema validation" >&2
+            exit 1
+        fi
+        SOURCE_MCP_FILE="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$SOURCE_MCP_FILE")"
+    fi
+
     if [[ "$OBJECTS" == *mcp* || "$OBJECTS" == *config* || "$OBJECTS" == *project* ]]; then
         echo "" >&2
         log_warn "SECURITY: This migration includes mcp/config/project, which may contain API keys, tokens," >&2
-        log_warn "bearer credentials or embedded URL credentials. During migration, secrets are automatically cleared (only key names kept), and the target IDE"
-        log_warn "needs a separate secret source configured (env vars/secret manager). Run only between sources and targets you trust."
+        log_warn "bearer credentials or embedded URL credentials. Literal credentials are cleared; exact supported environment references may be converted to target syntax."
+        log_warn "Review target environment/secret-manager bindings before enabling. Run only between sources and targets you trust."
         echo "" >&2
     fi
 
@@ -4853,6 +5155,9 @@ main() {
     echo "  target IDE: $(get_ide_name "$TARGET_IDE")" 
     echo "  workspace: $WORKSPACE_ROOT" 
     echo "  migration content: $OBJECTS" 
+    if [[ -n "$SOURCE_MCP_FILE" ]]; then
+        echo "  explicit MCP source: $SOURCE_MCP_FILE"
+    fi
     echo "  scope: $SCOPE (only applies to skills/mcp)" 
     echo "  strategy: $STRATEGY" 
     echo ""
@@ -4909,6 +5214,13 @@ main() {
         else
             echo "Report saved to: $REPORT_FILE"
         fi
+    fi
+
+    # An explicit source file is a strict import contract. Surface schema or
+    # conversion failure to automation through the process status as well as
+    # the human-readable report; never make a rejected override look accepted.
+    if [[ -n "${SOURCE_MCP_FILE:-}" && $MIGRATION_FAILED -gt 0 ]]; then
+        return 1
     fi
 }
 

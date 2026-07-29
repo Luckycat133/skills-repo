@@ -579,6 +579,216 @@ fi
 
 # ===========================================================================
 echo ""
+echo "== 20. Non-canonical MCP source file + safe environment references =="
+# Regression target: removing support for --source-mcp-file, resolving it to
+# the canonical workspace path, or blanking symbolic environment references
+# must fail this test. The fixture is deliberately outside .cursor/mcp.json so
+# the command has to consume the user-selected file rather than merely report
+# the canonical source as absent.
+S20_DIR="$TMP_ROOT/custom-source"
+S20="$S20_DIR/cursor-export.json"
+W20="$TMP_ROOT/custom-source-workspace"
+mkdir -p "$S20_DIR" "$W20"
+S20_RESOLVED="$(cd "$S20_DIR" && pwd -P)/$(basename "$S20")"
+cat > "$S20" <<'EOF'
+{
+  "mcpServers": {
+    "local-search": {
+      "command": "npx",
+      "args": ["-y", "@acme/search-mcp"],
+      "env": {
+        "ACME_API_KEY": "${env:ACME_API_KEY}",
+        "UNSUPPORTED_TOKEN": "${UNSUPPORTED_TOKEN}",
+        "LITERAL_TOKEN": "__literal_secret_should_blank__",
+        "LOG_LEVEL": "info"
+      }
+    },
+    "remote-docs": {
+      "url": "https://mcp.acme.example/rpc?api_key=${env:ACME_QUERY_KEY}",
+      "headers": {
+        "Authorization": "Bearer ${env:ACME_BEARER_TOKEN}",
+        "X-Workspace": "acme"
+      }
+    }
+  }
+}
+EOF
+S20_ORIG="$(cat "$S20")"
+
+set +e
+run bash "$MIG" --source cursor --target opencode --workspace "$W20" \
+    --objects project-mcp --source-mcp-file "$S20" --dry-run
+set -e
+if [[ $LAST_RC -eq 0 ]]; then check_pass "20a: custom-source dry-run exits 0"; else check_fail "20a: custom-source dry-run exits rc=$LAST_RC"; fi
+if grep -Fq "source: $S20_RESOLVED" "$OUT_FILE" && grep -Fq "validated MCP source" "$OUT_FILE"; then
+    check_pass "20a: dry-run reads and validates the selected source file"
+else
+    check_fail "20a: dry-run did not consume the selected source file"
+fi
+if [[ ! -e "$W20/opencode.json" ]]; then check_pass "20a: dry-run leaves target absent"; else check_fail "20a: dry-run wrote target config"; fi
+
+run bash "$MIG" --source cursor --target opencode --workspace "$W20" \
+    --objects project-mcp --source-mcp-file "$S20" --strategy overwrite --yes
+D20="$W20/opencode.json"
+if [[ $LAST_RC -eq 0 ]]; then check_pass "20b: custom-source apply exits 0"; else check_fail "20b: custom-source apply exits rc=$LAST_RC"; fi
+assert_valid_json "$D20" "20b: custom-source destination is valid JSON"
+S20_CHECK=$(python3 - "$D20" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))["mcp"]
+assert d["local-search"]["type"] == "local"
+assert d["local-search"]["command"] == ["npx", "-y", "@acme/search-mcp"]
+assert d["local-search"]["environment"]["ACME_API_KEY"] == "{env:ACME_API_KEY}"
+assert d["local-search"]["environment"]["UNSUPPORTED_TOKEN"] == ""
+assert d["local-search"]["environment"]["LITERAL_TOKEN"] == ""
+assert d["local-search"]["environment"]["LOG_LEVEL"] == "info"
+assert d["remote-docs"]["type"] == "remote"
+assert d["remote-docs"]["url"] == "https://mcp.acme.example/rpc?api_key={env:ACME_QUERY_KEY}"
+assert d["remote-docs"]["headers"]["Authorization"] == "Bearer {env:ACME_BEARER_TOKEN}"
+assert d["remote-docs"]["headers"]["X-Workspace"] == "acme"
+print("OK")
+PY
+)
+if [[ "$S20_CHECK" == "OK" ]]; then
+    check_pass "20b: conversion preserves safe references and blanks literal credentials"
+else
+    check_fail "20b: converted MCP semantics are incorrect"
+fi
+if [[ "$(cat "$S20")" == "$S20_ORIG" ]]; then check_pass "20b: selected source file remains unchanged"; else check_fail "20b: selected source file was mutated"; fi
+
+# ===========================================================================
+echo ""
+echo "== 21. Explicit MCP source rejects ambiguous or foreign inputs =="
+S21="$S20_DIR/foreign-schema.json"
+W21="$TMP_ROOT/invalid-source-workspace"
+mkdir -p "$W21"
+cat > "$S21" <<'EOF'
+{ "servers": { "wrong-root": { "command": "echo" } } }
+EOF
+
+set +e
+run bash "$MIG" --source cursor --target opencode --workspace "$W21" \
+    --objects project-mcp --source-mcp-file "$S21" --strategy overwrite --yes
+set -e
+if [[ $LAST_RC -ne 0 ]] && grep -Fq "failed strict schema validation" "$OUT_FILE"; then
+    check_pass "21a: foreign source schema is reported as failed"
+else
+    check_fail "21a: foreign source schema was accepted"
+fi
+if [[ ! -e "$W21/opencode.json" ]]; then check_pass "21a: foreign schema leaves target absent"; else check_fail "21a: foreign schema wrote a target"; fi
+
+set +e
+run bash "$MIG" --source cursor --target opencode --workspace "$W21" \
+    --objects rules --source-mcp-file "$S21" --dry-run
+set -e
+if [[ $LAST_RC -ne 0 ]] && grep -Fq "requires --objects mcp or project-mcp" "$OUT_FILE"; then
+    check_pass "21b: override is rejected outside MCP objects"
+else
+    check_fail "21b: override was accepted outside MCP objects"
+fi
+
+set +e
+run bash "$MIG" --source cursor --target opencode --workspace "$W21" \
+    --objects mcp --scope both --source-mcp-file "$S21" --dry-run
+set -e
+if [[ $LAST_RC -ne 0 ]] && grep -Fq "cannot represent both global and project MCP scopes" "$OUT_FILE"; then
+    check_pass "21c: override rejects ambiguous both-scope input"
+else
+    check_fail "21c: override accepted ambiguous both-scope input"
+fi
+
+S21_YAML="$S20_DIR/continue.yaml"
+cat > "$S21_YAML" <<'EOF'
+mcpServers: []
+EOF
+set +e
+run bash "$MIG" --source continue --target opencode --workspace "$W21" \
+    --objects project-mcp --source-mcp-file "$S21_YAML" --dry-run
+set -e
+if [[ $LAST_RC -ne 0 ]] && grep -Fq "accepts JSON or JSONC only" "$OUT_FILE"; then
+    check_pass "21d: override rejects YAML/TOML format boundaries explicitly"
+else
+    check_fail "21d: override did not clearly reject a YAML input"
+fi
+
+# ===========================================================================
+echo ""
+echo "== 22. Explicit-source JSONC parsing and symlink identity safety =="
+S22_JSONC="$S20_DIR/cursor-export.jsonc"
+cat > "$S22_JSONC" <<'EOF'
+{
+  // A real JSONC comment.
+  "mcpServers": {
+    "jsonc-local": {
+      "command": "echo",
+      "args": ["https://example.test/a/*literal*/", "literal // text /* x */"],
+    },
+  },
+}
+EOF
+set +e
+run bash "$MIG" --source cursor --target opencode --workspace "$W21" \
+    --objects project-mcp --source-mcp-file "$S22_JSONC" --dry-run
+set -e
+if [[ $LAST_RC -eq 0 ]] && grep -Fq "validated MCP source: 1 server entries" "$OUT_FILE"; then
+    check_pass "22a: JSONC comments/trailing commas do not corrupt string contents"
+else
+    check_fail "22a: valid JSONC source was rejected"
+fi
+
+W22_LINK="$TMP_ROOT/symlink-source-workspace"
+mkdir -p "$W22_LINK"
+D22_LINK="$W22_LINK/opencode.json"
+cat > "$D22_LINK" <<'EOF'
+{ "mcpServers": { "only-copy": { "command": "echo", "args": [] } } }
+EOF
+S22_LINK="$S20_DIR/link-to-target.json"
+ln -s "$D22_LINK" "$S22_LINK"
+D22_ORIG="$(cat "$D22_LINK")"
+run bash "$MIG" --source cursor --target opencode --workspace "$W22_LINK" \
+    --objects project-mcp --source-mcp-file "$S22_LINK" --strategy overwrite --yes
+if grep -Fq "source and target resolve to the same file" "$OUT_FILE"; then check_pass "22b: symlinked self-target is refused"; else check_fail "22b: symlinked self-target was not detected"; fi
+if [[ "$(cat "$D22_LINK")" == "$D22_ORIG" ]]; then check_pass "22b: symlink identity guard preserves the only copy"; else check_fail "22b: symlink identity guard allowed mutation"; fi
+
+# ===========================================================================
+echo ""
+echo "== 23. Safe-reference URLs cannot hide a second literal credential =="
+S23="$S20_DIR/mixed-url.json"
+W23="$TMP_ROOT/mixed-url-workspace"
+mkdir -p "$W23"
+PROVIDER_PREFIX="sk-"
+PROVIDER_BODY="ABCDEFGHIJKLMNOPQRSTUV"
+cat > "$S23" <<EOF
+{
+  "mcpServers": {
+    "mixed-remote": {
+      "url": "https://example.test/mcp?api_key=\${env:SAFE_REF}&note=${PROVIDER_PREFIX}${PROVIDER_BODY}"
+    }
+  }
+}
+EOF
+set +e
+run bash "$MIG" --source cursor --target opencode --workspace "$W23" \
+    --objects project-mcp --source-mcp-file "$S23" --strategy overwrite --yes
+set -e
+if [[ $LAST_RC -ne 0 && ! -e "$W23/opencode.json" ]]; then
+    check_pass "23a: mixed-reference MCP URL fails closed with no target"
+else
+    check_fail "23a: MCP safe-reference exception leaked a second literal credential"
+fi
+
+mkdir -p "$HOME/.claude"
+cat > "$HOME/.claude/settings.json" <<EOF
+{ "webhook": "https://example.test/hook?api_key=\${env:SAFE_REF}&note=${PROVIDER_PREFIX}${PROVIDER_BODY}" }
+EOF
+run bash "$MIG" --source claude --target openclaw --objects config --strategy overwrite --yes
+if grep -Fq "${PROVIDER_PREFIX}${PROVIDER_BODY}" "$HOME/.openclaw/openclaw.json"; then
+    check_fail "23b: generic config redactor leaked a second literal credential"
+else
+    check_pass "23b: generic config redactor blanks mixed-reference credential URLs"
+fi
+
+# ===========================================================================
+echo ""
 if [[ $FAIL -eq 0 ]]; then
     echo "ALL $CHECKS MCP SECRET-REDACTION CHECKS PASSED"
     exit 0

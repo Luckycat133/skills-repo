@@ -10,7 +10,7 @@
 
 ---
 name: agent-skills-setup
-version: 0.6.3
+version: 0.6.4
 license: MIT
 description: >
   Migrate AI assistant context between IDEs — MCP servers, rules/instructions,
@@ -56,9 +56,10 @@ Migrate AI assistant context (MCP, rules, skills, commands, agents, hooks, memor
 This skill is **scope-narrow and consent-gated** by design. It does **not** enumerate the user's home directory or auto-discover every installed IDE; it only resolves the **two IDEs the user explicitly names** via `--source` / `--target` (plus an optional `--workspace` for project-level config) and reads/writes only those resolved paths.
 
 - **MCP is opt-in.** `skills`, `rules`, and `prompts` migrate by default; MCP servers are touched only when the user explicitly passes `--objects mcp` or `--objects project-mcp`. Use `--scope global|project|both` for Skills/MCP; `project-mcp` always selects the explicit workspace file.
-- **Preview is read-only.** `--dry-run` prints resolved source/target paths and a plan — it never writes files and never echoes raw config or secret values.
+- **An explicit MCP input is narrow.** `--source-mcp-file <file>` is valid only for JSON/JSONC MCP input, with an MCP object and one scope. It overrides only the input file location; `--source` still selects the schema/root key and the registry still selects the target. The file must be readable, resolve to a different file than the target, and pass root-map/endpoint validation. Never use this flag to imply automatic YAML/TOML conversion (Continue, Goose, Codex); keep those format boundaries manual. Arbitrary directory scanning and copy-as-is fallback are forbidden.
+- **Preview is workspace-read-only.** `--dry-run` resolves and parses the selected source (including `--source-mcp-file`), prints only its path, root key, server count, and conversion plan, and creates no workspace/target output. It never echoes raw config or secret values.
 - **Writes require explicit confirmation.** A non-interactive run without `--yes` aborts with zero writes. With `--yes`, target changes follow `--strategy` (`skip` | `backup` | `overwrite`, **default `backup`** — a timestamped `.bak.<TS>` copy is taken before any overwrite; raw `--delete`/overwrite is never silent).
-- **Secrets are redacted fail-closed.** Credential values are blanked from a *copy* of the data (the original source is never modified). If redaction cannot be completed for any file, the entire copied tree is removed and the migration is marked failed — no secret is ever left on disk.
+- **Secrets are redacted fail-closed.** Literal credentials are blanked from a *copy* of the data (the original source is never modified). Exact environment references may be preserved or translated only when the target has a documented equivalent, for example Cursor `${env:NAME}` to OpenCode `{env:NAME}`. Mixed literals, default expansions, command substitutions, and unsupported reference syntax remain blank/manual. If redaction cannot be completed, the copied output is removed and migration fails.
 - **Network is consent-gated.** Outbound downloads (e.g. OpenClaw runtime) run only with `--yes` and mandatory SHA-256 verification; there is no hidden outbound activity.
 
 ---
@@ -75,17 +76,17 @@ This skill is **scope-narrow and consent-gated** by design. It does **not** enum
 | 6 | **hooks** | Lifecycle event hooks — diagnostic/manual only; never copied or executed |
 | 7 | **memory** | Persistent memory / memory banks / context files — diagnostic/manual only; generated state is never copied |
 
-**Never migrate live secrets**: API keys, tokens, and bearer/OAuth credentials are always **BLANKED** during mcp/config migration (key names kept, values set to `""`) — they are never copied as-is. Also never migrate: chat history/transcripts, IDE UI settings, built-in vector indexes, workspace storage, SQLite databases.
+**Never migrate live secrets**: literal API keys, tokens, bearer/OAuth credentials, and credential URLs are **BLANKED** during mcp/config migration (key names kept, values set to `""`). An exact symbolic environment reference is not a live value and may be preserved or converted only to documented target syntax; ambiguous expressions are blank/manual. Also never migrate: chat history/transcripts, IDE UI settings, built-in vector indexes, workspace storage, SQLite databases.
 
 ---
 
 ## Execution Workflow
 
 ```
-1. RESOLVE   — Read the user-specified source/target IDE names; resolve their config paths from IDE Registry (no filesystem-wide scanning)
+1. RESOLVE   — Read source/target IDE names; resolve registry paths, or one explicit --source-mcp-file input (no filesystem-wide scanning)
 2. IDENTIFY  — Ask user: source IDE(s) and target IDE(s)
-3. READ      — Read only the selected migration objects for the specified source IDE (default scope: skills, rules, prompts)
-4. DRY-RUN   — Generate migration preview: list objects, conversion plan, conflicts
+3. READ      — Read only selected objects; validate an explicit MCP file against the --source IDE root/schema
+4. DRY-RUN   — Parse the selected source and show a value-free structure/conversion preview with zero workspace writes
 5. CONFIRM   — Show preview to user; wait for explicit approval before writing
 6. BACKUP    — Create .bak.TIMESTAMP copies of existing target files that will be modified
 7. MIGRATE   — Execute migrations with format conversion per Object Conversion Rules
@@ -96,7 +97,11 @@ This skill is **scope-narrow and consent-gated** by design. It does **not** enum
 - Default to DRY-RUN. Never write without user confirmation.
 - Always backup before overwriting. Use `.bak.<YYYYMMDDHHMMSS>` suffix.
 - Merge, never overwrite. Conflicts renamed to `<name>_migrated`.
-- Blank all secret values during migration (keep key names, set values to `""`): env vars (API keys, tokens), `Authorization`/bearer headers, `user:pass@` or `?key=` credential URLs, and DB connection strings. Secrets are redacted BEFORE the config is written to the target; the `[SECURITY]` warning in the report confirms this happened.
+- Blank literal secret values during migration (keep key names, set values to `""`): API keys/tokens, literal `Authorization`/bearer headers, `user:pass@` or literal `?key=` URLs, and DB credentials. Preserve or translate only exact documented environment references; blank complex or unsupported expansions. Redaction happens before target write.
+- With `--source-mcp-file`, allow one MCP scope only (`--scope both` is invalid), resolve symlinks before the source/target identity check, and fail on parse/schema/conversion errors. Never fall back to copying the override as-is.
+- `--source-mcp-file` accepts JSON/JSONC only. For Continue/Goose YAML or Codex TOML, use a read-only canonical-path diagnostic and manual reconstruction; do not attach the override flag and claim it is convertible.
+- In an explicit-input preview response, say all three facts plainly: the flag changes only the input location, `--source` still determines the source root/schema, and `--workspace` plus the target registry still determine the output path.
+- When a YAML/TOML boundary is manual, finish with both reconstruction and validation steps. For Codex, rebuild `[mcp_servers.<name>]` in the reviewed TOML scope, validate the TOML, then verify discovery with `codex mcp list`; do not stop at “review manually.”
 - Default migration scope is **LOW-RISK ONLY** (`skills`, `rules`, `prompts`). `mcp`/`project-mcp`/`config`/`project` — which can carry live credentials — are NEVER migrated unless the user explicitly passes the corresponding object; a security warning is shown and secrets are redacted when they are in scope. `agents`, `hooks`, and `memory` are explicit diagnostics and remain manual.
 - If source or target config is invalid JSON/TOML/YAML, STOP and report.
 
@@ -117,12 +122,13 @@ The highest-risk formats to get wrong (see `skills/agent-skills-setup/references
 | IDE | MCP Root Key | Format | Config Path | Key Pitfall |
 |-----|-------------|--------|-------------|-------------|
 | VS Code Copilot | `servers` | JSON | workspace `.vscode/mcp.json`; user via `MCP: Open User Configuration` | IDE schema is `servers`, not `mcpServers`; preserve documented `stdio`, `http`, or `sse` entries and do not send this schema to the CLI; user file path is manual because the official docs do not publish a portable OS path |
+| Cursor | `mcpServers` | JSON | `~/.cursor/mcp.json` / project `.cursor/mcp.json` | Environment interpolation uses `${env:NAME}`; convert it when the target uses a different documented syntax |
 | GitHub Copilot CLI | `mcpServers` | JSON | `~/.copilot/mcp-config.json` | Canonical target `copilot`; documented transports are `local`/`stdio` (command+args) and `http`/`sse` (url); project MCP is `.mcp.json` or `.github/mcp.json`, not `.vscode/mcp.json` |
 | Claude Code | `mcpServers` | JSON | user/local `~/.claude.json`; project `.mcp.json` | Do not substitute `.claude/settings.local.json` for local MCP. The mapper handles only the user server map; review project and local per-project entries manually. |
 | Claude Desktop app | `mcpServers` | JSON / MCPB / UI | macOS `~/Library/Application Support/Claude/claude_desktop_config.json`; native Windows `%APPDATA%\\Claude\\claude_desktop_config.json`; Linux path not confirmed | Legacy local JSON is a narrow automatic target on macOS/Windows; install modern local servers as `.mcpb` through Settings → Extensions → Advanced settings → Install Extension, remote servers through Settings → Connectors. `claude mcp add-from-claude-desktop` is the official interactive import into Claude Code on macOS/WSL. |
 | Pieces for Developers | — (PiecesOS MCP server/provider) | PiecesOS/Desktop Settings → MCP or `pieces mcp setup` | no automatic file target | Pieces has no documented `~/.pieces`, `.pieces`, SKILL.md, rules, or client MCP/config path; configure the active PiecesOS endpoint in the consuming IDE and never migrate its local database |
 | Kilo Code | `mcp` | JSONC | `~/.config/kilo/kilo.jsonc` (global) / `kilo.jsonc` or `.kilo/kilo.jsonc` (project) | `type: local|remote`; local command is an array and env is `environment` |
-| OpenCode | `mcp` | JSON/JSONC | `~/.config/opencode/opencode.json` / project `opencode.json` | `mcp` not `mcpServers`; `type: local|remote`; local command is array and env is `environment` |
+| OpenCode | `mcp` | JSON/JSONC | `~/.config/opencode/opencode.json` / project `opencode.json` | `mcp` not `mcpServers`; `type: local|remote`; local command is array, env is `environment`, and environment interpolation uses `{env:NAME}` |
 | Kimi Code | `mcpServers` | JSON | `~/.kimi-code/mcp.json` / `.kimi-code/mcp.json` | `KIMI_CODE_HOME` relocates user data; config.toml is separate from MCP |
 | Kiro | `mcpServers` | JSON | `~/.kiro/settings/mcp.json` / `.kiro/settings/mcp.json` | Skills are `~/.kiro/skills` / `.kiro/skills`; steering is directory-scoped |
 | Augment | `mcpServers` | JSON | `~/.augment/settings.json` / `.augment/settings.json` | `.augment/settings.local.json` has local project precedence; rules/skills are separate directories |
@@ -160,10 +166,10 @@ Migrate to these FIRST for maximum cross-IDE compatibility:
 ```
 CONVERT_MCP(source_config, source_ide, target_ide):
 
-  1. Read source MCP config using source_ide paths and root_key
+  1. Read the canonical source path, or one JSON/JSONC `--source-mcp-file`; the declared source_ide still supplies root_key/schema. Strictly parse and validate an override, including during dry-run; never use it for YAML/TOML or copy it as-is on failure.
   2. For each server entry:
      a. Extract: command, args, env, url, headers
-     b. BLANK all secret values in env (keep key names, set to "")
+     b. BLANK literal secret values (keep key names). Preserve/translate only exact documented environment references; e.g. Cursor `${env:NAME}` → OpenCode `{env:NAME}`. Blank mixed/default/unsupported expressions.
      c. Convert to target format per root_key:
         - mcpServers (JSON object): direct copy
         - servers (JSON, VS Code Copilot): rename mcpServers→servers only after validating the documented server shape; preserve `stdio`/`http`/`sse` and fail closed when transport is ambiguous rather than guessing
@@ -398,4 +404,8 @@ bash skills/agent-skills-setup/scripts/smart-ide-migration.sh --source cursor --
 # 2) Apply after reviewing the plan (explicit consent)
 bash skills/agent-skills-setup/scripts/smart-ide-migration.sh --source cursor --target claude --yes
 bash skills/agent-skills-setup/scripts/smart-ide-migration.sh --source cursor --target windsurf --objects skills,rules --strategy backup --yes
+# Preview a reviewed export outside Cursor's canonical project path.
+bash skills/agent-skills-setup/scripts/smart-ide-migration.sh --source cursor --target opencode --workspace /path/to/project --objects project-mcp --source-mcp-file /path/to/cursor-export.json --dry-run
+# Apply the same validated conversion only after reviewing the preview.
+bash skills/agent-skills-setup/scripts/smart-ide-migration.sh --source cursor --target opencode --workspace /path/to/project --objects project-mcp --source-mcp-file /path/to/cursor-export.json --strategy backup --yes
 ```

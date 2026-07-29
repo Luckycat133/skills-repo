@@ -1,6 +1,6 @@
 # agent-skills-setup Development Docs
 
-> **文档元信息** ｜ 更新日期：2026-07-28 ｜ 作者：skills-repo 维护组 ｜ 类型：开发文档索引 ｜ 状态：已发布
+> **文档元信息** ｜ 更新日期：2026-07-29 ｜ 作者：skills-repo 维护组 ｜ 类型：开发文档索引 ｜ 状态：已发布
 
 `agent-skills-setup` 的开发文档集中在这里，用于规划、验证、发布和持续迭代。
 
@@ -39,6 +39,8 @@ Español: Esta carpeta reúne la planificación, validación, publicación e ite
 - `HI-001-ide-paths-single-source.md`：IDE 路径单一真源（single-source-of-truth）的架构设计说明（驱动 `scripts/ide-paths.json` 与 `test-ide-paths.sh`）
 - `code-review-2026-07-26.md`: full multi-reviewer audit (31 findings: 3 Critical / 4 High / 17 Medium / 7 Low)
 - `code-review-2026-07-26.md`：完整多维度审查归档（31 项：3 Critical / 4 High / 17 Medium / 7 Low）
+- `../../SECURITY-AUDIT.md`: runtime consent, redaction, explicit MCP input, and fail-closed controls
+- `../../SECURITY-AUDIT.md`：运行时授权、脱敏、显式 MCP 输入与 fail-closed 控制说明
 
 ## Current Workflow / 当前流程
 
@@ -50,3 +52,5 @@ Español: Esta carpeta reúne la planificación, validación, publicación e ite
 6. 把更新后的技能导入到本仓库。
 7. Update release, validation, and bilingual docs here before publishing.
 8. 在这里补齐发布、验证和双语文档后再准备发布。
+9. Run `test-mcp-secret-redaction.sh` for explicit-source dry-run/schema, symlink identity, and environment-reference conversion regressions.
+10. 运行 `test-mcp-secret-redaction.sh`，覆盖显式来源预览/schema、符号链接同源与环境引用转换回归。

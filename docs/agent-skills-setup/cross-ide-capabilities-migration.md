@@ -224,6 +224,8 @@ Verification:
 
 ### 7.3 Configurations
 
+Implementation note for the live mapper: a reviewed MCP export outside an IDE's canonical path can be selected with the canonical skill's `--source-mcp-file` workflow. The declared source IDE still determines schema/root; dry-run parses the single file and reports only structural metadata. Literal credentials are blanked, exact environment references are translated only when the target syntax is documented, and invalid/mixed inputs fail closed. See `../../skills/agent-skills-setup/SKILL.md` for the actual CLI contract; the planned staging examples in this document are not additional flags.
+
 Steps:
 
 1. Stage config files into platform config directories.
@@ -300,6 +302,8 @@ Required quality gates:
 4. Documentation includes prerequisites, execution, risk, fix, verification.
 5. No secrets or private local paths in publishable content.
 6. Staging migration output passes strict validation before any direct-write rollout.
+7. Explicit MCP inputs pass preview-time root/endpoint validation, create no workspace output during dry-run, and cannot resolve through a symlink to the target.
+8. Secret fixtures prove both sides of the policy: literal or mixed credentials never land in the target, while exact supported environment references are preserved or converted to target syntax.
 
 Recommended E2E matrix:
 

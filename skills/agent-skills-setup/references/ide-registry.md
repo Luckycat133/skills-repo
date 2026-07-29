@@ -22,6 +22,8 @@ Detailed per-IDE paths for all migration objects. Read this when executing STEP 
 
 > **Scope**: The registry documents all 40 IDEs/agents the migration engine automates. Objects not listed for an IDE are unsupported by that IDE (fail-closed by design).
 
+> **Explicit MCP input**: `--source-mcp-file <file>` is a one-run JSON/JSONC input override, not a canonical path mapping. It changes only the source file location; `--source` still selects this registry's root key/schema and the target remains registry-resolved. The mapper resolves symlinks, validates the server map/endpoints during preview, rejects `--scope both`, and disables copy-as-is fallback. Do not use it for Continue/Goose YAML or Codex TOML; those format boundaries remain canonical-path diagnostics plus manual reconstruction.
+
 ## Claude Family
 
 ### claude-desktop (Claude Desktop app)
@@ -46,7 +48,7 @@ Detailed per-IDE paths for all migration objects. Read this when executing STEP 
 
 ### cursor
 - **detect**: no stable, documented installation-detection path used by this mapper; manual only
-- **mcp**: global `~/.cursor/mcp.json` · project `.cursor/mcp.json` · root_key `mcpServers` · JSON · official docs describe stdio, SSE, and Streamable HTTP
+- **mcp**: global `~/.cursor/mcp.json` · project `.cursor/mcp.json` · root_key `mcpServers` · JSON · official docs describe stdio, SSE, and Streamable HTTP; environment interpolation uses `${env:NAME}`
 - **rules**: canonical project directory `.cursor/rules/*.mdc` · frontmatter includes `description`, `globs`, and `alwaysApply`; root `.cursorrules` is legacy/deprecated compatibility
 - **skills**: project `.cursor/skills/<name>/SKILL.md` · global `~/.cursor/skills/<name>/SKILL.md`; `.agents/skills/` is a separate cross-tool compatibility location, not the Cursor canonical project path
 - **commands**: project `.cursor/commands/*.md` · plain Markdown commands; command-to-skill conversion is not performed automatically here
@@ -283,7 +285,7 @@ Detailed per-IDE paths for all migration objects. Read this when executing STEP 
 
 ### opencode
 - **detect**: `~/.config/opencode/`
-- **mcp**: global `~/.config/opencode/opencode.json` · project `opencode.json` · root_key `mcp` · JSON · REQUIRES type:'local'|'remote' · command is ARRAY · env field is `environment`
+- **mcp**: global `~/.config/opencode/opencode.json` · project `opencode.json` · root_key `mcp` · JSON · REQUIRES type:'local'|'remote' · command is ARRAY · env field is `environment` · environment interpolation uses `{env:NAME}`; the mapper converts Cursor `${env:NAME}` references to this form
 - **rules**: `AGENTS.md` (via instructions field in config)
 - **skills**: project `.opencode/skills/` · global `~/.config/opencode/skills/` · also loads `.claude/skills/`, `.agents/skills/`
 - **commands**: project `.opencode/commands/*.md` · global `~/.config/opencode/commands/*.md` · frontmatter: description, agent, model · $ARGUMENTS, !`cmd`, @file templates

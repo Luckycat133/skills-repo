@@ -1,6 +1,6 @@
 # ClawHub Release Guide / ClawHub 发布指南
 
-> **文档元信息** ｜ 更新日期：2026-07-28 ｜ 作者：skills-repo 维护组 ｜ 类型：发布操作指南 ｜ 状态：已发布
+> **文档元信息** ｜ 更新日期：2026-07-29 ｜ 作者：skills-repo 维护组 ｜ 类型：发布操作指南 ｜ 状态：已发布
 
 This document explains the exact release flow for publishing `agent-skills-setup` to ClawHub.
 
@@ -29,8 +29,8 @@ Español: Este documento resume el flujo exacto y los metadatos recomendados par
 - skill 目录中包含有效的 `SKILL.md`。
 - Release docs and changelog are already updated.
 - 发布文档和 changelog 已更新。
-- The `--version` must equal the current `version:` field in `skills/agent-skills-setup/SKILL.md` (currently `0.6.3`); update it on every release.
-- `--version` 必须与 `skills/agent-skills-setup/SKILL.md` 中当前的 `version:` 一致（当前为 `0.6.3`），每次发布时同步更新。
+- The `--version` must equal the current `version:` field in `skills/agent-skills-setup/SKILL.md` (currently `0.6.4`); update it on every release.
+- `--version` 必须与 `skills/agent-skills-setup/SKILL.md` 中当前的 `version:` 一致（当前为 `0.6.4`），每次发布时同步更新。
 
 ## Recommended Commands / 推荐命令
 
@@ -43,9 +43,9 @@ bash skills/agent-skills-setup/scripts/prepare-clawhub-release.sh \
     --skill-dir skills/agent-skills-setup \
     --slug agent-skills-setup \
     --name "Agent Skills Setup" \
-    --version 0.6.3 \
+    --version 0.6.4 \
     --tags latest,setup,skills,openclaw,cross-ide \
-    --changelog "Add cross-IDE capability migration scripts, strict validation gates, staging-first rollout defaults, and expanded mainstream IDE coverage."
+    --changelog "Add strict explicit MCP source previews, safe environment-reference conversion, symlink identity guards, and executable migration evals."
 ```
 
 Publish immediately after validation:
@@ -57,9 +57,9 @@ bash skills/agent-skills-setup/scripts/prepare-clawhub-release.sh \
     --skill-dir skills/agent-skills-setup \
     --slug agent-skills-setup \
     --name "Agent Skills Setup" \
-    --version 0.6.3 \
+    --version 0.6.4 \
     --tags latest,setup,skills,openclaw,cross-ide \
-    --changelog "Add cross-IDE capability migration scripts, strict validation gates, staging-first rollout defaults, and expanded mainstream IDE coverage." \
+    --changelog "Add strict explicit MCP source previews, safe environment-reference conversion, symlink identity guards, and executable migration evals." \
     --publish
 ```
 

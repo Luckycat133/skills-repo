@@ -1,0 +1,62 @@
+{
+  "skill_name": "agent-skills-setup",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I want to move my Cursor skills and project rules into Claude Code for the Acme repository at /tmp/acme-app. Please handle it safely. I have not approved any writes yet, and I do not want you scanning unrelated IDE or home-directory data. Explain what you would do next and give me the exact first command you would run.",
+      "expected_output": "A scoped, read-only migration preview plan that names Cursor and Claude Code, limits discovery to the specified workspace and IDE paths, defaults to skills/rules/prompts rather than MCP, and gives a --dry-run command without writing files.",
+      "files": [],
+      "expectations": [
+        "The response chooses a read-only dry run as the first operation and does not claim that files were migrated.",
+        "The proposed command names cursor as source, claude as target, /tmp/acme-app as the workspace, and includes --dry-run.",
+        "The response limits inspection to the named IDEs and workspace instead of scanning the home directory or unrelated IDEs.",
+        "The response does not include MCP, config, agents, hooks, or memory in the default migration scope."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "We are moving the project MCP config in evals/files/cursor-project-mcp.json from Cursor to OpenCode for workspace /tmp/acme-mcp. Do not write anything yet. Produce a safe preview that shows the intended OpenCode JSON shape and the exact preview/apply commands. Preserve server behavior, but never copy live credential values.",
+      "expected_output": "A no-workspace-write preview that reads the explicitly supplied MCP file with --source-mcp-file, validates it as Cursor mcpServers, converts to OpenCode's mcp object, changes local commands to arrays, uses environment instead of env, marks local/remote types, translates supported environment references, blanks literal credentials, and separates --dry-run from a later --yes apply command.",
+      "files": [
+        "evals/files/cursor-project-mcp.json"
+      ],
+      "expectations": [
+        "The preview uses OpenCode's root key mcp rather than mcpServers.",
+        "The local server uses type local, a command array, and environment rather than env.",
+        "The remote server uses type remote and preserves its URL without inventing a transport.",
+        "Exact Cursor ${env:NAME} references are shown as OpenCode {env:NAME}, while the literal credential fixture is absent or blanked.",
+        "The response keeps the first command read-only with --dry-run and puts --yes only in a separate apply command.",
+        "Both commands explicitly select project MCP for workspace /tmp/acme-mcp and point --source-mcp-file to the supplied evals/files/cursor-project-mcp.json input (relative or resolved absolute path).",
+        "The response explains that --source-mcp-file changes only the input location: --source cursor still determines the root/schema and the OpenCode target remains workspace-resolved."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Move the MCP servers from my Continue.dev YAML config into Codex for project /tmp/atlas. I want a preview only. Give me the exact migration command and, if automatic conversion is unsafe, say so plainly and provide the safest next step instead of guessing.",
+      "expected_output": "A preview-oriented answer that recognizes Continue.dev uses a YAML mcpServers array while Codex uses TOML mcp_servers, refuses generic automatic conversion, and provides a manual review/conversion path without writing.",
+      "files": [],
+      "expectations": [
+        "The response identifies Continue.dev MCP as YAML with an mcpServers array and Codex MCP as TOML using mcp_servers.",
+        "The response states that generic automatic conversion is unsupported or unsafe and does not fabricate a converted config.",
+        "Any diagnostic command is read-only and includes --dry-run or --print-path.",
+        "The response does not use --yes, claim files were migrated, or recommend piping/installing remote code.",
+        "The safest next step includes manual reconstruction or review plus validation of the resulting TOML."
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "In an isolated temporary workspace, execute the Cursor-to-OpenCode project MCP migration against evals/files/cursor-project-mcp.json. First run the explicit-source dry-run and prove it reads the supplied fixture while leaving the workspace target absent. Then apply with --yes, preserve the source file byte-for-byte, and save the generated opencode.json for inspection.",
+      "expected_output": "Execution evidence showing a successful explicit-source dry-run with no workspace target, followed by a successful apply whose OpenCode JSON has the correct mcp schema, converted environment references, blank literal credential, and an unchanged source fixture.",
+      "files": [
+        "evals/files/cursor-project-mcp.json"
+      ],
+      "expectations": [
+        "The transcript contains an actual dry-run exit code 0, the resolved supplied fixture path, and a validated MCP source summary.",
+        "The transcript or filesystem evidence proves opencode.json was absent after dry-run and created only after the apply command.",
+        "The saved opencode.json parses and contains mcp.local-search with type local, the expected command array, and environment rather than env.",
+        "The saved output converts ${env:NAME} references to {env:NAME}, blanks LITERAL_TOKEN, and preserves the remote URL/header behavior without a guessed transport.",
+        "A before/after digest proves the supplied source fixture was unchanged."
+      ]
+    }
+  ]
+}
