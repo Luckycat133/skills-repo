@@ -81,7 +81,7 @@ Covered mainstream IDE ecosystems now include 40 IDEs & agents (Copilot, Cursor,
    `bash validate-all.sh --list-tests` to audit the exact list; useful individual
    entry points include:
    - `bash skills/agent-skills-setup/scripts/verify-ide-config.sh` — asserts resolved IDE paths match `references/ide-registry.md` (235 checks).
-   - `bash skills/agent-skills-setup/scripts/test-ide-paths.sh` — drift test between `references/ide-paths.json` and the script (449 checks).
+   - `bash skills/agent-skills-setup/scripts/test-ide-paths.sh` — cross-platform drift test between `references/ide-paths.json`, the registry, and the script (453 checks).
    - `bash skills/agent-skills-setup/scripts/test-migration.sh` — migration + global-sync engine tests (80 checks, isolated temp HOME).
    - `bash skills/agent-skills-setup/scripts/test-mcp-secret-redaction.sh` — literal-secret redaction, explicit MCP source/schema preview, symlink identity, and environment-reference conversion regressions.
 4. Merge only after the validation workflow passes.

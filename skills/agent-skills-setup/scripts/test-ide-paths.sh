@@ -8,9 +8,9 @@
 # the JSON value. This catches drift between the script's hardcoded case
 # tables and the canonical registry/JSON.
 #
-# Additionally, for key IDEs, every non-empty JSON value must literally appear
-# in ide-registry.md.
-# non-empty JSON value must literally appear in ide-registry.md.
+# Additionally, for key IDEs, every non-empty JSON value on every supported OS
+# must literally appear in ide-registry.md. Checking all platforms avoids a
+# macOS run silently accepting abbreviated Linux/Windows documentation.
 #
 # Exits non-zero on ANY mismatch; exits 0 if all checks pass.
 
@@ -54,6 +54,23 @@ for ide in sorted(data.keys()):
         if isinstance(val, dict):
             val = val.get(os_key, "")
         print(f"{ide}\t{jk}\t{keymap[jk]}\t{val}")
+PYEOF
+}
+
+dump_registry_rows() {
+    python3 - "$JSON_FILE" "$@" <<'PYEOF'
+import json
+import sys
+
+data = json.load(open(sys.argv[1]))
+for ide in sys.argv[2:]:
+    for key, value in data[ide].items():
+        if isinstance(value, dict):
+            for platform_name, platform_value in sorted(value.items()):
+                if platform_value:
+                    print(f"{ide}\t{key}:{platform_name}\t{platform_value}")
+        elif value:
+            print(f"{ide}\t{key}\t{value}")
 PYEOF
 }
 
@@ -247,8 +264,8 @@ if [[ -f "$REGISTRY_FILE" ]]; then
     echo "========================================"
     echo ""
 
-    KEY_ROWS="$(dump_rows antigravity kimiai copilot codex workbuddy claude claude-desktop openclaw neovim continue aider roo-code cline amazon-q goose-cli pearai pieces blackbox gemini-cli opencode kilocode kiro augment-code void-editor baidu-comate tencent-codebuddy zcode cody codeium tabnine replit supermaven vscode windsurf jetbrains trae trae-cn)"
-    while IFS=$'\t' read -r ide jsonkey _scriptobj expected; do
+    KEY_ROWS="$(dump_registry_rows antigravity kimiai copilot codex workbuddy claude claude-desktop openclaw neovim continue aider roo-code cline amazon-q goose-cli pearai pieces blackbox gemini-cli opencode kilocode kiro augment-code void-editor baidu-comate tencent-codebuddy zcode cody codeium tabnine replit supermaven vscode windsurf jetbrains trae trae-cn)"
+    while IFS=$'\t' read -r ide jsonkey expected; do
         [[ -z "$expected" ]] && continue
         checks=$((checks + 1))
         if grep -Fq "$expected" "$REGISTRY_FILE"; then

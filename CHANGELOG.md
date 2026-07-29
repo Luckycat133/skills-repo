@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.6] - 2026-07-29
+
+### CI portability
+
+- Expanded `test-ide-paths.sh` registry validation to check every platform-specific path on every host instead of checking only the runner's current OS.
+- Replaced abbreviated Cline Linux/Windows globalStorage paths in the registry with their complete canonical values, fixing the Linux CI drift failure exposed after all focused suites were added to `validate-all.sh`.
+
+### Verification
+
+- `test-ide-paths.sh`: all 453 cross-platform script/JSON/registry checks pass locally; the same Linux branch is exercised by GitHub Actions.
+
 ## [0.6.5] - 2026-07-29
 
 ### Evaluation remediation
