@@ -11,11 +11,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Reject unknown `--strategy` values before path resolution or target writes. Previously, an unrecognized value could bypass the default backup branch and silently overwrite an existing Skill while reporting success.
 - Added an isolated regression proving invalid strategies return non-zero, preserve the existing target byte-for-byte, create no backup, and emit a clear validation error.
+- Exclude `.env` and `.env.*` from copied skill/project trees while preserving the source, closing the post-copy secret-scan exposure identified by the 0.6.4 external audit.
+- Guard recursive cleanup with resolved parent-containment and symlink checks instead of deleting unchecked target paths directly.
+- Reject symlinked or group/world-accessible OpenClaw `--env-file` inputs, and force both the generated config and its backup to owner-only mode `600`.
+- Removed installation, registry publication, dependency execution, literal environment-value ingestion, and destructive mirror utilities from the publishable Skill. These maintainer tools now live only under repository-level `scripts/` and are tested separately.
+- Replaced recursive force removal in the migration engine with guarded, non-following tree cleanup based on `find -depth -delete`.
+- Rewrote the OpenClaw reference as a migration-only guide whose first executable workflow is `--dry-run`; real writes appear only after an explicit approval checkpoint.
 
 ### Documentation and verification
 
-- Updated the canonical Skill, root mirror, README, release checklist, ClawHub release guide, and evaluation report for the fail-closed strategy contract.
-- `bash validate-all.sh`: exit 0 in 44.66 seconds; all 22 discovered focused suites pass, including 235 registry checks, 453 path/registry checks, and 87 MCP secret-redaction checks.
+- Updated the canonical Skill, root mirror, README, release checklist, and ClawHub release guide for the fail-closed strategy contract.
+- Added `test-security-audit-boundary.sh` to prevent repository-only tools, install/network authority, literal secret ingestion, unsafe workflow ordering, or recursive force deletion from re-entering the publishable artifact.
+- Removed unrelated dataset scaffolding, superseded audit/evaluation snapshots, external-skill review archives, and ignored local process artifacts; retained executable regressions, active eval fixtures, release guidance, and open engineering plans.
+- `bash validate-all.sh`: exit 0; all 22 discovered focused suites pass, including 235 registry checks, 453 path/registry checks, 87 MCP secret-redaction checks, 50 migration checks, and the publishable-artifact security boundary.
 
 ## [0.6.6] - 2026-07-29
 

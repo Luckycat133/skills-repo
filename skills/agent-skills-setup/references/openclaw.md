@@ -1,334 +1,103 @@
-# OpenClaw Skills Configuration
+# OpenClaw Migration Reference
 
-OpenClaw has the richest skills model in this repository: it supports bundled skills, shared user-managed skills, per-agent workspace skills, ClawHub registry distribution, metadata-driven dependency installers, per-run env injection, and hot reload.
+Use this reference only when OpenClaw is the named source or target of a
+cross-IDE migration. It describes file-backed migration boundaries; it does not
+authorize software management, registry publication, dependency execution, or
+unrelated changes to the user's OpenClaw state.
 
-This guide maps those official capabilities into a reproducible setup and maintenance workflow.
+## 1. Supported paths
 
-## 1. Official Paths and Load Order
-
-OpenClaw loads skills from four sources.
-
-| Layer | Path | Scope | Precedence |
-|---|---|---|---|
-| Workspace skills | `<agent-workspace>/skills/` | One agent only | Highest |
-| Managed skills | `~/.openclaw/skills/` | Shared on one machine | Medium |
-| Bundled skills | Built into OpenClaw | Runtime-wide | Lower |
-| Extra dirs | `skills.load.extraDirs` | Shared packs | Lowest |
-
-Resolution order for duplicate skill names:
-
-`<agent-workspace>/skills` → `~/.openclaw/skills` → bundled skills → `skills.load.extraDirs`
-
-Important filesystem locations from the official docs:
-
-- Config file: `~/.openclaw/openclaw.json`
-- Global env fallback: `~/.openclaw/.env`
-- Shared skills: `~/.openclaw/skills`
-- Default workspace: `~/.openclaw/workspace`
-- Agent sessions: `~/.openclaw/agents/<agentId>/sessions/`
-- Multi-instance overrides: `OPENCLAW_CONFIG_PATH`, `OPENCLAW_STATE_DIR`
-
-## 2. Global Configuration
-
-All OpenClaw skill settings live under the `skills` key in `~/.openclaw/openclaw.json`.
-
-### 2.1 Core fields
-
-| Field | Purpose | Official behavior |
+| Object | Supported path | Boundary |
 |---|---|---|
-| `skills.allowBundled` | Allowlist bundled skills | Does not affect managed or workspace skills |
-| `skills.load.extraDirs` | Extra scan roots | Lowest precedence |
-| `skills.load.watch` | Skill watcher switch | Default `true` |
-| `skills.load.watchDebounceMs` | Watch debounce | Default `250` |
-| `skills.install.preferBrew` | Prefer Homebrew | Default `true` |
-| `skills.install.nodeManager` | Node package backend | `npm`, `pnpm`, `yarn`, `bun` |
-| `skills.entries.<skill>.enabled` | Enable or disable one skill | `false` disables it even if present |
-| `skills.entries.<skill>.env` | Per-skill env injection | Added only if absent from process env |
-| `skills.entries.<skill>.apiKey` | SecretRef or convenience key | Useful with `metadata.openclaw.primaryEnv` |
-| `skills.entries.<skill>.config` | Free-form config bag | Skill-defined settings |
+| Managed Skills | `~/.openclaw/skills/` | Named directories only |
+| Workspace Skills | `<active-workspace>/skills/` | Requires the explicit workspace |
+| Project-agent Skills | `<active-workspace>/.agents/skills/` | Requires the explicit workspace |
+| Rules/context | `<active-workspace>/AGENTS.md` | Review before merging |
+| MCP/config | `~/.openclaw/openclaw.json` | Explicit opt-in; shared JSON file |
 
-### 2.2 Example
+OpenClaw has no fixed project configuration root. The active workspace is a
+runtime choice, so never infer it from the current directory or search the home
+directory for candidates. Ask the user for the workspace when project scope is
+needed.
 
-```json5
-// ~/.openclaw/openclaw.json
-{
-  agents: {
-    defaults: {
-      workspace: "~/.openclaw/workspace",
-    },
-  },
-  skills: {
-    allowBundled: ["peekaboo", "gifgrep"],
-    load: {
-      extraDirs: [
-        "~/.gemini/config/skills",
-        "~/Projects/internal-openclaw-skill-pack/skills",
-      ],
-      watch: true,
-      watchDebounceMs: 250,
-    },
-    install: {
-      preferBrew: true,
-      nodeManager: "npm",
-    },
-    entries: {
-      "agent-skills-setup": {
-        enabled: true,
-        env: {
-          OPENCLAW_SKILLS_SOURCE: "~/.gemini/config/skills",
-        },
-        config: {
-          preferredScope: "managed",
-        },
-      },
-    },
-  },
-}
-```
+## 2. MCP schema
 
-### 2.3 Environment resolution
+OpenClaw stores MCP servers under the nested JSON path `mcp.servers`.
 
-OpenClaw reads missing env vars from these sources:
+- Local servers use `command` plus optional `args`.
+- Remote servers require `url` and `transport: "streamable-http"`.
+- Reject entries that mix local and remote endpoint shapes.
+- Blank literal credentials before writing. Preserve only an exact symbolic
+  environment reference whose target syntax is documented.
+- Preserve unrelated top-level keys in `openclaw.json` for every strategy.
+- Treat invalid existing JSON as a hard stop; never replace it with a guessed
+  structure.
 
-1. Parent process environment
-2. `.env` in the current working directory
-3. `~/.openclaw/.env`
-4. `skills.entries.<skill>.env` in `openclaw.json`
+The mapper performs static conversion and validation only. Runtime connectivity,
+OAuth state, and server permissions remain manual verification steps.
 
-Important caveat: `skills.entries.*.env` and `skills.entries.*.apiKey` only affect host runs. They do not automatically populate Docker sandbox env.
+## 3. Skills and rules
 
-## 3. Per-Agent Configuration, Isolation, and Inheritance
+Copy only the named Skill directories selected by the user. Preserve each
+directory as a unit, including `SKILL.md`, `scripts/`, `references/`, and
+`assets/`. Do not mirror every discovered directory.
 
-OpenClaw isolates agents through workspaces. Each workspace can carry its own `skills/` directory.
+For workspace rules, treat `AGENTS.md` as living user content. Preview the
+proposed merge and preserve the existing file under `skip` or `backup` as
+selected. Hooks, generated memory, session history, and workspace databases are
+outside the migration boundary.
 
-### 3.1 Default workspace and explicit agents
+## 4. Secret and deletion boundaries
 
-```json5
-{
-  agents: {
-    defaults: {
-      workspace: "~/.openclaw/workspace",
-    },
-    list: [
-      {
-        id: "home",
-        default: true,
-        workspace: "~/.openclaw/workspace-home",
-      },
-      {
-        id: "work",
-        workspace: "~/.openclaw/workspace-work",
-      },
-    ],
-  },
-}
-```
+- MCP and config are never part of the default object set.
+- Exclude `.env` and `.env.*` files from copied trees; leave the source intact.
+- Redact supported copied configuration before the target write.
+- If redaction fails, remove only the copy created for the selected object.
+- Resolve the selected parent path, reject traversal and symlink escapes, and
+  refuse cleanup outside that parent.
+- Do not accept literal secret values as migration parameters.
 
-Each workspace can then override shared skills through its own directory.
+## 5. Safe migration workflow
 
-- `~/.openclaw/workspace-home/skills/`
-- `~/.openclaw/workspace-work/skills/`
-
-### 3.2 Scope isolation rules
-
-| Scope | Isolation | Shared? | Typical use |
-|---|---|---|---|
-| `<agent-workspace>/skills/` | Per agent | No | Persona or team overrides |
-| `~/.openclaw/skills/` | Machine-wide | Yes | Shared personal pack |
-| `skills.load.extraDirs` | Machine-wide | Yes | Mirrored read-only packs |
-| Bundled skills | Runtime-wide | Yes | Baseline built-ins |
-
-### 3.3 Priority and inheritance
-
-OpenClaw skill precedence is path-based:
-
-1. Workspace skill wins.
-2. Shared managed skill is next.
-3. Bundled skill is fallback.
-4. `skills.load.extraDirs` are lowest.
-
-Config inheritance is different:
-
-- `agents.defaults.*` provides base agent settings.
-- `agents.list[]` overrides only the matching agent.
-- `skills.entries.*` is global to the gateway process.
-
-If you need full isolation of config, skills, sessions, and credentials, split by `OPENCLAW_CONFIG_PATH` and `OPENCLAW_STATE_DIR`.
+The first command is always a value-free preview. It parses the selected source
+but creates no target output:
 
 ```bash
-OPENCLAW_CONFIG_PATH=~/.openclaw/work.json \
-OPENCLAW_STATE_DIR=~/.openclaw-work \
-openclaw gateway --port 19001
+bash scripts/smart-ide-migration.sh \
+  --source cursor \
+  --target openclaw \
+  --workspace /reviewed/workspace \
+  --objects skills,rules \
+  --dry-run
 ```
 
-### 3.4 Sandboxed agents
-
-When a skill must run inside Docker sandboxed agents, mirror env into sandbox settings as well.
-
-```json5
-{
-  agents: {
-    defaults: {
-      sandbox: {
-        mode: "non-main",
-        backend: "docker",
-        docker: {
-          env: {
-            LANG: "C.UTF-8",
-            GEMINI_API_KEY: "${GEMINI_API_KEY}",
-          },
-          setupCommand: "apt-get update && apt-get install -y git curl jq",
-        },
-      },
-    },
-  },
-}
-```
-
-## 4. Skill Metadata and Installers
-
-OpenClaw extends skill metadata under `metadata.openclaw`.
-
-### 4.1 Example metadata
-
-```yaml
----
-name: gifgrep
-description: Search GIF providers with CLI/TUI, download results, and extract stills/sheets.
-homepage: https://gifgrep.com
-metadata: {"openclaw":{"emoji":"🧲","requires":{"bins":["gifgrep"]},"install":[{"id":"brew","kind":"brew","formula":"steipete/tap/gifgrep","bins":["gifgrep"],"label":"Install gifgrep (brew)"}]}}
----
-```
-
-### 4.2 Official installer kinds
-
-| Kind | Fields |
-|---|---|
-| `brew` | `formula`, `bins`, `label`, `os` |
-| `node` | `package`, `bins`, `label`, `os` |
-| `go` | `module`, `bins`, `label`, `os` |
-| `uv` | `package`, `bins`, `label`, `os` |
-| `download` | `url`, `sha256`, `archive`, `extract`, `stripComponents`, `targetDir`, `bins`, `label`, `os` |
-
-Notes:
-
-- OpenClaw prefers `brew` when available, otherwise `node` if multiple installers exist.
-- `download` installers default to `~/.openclaw/tools/<skillKey>` if `targetDir` is omitted.
-- Set `sha256` to the expected 64-character SHA-256 digest. The helper verifies it before extracting or writing to `targetDir`; legacy specs without it emit a warning.
-- `skills.install.nodeManager` affects skill dependency installs, not the OpenClaw runtime itself.
-
-## 5. Automatic Setup Workflow
-
-This repository includes a dedicated helper:
+Review the resolved paths, selected objects, conflict strategy, and any manual
+boundaries. Only after the user explicitly approves that exact plan may the
+same migration be applied:
 
 ```bash
-bash ../scripts/auto-configure-openclaw-skills.sh \
-  --yes \
-  --scope both \
-  --agent home:~/.openclaw/workspace-home \
-  --agent work:~/.openclaw/workspace-work \
-  --default-agent home \
-  --node-manager npm \
-  --env agent-skills-setup:OPENCLAW_SKILLS_SOURCE=~/.gemini/config/skills
+bash scripts/smart-ide-migration.sh \
+  --source cursor \
+  --target openclaw \
+  --workspace /reviewed/workspace \
+  --objects skills,rules \
+  --strategy backup \
+  --yes
 ```
 
-What it does:
+An apply can create or replace only the reviewed migration objects. Existing
+objects follow `skip`, `backup`, or `overwrite`; `backup` is the default.
+Unsupported schemas remain manual, and no fallback copies an unvalidated input.
 
-1. Install OpenClaw if `openclaw` is missing.
-2. Install ClawHub if `clawhub` is missing.
-3. Sync selected skills into `~/.openclaw/skills/` and workspace `skills/` directories.
-4. Parse `metadata.openclaw.install` and install declared dependencies.
-5. Patch `~/.openclaw/openclaw.json` with `skills.*` and `agents.*` settings.
-6. Run `openclaw doctor` after a real apply.
+## 6. Verification
 
-## 6. Updates and Lifecycle
+Prefer `--json` for deterministic evidence. Confirm:
 
-OpenClaw has two first-class update surfaces plus local mirrors.
+1. the resolved source and target match the reviewed paths;
+2. the source digest is unchanged;
+3. the target exists and parses as the documented format;
+4. any backup path is reported and confined to the selected parent;
+5. secret-bearing copied values are blank and `.env*` files are absent.
 
-### 6.1 Runtime updates
-
-```bash
-openclaw update
-openclaw update --channel beta
-openclaw update --tag main
-openclaw update --dry-run
-```
-
-### 6.2 ClawHub updates
-
-```bash
-clawhub update --all
-```
-
-ClawHub stores install state in `.clawhub/lock.json` and compares local content hashes against published versions.
-
-### 6.3 Local mirror updates
-
-```bash
-bash ../scripts/update-openclaw-skills.sh
-```
-
-This helper combines:
-
-1. `openclaw update`
-2. `clawhub update --all`
-3. `rsync` refresh for `~/.openclaw/skills/` and workspace `skills/`
-
-## 7. OpenClaw vs Other IDE Skills
-
-| Capability | OpenClaw | Claude/Codex/Trae/Copilot |
-|---|---|---|
-| Bundled skills | Yes | Usually no |
-| Shared managed skills | Yes | Sometimes, but less structured |
-| Per-agent workspaces | Yes | Usually project or global only |
-| Load-time gating | Yes | Rare |
-| Metadata-driven installers | Yes | Rare |
-| Per-run env injection | Yes | Usually external only |
-| Registry updates | Yes, via ClawHub | Usually ad hoc Git repos |
-| Watcher and hot reload | Yes | Rare |
-
-Practical implication:
-
-OpenClaw is not just another folder for `SKILL.md`; it is a managed skill runtime.
-
-## 8. Cross-IDE Integration Strategy
-
-Recommended model:
-
-1. Keep Antigravity as the single source of truth.
-2. Run `sync-global-skills.sh --targets claude,codex,copilot,openclaw,trae,trae-cn` for global mirrors.
-3. Use `auto-configure-openclaw-skills.sh` when OpenClaw-specific dependency installs or per-agent routing are required.
-4. Use `update-openclaw-skills.sh` for maintenance.
-
-## 9. Validation Plan
-
-### 9.1 Automated smoke test
-
-```bash
-bash ../scripts/test-openclaw-support.sh
-```
-
-This covers managed sync, workspace sync, config patching, dependency install flow, and update refresh behavior.
-
-### 9.2 Real-machine test guidance
-
-Use isolated state roots when testing on a machine that already has OpenClaw installed.
-
-```bash
-OPENCLAW_STATE_DIR=/tmp/openclaw-test-state \
-OPENCLAW_CONFIG_PATH=/tmp/openclaw-test-state/openclaw.json \
-AGENT_SKILLS_OPENCLAW_DIR=/tmp/openclaw-test-state/skills \
-bash ../scripts/auto-configure-openclaw-skills.sh --dry-run
-```
-
-The script refuses global installs, config writes, and replacement syncs unless `--yes` is supplied. Review `--dry-run` output first; existing skill directories and config files receive timestamped `.bak.*` copies before replacement.
-
-Important note: even with isolated config paths, `openclaw doctor` may still observe or interact with machine-global gateway state such as a running local service or LaunchAgent. Use dry runs first when non-interference matters.
-
-### 9.3 Release guardrails
-
-1. `bash -n` passes for every new script.
-2. `test-openclaw-support.sh` passes locally.
-3. `sync-global-skills.sh --dry-run --targets openclaw` shows only expected changes.
-4. `auto-configure-openclaw-skills.sh --dry-run` prints the expected plan.
-5. Real-machine verification is documented with any observed gateway-side effects.
+Static validation does not prove live service connectivity. Report that boundary
+instead of running unrelated runtime commands automatically.

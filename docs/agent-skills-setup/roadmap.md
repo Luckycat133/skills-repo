@@ -37,23 +37,7 @@
 > 注：`ideas.md` 中原列的「ClawHub 发布辅助脚本」已经实装为
 > `skills/agent-skills-setup/scripts/prepare-clawhub-release.sh`，故不再列入。
 
-## Audit Backlog (2026-07-26 multi-reviewer review) / 审计 backlog
-
-完整报告见 [`code-review-2026-07-26.md`](./code-review-2026-07-26.md)（31 项：3 Critical / 4 High / 17 Medium / 7 Low）。安全与测试闸门已进 `release-checklist.md`；此处收录可纳入规划的**重构与已知问题**。
-
-### Completed in Recent Sprint / 已完成项目
-- ✅ **R1** `validate_skills.py` 读取 `git ls-files`，解决 `.gitignore` 过滤失效导致的误报
-- ✅ **R2** 统一 `SKILL.md` / `README.md` 中的 IDE 支持数量为 40
-- ✅ **R3 / CR-003** `validate-all.sh` 通过 `test-*.sh` 自动发现聚合全量 focused suites，并以 `--list-tests` + coverage regression 防止新增测试漏出 CI
-- ✅ **R4** `smart-ide-migration.sh` 补充标准 Bash `main()` 函数守卫
-- ✅ **R5 / MED-P2 (install.sh)** `install.sh` 增加 `--target`/`--skill` 必填参数守卫
-- ✅ **R6** `validate_skills.py` 扫描扩展至 `.json` 与 `.toml`
-- ✅ **G4 / MED-P4** `sync-root-mirror.sh` 采用临时文件 + `mv` 原子写与前缀正则链接重写
-- ✅ **G6** `.gitignore` 增加 `datasets/` 与 `.superpowers/`
-
-### Security (must-fix before release) / 发布前必修 — 详见 release-checklist.md
-- ✅ **CR-001** 运行时脱敏对 provider-key 值（`sk-`/`ghp_/`AKIA/`xoxb`/`ya29`/`AIza`）失明 — 已修：运行时不分 key 名做值扫描，复用 validator 的 PROVIDER_SECRET_RE；MCP/config 两路径都覆盖（2026-07-27）
-- ✅ **CR-002** 无 `python3` 时 `redact_secrets_in_file` 返成功却零脱敏（fail-open） — 已修：无 python3 分支改 fail-closed（`rm -f` + `[SECURITY]` 告警 + `return 1`），各调用方已具备失败处理（2026-07-27）
+## Engineering Backlog / 工程待办
 
 ### Architecture / 架构重构
 - **HI-001** IDE 路径表在 json/md/bash/verify/test 重复 4–5 份 → 抽 `ide-paths.json` 单一真源 + 代码生成
@@ -61,7 +45,6 @@
 - **HI-003** 脱敏算法实现两份且漂移 → 抽共享脱敏模块
 - **MED-A1** 策略/拷贝逻辑重复 4–5× → `apply_strategy` helper
 - **MED-A2（部分完成，2026-07-29）** `--source-mcp-file` 已使用显式 fail-closed 契约并禁止 copy-as-is fallback；通用 `convert_mcp_file` 的退出码分支仍待重构为 `ALLOW_FALLBACK`/`FAIL_CLOSED` 表
-- ✅ **MCP-OVERRIDE-001** 非 canonical MCP 输入支持严格 dry-run/schema 校验、symlink 同源保护、Cursor→OpenCode 环境引用转换及混合凭据 URL 回归（2026-07-29）
 - **MED-A3** 死代码 `get_project_mcp_path` / `get_project_config_file` → 实现或删除
 
 ### Performance & Robustness / 性能与健壮性

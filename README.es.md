@@ -44,7 +44,7 @@ Repositorio fuente: [Luckycat133/skills-repo](https://github.com/Luckycat133/ski
 
 | Idioma | Resumen |
 | --- | --- |
-| Español | Construye y publica skills de agente reutilizables con un flujo de trabajo local-primero, automatización de OpenClaw y guía de distribución pública. |
+| Español | Mantén un Skill público dedicado a migración y limita la automatización de OpenClaw y publicación al repositorio. |
 
 ## Estructura
 
@@ -67,7 +67,7 @@ skills-repo/
 
 ## Módulo de Capacidad Actual
 
-- `agent-skills-setup`: instalación de capacidades multiagente, sincronización, automatización de OpenClaw y flujo de trabajo de publicación.
+- `agent-skills-setup`: migración con consentimiento de contexto seleccionado entre IDE y agentes nombrados.
 
 El alcance de migración entre IDE ahora incluye capacidades, prompts, configuraciones, reglas y flujos de trabajo.
 
@@ -80,7 +80,8 @@ Los ecosistemas de IDE principales cubiertos ahora incluyen 40 IDEs y agentes (C
 3. Para cambios en `agent-skills-setup`, ejecuta también la suite de verificación enfocada:
    - `bash skills/agent-skills-setup/scripts/verify-ide-config.sh` — verifica que las rutas de IDE resueltas coincidan con `references/ide-registry.md` (235 comprobaciones).
    - `bash skills/agent-skills-setup/scripts/test-ide-paths.sh` — prueba de deriva entre `references/ide-paths.json` y el script (450 comprobaciones).
-   - `bash skills/agent-skills-setup/scripts/test-migration.sh` — pruebas del motor de migración y sincronización global (80 comprobaciones, HOME temporal aislado).
+   - `bash skills/agent-skills-setup/scripts/test-migration.sh` — pruebas del motor de migración (50 comprobaciones, HOME temporal aislado).
+   - `bash skills/agent-skills-setup/scripts/test-security-audit-boundary.sh` — verifica que la automatización del repositorio no entre en el Skill publicable.
 4. Fusiona solo después de que el flujo de validación pase.
 5. Instala la versión fusionada en un entorno de agente:
 

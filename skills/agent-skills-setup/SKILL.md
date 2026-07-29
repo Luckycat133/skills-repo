@@ -27,8 +27,6 @@ capabilities:
   - read: user-selected IDE/agent config paths
   - write: file-backed migration objects, gated by dry-run, consent, and strategy
   - exec: local migration and verification scripts
-  - install: OpenClaw runtime or clawhub only through the consent and SHA-256 exception below
-  - network: outbound HTTPS only for an explicitly approved, integrity-verified download
 ---
 
 # AI IDE Context Migration
@@ -65,6 +63,8 @@ contract. If prose and executable behavior disagree, stop and report the drift.
 - Literal credentials are blanked in a copy. Preserve or translate only an exact
   documented environment reference; mixed/default/command-substitution syntax is
   blank/manual. If redaction fails, delete the target copy and fail closed.
+- Exclude copied `.env` and `.env.*` files entirely; never alter the source copy.
+  Remove recursive target trees only through containment and symlink guards.
 - Reject source/target paths that resolve to the same file, including symlinks.
 - Stop on invalid JSON/JSONC/TOML/YAML or an unsupported schema/transport. Never
   fall back to copying an explicit input as-is.
@@ -190,15 +190,6 @@ project config.toml, validate TOML, then run **codex mcp list**.
   event names, matchers, command semantics, and trust scope.
 - **Memory:** generated or private runtime state is not portable. A user may
   manually select human-readable context and rewrite it as rules.
-
-## OpenClaw installation exception
-
-**scripts/auto-configure-openclaw-skills.sh** may install the OpenClaw runtime
-or clawhub only when the user explicitly requests it and passes **--yes**.
-Remote install.sh must be downloaded to a temporary file and match the mandatory
-**OPENCLAW_INSTALL_SHA256** value before execution. **--dry-run** previews
-without installing. This exception does not authorize any other global install,
-shell-rc edit, remote-script pipe, or IDE restart.
 
 ## Verification
 

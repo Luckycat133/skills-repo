@@ -31,7 +31,7 @@ IDE 路径与能力映射目前以 **4–5 份副本** 存在于仓库，互相�
 
 ## 执行约束
 
-- **不要**直接改写 `smart-ide-migration.sh`（约 4005 行核心引擎）的路径逻辑来“顺便修”。
+- **不要**直接改写 `smart-ide-migration.sh` 的路径逻辑来“顺便修”。
 - 先写生成器 + 单测，再用生成器产出片段替换手写在 `smart-ide-migration.sh` 中的路径块；分 PR 推进。
 - 真源变更必须经 `test-ide-paths.sh` 全绿 + `validate-all.sh` 通过。
 - 完成后删除其余副本中的重复常量，仅保留“生成片段 + 真源 + 文档”。
@@ -39,5 +39,5 @@ IDE 路径与能力映射目前以 **4–5 份副本** 存在于仓库，互相�
 
 ## 关联
 
-- 记忆约定（`.workbuddy/memory/MEMORY.md`）：脚本路径真源 = `references/ide-registry.md` + `references/ide-paths.json`；改 `smart-ide-migration.sh` 路径函数后必须同步 `ide-paths.json` 并跑 `test-ide-paths.sh`。本 HI-001 正是要把这条“人工同步”升级为“自动生成”。
+- 当前约定：脚本路径真源 = `references/ide-registry.md` + `references/ide-paths.json`；改 `smart-ide-migration.sh` 路径函数后必须同步 `ide-paths.json` 并跑 `test-ide-paths.sh`。本 HI-001 正是要把这条“人工同步”升级为“自动生成”。
 - 路线图：`docs/agent-skills-setup/roadmap.md`

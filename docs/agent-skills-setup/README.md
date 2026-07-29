@@ -2,9 +2,9 @@
 
 > **文档元信息** ｜ 更新日期：2026-07-29 ｜ 作者：skills-repo 维护组 ｜ 类型：开发文档索引 ｜ 状态：已发布
 
-`agent-skills-setup` 的开发文档集中在这里，用于规划、验证、发布和持续迭代。
+`agent-skills-setup` 的长期维护文档集中在这里，用于规划、发布和能力说明。
 
-This folder collects planning, validation, release, and iteration material for `agent-skills-setup`.
+This folder contains durable planning, release, and capability guidance for `agent-skills-setup`.
 
 日本語: このフォルダには、`agent-skills-setup` の計画、検証、公開準備、改善メモをまとめます。
 
@@ -18,8 +18,8 @@ Español: Esta carpeta reúne la planificación, validación, publicación e ite
 - 记录发布与分发决策
 - keep development notes separate from publishable capability files
 - 将开发过程文档与可发布 capability 文件分离
-- preserve validation notes, including machine-safe testing guidance
-- 保留验证记录，包括“本机安全测试”相关说明
+- keep durable decisions here; leave temporary audits and evaluation output in task workspaces
+- 这里只保留长期有效的结论；临时审计与评测输出留在任务工作区
 
 ## Recommended Files / 推荐文件
 
@@ -37,12 +37,6 @@ Español: Esta carpeta reúne la planificación, validación, publicación e ite
 - `cross-ide-capabilities-migration.md`：覆盖 capabilities、prompts、configurations、rules、workflows 的跨 IDE 迁移总指南
 - `HI-001-ide-paths-single-source.md`: design note on single-source-of-truth for IDE paths (drives `scripts/ide-paths.json` + `test-ide-paths.sh`)
 - `HI-001-ide-paths-single-source.md`：IDE 路径单一真源（single-source-of-truth）的架构设计说明（驱动 `scripts/ide-paths.json` 与 `test-ide-paths.sh`）
-- `code-review-2026-07-26.md`: full multi-reviewer audit (31 findings: 3 Critical / 4 High / 17 Medium / 7 Low)
-- `code-review-2026-07-26.md`：完整多维度审查归档（31 项：3 Critical / 4 High / 17 Medium / 7 Low）
-- `skill-evaluation-2026-07-29.md`: paired baseline plus v0.6.5 remediation review across functionality, accuracy, UX, performance, and application scenarios
-- `skill-evaluation-2026-07-29.md`：功能、准确性、用户体验、响应性能及应用场景的成对基线与 v0.6.5 修复复评
-- `../../SECURITY-AUDIT.md`: runtime consent, redaction, explicit MCP input, and fail-closed controls
-- `../../SECURITY-AUDIT.md`：运行时授权、脱敏、显式 MCP 输入与 fail-closed 控制说明
 
 ## Current Workflow / 当前流程
 

@@ -6,6 +6,7 @@
 # Local tooling / private state
 .workbuddy/
 .superpowers/
+/datasets/
 
 # Secrets / environment (migration scripts write OpenClaw config/.env)
 .env
@@ -25,6 +26,3 @@ node_modules/
 dist/
 build/
 *.log
-
-# Datasets: real data is excluded by datasets/.gitignore
-# (docs, scripts, config examples, and metadata are tracked).

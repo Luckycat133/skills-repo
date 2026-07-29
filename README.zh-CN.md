@@ -44,7 +44,7 @@ npx skills add Luckycat133/skills-repo
 
 | 语言 | 摘要 |
 | --- | --- |
-| 中文 | 采用本地优先的工作流构建并发布可复用的智能体技能，支持 OpenClaw 自动化与公开发布指南。 |
+| 中文 | 维护仅含迁移能力的公开 Skill，并将 OpenClaw 自动化与发布工具限制在仓库级。 |
 
 ## 结构
 
@@ -67,7 +67,7 @@ skills-repo/
 
 ## 当前能力模块
 
-- `agent-skills-setup`：多智能体能力安装、同步、OpenClaw 自动化与发布工作流。
+- `agent-skills-setup`：在明确同意后，于指定 IDE 与智能体之间迁移选定的上下文。
 
 跨 IDE 迁移范围现已涵盖能力、提示词、配置、规则与工作流。
 
@@ -80,7 +80,8 @@ skills-repo/
 3. 针对 `agent-skills-setup` 的改动，还需运行聚焦的验证套件：
    - `bash skills/agent-skills-setup/scripts/verify-ide-config.sh` — 断言已解析的 IDE 路径与 `references/ide-registry.md` 一致（235 项检查）。
    - `bash skills/agent-skills-setup/scripts/test-ide-paths.sh` — `references/ide-paths.json` 与脚本之间的漂移测试（450 项检查）。
-   - `bash skills/agent-skills-setup/scripts/test-migration.sh` — 迁移 + 全局同步引擎测试（80 项检查，隔离的临时 HOME）。
+   - `bash skills/agent-skills-setup/scripts/test-migration.sh` — 迁移引擎测试（50 项检查，隔离的临时 HOME）。
+   - `bash skills/agent-skills-setup/scripts/test-security-audit-boundary.sh` — 验证仓库级自动化不会进入可发布 Skill。
 4. 仅在验证工作流通过后合并。
 5. 将合并后的版本安装到智能体环境中：
 

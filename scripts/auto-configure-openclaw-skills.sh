@@ -255,6 +255,12 @@ while [[ $# -gt 0 ]]; do
             # values never appear in argv / process listings / history.
             [[ $# -ge 2 ]] || die "--env-file requires a value"
             [[ -f "$2" ]] || die "--env-file: file not found: $2"
+            [[ ! -L "$2" ]] || die "--env-file must be a regular file, not a symlink: $2"
+            _env_file_mode="$(stat -f '%Lp' "$2" 2>/dev/null || stat -c '%a' "$2" 2>/dev/null || true)"
+            [[ "$_env_file_mode" =~ ^[0-7]{3,4}$ ]] || die "--env-file: unable to verify file permissions: $2"
+            if (( (8#${_env_file_mode} & 077) != 0 )); then
+                die "--env-file must be readable only by its owner (chmod 600): $2"
+            fi
             while IFS= read -r _env_line || [[ -n "$_env_line" ]]; do
                 # skip blanks and comments
                 [[ -z "$_env_line" || "$_env_line" == \#* ]] && continue
@@ -805,7 +811,7 @@ process.stdout.write(JSON.stringify(items));
 }
 
 patch_openclaw_config() {
-    local workspaces_json agents_json extra_dirs_json env_json api_key_json requested_skills_json default_workspace
+    local workspaces_json agents_json extra_dirs_json env_json api_key_json requested_skills_json default_workspace config_backup
 
     default_workspace="${WORKSPACES[0]:-${STATE_DIR}/workspace}"
     workspaces_json="$(build_json_array WORKSPACES)"
@@ -818,7 +824,9 @@ patch_openclaw_config() {
     run_cmd mkdir -p "$(dirname "$CONFIG_PATH")"
 
     if [[ -f "$CONFIG_PATH" ]]; then
-        run_cmd cp -a "$CONFIG_PATH" "${CONFIG_PATH}.bak.$(date +%Y%m%d%H%M%S).$$"
+        config_backup="${CONFIG_PATH}.bak.$(date +%Y%m%d%H%M%S).$$"
+        run_cmd cp -a "$CONFIG_PATH" "$config_backup"
+        run_cmd chmod 600 "$config_backup"
     fi
 
     if [[ $DRY_RUN -eq 1 ]]; then

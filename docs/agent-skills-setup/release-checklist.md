@@ -6,7 +6,7 @@
 
 - 确认 `SKILL.md` 的描述足够具体、准确，并能触发正确的使用场景。
 - 确认打包脚本通过 shell 语法检查。
-- 确认 OpenClaw 相关脚本至少通过一次隔离环境验证。
+- 确认仓库级 OpenClaw 工具至少通过一次隔离环境验证，且不被打进发布 Skill。
 - 确认跨 IDE 迁移先走 staging 模式，再通过 strict 校验后才允许 direct 写入。
 - 确认真实机器测试没有写入用户原有 `~/.openclaw` 配置，或已明确记录任何例外行为。
 - 确认公开文档中不包含私有路径、机器特定假设或敏感信息。
@@ -16,10 +16,13 @@
 - 确认 ClawHub 发布命令、slug、版本号和 changelog 文案已经准备完成。
 - 确认 README、CHANGELOG 和分发文档已更新为中英双语。
 - 确认 `bash validate-all.sh` 在干净本地 checkout 上通过（已完成 R1 修复：校验器通过 `git ls-files` 跳过被忽略的路径）。
-- 确认脱敏覆盖 provider-key 值格式（`sk-`/`ghp_`/`AKIA`/`xoxb`/`ya29`/`AIza`），且 `test-mcp-secret-redaction.sh` 含这些值的 fixture（CR-001，详见 `code-review-2026-07-26.md`）。
+- 确认脱敏覆盖 provider-key 值格式（`sk-`/`ghp_`/`AKIA`/`xoxb`/`ya29`/`AIza`），且 `test-mcp-secret-redaction.sh` 含这些值的 fixture。
 - 确认无 `python3` 时 `redact_secrets_in_file` 走 fail-closed（拒绝复制或报错），绝不返“成功”却零脱敏（CR-002）。
 - 确认 CI 实际执行全量测试套件（`validate-all.sh` 自动发现并执行 `skills/agent-skills-setup/scripts/test-*.sh`，用 `--list-tests` 审计清单）。
-- 确认 OpenClaw 配置 / `.env` 写入权限为 `600`，无明文密钥泄漏到世界可读文件（MED-S1）。
+- 确认迁移副本完全排除 `.env` / `.env.*`，源文件保持不变；其他文件继续先脱敏再写入目标。
+- 确认可发布 Skill 不包含安装、发布、全局镜像、依赖执行或字面环境值写入工具；这些能力仅保留在仓库级 `scripts/`。
+- 确认所有递归目标清理都经过父目录包含关系和符号链接保护，并使用不跟随链接的受控树清理。
+- 确认 OpenClaw 迁移文档先给出 `--dry-run`，经明确批准后才给出 `--yes`。
 - 确认非 MCP 对象（skills/agents/hooks/memory）复制时也经脱敏或至少扫描告警（MED-S3）。
 - 确认 root `SKILL.md` 镜像写入为原子操作（已完成 G4/MED-P4 修复：临时文件 + `mv` 替换，且采用前缀 link 自动重写）。
 - 确认 `--source-mcp-file` 的正常输入、错误 root/schema、符号链接同源和 `--scope both` 拒绝场景均有回归；dry-run 会真实解析但不写 workspace/target。
@@ -35,7 +38,7 @@
 
 - Verify the `SKILL.md` description is specific, accurate, and triggerable for the intended use case.
 - Verify bundled scripts pass shell syntax checks.
-- Verify OpenClaw scripts have passed at least one isolated-environment validation run.
+- Verify repository-level OpenClaw tools pass an isolated-environment run and are not packaged in the publishable Skill.
 - Verify cross-IDE migration runs in staging mode first, then passes strict validation before any direct-write rollout.
 - Verify real-machine testing did not write into the user's existing `~/.openclaw` state, or explicitly document any exception.
 - Remove private paths, machine-specific assumptions, and sensitive material from public-facing docs.
@@ -45,10 +48,13 @@
 - Confirm the ClawHub publish command, slug, version, and changelog text are ready.
 - Confirm the README, CHANGELOG, and distribution docs are updated in both Chinese and English.
 - Confirm `bash validate-all.sh` passes on a clean local checkout (R1 resolved: validator uses git ls-files to skip ignored paths).
-- Confirm redaction covers provider-key value formats (`sk-`/`ghp_`/`AKIA`/`xoxb`/`ya29`/`AIza`) and `test-mcp-secret-redaction.sh` includes fixtures with these values (CR-001, see `code-review-2026-07-26.md`).
+- Confirm redaction covers provider-key value formats (`sk-`/`ghp_`/`AKIA`/`xoxb`/`ya29`/`AIza`) and `test-mcp-secret-redaction.sh` includes fixtures with these values.
 - Confirm `redact_secrets_in_file` fails closed when `python3` is missing (refuses copy or errors) — never returns "success" with zero redaction (CR-002).
 - Confirm CI actually runs every focused suite (`validate-all.sh --list-tests` enumerates all colocated `test-*.sh` files and the default run executes each one).
-- Confirm OpenClaw config / `.env` are written `600`, with no plaintext secrets leaking to world-readable files (MED-S1).
+- Confirm migration copies exclude `.env` / `.env.*` entirely while leaving source files unchanged; redact other files before target writes.
+- Confirm the publishable Skill excludes installation, publication, global mirroring, dependency execution, and literal environment-value ingestion tools; keep them only under repository-level `scripts/`.
+- Confirm every recursive target cleanup validates parent containment and symlinks and uses non-following controlled tree cleanup.
+- Confirm the OpenClaw migration guide presents `--dry-run` before any explicitly approved `--yes` apply.
 - Confirm non-MCP objects (skills/agents/hooks/memory) are also redacted on copy, or at least scanned with a warning (MED-S3).
 - Confirm the root `SKILL.md` mirror write is atomic (G4/MED-P4 resolved: temp file + `mv` with prefix-based link rewriting).
 - Confirm `--source-mcp-file` covers valid input, wrong root/schema, symlink self-target, and rejected `--scope both`; dry-run must parse the source without writing workspace/target output.

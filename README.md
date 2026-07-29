@@ -44,7 +44,7 @@ Source repository: [Luckycat133/skills-repo](https://github.com/Luckycat133/skil
 
 | Language | Summary |
 | --- | --- |
-| English | Build and release reusable agent skills with a local-first workflow, OpenClaw automation, and public distribution guidance. |
+| English | Maintain a migration-only public Skill while keeping OpenClaw automation and release tooling at repository scope. |
 
 ## Structure
 
@@ -67,7 +67,7 @@ skills-repo/
 
 ## Current Capability Module
 
-- `agent-skills-setup`: multi-agent capability installation, synchronization, OpenClaw automation, and publishing workflow.
+- `agent-skills-setup`: consent-gated migration of selected AI assistant context between named IDEs and agents.
 
 Cross-IDE migration scope now includes capabilities, prompts, configurations, rules, and workflows.
 
@@ -82,7 +82,8 @@ Covered mainstream IDE ecosystems now include 40 IDEs & agents (Copilot, Cursor,
    entry points include:
    - `bash skills/agent-skills-setup/scripts/verify-ide-config.sh` — asserts resolved IDE paths match `references/ide-registry.md` (235 checks).
    - `bash skills/agent-skills-setup/scripts/test-ide-paths.sh` — cross-platform drift test between `references/ide-paths.json`, the registry, and the script (453 checks).
-   - `bash skills/agent-skills-setup/scripts/test-migration.sh` — migration + global-sync engine tests (80 checks, isolated temp HOME).
+   - `bash skills/agent-skills-setup/scripts/test-migration.sh` — migration engine tests (50 checks, isolated temp HOME).
+   - `bash skills/agent-skills-setup/scripts/test-security-audit-boundary.sh` — verifies repository-only automation cannot enter the publishable Skill.
    - `bash skills/agent-skills-setup/scripts/test-mcp-secret-redaction.sh` — literal-secret redaction, explicit MCP source/schema preview, symlink identity, and environment-reference conversion regressions.
    - `bash skills/agent-skills-setup/scripts/test-conflict-strategies.sh` — strategy semantics plus fail-closed rejection of unknown values before target writes.
 4. Merge only after the validation workflow passes.

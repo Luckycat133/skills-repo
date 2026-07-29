@@ -33,10 +33,14 @@ assert_contains() {
     local file_path="$1"
     local pattern="$2"
 
-    grep -Fq "$pattern" "$file_path" || {
+    grep -Fq -- "$pattern" "$file_path" || {
         echo "ASSERT FAIL: expected '$pattern' in $file_path" >&2
         exit 1
     }
+}
+
+file_mode() {
+    stat -f '%Lp' "$1" 2>/dev/null || stat -c '%a' "$1" 2>/dev/null
 }
 
 mkdir -p "$SOURCE_DIR/demo" "$FAKE_BIN"
@@ -131,6 +135,53 @@ assert_contains "$NPM_LOG" 'install -g demo-cli@1.0.0'
 assert_contains "$OPENCLAW_LOG" 'doctor'
 assert_file_exists "$DOWNLOAD_TARGET/download-cli"
 assert_file_exists "$TEST_HOME/.openclaw/bin/download-cli"
+
+# A pre-existing permissive config must not produce a permissive backup when
+# the next confirmed update runs. Both the rewritten config and its recovery
+# copy can contain user-supplied environment values.
+chmod 644 "$CONFIG_PATH"
+OPENCLAW_STATE_DIR="$TEST_HOME/.openclaw" \
+OPENCLAW_CONFIG_PATH="$CONFIG_PATH" \
+AGENT_SKILLS_SOURCE_DIR="$SOURCE_DIR" \
+bash "$SCRIPT_DIR/auto-configure-openclaw-skills.sh" \
+    --yes \
+    --skip-openclaw-install \
+    --skip-clawhub-install \
+    --skip-doctor \
+    --managed-dir "$OPENCLAW_DIR" \
+    --scope managed \
+    --skills demo \
+    --env demo:DEMO_TOKEN=456
+CONFIG_BACKUP="$(ls -t "$CONFIG_PATH".bak.* | head -1)"
+[[ "$(file_mode "$CONFIG_BACKUP")" == "600" ]] || {
+    echo "ASSERT FAIL: OpenClaw config backup is not mode 600" >&2
+    exit 1
+}
+[[ "$(file_mode "$CONFIG_PATH")" == "600" ]] || {
+    echo "ASSERT FAIL: OpenClaw config is not mode 600" >&2
+    exit 1
+}
+
+# Refuse a group/world-readable --env-file before reading credentials from it.
+ENV_INPUT="$TMP_ROOT/openclaw.env"
+printf '%s\n' 'demo:DEMO_TOKEN=from-file' > "$ENV_INPUT"
+chmod 644 "$ENV_INPUT"
+if OPENCLAW_STATE_DIR="$TEST_HOME/.openclaw" \
+    OPENCLAW_CONFIG_PATH="$CONFIG_PATH" \
+    AGENT_SKILLS_SOURCE_DIR="$SOURCE_DIR" \
+    bash "$SCRIPT_DIR/auto-configure-openclaw-skills.sh" \
+        --yes \
+        --skip-openclaw-install \
+        --skip-clawhub-install \
+        --skip-doctor \
+        --managed-dir "$OPENCLAW_DIR" \
+        --scope managed \
+        --skills demo \
+        --env-file "$ENV_INPUT" >"$TMP_ROOT/insecure-env-file.log" 2>&1; then
+    echo "ASSERT FAIL: expected permissive --env-file to be rejected" >&2
+    exit 1
+fi
+assert_contains "$TMP_ROOT/insecure-env-file.log" '--env-file must be readable only by its owner'
 
 perl -0pi -e 's/"sha256":"[0-9a-f]{64}"/"sha256":"0000000000000000000000000000000000000000000000000000000000000000"/' \
     "$SOURCE_DIR/download-demo/SKILL.md"

@@ -11,8 +11,9 @@
 #
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_ROOT="${AGENT_SKILLS_SOURCE_DIR:-${HOME}/.gemini/config/skills}"
-TEMPLATE_PATH="${SOURCE_ROOT}/agent-skills-setup/assets/public-repo-readme-template.md"
+TEMPLATE_PATH="${SCRIPT_DIR}/../assets/public-repo-readme-template.md"
 SKILL_NAME=""
 OUTPUT_DIR=""
 REPO_NAME=""

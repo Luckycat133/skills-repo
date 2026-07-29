@@ -955,8 +955,25 @@ print_progress() {
     echo "[${step}] ${message}"
 }
 
+# Remove one verified tree without following symlinks. `find -depth -delete`
+# avoids passing a computed path to recursive force removal while still making
+# fail-closed cleanup deterministic on both BSD and GNU find.
+remove_verified_tree() {
+    local target="$1"
+
+    if [[ -L "$target" ]]; then
+        rm -f -- "$target"
+    elif [[ -d "$target" ]]; then
+        find "$target" -xdev -depth -delete
+    elif [[ -e "$target" ]]; then
+        rm -f -- "$target"
+    else
+        return 1
+    fi
+}
+
 # Safely remove a single skill directory nested directly under a parent dir.
-# Guards against the classic `rm -rf` foot-guns before deleting anything:
+# Guards against recursive-deletion foot-guns before deleting anything:
 #   - both the parent dir and the skill name must be non-empty (an empty
 #     variable would collapse the path and risk wiping the parent or "/");
 #   - the skill name must be a single path component (no "/", no "." / "..",
@@ -981,15 +998,55 @@ safe_remove_skill_dir() {
     local target="$parent/$name"
     if [[ -L "$target" ]]; then
         # A symlink here could point outside the parent; unlink only the link.
-        rm -f "$target"
-        return 0
+        remove_verified_tree "$target"
+        return $?
     fi
     if [[ ! -d "$target" ]]; then
         echo "  [GUARD] skipped deletion: target is not a directory or does not exist '$target'" >&2
         return 1
     fi
 
-    rm -rf "$target"
+    remove_verified_tree "$target"
+}
+
+# Remove one existing file or directory only when its resolved parent remains
+# inside the approved workspace root. The final component is handled without
+# following symlinks, preventing an overwrite or fail-closed cleanup from
+# escaping through a workspace-controlled link.
+safe_remove_path_within() {
+    local allowed_root="$1"
+    local target="$2"
+    local allowed_real target_parent_real target_name
+
+    if [[ -z "$allowed_root" || -z "$target" || ! -d "$allowed_root" ]]; then
+        echo "  [GUARD] refused to delete: invalid containment root or target" >&2
+        return 1
+    fi
+
+    allowed_real="$(cd "$allowed_root" 2>/dev/null && pwd -P)" || return 1
+    target_parent_real="$(cd "$(dirname "$target")" 2>/dev/null && pwd -P)" || {
+        echo "  [GUARD] refused to delete: target parent cannot be resolved '$target'" >&2
+        return 1
+    }
+    target_name="$(basename "$target")"
+
+    if [[ -z "$target_name" || "$target_name" == "." || "$target_name" == ".." ]]; then
+        echo "  [GUARD] refused to delete: invalid target name '$target_name'" >&2
+        return 1
+    fi
+    case "$target_parent_real" in
+        "$allowed_real"|"$allowed_real"/*) ;;
+        *)
+            echo "  [GUARD] refused to delete path outside workspace: $target" >&2
+            return 1
+            ;;
+    esac
+
+    if [[ ! -L "$target" && ! -e "$target" ]]; then
+        echo "  [GUARD] skipped deletion: target does not exist '$target'" >&2
+        return 1
+    fi
+    remove_verified_tree "$target"
 }
 
 validate_ide() {
@@ -1386,12 +1443,10 @@ migrate_global_skills() {
                             echo "  [OK] migrated skill: $skill_name"
                             ((migrated_count++)) || true
                         else
-                            # SECURITY: fail-closed — if redaction cannot be
-                            # guaranteed, delete the unredacted COPY rather
-                            # than risk leaking embedded credentials. The
-                            # ${target_global:?} / ${skill_name:?} guards make
-                            # this safe: an empty variable aborts before rm.
-                            rm -rf "${target_global:?}/${skill_name:?}"
+                            # SECURITY: fail-closed — remove only the direct
+                            # child copy through the same containment and
+                            # symlink guard used by overwrite handling.
+                            safe_remove_skill_dir "$target_global" "$skill_name" || true
                             echo "  [FAIL] skill copy redaction failed, deleted copy to prevent key leak: $skill_name"
                             ((failed_count++)) || true
                         fi
@@ -1437,7 +1492,7 @@ migrate_global_skills() {
                         ((migrated_count++)) || true
                     else
                         # SECURITY: fail-closed — see fail-closed note above.
-                        rm -rf "${target_global:?}/${skill_name:?}"
+                        safe_remove_skill_dir "$target_global" "$skill_name" || true
                         echo "  [FAIL] skill copy redaction failed, deleted copy to prevent key leak: $skill_name"
                         ((failed_count++)) || true
                     fi
@@ -1535,7 +1590,7 @@ migrate_project_skills() {
     # and `claude → copilot` / `tencent-codebuddy` share `.mcp.json`. Without
     # this guard, the backup strategy's `mv` would rename the source in
     # place and the subsequent `cp -R` would fail; the overwrite strategy
-    # would `rm -rf` the source with no backup. Either path destroys data.
+    # would recursively remove the source with no backup. Either path destroys data.
     if [[ "$(cd "$source_path" 2>/dev/null && pwd -P)" == "$(cd "$target_path" 2>/dev/null && pwd -P)" ]]; then
         set_status "skills" "manual"
         set_message "skills" "project Skills source and target resolve to the same path; refusing to self-overwrite"
@@ -1591,14 +1646,10 @@ migrate_project_skills() {
                 echo "  [OK] migrated project skill: $skill_name"
                 migrated_count=$((migrated_count + 1))
             else
-                # SECURITY: fail-closed — delete the unredacted COPY rather
-                # than risk leaking embedded credentials. ${target_path:?} and
-                # ${skill_name:?} make rm abort if either variable is unset or
-                # empty, so the cleanup can only ever remove a freshly-copied
-                # tree, never an unrelated path. (Both guards are parameter-
-                # expansion checks, not just loop invariants — see F8 in
-                # SECURITY-AUDIT.md.)
-                rm -rf "${target_path:?}/${skill_name:?}"
+                # SECURITY: fail-closed — remove only the direct child copy
+                # through the same containment and symlink guard used by
+                # overwrite handling.
+                safe_remove_skill_dir "$target_path" "$skill_name" || true
                 echo "  [FAIL] project skill redaction failed, deleted copy to prevent key leak: $skill_name"
                 failed_count=$((failed_count + 1))
             fi
@@ -4487,12 +4538,25 @@ redact_project_copy() {
     # any per-file failure deletes that copy and the engine exits non-zero.
     local root="$1"
     local total=0 had_fail=0 f rc=0 pyout
+    local -a excluded_env_files=()
     local -a files=()
+
+    # .env files are secret stores, not portable configuration. Exclude them
+    # from the COPY entirely rather than briefly retaining and regex-redacting
+    # them. Include symlinks so a copied .env link cannot escape the target.
+    while IFS= read -r -d '' f; do
+        excluded_env_files+=("$f")
+    done < <(find "$root" \( -type f -o -type l \) -name '.env*' -print0 2>/dev/null)
+    if [[ ${#excluded_env_files[@]} -gt 0 ]]; then
+        delete_copy_only "${excluded_env_files[@]}"
+        echo "  [SECURITY] excluded ${#excluded_env_files[@]} .env file(s) from migrated copy" >&2
+    fi
+
     while IFS= read -r -d '' f; do
         files+=("$f")
     done < <(find "$root" -name '*.bak.*' -prune -o -type f \( \
         -name '*.json' -o -name '*.jsonc' -o -name '*.yaml' -o -name '*.yml' \
-        -o -name '*.toml' -o -name '*.env' -o -name '.env*' \
+        -o -name '*.toml' \
         -o -name '*.sh' -o -name '*.bash' -o -name '*.zsh' \) -print0 2>/dev/null)
 
     if [[ ${#files[@]} -eq 0 ]]; then
@@ -4771,7 +4835,12 @@ migrate_project() {
                         echo "  [BACKUP] backed up existing project config: $target_project.bak.$ts" 
                         ;;
                     overwrite)
-                        rm -rf "$target_path"
+                        if ! safe_remove_path_within "$WORKSPACE_ROOT" "$target_path"; then
+                            set_status "project" "failed"
+                            set_message "project" "refused unsafe target project deletion"
+                            MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
+                            return 0
+                        fi
                         ;;
                 esac
             fi
@@ -4804,7 +4873,7 @@ migrate_project() {
                     proj_redacted=$(redact_project_copy "$target_path") || proj_rc=$?
                     if [[ "$proj_rc" -ne 0 ]]; then
                         echo "  [FAIL] project config redaction failed, target copy deleted to prevent secret leak" 
-                        rm -rf "$target_path"
+                        safe_remove_path_within "$WORKSPACE_ROOT" "$target_path" || true
                         set_status "project" "failed"
                     set_message "project" "project config redaction failed, target copy deleted to prevent secret leak (source file untouched)" 
                         MIGRATION_FAILED=$((MIGRATION_FAILED + 1))

@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-`skills/agent-skills-setup/` is the canonical publishable skill. Its `SKILL.md` defines behavior, `scripts/` contains migration and synchronization tools, `references/` stores IDE metadata and supporting guidance, and `assets/` holds reusable templates. The root `SKILL.md` is generated for distribution; edit the canonical copy and run `bash scripts/sync-root-mirror.sh`. Repository-wide utilities live in `scripts/`. Design notes and release guidance for this repository's own skill belong in `docs/agent-skills-setup/`; reviews of other (user-level) skills belong in `docs/skill-reviews/`. Shell integration tests are colocated with the skill as `skills/agent-skills-setup/scripts/test-*.sh`.
+`skills/agent-skills-setup/` is the canonical publishable skill. Its `SKILL.md` defines behavior, `scripts/` contains migration and synchronization tools, `references/` stores IDE metadata and supporting guidance, and `assets/` holds reusable templates. The root `SKILL.md` is generated for distribution; edit the canonical copy and run `bash scripts/sync-root-mirror.sh`. Repository-wide utilities live in `scripts/`. Keep only active design and release guidance for this repository's own skill in `docs/agent-skills-setup/`; temporary audits, evaluation outputs, and reviews of unrelated user-level skills do not belong in this repository. Shell integration tests are colocated with the skill as `skills/agent-skills-setup/scripts/test-*.sh`.
 
 ## Build, Test, and Development Commands
 

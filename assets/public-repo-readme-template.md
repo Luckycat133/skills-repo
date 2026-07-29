@@ -1,5 +1,7 @@
 # {{SKILL_NAME}}
 
+<!-- Repository-level public README template; not part of a published Skill. -->
+
 [![GitHub](https://img.shields.io/badge/GitHub-{{REPO_NAME}}-181717?logo=github)](https://github.com/{{REPO_NAME}})
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 

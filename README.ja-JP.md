@@ -80,7 +80,8 @@ skills-repo/
 3. `agent-skills-setup` の変更については、以下の焦点を絞った検証スイートも実行します。
    - `bash skills/agent-skills-setup/scripts/verify-ide-config.sh` — 解決された IDE パスが `references/ide-registry.md` と一致することを検証します（235 件のチェック）。
    - `bash skills/agent-skills-setup/scripts/test-ide-paths.sh` — `references/ide-paths.json` とスクリプト間のドリフト（乖離）テストを行います（450 件のチェック）。
-   - `bash skills/agent-skills-setup/scripts/test-migration.sh` — 移行およびグローバル同期エンジンのテストを行います（80 件のチェック、分離された一時 HOME）。
+   - `bash skills/agent-skills-setup/scripts/test-migration.sh` — 移行エンジンのテストを行います（50 件のチェック、分離された一時 HOME）。
+   - `bash skills/agent-skills-setup/scripts/test-security-audit-boundary.sh` — リポジトリ専用自動化が公開 Skill に入らないことを検証します。
 4. 検証ワークフローが通過してからのみ、マージします。
 5. マージ済みのバージョンをエージェント環境にインストールします。
 
