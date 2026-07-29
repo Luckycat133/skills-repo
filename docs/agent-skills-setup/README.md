@@ -39,6 +39,8 @@ Español: Esta carpeta reúne la planificación, validación, publicación e ite
 - `HI-001-ide-paths-single-source.md`：IDE 路径单一真源（single-source-of-truth）的架构设计说明（驱动 `scripts/ide-paths.json` 与 `test-ide-paths.sh`）
 - `code-review-2026-07-26.md`: full multi-reviewer audit (31 findings: 3 Critical / 4 High / 17 Medium / 7 Low)
 - `code-review-2026-07-26.md`：完整多维度审查归档（31 项：3 Critical / 4 High / 17 Medium / 7 Low）
+- `skill-evaluation-2026-07-29.md`: paired baseline plus v0.6.5 remediation review across functionality, accuracy, UX, performance, and application scenarios
+- `skill-evaluation-2026-07-29.md`：功能、准确性、用户体验、响应性能及应用场景的成对基线与 v0.6.5 修复复评
 - `../../SECURITY-AUDIT.md`: runtime consent, redaction, explicit MCP input, and fail-closed controls
 - `../../SECURITY-AUDIT.md`：运行时授权、脱敏、显式 MCP 输入与 fail-closed 控制说明
 

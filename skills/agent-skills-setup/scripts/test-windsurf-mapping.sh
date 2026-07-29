@@ -52,6 +52,8 @@ assert servers["server-url"]["serverUrl"] == "https://example.test/mcp"
 assert servers["url"]["url"] == "https://example.test/legacy"
 PY
 
+WINDSURF_TARGET_BEFORE="$TMP_ROOT/windsurf-mcp-before.json"
+cp "$TEST_HOME/.codeium/windsurf/mcp_config.json" "$WINDSURF_TARGET_BEFORE"
 cat > "$TEST_HOME/.cursor/mcp.json" <<'JSON'
 {
   "mcpServers": {
@@ -66,8 +68,8 @@ HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source cursor --target windsurf --workspace "$WORKSPACE" \
     --objects mcp --yes --strategy overwrite > "$TMP_ROOT/foreign.txt" 2>&1 || true
 grep -Fq 'Windsurf/Devin MCP schema is invalid or ambiguous' "$TMP_ROOT/foreign.txt"
-[[ ! -e "$TEST_HOME/.codeium/windsurf/mcp_config.json" ]] || {
-    echo "FAIL: foreign VS Code transport was written to Windsurf" >&2
+cmp -s "$WINDSURF_TARGET_BEFORE" "$TEST_HOME/.codeium/windsurf/mcp_config.json" || {
+    echo "FAIL: foreign VS Code transport mutated the existing Windsurf target" >&2
     exit 1
 }
 

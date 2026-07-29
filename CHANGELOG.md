@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.5] - 2026-07-29
+
+### Evaluation remediation
+
+- Restored fail-closed VS Code user MCP handling. The mapper no longer guesses a default Profile path; users must resolve the active Profile through `MCP: Open User Configuration`, while project MCP remains `.vscode/mcp.json`.
+- Made MCP conflict behavior match the documented strategies. `skip` preserves the target, `backup` saves the complete shared file before merging with same-name source entries active, and `overwrite` replaces only the selected MCP map while preserving unrelated settings.
+- Added explicit OpenCode V1/V2 targeting through `--opencode-version`. V2 writes native `mcp.servers`, converts `enabled` to inverse `disabled`, expands scalar timeouts, normalizes OAuth keys, and removes the alternate-version server container to avoid mixed layouts.
+- Added deterministic JSON migration evidence with canonical paths, source hashes before/after, source immutability, target existence/hash/validation, backup path, scope, and operation status.
+
+### Skill UX and verification
+
+- Reduced the canonical `SKILL.md` from 401 lines / 5,699 words / 41,904 bytes to 248 lines / 1,647 words / 11,858 bytes, with IDE details loaded progressively from the registry while retaining critical UI-only boundaries.
+- Changed `validate-all.sh` to discover and execute every colocated `test-*.sh`; `--list-tests` and a repository-level coverage regression prevent focused tests from silently dropping out of CI.
+- Added focused regressions for conflict strategies, OpenCode V2, deterministic evidence, and eval coverage. The behavior eval set now covers eight scenarios, and a balanced 20-case trigger set covers explicit migrations and near-miss informational/debugging requests.
+- Updated invalid-overwrite fixtures to assert the transactional contract: a rejected schema preserves the last valid target byte-for-byte instead of deleting recoverable configuration.
+
+### Verification
+
+- `bash validate-all.sh`: exit 0 in 42.68 seconds; all 22 discovered focused suites pass, including 235 registry checks, 449 path/registry drift checks, and 87 MCP secret-redaction checks.
+
 ## [0.6.4] - 2026-07-29
 
 ### MCP explicit-source correctness and security

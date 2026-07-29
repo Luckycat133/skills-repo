@@ -32,11 +32,11 @@
     },
     {
       "id": 3,
-      "prompt": "Move the MCP servers from my Continue.dev YAML config into Codex for project /tmp/atlas. I want a preview only. Give me the exact migration command and, if automatic conversion is unsafe, say so plainly and provide the safest next step instead of guessing.",
-      "expected_output": "A preview-oriented answer that recognizes Continue.dev uses a YAML mcpServers array while Codex uses TOML mcp_servers, refuses generic automatic conversion, and provides a manual review/conversion path without writing.",
+      "prompt": "My user-level Continue.dev config at ~/.continue/config.yaml contains a YAML mcpServers array. I want to move those servers into the trusted Codex project config for /tmp/atlas, not a Continue project block. Preview only: do not read or write the real files. Give me the exact diagnostic command and, if automatic conversion is unsafe, say so plainly and provide the safest next step instead of guessing.",
+      "expected_output": "A preview-oriented answer that distinguishes the user-level Continue YAML source from project blocks, recognizes Codex project TOML mcp_servers, refuses generic automatic conversion, and provides a manual review/conversion path without writing.",
       "files": [],
       "expectations": [
-        "The response identifies Continue.dev MCP as YAML with an mcpServers array and Codex MCP as TOML using mcp_servers.",
+        "The response identifies the source as user-level ~/.continue/config.yaml with a YAML mcpServers array and the trusted Codex project target as /tmp/atlas/.codex/config.toml using mcp_servers.",
         "The response states that generic automatic conversion is unsupported or unsafe and does not fabricate a converted config.",
         "Any diagnostic command is read-only and includes --dry-run or --print-path.",
         "The response does not use --yes, claim files were migrated, or recommend piping/installing remote code.",
@@ -55,7 +55,61 @@
         "The transcript or filesystem evidence proves opencode.json was absent after dry-run and created only after the apply command.",
         "The saved opencode.json parses and contains mcp.local-search with type local, the expected command array, and environment rather than env.",
         "The saved output converts ${env:NAME} references to {env:NAME}, blanks LITERAL_TOKEN, and preserves the remote URL/header behavior without a guessed transport.",
-        "A before/after digest proves the supplied source fixture was unchanged."
+        "Both commands use --json, and their reports contain evidence.mcp records with canonical source and target paths, source hashes before and after, target existence and validation state, and operation status.",
+        "The apply evidence proves the supplied source fixture was unchanged and the generated target exists with a recorded digest."
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "How does Cursor's mcp.json work, and which root key does it use? I only want an explanation. Do not inspect my files, run a migration, or give me commands that would change anything.",
+      "expected_output": "A concise explanation of Cursor's MCP configuration shape that respects the request as an informational question and does not initiate the cross-IDE migration workflow.",
+      "files": [],
+      "expectations": [
+        "The response treats the request as a configuration question, not as authorization to migrate or inspect files.",
+        "The response identifies mcpServers as Cursor's MCP root key.",
+        "The response does not claim to have read local configuration or run the migration script.",
+        "The response does not provide an apply command, use --yes, or broaden the request into unrelated IDE discovery."
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Before I migrate Cursor project MCP servers into an existing OpenCode config, explain exactly what --strategy skip, backup, and overwrite do. The target already contains an unrelated theme setting, one server with the same name, and another non-conflicting server. Do not execute anything.",
+      "expected_output": "An exact, non-executing explanation of conflict semantics for a shared OpenCode JSON file, including preservation of unrelated configuration and the selected MCP container.",
+      "files": [],
+      "expectations": [
+        "The response says skip leaves an existing target unchanged rather than creating renamed entries.",
+        "The response says backup preserves a timestamped copy of the complete target file, merges non-conflicting servers, and lets the source definition win for a same-name server.",
+        "The response says overwrite replaces only the selected OpenCode MCP map and preserves unrelated top-level settings such as theme.",
+        "The response does not describe a <name>_migrated convention or claim that overwrite deletes the whole shared config file.",
+        "The response does not execute a command or claim a migration occurred."
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "Preview moving my Claude Code user-level MCP servers into VS Code. I use a named VS Code Profile, but I have not told you its directory. Do not guess a default profile path and do not write anything. Tell me the safe next step and the project-scoped alternative.",
+      "expected_output": "A fail-closed preview plan that does not infer a global VS Code profile path, explains how to resolve the active profile, and offers the documented workspace MCP location.",
+      "files": [],
+      "expectations": [
+        "The response does not guess a user-level VS Code mcp.json path for the active named profile.",
+        "The response directs the user to VS Code's MCP: Open User Configuration command or asks for an explicit resolved target path before a global migration.",
+        "The response identifies .vscode/mcp.json as the project-scoped alternative.",
+        "Any proposed project preview is read-only and uses --dry-run rather than --yes.",
+        "The response does not claim that a migration was completed."
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "Preview migrating Cursor project MCP from evals/files/cursor-project-mcp.json into native OpenCode 2 configuration for /tmp/opencode-v2. I explicitly want V2, no writes, and no mixed V1/V2 layout. Show the expected schema and exact command.",
+      "expected_output": "An OpenCode V2-specific dry run using the explicit source fixture and native mcp.servers schema with V2 field transforms and no V1 mcp sibling.",
+      "files": [
+        "evals/files/cursor-project-mcp.json"
+      ],
+      "expectations": [
+        "The exact preview command includes --opencode-version v2, --dry-run, --objects project-mcp, /tmp/opencode-v2, and --source-mcp-file pointing to the supplied fixture.",
+        "The expected target uses the root path mcp.servers and does not also retain a V1 root mcp server map.",
+        "The response explains the V2 enabled-to-disabled inversion, scalar timeout expansion to catalog/execution, and OAuth camelCase-to-snake_case transforms when those fields are present.",
+        "The response preserves the existing local/remote server behavior and credential-redaction policy rather than inventing unsupported fields.",
+        "The response does not use --yes or claim that the target was written."
       ]
     }
   ]

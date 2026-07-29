@@ -19,6 +19,8 @@ ASSUME_YES=0
 REPORT_FILE=""
 PRINT_PATH_IDE=""
 PRINT_PATH_OBJECT=""
+OPENCODE_VERSION="v1"
+OPENCODE_VERSION_EXPLICIT=0
 
 SUPPORTED_IDES="antigravity claude claude-desktop codex copilot cursor windsurf jetbrains openclaw trae trae-cn vscode zed neovim emacs continue aider roo-code cline amazon-q cody codeium tabnine replit pearai supermaven pieces blackbox gemini-cli goose-cli opencode kilocode kimiai workbuddy kiro augment-code void-editor baidu-comate tencent-codebuddy zcode"
 
@@ -30,6 +32,7 @@ MIGRATION_SKIPPED=0
 MIGRATION_STATUS_FILE=""
 MIGRATION_MESSAGES_FILE=""
 MIGRATION_MANUAL_FILE=""
+MIGRATION_EVIDENCE_FILE=""
 
 get_ide_name() {
     local ide="$1"
@@ -660,18 +663,11 @@ get_mcp_path() {
         # copilot = GitHub Copilot CLI: ~/.copilot/mcp-config.json, root key
         # mcpServers (project .mcp.json ALSO uses mcpServers, unlike VS Code).
         copilot)     echo "${HOME}/.copilot/mcp-config.json" ;;
-        # VS Code user MCP is opened through MCP: Open User Configuration in
-        # the active profile. The default profile's mcp.json follows the
-        # standard VS Code user-config base across platforms; named profiles
-        # live under <User>/profiles/<profile-id>/mcp.json (see Microsoft
-        # docs /configure/profiles). Insiders builds use "Code - Insiders".
-        vscode)
-            case "$(uname -s)" in
-                Darwin)  echo "${HOME}/Library/Application Support/Code/User/mcp.json" ;;
-                Linux)   echo "${HOME}/.config/Code/User/mcp.json" ;;
-                *)       [[ -n "${APPDATA:-}" ]] && echo "${APPDATA}/Code/User/mcp.json" || echo "" ;;
-            esac
-            ;;
+        # VS Code user MCP belongs to the active Profile. Default, named,
+        # Insiders/VSCodium, and relocated --user-data-dir installations do
+        # not share one safely inferable path. Resolve it through
+        # "MCP: Open User Configuration" instead of guessing a profile.
+        vscode)      echo "" ;;
         zed)         echo "${HOME}/.config/zed/settings.json" ;;
         opencode)    echo "${HOME}/.config/opencode/opencode.json" ;;
         # The current IDE guide names default.json; the overview page and
@@ -824,7 +820,13 @@ get_mcp_root_key() {
         goose-cli)   echo "extensions" ;;
         zed)         echo "context_servers" ;;
         openclaw)    echo "mcp.servers" ;;
-        opencode)    echo "mcp" ;;
+        opencode)
+            if [[ "$OPENCODE_VERSION" == "v2" ]]; then
+                echo "mcp.servers"
+            else
+                echo "mcp"
+            fi
+            ;;
         kilocode)    echo "mcp" ;;
         # VS Code user-level mcp.json uses `servers` (NOT mcpServers).
         vscode)      echo "servers" ;;
@@ -859,8 +861,12 @@ Optional arguments:
   --objects <list>       content types to migrate (comma-separated)
   --source-mcp-file <file>
                           explicit MCP source file; --source still defines its schema
+  --opencode-version <v1|v2>
+                          OpenCode target MCP schema (default: v1 legacy-compatible)
   --scope <scope>        Skills/MCP scope: global, project, both (default: global)
   --strategy <mode>      migration strategy: skip, overwrite, backup (default: backup)
+                          skip preserves an existing object; backup snapshots then merges;
+                          overwrite replaces only the selected object without a backup
   --report <file>        save migration report to file
   --dry-run              preview mode, does not actually modify files
   --yes, -y              confirm writing. Explicit confirmation required when not in dry-run:
@@ -1063,12 +1069,14 @@ init_migration_files() {
     MIGRATION_STATUS_FILE=$(mktemp)
     MIGRATION_MESSAGES_FILE=$(mktemp)
     MIGRATION_MANUAL_FILE=$(mktemp)
+    MIGRATION_EVIDENCE_FILE=$(mktemp)
 }
 
 cleanup_migration_files() {
     [[ -f "$MIGRATION_STATUS_FILE" ]] && rm -f "$MIGRATION_STATUS_FILE"
     [[ -f "$MIGRATION_MESSAGES_FILE" ]] && rm -f "$MIGRATION_MESSAGES_FILE"
     [[ -f "$MIGRATION_MANUAL_FILE" ]] && rm -f "$MIGRATION_MANUAL_FILE"
+    [[ -f "$MIGRATION_EVIDENCE_FILE" ]] && rm -f "$MIGRATION_EVIDENCE_FILE"
     [[ -n "${REDACTOR_PY:-}" && -f "${REDACTOR_PY:-}" ]] && rm -f "$REDACTOR_PY"
     # Always succeed: under `set -e` an EXIT-trap command that fails would
     # override an explicit `exit 0` (e.g. the read-only --print-path mode,
@@ -1116,6 +1124,93 @@ get_manual_steps() {
     if [[ -f "$MIGRATION_MANUAL_FILE" ]]; then
         awk -v o="$obj" -F: '$1 == o { sub(/^[^:]*:/, ""); print }' "$MIGRATION_MANUAL_FILE"
     fi
+}
+
+sha256_file() {
+    local file="$1"
+    [[ -f "$file" ]] || return 1
+    if command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$file" | awk '{print $1}'
+    elif command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$file" | awk '{print $1}'
+    elif command -v python3 >/dev/null 2>&1; then
+        python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "$file"
+    else
+        return 1
+    fi
+}
+
+validate_evidence_target() {
+    local file="$1"
+    if [[ ! -f "$file" ]]; then
+        echo "absent"
+        return 0
+    fi
+    case "$file" in
+        *.json|*.jsonc)
+            if command -v python3 >/dev/null 2>&1 && \
+               python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$file" >/dev/null 2>&1; then
+                echo "valid-json"
+            else
+                echo "invalid-json"
+            fi
+            ;;
+        *)
+            echo "unverified-format"
+            ;;
+    esac
+}
+
+json_string_or_null() {
+    local value="$1"
+    if [[ -n "$value" ]]; then
+        printf '"%s"' "$(json_escape "$value")"
+    else
+        printf 'null'
+    fi
+}
+
+record_mcp_evidence() {
+    local scope="$1"
+    local source_path="$2"
+    local target_path="$3"
+    local source_sha256_before="$4"
+    local backup_path="${5:-}"
+    local source_sha256_after=""
+    local target_sha256=""
+    local source_unchanged="null"
+    local target_exists="false"
+    local target_validation
+    local status
+
+    source_sha256_after="$(sha256_file "$source_path" 2>/dev/null || true)"
+    if [[ -n "$source_sha256_before" && -n "$source_sha256_after" ]]; then
+        if [[ "$source_sha256_before" == "$source_sha256_after" ]]; then
+            source_unchanged="true"
+        else
+            source_unchanged="false"
+        fi
+    fi
+    if [[ -f "$target_path" ]]; then
+        target_exists="true"
+        target_sha256="$(sha256_file "$target_path" 2>/dev/null || true)"
+    fi
+    target_validation="$(validate_evidence_target "$target_path")"
+    status="$(get_status mcp)"
+
+    printf '{"scope":"%s","status":"%s","source_path":"%s","target_path":"%s","source_sha256_before":%s,"source_sha256_after":%s,"source_unchanged":%s,"target_exists":%s,"target_sha256":%s,"target_validation":"%s","backup_path":%s}\n' \
+        "$(json_escape "$scope")" \
+        "$(json_escape "$status")" \
+        "$(json_escape "$source_path")" \
+        "$(json_escape "$target_path")" \
+        "$(json_string_or_null "$source_sha256_before")" \
+        "$(json_string_or_null "$source_sha256_after")" \
+        "$source_unchanged" \
+        "$target_exists" \
+        "$(json_string_or_null "$target_sha256")" \
+        "$(json_escape "$target_validation")" \
+        "$(json_string_or_null "$backup_path")" \
+        >> "$MIGRATION_EVIDENCE_FILE"
 }
 
 # MED-A1: shared existing-target strategy handling for skill migration.
@@ -1988,7 +2083,7 @@ migrate_prompts() {
 # CONV_RESULT (success|copied|failed) and CONV_DETAIL (human message) for the
 # caller. NEVER reports success when zero bytes were actually transferred.
 convert_mcp_file() {
-    local src="$1" src_key="$2" dst="$3" dst_key="$4" target_ide="$5"
+    local src="$1" src_key="$2" dst="$3" dst_key="$4" target_ide="$5" strategy="$6" target_version="$7"
     CONV_RESULT=""
     CONV_DETAIL=""
     MCP_REDACTED_COUNT=0
@@ -2011,10 +2106,10 @@ convert_mcp_file() {
 
     if [[ "$src_ext" =~ ^jsonc?$ && "$dst_ext" =~ ^jsonc?$ ]] && command -v python3 >/dev/null 2>&1; then
         local json_conversion_rc=0
-        python3 - "$src" "$src_key" "$dst" "$dst_key" "$target_ide" >/dev/null 2>&1 <<'PYEOF' || json_conversion_rc=$?
+        python3 - "$src" "$src_key" "$dst" "$dst_key" "$target_ide" "$strategy" "$target_version" >/dev/null 2>&1 <<'PYEOF' || json_conversion_rc=$?
 import json, os, re, sys
 from urllib.parse import parse_qsl, urlsplit
-src, src_key, dst, dst_key, target_ide = sys.argv[1], (sys.argv[2] or ""), sys.argv[3], (sys.argv[4] or ""), sys.argv[5]
+src, src_key, dst, dst_key, target_ide, strategy, target_version = sys.argv[1], (sys.argv[2] or ""), sys.argv[3], (sys.argv[4] or ""), sys.argv[5], sys.argv[6], sys.argv[7]
 SECRET_KEY_RE = re.compile(r"(?i)(api[_-]?key|token|secret|password|passwd|authorization|auth|bearer|private[_-]?key|access[_-]?key|client[_-]?secret|session|cookie)", re.IGNORECASE)
 # Broadened to catch credential-bearing DB/connection URIs (postgres://user:pass@,
 # mysql://..., redis://..., etc.), not just http(s).
@@ -2692,6 +2787,31 @@ if target_ide == "opencode":
                 sys.exit(10)
             if any(key in server for key in ("args", "env", "environment", "cwd")):
                 sys.exit(10)
+        if target_version == "v2":
+            if "enabled" in server and "disabled" in server:
+                sys.exit(10)
+            if "enabled" in server:
+                server["disabled"] = not server.pop("enabled")
+            if "timeout" in server:
+                timeout = server["timeout"]
+                if not isinstance(timeout, (int, float)) or isinstance(timeout, bool):
+                    sys.exit(10)
+                server["timeout"] = {
+                    "catalog": timeout,
+                    "execution": timeout,
+                }
+            if isinstance(server.get("oauth"), dict):
+                oauth = server["oauth"]
+                for old_key, new_key in {
+                    "clientId": "client_id",
+                    "clientSecret": "client_secret",
+                    "callbackPort": "callback_port",
+                    "redirectUri": "redirect_uri",
+                }.items():
+                    if old_key in oauth and new_key in oauth:
+                        sys.exit(10)
+                    if old_key in oauth:
+                        oauth[new_key] = oauth.pop(old_key)
 # VS Code's `servers` schema is not interchangeable with a generic
 # `mcpServers` object. Local stdio entries may omit `type`; remote entries
 # require the documented `http`/`sse` discriminator. Reject foreign fields
@@ -2851,6 +2971,26 @@ if not isinstance(existing, dict):
     if target_ide in {"gemini-cli", "opencode", "kilocode", "kimiai", "kiro", "workbuddy", "jetbrains", "vscode", "windsurf", "void-editor", "augment-code", "baidu-comate", "zcode"}:
         sys.exit(9)
     existing = {}
+if target_ide == "opencode" and isinstance(existing.get("mcp"), dict):
+    existing_mcp = existing["mcp"]
+    if target_version == "v2":
+        # V1 stores server names directly under mcp. Never leave those beside
+        # native V2 mcp.servers; the whole selected MCP object is replaced
+        # while unrelated top-level settings and the strategy backup remain.
+        if any(key not in {"servers", "timeout"} for key in existing_mcp):
+            existing["mcp"] = {}
+    elif "servers" in existing_mcp:
+        # The inverse migration follows the same rule: do not mix a native V2
+        # container with direct V1 server names.
+        existing["mcp"] = {}
+if strategy == "overwrite":
+    # Replace only the selected MCP map. Shared target files such as
+    # opencode.json/settings.json may hold unrelated user settings that an MCP
+    # migration must not delete.
+    if dst_key:
+        write_path(existing, dst_key, {})
+    else:
+        existing = {}
 if dst_key:
     cur = read_path(existing, dst_key)
     if not isinstance(cur, dict):
@@ -3616,6 +3756,8 @@ migrate_mcp() {
     local target_ide="$2"
     local scope="${3:-global}"
     local scope_label="global/user"
+    local source_sha256_before=""
+    local evidence_backup_path=""
     [[ "$scope" == "project" ]] && scope_label="project"
 
     MIGRATION_TOTAL=$((MIGRATION_TOTAL + 1))
@@ -3641,7 +3783,7 @@ migrate_mcp() {
     fi
 
     if [[ "$source_ide" == "opencode" || "$target_ide" == "opencode" ]]; then
-        set_manual_step "mcp" "OpenCode: selected ${scope_label} scope; review ~/.config/opencode/opencode.json versus project opencode.json, JSONC files, merged precedence, OAuth/keychain state, and agent-specific MCP permissions manually"
+        set_manual_step "mcp" "OpenCode: selected ${scope_label} scope and ${OPENCODE_VERSION} target schema; review ~/.config/opencode/opencode.json versus project opencode.json, JSONC files, merged precedence, OAuth/keychain state, and agent-specific MCP permissions manually"
     fi
 
     if [[ "$source_ide" == "kimiai" || "$target_ide" == "kimiai" ]]; then
@@ -3891,10 +4033,9 @@ migrate_mcp() {
     # Refuse to operate when source and target resolve to the same file.
     # Several IDEs share project-MCP paths: claude/copilot/tencent-codebuddy
     # all map to `.mcp.json`; trae/trae-cn both map to `.trae/mcp.json`.
-    # Without this guard, the overwrite strategy's `rm -f` would delete the
-    # only copy of the source; the backup strategy's `cp -r` would save a
-    # snapshot but then `convert_mcp_file` would overwrite the live source in
-    # place. Either path destroys or mutates the source.
+    # Without this guard, either merge strategy would write the converted
+    # target map back into the only source file. Refuse the operation before
+    # a backup or conversion can mutate that source.
     local source_identity target_identity
     if command -v python3 >/dev/null 2>&1; then
         source_identity="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$source_mcp")"
@@ -3952,6 +4093,8 @@ migrate_mcp() {
         return 0
     fi
 
+    source_sha256_before="$(sha256_file "$source_identity" 2>/dev/null || true)"
+
     # Codex stores MCP servers as TOML tables in config.toml. This script has
     # no TOML-aware MCP converter, so it must never copy JSON mcpServers into
     # that file (nor claim a same-format Codex transfer is safe). Rebuild the
@@ -3961,6 +4104,7 @@ migrate_mcp() {
         set_message "mcp" "Codex MCP config uses TOML; auto migration unsupported, manual migration required" 
         set_manual_step "mcp" "rebuild servers using [mcp_servers.<server-name>] TOML table in Codex user ~/.codex/config.toml or trusted project .codex/config.toml; stdio uses command, Streamable HTTP uses url" 
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
+        record_mcp_evidence "$scope" "$source_identity" "$target_identity" "$source_sha256_before"
         return 0
     fi
 
@@ -3973,6 +4117,7 @@ migrate_mcp() {
             set_status "mcp" "failed"
             set_message "mcp" "explicit MCP source failed strict schema validation"
             MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
+            record_mcp_evidence "$scope" "$source_identity" "$target_identity" "$source_sha256_before"
             return 0
         fi
     fi
@@ -3984,6 +4129,7 @@ migrate_mcp() {
         # Dry-run only prints the plan; never mark success.
         set_status "mcp" "skipped"
         set_message "mcp" "DRY-RUN: planned MCP config conversion (${src_key:-?} -> ${dst_key:-?})" 
+        record_mcp_evidence "$scope" "$source_identity" "$target_identity" "$source_sha256_before"
         return 0
     fi
 
@@ -3996,21 +4142,24 @@ migrate_mcp() {
                 set_status "mcp" "skipped"
                 set_message "mcp" "target MCP config already exists, skip (strategy: skip)" 
                 MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
+                record_mcp_evidence "$scope" "$source_identity" "$target_identity" "$source_sha256_before"
                 return 0
                 ;;
             backup)
                 local ts
                 ts="$(date +%Y%m%d%H%M%S).$$"
                 cp -r "$target_mcp" "$target_mcp.bak.$ts"
+                evidence_backup_path="$target_identity.bak.$ts"
                 echo "  [BACKUP] backed up existing MCP config: $target_mcp.bak.$ts" 
                 ;;
             overwrite)
-                rm -f "$target_mcp"
+                # `convert_mcp_file` replaces only the selected server map so
+                # unrelated keys in a shared config file remain intact.
                 ;;
         esac
     fi
 
-    convert_mcp_file "$source_mcp" "$src_key" "$target_mcp" "$dst_key" "$target_ide"
+    convert_mcp_file "$source_mcp" "$src_key" "$target_mcp" "$dst_key" "$target_ide" "$STRATEGY" "$OPENCODE_VERSION"
 
     case "$CONV_RESULT" in
         success)
@@ -4045,6 +4194,8 @@ migrate_mcp() {
             MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
             ;;
     esac
+
+    record_mcp_evidence "$scope" "$source_identity" "$target_identity" "$source_sha256_before" "$evidence_backup_path"
 }
 
 migrate_config() {
@@ -4914,6 +5065,8 @@ _emit_json_report() {
     local source_ide="$1"
     local target_ide="$2"
     local entries=()
+    local object_entries=()
+    local requested_object
 
     for obj in skills rules prompts mcp project-mcp config project agents hooks memory; do
         local status message token steps
@@ -4932,10 +5085,29 @@ _emit_json_report() {
 
     local entries_json
     entries_json=$(IFS=,; echo "${entries[*]}")
-    printf '{"source_ide":"%s","target_ide":"%s","strategy":"%s","statistics":{"total":%s,"succeeded":%s,"failed":%s,"skipped":%s},"results":[%s]}\n' \
-        "$source_ide" "$target_ide" "$STRATEGY" \
+    while IFS= read -r requested_object; do
+        [[ -n "$requested_object" ]] || continue
+        object_entries+=("\"$(json_escape "$requested_object")\"")
+    done < <(printf '%s\n' "$OBJECTS" | tr ',' '\n')
+    local objects_json
+    objects_json=$(IFS=,; echo "${object_entries[*]}")
+
+    local report_scope="$SCOPE"
+    if [[ ",$OBJECTS," == *",project-mcp,"* && ",$OBJECTS," != *",mcp,"* ]]; then
+        report_scope="project"
+    fi
+    local report_mode="apply"
+    [[ $DRY_RUN -eq 1 ]] && report_mode="dry-run"
+
+    local evidence_json=""
+    if [[ -s "$MIGRATION_EVIDENCE_FILE" ]]; then
+        evidence_json="$(paste -sd, "$MIGRATION_EVIDENCE_FILE")"
+    fi
+
+    printf '{"source_ide":"%s","target_ide":"%s","mode":"%s","scope":"%s","objects":[%s],"workspace":"%s","strategy":"%s","opencode_version":"%s","statistics":{"total":%s,"succeeded":%s,"failed":%s,"skipped":%s},"results":[%s],"evidence":{"mcp":[%s]}}\n' \
+        "$source_ide" "$target_ide" "$report_mode" "$report_scope" "$objects_json" "$(json_escape "$WORKSPACE_ROOT")" "$STRATEGY" "$OPENCODE_VERSION" \
         "$MIGRATION_TOTAL" "$MIGRATION_SUCCESS" "$MIGRATION_FAILED" "$MIGRATION_SKIPPED" \
-        "$entries_json"
+        "$entries_json" "$evidence_json"
 }
 
 
@@ -4966,6 +5138,15 @@ main() {
                     exit 1
                 fi
                 SOURCE_MCP_FILE="$2"
+                shift 2
+                ;;
+            --opencode-version)
+                if [[ $# -lt 2 || -z "${2:-}" ]]; then
+                    echo "Error: --opencode-version requires v1 or v2" >&2
+                    exit 1
+                fi
+                OPENCODE_VERSION="$2"
+                OPENCODE_VERSION_EXPLICIT=1
                 shift 2
                 ;;
             --scope)
@@ -5086,6 +5267,19 @@ main() {
     if ! validate_ide "$TARGET_IDE"; then
             echo "Error: invalid target IDE: $TARGET_IDE" >&2
             echo "Supported IDEs: $SUPPORTED_IDES" >&2
+        exit 1
+    fi
+
+    case "$OPENCODE_VERSION" in
+        v1|v2)
+            ;;
+        *)
+            echo "Error: invalid OpenCode version: $OPENCODE_VERSION (options: v1, v2)" >&2
+            exit 1
+            ;;
+    esac
+    if [[ $OPENCODE_VERSION_EXPLICIT -eq 1 && "$TARGET_IDE" != "opencode" ]]; then
+        echo "Error: --opencode-version applies only when --target opencode" >&2
         exit 1
     fi
 

@@ -83,11 +83,7 @@
     "global_skills": "~/.copilot/skills",
     "project_skills": ".github/skills",
     "rules": ".github/copilot-instructions.md",
-    "mcp": {
-      "darwin": "~/Library/Application Support/Code/User/mcp.json",
-      "linux": "~/.config/Code/User/mcp.json",
-      "windows": "${APPDATA}/Code/User/mcp.json"
-    },
+    "mcp": "",
     "project_mcp": ".vscode/mcp.json",
     "config": ""
   },

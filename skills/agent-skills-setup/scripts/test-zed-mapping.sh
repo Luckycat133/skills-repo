@@ -37,11 +37,17 @@ assert data["context_servers"]["remote"]["headers"]["Authorization"] == ""
 assert "type" not in data["context_servers"]["local"]
 PY
 
+ZED_TARGET_BEFORE="$TMP_ROOT/zed-settings-before.json"
+cp "$TEST_HOME/.config/zed/settings.json" "$ZED_TARGET_BEFORE"
 printf '%s\n' '{"mcpServers":{"bad":{"type":"stdio","command":"node","args":[]}}}' > "$TEST_HOME/.cursor/mcp.json"
 BAD_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT" --source cursor --target zed --objects mcp --yes --strategy overwrite 2>&1)"
-if [[ -e "$TEST_HOME/.config/zed/settings.json" ]] || ! grep -Fq 'Zed context_servers schema is unsupported' <<< "$BAD_OUTPUT"; then
+if ! grep -Fq 'Zed context_servers schema is unsupported' <<< "$BAD_OUTPUT"; then
     echo "FAIL: unsupported Zed transport/type was accepted" >&2
     exit 1
 fi
+cmp -s "$ZED_TARGET_BEFORE" "$TEST_HOME/.config/zed/settings.json" || {
+    echo "FAIL: unsupported Zed transport/type mutated the existing target" >&2
+    exit 1
+}
 
 echo "Zed mapping fixture test passed"

@@ -44,7 +44,7 @@
 ### Completed in Recent Sprint / 已完成项目
 - ✅ **R1** `validate_skills.py` 读取 `git ls-files`，解决 `.gitignore` 过滤失效导致的误报
 - ✅ **R2** 统一 `SKILL.md` / `README.md` 中的 IDE 支持数量为 40
-- ✅ **R3 / CR-003** `validate-all.sh` 聚合全量测试套件（`verify-ide-config.sh`、`test-ide-paths.sh`、`test-migration.sh`、`test-smart-ide-migration.sh`、`test-mcp-secret-redaction.sh`）并接入 CI
+- ✅ **R3 / CR-003** `validate-all.sh` 通过 `test-*.sh` 自动发现聚合全量 focused suites，并以 `--list-tests` + coverage regression 防止新增测试漏出 CI
 - ✅ **R4** `smart-ide-migration.sh` 补充标准 Bash `main()` 函数守卫
 - ✅ **R5 / MED-P2 (install.sh)** `install.sh` 增加 `--target`/`--skill` 必填参数守卫
 - ✅ **R6** `validate_skills.py` 扫描扩展至 `.json` 与 `.toml`

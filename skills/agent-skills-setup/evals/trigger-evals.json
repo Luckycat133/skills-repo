@@ -1,0 +1,82 @@
+[
+  {
+    "query": "Move my Cursor project rules and skills into Claude Code for this repository, starting with a safe preview.",
+    "should_trigger": true
+  },
+  {
+    "query": "Migrate the MCP servers in my Windsurf user config to Codex without copying literal secrets.",
+    "should_trigger": true
+  },
+  {
+    "query": "Convert this Cursor mcp.json into native OpenCode 2 configuration and show me the dry run first.",
+    "should_trigger": true
+  },
+  {
+    "query": "I am switching from Claude Code to Gemini CLI; help transfer the reusable skills in this workspace.",
+    "should_trigger": true
+  },
+  {
+    "query": "Set up this repo's agent instructions in VS Code based on the existing Cursor configuration.",
+    "should_trigger": true
+  },
+  {
+    "query": "Safely synchronize my project prompts from Cline into GitHub Copilot and keep the source unchanged.",
+    "should_trigger": true
+  },
+  {
+    "query": "Preview a project-scoped MCP migration from Claude Code to Zed, then give me a separate apply command.",
+    "should_trigger": true
+  },
+  {
+    "query": "Consolidate the agent skills duplicated across Cursor and Codex, but inspect only the named workspace.",
+    "should_trigger": true
+  },
+  {
+    "query": "Move our repository AI rules from Roo Code to Continue.dev and explain any manual conversion boundaries.",
+    "should_trigger": true
+  },
+  {
+    "query": "I changed IDEs from OpenCode to Cursor; migrate the project-level agent assets with backups.",
+    "should_trigger": true
+  },
+  {
+    "query": "What root key does Cursor use in mcp.json? I only need an explanation.",
+    "should_trigger": false
+  },
+  {
+    "query": "Debug why my MCP server times out when Cursor starts it.",
+    "should_trigger": false
+  },
+  {
+    "query": "Install the Playwright MCP server in Claude Code; there is no existing config to migrate.",
+    "should_trigger": false
+  },
+  {
+    "query": "Compare Cursor and Windsurf pricing and recommend one for a small team.",
+    "should_trigger": false
+  },
+  {
+    "query": "Create a brand-new Codex skill that reviews SQL migrations.",
+    "should_trigger": false
+  },
+  {
+    "query": "Where does VS Code store the MCP configuration for the active Profile?",
+    "should_trigger": false
+  },
+  {
+    "query": "Validate the syntax of my existing opencode.json without moving it to another tool.",
+    "should_trigger": false
+  },
+  {
+    "query": "Update the README paragraph that mentions our previous IDE migration.",
+    "should_trigger": false
+  },
+  {
+    "query": "Explain the difference between a prompt, a rule, and a skill in AI coding tools.",
+    "should_trigger": false
+  },
+  {
+    "query": "Back up my current Cursor settings directory exactly as-is; do not translate it for another IDE.",
+    "should_trigger": false
+  }
+]

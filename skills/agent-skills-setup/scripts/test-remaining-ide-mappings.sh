@@ -287,27 +287,33 @@ HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
 python3 -m json.tool "$TEST_HOME/.config/opencode/opencode.json" >/dev/null
 assert_contains "$TEST_HOME/.config/opencode/opencode.json" '"fixture"'
 
-# Comate requires an explicit transport type; ambiguous source entries must
-# fail closed instead of becoming an invalid mcp.json.
+# Comate requires an explicit transport type. A rejected overwrite must be
+# transactional: keep the previously valid target byte-for-byte instead of
+# replacing it with invalid data or deleting recoverable configuration.
+COMATE_BEFORE="$TMP_ROOT/comate-before.json"
+cp "$TEST_HOME/.comate/mcp.json" "$COMATE_BEFORE"
 printf '%s\n' '{"mcpServers":{"ambiguous":{"command":"node"}}}' > "$TEST_HOME/.claude.json"
 HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source claude --target baidu-comate --workspace "$PROJECT" \
     --objects mcp --yes --strategy overwrite > "$OUTPUT" 2>&1 || true
 assert_contains "$OUTPUT" 'Comate MCP schema is invalid'
-[[ ! -e "$TEST_HOME/.comate/mcp.json" ]] || {
-    echo "FAIL: invalid Comate MCP fixture wrote a target" >&2
+cmp -s "$COMATE_BEFORE" "$TEST_HOME/.comate/mcp.json" || {
+    echo "FAIL: invalid Comate MCP fixture mutated the existing target" >&2
     exit 1
 }
 
 # Invalid non-array args must fail closed rather than being silently dropped
 # when a command-array source is normalized for the scalar-command targets.
+# As above, failure preserves the last valid target.
+ZCODE_BEFORE="$TMP_ROOT/zcode-before.json"
+cp "$TEST_HOME/.zcode/cli/config.json" "$ZCODE_BEFORE"
 printf '%s\n' '{"mcpServers":{"ambiguous":{"command":["node","server.js"],"args":"not-an-array"}}}' > "$TEST_HOME/.claude.json"
 HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source claude --target zcode --workspace "$PROJECT" \
     --objects mcp --yes --strategy overwrite > "$OUTPUT" 2>&1 || true
 assert_contains "$OUTPUT" 'MCP mcpServers/schema is invalid'
-[[ ! -e "$TEST_HOME/.zcode/cli/config.json" ]] || {
-    echo "FAIL: invalid args fixture wrote a ZCode target" >&2
+cmp -s "$ZCODE_BEFORE" "$TEST_HOME/.zcode/cli/config.json" || {
+    echo "FAIL: invalid args fixture mutated the existing ZCode target" >&2
     exit 1
 }
 

@@ -88,7 +88,7 @@ Detailed per-IDE paths for all migration objects. Read this when executing STEP 
 
 ### vscode (VS Code + GitHub Copilot IDE; not cloud agent or the `copilot` script target)
 - **detect**: no stable portable VS Code installation/config path is used by this mapper; `~/.vscode/` is application data, not a Skills or whole-project target
-- **mcp**: workspace `.vscode/mcp.json` · root_key `servers` · JSON. User MCP is profile-scoped and resolved via `MCP: Open User Configuration`; the default profile's `mcp.json` lives at `~/.config/Code/User/mcp.json` (Linux), `~/Library/Application Support/Code/User/mcp.json` (macOS), or `%APPDATA%\Code\User\mcp.json` (Windows, where `Code` becomes `Code - Insiders` for the Insiders build). Named profiles store their own `mcp.json` under `<User>/profiles/<profile-id>/mcp.json` on the same base. Local entries use `command`/`args`/`env` and optional `type: stdio`; remote entries use `type: http|sse` plus `url`/optional `headers`/`oauth`. This schema is distinct from CLI `mcpServers`; the converter validates it and fails closed on foreign `transport`/`serverUrl` fields.
+- **mcp**: workspace `.vscode/mcp.json` · root_key `servers` · JSON. User MCP is profile-scoped and must be resolved with `MCP: Open User Configuration`; the mapper intentionally returns no global filesystem path because default/named Profiles, Insiders/VSCodium, and relocated `--user-data-dir` installations can select different stores. Local entries use `command`/`args`/`env` and optional `type: stdio`; remote entries use `type: http|sse` plus `url`/optional `headers`/`oauth`. This schema is distinct from CLI `mcpServers`; the converter validates it and fails closed on foreign `transport`/`serverUrl` fields.
 - **rules**: `.github/copilot-instructions.md` · `.github/instructions/**/*.instructions.md` (frontmatter: `applyTo`) · other agent instruction files are surface-specific and require manual review
 - **skills**: project `.github/skills/<name>/SKILL.md` / `.claude/skills/<name>/SKILL.md` / `.agents/skills/<name>/SKILL.md` · personal `~/.copilot/skills/<name>/SKILL.md` / `~/.claude/skills/<name>/SKILL.md` / `~/.agents/skills/<name>/SKILL.md`
 - **prompts**: workspace `.github/prompts/*.prompt.md`; user-level prompt files are supported by the UI, but the official docs do not publish a portable user path, so user prompt migration is manual. VS Code frontmatter fields including `description`, `name`, `agent`, `model`, and `tools` are optional · not supported by Copilot CLI
@@ -285,15 +285,15 @@ Detailed per-IDE paths for all migration objects. Read this when executing STEP 
 
 ### opencode
 - **detect**: `~/.config/opencode/`
-- **mcp**: global `~/.config/opencode/opencode.json` · project `opencode.json` · root_key `mcp` · JSON · REQUIRES type:'local'|'remote' · command is ARRAY · env field is `environment` · environment interpolation uses `{env:NAME}`; the mapper converts Cursor `${env:NAME}` references to this form
+- **mcp**: global `~/.config/opencode/opencode.json` · project `opencode.json` · JSON/JSONC. V1 stores server names directly under `mcp`; native V2 stores them under `mcp.servers`. Both require `type: local|remote`, local command ARRAY, `environment`, and `{env:NAME}` interpolation. The mapper defaults to V1-compatible output and emits native V2 with `--opencode-version v2`, including `enabled` → inverse `disabled`, scalar timeout → catalog/execution timeouts, and OAuth camelCase → snake_case conversion. When changing versions, it replaces the selected MCP container without mixing V1/V2 keys, while preserving unrelated top-level config and the requested backup strategy.
 - **rules**: `AGENTS.md` (via instructions field in config)
 - **skills**: project `.opencode/skills/` · global `~/.config/opencode/skills/` · also loads `.claude/skills/`, `.agents/skills/`
 - **commands**: project `.opencode/commands/*.md` · global `~/.config/opencode/commands/*.md` · frontmatter: description, agent, model · $ARGUMENTS, !`cmd`, @file templates
 - **agents**: project `.opencode/agents/*.md` · global `~/.config/opencode/agents/*.md` · frontmatter: description, mode, model, tools, permission
 - **hooks**: via `.opencode/plugins/*.ts` (TypeScript event-driven)
 - **memory**: via plugins (OpenMemory, short-term-memory, agent-memory)
-- **note**: Config is MERGED not replaced
-- **sources**: [OpenCode Skills](https://opencode.ai/docs/skills/), [OpenCode MCP](https://opencode.ai/docs/mcp/), [OpenCode config](https://opencode.ai/docs/config/)
+- **note**: V2 currently reads the same config locations and translates V1-shaped files in memory. Do not mix V1 and V2 field names in one file. MCP migration preserves unrelated top-level settings; `backup` merges same-version servers after a snapshot, while an explicit version change replaces only the MCP container.
+- **sources**: [OpenCode V1 Skills](https://opencode.ai/docs/skills/), [OpenCode V1 MCP](https://opencode.ai/docs/mcp/), [OpenCode V1 config](https://opencode.ai/docs/config/), [OpenCode V2 MCP](https://opencode.ai/v2/docs/mcp-servers), [V1 → V2 migration](https://opencode.ai/v2/docs/migrate-v1)
 
 ### goose-cli (Goose CLI)
 - **status**: current Goose CLI/desktop documentation is published by the Agentic AI Foundation at `goose-docs.ai`; the CLI and desktop share core config/extension storage

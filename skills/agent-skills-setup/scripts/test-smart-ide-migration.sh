@@ -430,12 +430,16 @@ assert data["mcpServers"]["http-server"]["headers"]["Authorization"] == ""
 assert data["mcpServers"]["http-server"]["httpUrl"] == "https://example.invalid/mcp"
 PY
 
+# Invalid input must be rejected before overwrite mutates the last valid
+# shared settings file.
+GEMINI_TARGET_BEFORE="$TMP_ROOT/gemini-settings-before.json"
+cp "$TEST_HOME/.gemini/settings.json" "$GEMINI_TARGET_BEFORE"
 printf '%s\n' '{"mcpServers":{"bad_server":{"command":"node","args":[]}}}' > "$TEST_HOME/.claude.json"
 GEMINI_INVALID_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source claude --target gemini-cli --workspace "$GEMINI_PROJECT" --objects mcp --yes --strategy overwrite 2>&1)"
 grep -Fq 'Gemini CLI MCP schema is invalid or ambiguous' <<< "$GEMINI_INVALID_OUTPUT"
-[[ ! -e "$TEST_HOME/.gemini/settings.json" ]] || {
-    echo "FAIL: invalid Gemini MCP alias left a target settings file"
+cmp -s "$GEMINI_TARGET_BEFORE" "$TEST_HOME/.gemini/settings.json" || {
+    echo "FAIL: invalid Gemini MCP alias mutated the existing settings file"
     exit 1
 }
 
@@ -666,6 +670,8 @@ assert data["mcpServers"]["local"]["env"]["API_KEY"] == ""
 assert data["mcpServers"]["remote"]["transportType"] == "sse"
 PY
 
+CLINE_TARGET_BEFORE="$TMP_ROOT/cline-mcp-before.json"
+cp "$CLINE_MCP_TARGET" "$CLINE_TARGET_BEFORE"
 printf '%s\n' '{"mcpServers":{"ambiguous":{"args":["server.js"]}}}' > "$TEST_HOME/.claude.json"
 INVALID_CLINE_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source claude --target cline --objects mcp --yes --strategy overwrite 2>&1)"
@@ -673,8 +679,8 @@ grep -Fq 'Cline MCP mcpServers schema is invalid or ambiguous' <<< "$INVALID_CLI
     echo "FAIL: invalid Cline mcpServers entry was not rejected" >&2
     exit 1
 }
-[[ ! -e "$CLINE_MCP_TARGET" ]] || {
-    echo "FAIL: invalid Cline MCP conversion left a target file" >&2
+cmp -s "$CLINE_TARGET_BEFORE" "$CLINE_MCP_TARGET" || {
+    echo "FAIL: invalid Cline MCP conversion mutated the existing target" >&2
     exit 1
 }
 

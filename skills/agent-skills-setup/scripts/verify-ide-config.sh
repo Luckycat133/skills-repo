@@ -19,20 +19,17 @@ fi
 # Resolve platform-specific EXPECTED entries. Claude Desktop's documented
 # legacy JSON path differs by platform; Cline's current shared/CLI path is
 # platform-neutral and its documented alternative is handled by the mapper's
-# existing-file resolver. VS Code stores its default-profile user MCP config
-# under the same XDG/standard user-config base across platforms.
+# existing-file resolver. VS Code user MCP belongs to the active Profile, so
+# this mapper intentionally exposes no guessed global path.
 case "$(uname -s)" in
     Darwin)
         CLAUDE_DESKTOP_MCP_PATH='~/Library/Application Support/Claude/claude_desktop_config.json'
-        VSCODE_MCP_PATH='~/Library/Application Support/Code/User/mcp.json'
         ;;
     Linux)
         CLAUDE_DESKTOP_MCP_PATH=''
-        VSCODE_MCP_PATH='~/.config/Code/User/mcp.json'
         ;;
     *)
         CLAUDE_DESKTOP_MCP_PATH='${APPDATA}/Claude/claude_desktop_config.json'
-        VSCODE_MCP_PATH='${APPDATA}/Code/User/mcp.json'
         ;;
 esac
 
@@ -143,7 +140,7 @@ EXPECTED=(
     "vscode|project-skills|.github/skills"
     "vscode|rules|.github/copilot-instructions.md"
     "vscode|project-mcp|.vscode/mcp.json"
-    "vscode|mcp|${VSCODE_MCP_PATH}"
+    "vscode|mcp|"
     "vscode|config|"
     "zed|global|~/.agents/skills"
     "zed|project-skills|.agents/skills"
