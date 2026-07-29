@@ -1,6 +1,6 @@
 # Release Checklist
 
-> **文档元信息** ｜ 更新日期：2026-07-28 ｜ 作者：skills-repo 维护组 ｜ 类型：发布清单 ｜ 状态：已发布
+> **文档元信息** ｜ 更新日期：2026-07-29 ｜ 作者：skills-repo 维护组 ｜ 类型：发布清单 ｜ 状态：已发布
 
 ## 中文
 
@@ -27,6 +27,7 @@
 - 确认 Eval 4 在隔离 workspace 中实际执行 dry-run/apply，并以目标文件和 source digest 证明零预览写入、正确转换及源不变，而不是只检查回答文字。
 - 确认 VS Code 用户级 MCP 保持 active-Profile/manual 边界，不推测 default Profile 路径；项目级仍解析为 `.vscode/mcp.json`。
 - 确认 MCP `skip`/`backup`/`overwrite` 策略在共享配置中保留无关字段，并有同名 server 回归；不得再声称创建 `<name>_migrated`。
+- 确认未知 `--strategy` 在任何目标写入前返回非零，且已有目标逐字节不变、无备份或成功记录。
 - 确认 OpenCode V1 与 V2 fixture 均通过，V2 使用 `mcp.servers` 且 `--json` 报告含完整 `evidence.mcp` 证据链。
 - 确认 `evals/evals.json` 的 8 个行为案例与 `evals/trigger-evals.json` 的 20 个正负触发案例通过 coverage test。
 
@@ -55,5 +56,6 @@
 - Confirm Eval 4 actually executes dry-run/apply in an isolated workspace and uses target-file plus source-digest evidence, rather than grading response text alone.
 - Confirm VS Code user MCP remains active-Profile/manual and no default Profile path is guessed; project MCP still resolves to `.vscode/mcp.json`.
 - Confirm MCP `skip`/`backup`/`overwrite` preserve unrelated shared-config fields and cover same-name servers; never claim a `<name>_migrated` entry is created.
+- Confirm an unknown `--strategy` exits non-zero before any target write, leaving an existing target byte-for-byte unchanged with no backup or success record.
 - Confirm OpenCode V1 and V2 fixtures pass, V2 uses `mcp.servers`, and `--json` includes the complete `evidence.mcp` chain.
 - Confirm the eight behavior evals and balanced 20-case trigger eval set pass `test-eval-coverage.sh`.

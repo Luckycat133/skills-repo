@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.7] - 2026-07-29
+
+### Security
+
+- Reject unknown `--strategy` values before path resolution or target writes. Previously, an unrecognized value could bypass the default backup branch and silently overwrite an existing Skill while reporting success.
+- Added an isolated regression proving invalid strategies return non-zero, preserve the existing target byte-for-byte, create no backup, and emit a clear validation error.
+
+### Documentation and verification
+
+- Updated the canonical Skill, root mirror, README, release checklist, ClawHub release guide, and evaluation report for the fail-closed strategy contract.
+- `bash validate-all.sh`: exit 0 in 44.66 seconds; all 22 discovered focused suites pass, including 235 registry checks, 453 path/registry checks, and 87 MCP secret-redaction checks.
+
 ## [0.6.6] - 2026-07-29
 
 ### CI portability

@@ -13,6 +13,43 @@ mkdir -p "$TEST_HOME/.config/opencode"
 
 printf '%s\n' '{"mcpServers":{"same":{"command":"new-server"}}}' > "$SOURCE_FILE"
 
+SOURCE_SKILL="$TEST_HOME/.cursor/skills/demo"
+TARGET_SKILL="$TEST_HOME/.claude/skills/demo"
+mkdir -p "$SOURCE_SKILL" "$TARGET_SKILL"
+printf '%s\n' 'source skill' > "$SOURCE_SKILL/SKILL.md"
+printf '%s\n' 'existing target skill' > "$TARGET_SKILL/SKILL.md"
+TARGET_HASH_BEFORE="$(shasum -a 256 "$TARGET_SKILL/SKILL.md" | awk '{print $1}')"
+
+set +e
+HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+    --source cursor --target claude --objects skills \
+    --strategy typo --yes >"$TMP_ROOT/invalid-strategy.log" 2>&1
+INVALID_STRATEGY_RC=$?
+set -e
+
+if [[ $INVALID_STRATEGY_RC -eq 0 ]]; then
+    echo "FAIL: unknown strategy exited successfully" >&2
+    exit 1
+fi
+
+TARGET_HASH_AFTER="$(shasum -a 256 "$TARGET_SKILL/SKILL.md" | awk '{print $1}')"
+if [[ "$TARGET_HASH_AFTER" != "$TARGET_HASH_BEFORE" ]]; then
+    echo "FAIL: unknown strategy modified the existing target" >&2
+    exit 1
+fi
+
+if find "$TEST_HOME/.claude/skills" -maxdepth 1 -type d -name 'demo.bak.*' -print -quit | grep -q .; then
+    echo "FAIL: unknown strategy created a backup before rejection" >&2
+    exit 1
+fi
+
+if ! grep -q 'invalid strategy' "$TMP_ROOT/invalid-strategy.log"; then
+    echo "FAIL: unknown strategy did not produce a clear validation error" >&2
+    exit 1
+fi
+
+echo "PASS: unknown strategy fails before modifying an existing target"
+
 write_existing_target() {
     printf '%s\n' '{"theme":"dark","mcp":{"keep":{"type":"local","command":["keep-server"]},"same":{"type":"local","command":["old-server"]}}}' \
         > "$TEST_HOME/.config/opencode/opencode.json"

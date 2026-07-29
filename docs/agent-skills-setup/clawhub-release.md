@@ -29,8 +29,8 @@ Español: Este documento resume el flujo exacto y los metadatos recomendados par
 - skill 目录中包含有效的 `SKILL.md`。
 - Release docs and changelog are already updated.
 - 发布文档和 changelog 已更新。
-- The `--version` must equal the current `version:` field in `skills/agent-skills-setup/SKILL.md` (currently `0.6.6`); update it on every release.
-- `--version` 必须与 `skills/agent-skills-setup/SKILL.md` 中当前的 `version:` 一致（当前为 `0.6.6`），每次发布时同步更新。
+- The `--version` must equal the current `version:` field in `skills/agent-skills-setup/SKILL.md` (currently `0.6.7`); update it on every release.
+- `--version` 必须与 `skills/agent-skills-setup/SKILL.md` 中当前的 `version:` 一致（当前为 `0.6.7`），每次发布时同步更新。
 
 ## Recommended Commands / 推荐命令
 
@@ -43,9 +43,9 @@ bash skills/agent-skills-setup/scripts/prepare-clawhub-release.sh \
     --skill-dir skills/agent-skills-setup \
     --slug agent-skills-setup \
     --name "Agent Skills Setup" \
-    --version 0.6.6 \
+    --version 0.6.7 \
     --tags latest,setup,skills,openclaw,cross-ide \
-    --changelog "Fix cross-platform Cline registry validation and verify every platform-specific path on all hosts."
+    --changelog "Reject unknown migration strategies before writes and preserve existing targets unchanged; add fail-closed regression coverage."
 ```
 
 Publish immediately after validation:
@@ -57,9 +57,9 @@ bash skills/agent-skills-setup/scripts/prepare-clawhub-release.sh \
     --skill-dir skills/agent-skills-setup \
     --slug agent-skills-setup \
     --name "Agent Skills Setup" \
-    --version 0.6.6 \
+    --version 0.6.7 \
     --tags latest,setup,skills,openclaw,cross-ide \
-    --changelog "Fix cross-platform Cline registry validation and verify every platform-specific path on all hosts." \
+    --changelog "Reject unknown migration strategies before writes and preserve existing targets unchanged; add fail-closed regression coverage." \
     --publish
 ```
 

@@ -10,7 +10,7 @@
 
 ---
 name: agent-skills-setup
-version: 0.6.6
+version: 0.6.7
 license: MIT
 description: >
   Migrate AI assistant context between IDEs — MCP servers, rules/instructions,
@@ -139,7 +139,8 @@ report already provides these fields.
 For MCP inside a shared config file, every strategy preserves unrelated
 top-level settings. **overwrite** replaces the selected server map, not the
 whole file. For directory-backed skills/projects, the selected same-name
-directory/tree is the object. Never invent a **<name>_migrated** entry.
+directory/tree is the object. Reject any other strategy before resolving or
+writing targets. Never invent a **<name>_migrated** entry.
 
 ## MCP conversion
 

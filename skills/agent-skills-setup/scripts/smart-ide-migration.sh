@@ -5190,6 +5190,15 @@ main() {
         esac
     done
 
+    case "$STRATEGY" in
+        skip|backup|overwrite)
+            ;;
+        *)
+            echo "Error: invalid strategy: $STRATEGY (options: skip, backup, overwrite)" >&2
+            exit 1
+            ;;
+    esac
+
     if [[ "${MIGRATE_JSON:-}" == "1" ]]; then
         exec 3>&1
         exec 1>&2
