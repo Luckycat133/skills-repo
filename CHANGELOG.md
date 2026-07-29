@@ -5,12 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.6.7] - 2026-07-29
+## [0.6.8] - 2026-07-29
 
-### Security
+### Security audit remediation
 
-- Reject unknown `--strategy` values before path resolution or target writes. Previously, an unrecognized value could bypass the default backup branch and silently overwrite an existing Skill while reporting success.
-- Added an isolated regression proving invalid strategies return non-zero, preserve the existing target byte-for-byte, create no backup, and emit a clear validation error.
 - Exclude `.env` and `.env.*` from copied skill/project trees while preserving the source, closing the post-copy secret-scan exposure identified by the 0.6.4 external audit.
 - Guard recursive cleanup with resolved parent-containment and symlink checks instead of deleting unchecked target paths directly.
 - Reject symlinked or group/world-accessible OpenClaw `--env-file` inputs, and force both the generated config and its backup to owner-only mode `600`.
@@ -24,6 +22,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `test-security-audit-boundary.sh` to prevent repository-only tools, install/network authority, literal secret ingestion, unsafe workflow ordering, or recursive force deletion from re-entering the publishable artifact.
 - Removed unrelated dataset scaffolding, superseded audit/evaluation snapshots, external-skill review archives, and ignored local process artifacts; retained executable regressions, active eval fixtures, release guidance, and open engineering plans.
 - `bash validate-all.sh`: exit 0; all 22 discovered focused suites pass, including 235 registry checks, 453 path/registry checks, 87 MCP secret-redaction checks, 50 migration checks, and the publishable-artifact security boundary.
+
+## [0.6.7] - 2026-07-29
+
+### Security
+
+- Reject unknown `--strategy` values before path resolution or target writes. Previously, an unrecognized value could bypass the default backup branch and silently overwrite an existing Skill while reporting success.
+- Added an isolated regression proving invalid strategies return non-zero, preserve the existing target byte-for-byte, create no backup, and emit a clear validation error.
+
+### Documentation and verification
+
+- Updated the canonical Skill, root mirror, README, release checklist, ClawHub release guide, and evaluation report for the fail-closed strategy contract.
+- `bash validate-all.sh`: exit 0 in 44.66 seconds; all 22 discovered focused suites pass, including 235 registry checks, 453 path/registry checks, and 87 MCP secret-redaction checks.
 
 ## [0.6.6] - 2026-07-29
 

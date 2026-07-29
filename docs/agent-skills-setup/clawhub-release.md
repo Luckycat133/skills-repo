@@ -29,8 +29,8 @@ Español: Este documento resume el flujo exacto y los metadatos recomendados par
 - skill 目录中包含有效的 `SKILL.md`。
 - Release docs and changelog are already updated.
 - 发布文档和 changelog 已更新。
-- The `--version` must equal the current `version:` field in `skills/agent-skills-setup/SKILL.md` (currently `0.6.7`); update it on every release.
-- `--version` 必须与 `skills/agent-skills-setup/SKILL.md` 中当前的 `version:` 一致（当前为 `0.6.7`），每次发布时同步更新。
+- The `--version` must equal the current `version:` field in `skills/agent-skills-setup/SKILL.md` (currently `0.6.8`); update it on every release.
+- `--version` 必须与 `skills/agent-skills-setup/SKILL.md` 中当前的 `version:` 一致（当前为 `0.6.8`），每次发布时同步更新。
 
 ## Recommended Commands / 推荐命令
 
@@ -39,13 +39,13 @@ Validate and print the exact publish command first:
 先做校验并生成精确发布命令：
 
 ```bash
-bash skills/agent-skills-setup/scripts/prepare-clawhub-release.sh \
+bash scripts/prepare-clawhub-release.sh \
     --skill-dir skills/agent-skills-setup \
     --slug agent-skills-setup \
     --name "Agent Skills Setup" \
-    --version 0.6.7 \
+    --version 0.6.8 \
     --tags latest,setup,skills,openclaw,cross-ide \
-    --changelog "Reject unknown migration strategies before writes and preserve existing targets unchanged; add fail-closed regression coverage."
+    --changelog "Remediate the ClawHub audit by narrowing the artifact to migration, excluding copied environment files, removing literal secret ingestion and recursive force deletion, and documenting preview-first OpenClaw migration."
 ```
 
 Publish immediately after validation:
@@ -53,13 +53,13 @@ Publish immediately after validation:
 校验后直接发布：
 
 ```bash
-bash skills/agent-skills-setup/scripts/prepare-clawhub-release.sh \
+bash scripts/prepare-clawhub-release.sh \
     --skill-dir skills/agent-skills-setup \
     --slug agent-skills-setup \
     --name "Agent Skills Setup" \
-    --version 0.6.7 \
+    --version 0.6.8 \
     --tags latest,setup,skills,openclaw,cross-ide \
-    --changelog "Reject unknown migration strategies before writes and preserve existing targets unchanged; add fail-closed regression coverage." \
+    --changelog "Remediate the ClawHub audit by narrowing the artifact to migration, excluding copied environment files, removing literal secret ingestion and recursive force deletion, and documenting preview-first OpenClaw migration." \
     --publish
 ```
 
