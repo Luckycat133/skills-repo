@@ -6,4 +6,3 @@
 - **note**: Distinct from Trae CLI (different ByteDance product line: Volcano Engine vs Trae brand); `ve`/`@volcengine/cli` is cloud-resource CLI (NOT AI tool) — do not confuse
 
 ---
-

@@ -6,4 +6,3 @@
 - **skills**: project `.lingma/skills/<name>/SKILL.md` · global `~/.lingma/skills/`
 - **commands**: project `.lingma/commands/` · global `~/.lingma/commands/`
 - **agents**: project `.lingma/agents/<name>.md` · global `~/.lingma/agents/` · frontmatter: name, description, tools
-

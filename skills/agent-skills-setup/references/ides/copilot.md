@@ -28,4 +28,3 @@ Treat those notes as current compatibility evidence and practical guidance; when
 - **hooks**: project `.github/hooks/*.json` · personal `~/.copilot/hooks/*.json` or `~/.copilot/settings.json` `hooks` key
 - **plugins**: configure declaratively with `enabledPlugins` in `~/.copilot/settings.json` or `.github/copilot/settings.json`; installed-plugin state under `~/.copilot/` is application-managed, not a migration target
 - **note**: `.vscode/mcp.json` is VS Code's distinct `servers` schema. Its entries require transport/schema review before placing them in a CLI `mcpServers` file; never copy it unchanged or let the generic mapper choose between `.mcp.json` and `.github/mcp.json`.
-

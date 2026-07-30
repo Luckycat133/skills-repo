@@ -26,4 +26,3 @@ Treat those notes as current compatibility evidence and practical guidance; when
 - **project config root**: unsupported/manual; OpenClaw has no fixed project config directory. The active workspace is selected by `agents.defaults.workspace`, so do not infer a repository-relative config root.
 - **validation/installation**: static JSON/frontmatter checks are safe. `openclaw mcp list`/`openclaw mcp doctor` and `openclaw skills install <slug>` are official runtime operations but are not run by this migration mapper; no install or live probe is automatic.
 - **sources**: [skills](https://docs.openclaw.ai/tools/skills), [agent workspace](https://docs.openclaw.ai/concepts/agent-workspace), [MCP](https://docs.openclaw.ai/cli/mcp), [configuration](https://docs.openclaw.ai/gateway/configuration)
-

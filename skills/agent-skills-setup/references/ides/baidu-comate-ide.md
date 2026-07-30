@@ -5,4 +5,3 @@
 - **agents**: Zulu multi-agent system (default entry) · Custom Agent · domain agents
 - **commands**: slash commands
 - **note**: Standalone IDE (2025-06-23 released) distinct from plugin version; global Rules/MCP config only since 2025-08 late version; cannot install official MS Python/C++ plugins (use BasedPyright/clangd)
-

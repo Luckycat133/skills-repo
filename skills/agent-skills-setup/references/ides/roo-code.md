@@ -30,4 +30,3 @@ Treat those notes as current compatibility evidence and practical guidance; when
 - **sources**: [Roo Code announcement](https://roocodeinc.github.io/Roo-Code/), [Roo Code Skills](https://roocodeinc.github.io/Roo-Code/features/skills/), [Custom Instructions](https://roocodeinc.github.io/Roo-Code/features/custom-instructions/), [Customizing Modes](https://roocodeinc.github.io/Roo-Code/features/custom-modes/), [Slash Commands](https://roocodeinc.github.io/Roo-Code/features/slash-commands/), [MCP](https://roocodeinc.github.io/Roo-Code/features/mcp/using-mcp-in-roo/), [Roo Code repository archive](https://github.com/RooCodeInc/Roo-Code)
 
 ---
-

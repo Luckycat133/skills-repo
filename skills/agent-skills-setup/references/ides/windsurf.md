@@ -27,4 +27,3 @@ Treat those notes as current compatibility evidence and practical guidance; when
 - **project namespace**: `.windsurf` mixes Skills, rules, workflows, and application state; no automatic whole-project or project-MCP path is claimed. The `codeium` namespace above is the current official app storage path, not a separate legacy Codeium target.
 - **note**: 6000-char global-rule / 12000-char workspace-rule and workflow limits; 100-tool limit.
 - **sources**: [Cascade Skills](https://docs.windsurf.com/windsurf/cascade/skills), [Cascade MCP](https://docs.windsurf.com/windsurf/cascade/mcp), [Devin rules](https://docs.devin.ai/desktop/cascade/rules), [workflows](https://docs.devin.ai/desktop/cascade/workflows)
-

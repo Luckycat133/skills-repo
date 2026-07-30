@@ -6,4 +6,3 @@
 - **commands**: `forge.yaml` commands array
 - **agents**: `.forge/agents/<name>.md` · built-in: Forge, Sage, Muse
 - **other**: `forge.yaml` (main config) · `.forge/templates/`
-

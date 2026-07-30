@@ -6,4 +6,3 @@
 - **context**: project-root `CODEBUDDY.md` is supported; `AGENTS.md` is a compatibility fallback when `CODEBUDDY.md` is absent
 - **commands/agents/hooks/memory**: UI/IDE-managed or not given a portable standalone path in the reviewed IDE docs; do not reuse the CLI's global MCP/settings paths for the IDE
 - **note**: Standalone IDE is distinct from CodeBuddy Code CLI/plugin. Sources: [CodeBuddy IDE overview](https://www.codebuddy.cn/docs/ide/User-guide/Overview), [IDE Skills](https://www.codebuddy.cn/docs/ide/Features/Skills), [IDE Rules](https://www.codebuddy.cn/docs/ide/User-guide/Rules), [IDE MCP](https://www.codebuddy.cn/docs/ide/User-guide/MCP), [IDE slash commands](https://www.codebuddy.cn/docs/ide/User-guide/Slash-Commands)
-

@@ -6,4 +6,3 @@
 - **skills**: project skills (via `load_project_skills()`, agentskills.io standard)
 - **agents**: `~/.openhands-cli/persist/agent_settings.json`
 - **memory**: Condenser system (config.toml [condenser]: type=amortized/llm_attention/llm_summarizing)
-

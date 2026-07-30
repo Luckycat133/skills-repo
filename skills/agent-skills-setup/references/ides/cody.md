@@ -25,4 +25,3 @@ Treat those notes as current compatibility evidence and practical guidance; when
 - **related product**: Sourcegraph MCP Server is a separate Enterprise server for external agents; it is configured in the client (for example `amp mcp add`), not as Cody's local MCP store. See [Sourcegraph MCP Server](https://sourcegraph.com/docs/api/mcp).
 
 ---
-

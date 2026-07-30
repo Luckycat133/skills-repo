@@ -29,4 +29,3 @@ Treat those notes as current compatibility evidence and practical guidance; when
 - **hooks**: CLI settings JSON hooks in `~/.codebuddy/settings.json`, `.codebuddy/settings.json`, or local settings; IDE hooks/events are a separate UI/product schema. Do not copy or execute hooks automatically.
 - **other**: `settings.json` / `settings.local.json`
 - **sources**: [CodeBuddy CLI Skills](https://www.codebuddy.cn/docs/cli/skills), [CodeBuddy CLI MCP](https://www.codebuddy.cn/docs/cli/mcp), [CodeBuddy CLI Memory](https://www.codebuddy.cn/docs/cli/memory), [CodeBuddy CLI Hooks](https://www.codebuddy.cn/docs/cli/hooks), [CodeBuddy CLI Sub-agents](https://www.codebuddy.cn/docs/cli/sub-agents), [CodeBuddy IDE Skills](https://www.codebuddy.cn/docs/ide/Features/Skills), [CodeBuddy IDE MCP](https://www.codebuddy.cn/docs/ide/User-guide/MCP), [CodeBuddy IDE Subagents](https://www.codebuddy.cn/docs/ide/Features/Subagents)
-

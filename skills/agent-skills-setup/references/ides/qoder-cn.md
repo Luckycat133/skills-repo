@@ -7,4 +7,3 @@
 - **commands**: `qodercli` CLI commands
 - **agents**: Quest 2.0 multi-agent · Experts (specialist team)
 - **note**: Renamed from Tongyi Lingma on 2026-05-20; Qoder CN (GLM/DeepSeek/Kimi/MiniMax models) vs Qoder (qoder.com, GPT/Claude); supports ModelScope MCP plaza
-

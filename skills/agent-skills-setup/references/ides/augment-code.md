@@ -25,4 +25,3 @@ Treat those notes as current compatibility evidence and practical guidance; when
 - **commands**: global `~/.augment/commands/`
 - **other**: `~/.augment-plugin/` (plugins marketplace)
 - **sources**: [Augment Skills](https://docs.augmentcode.com/using-augment/skills), [Augment Rules](https://docs.augmentcode.com/cli/rules), [Augment MCP](https://docs.augmentcode.com/cli/integrations), [Augment config scopes](https://docs.augmentcode.com/cli/config)
-

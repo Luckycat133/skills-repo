@@ -4,4 +4,3 @@
 - **note**: package installation, init-file snippets, server registration, and any package state require manual review; do not treat `~/.emacs.d/` as a native AI skills directory
 
 ---
-

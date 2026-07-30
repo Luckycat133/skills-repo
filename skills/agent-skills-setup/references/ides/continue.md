@@ -27,4 +27,3 @@ Treat those notes as current compatibility evidence and practical guidance; when
 - **skills**: unsupported; Continue docs do not define a `SKILL.md` skill directory
 - **automatic boundary**: this mapper exposes paths for diagnosis but does not automatically copy Continue `config.yaml`, MCP, rules, or the mixed `.continue` project namespace; its generic JSON converter cannot safely convert YAML or an `mcpServers` array
 - **sources**: [config.yaml reference](https://docs.continue.dev/reference), [configuration](https://docs.continue.dev/customize/deep-dives/configuration), [MCP](https://docs.continue.dev/customize/deep-dives/mcp), [rules](https://docs.continue.dev/customize/deep-dives/rules), [prompts](https://docs.continue.dev/customize/prompts), [YAML migration](https://docs.continue.dev/reference/yaml-migration), [config.json reference](https://docs.continue.dev/reference/json-reference)
-

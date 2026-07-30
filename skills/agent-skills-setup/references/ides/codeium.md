@@ -23,4 +23,3 @@ Treat those notes as current compatibility evidence and practical guidance; when
 - **skills / rules / mcp / config**: unsupported/empty in this mapper. No standalone Codeium Skills, MCP, or portable config path is evidenced by the current official docs; current Windsurf mappings are listed only under `### windsurf`.
 - **migration boundary**: the `codeium` CLI token remains only so an explicitly selected legacy source fails closed with a manual/unsupported result. Do not use generic `.codeium` state as Skills or copy it as opaque project config.
 - **sources**: [Windsurf Plugins — formerly Codeium](https://docs.windsurf.com/plugins/getting-started), [Cascade Skills](https://docs.windsurf.com/windsurf/cascade/skills), [Cascade MCP Integration](https://docs.windsurf.com/windsurf/cascade/mcp)
-

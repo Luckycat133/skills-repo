@@ -29,4 +29,3 @@ Treat those notes as current compatibility evidence and practical guidance; when
 - **other**: API Key config via GUI (BigModel / Z.AI / Anthropic / OpenRouter / custom)
 - **note**: Root key `mcp.servers` (dot notation); uses `AGENTS.md` not `CLAUDE.md`; ZCode ≠ CodeGeeX (CodeGeeX has NO MCP/skills/rules)
 - **sources**: [ZCode Skills](https://zcode.z.ai/en/docs/skill), [ZCode MCP](https://zcode.z.ai/cn/docs/mcp-services), [ZCode Agent instructions](https://zcode.z.ai/en/docs/agents), [ZCode Subagents](https://zcode.z.ai/en/docs/subagents), [ZCode Plugins](https://zcode.z.ai/en/docs/plugin)
-

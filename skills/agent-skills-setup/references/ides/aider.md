@@ -25,4 +25,3 @@ Treat those notes as current compatibility evidence and practical guidance; when
 - **mcp/tools**: no native Aider MCP client/configuration is documented in the official configuration or command references; MCP migration is unsupported/manual.
 - **automatic boundary**: only the path to `.aider.conf.yml` and `CONVENTIONS.md` is exposed for diagnostics. YAML/YML config, `.env`, environment variables, CLI flags, and `/load` command files require manual review; this mapper must not copy or rewrite another IDE's schema into Aider's YAML.
 - **sources**: [configuration](https://aider.chat/docs/config.html), [YAML config file](https://aider.chat/docs/config/aider_conf.html), [environment/.env config](https://aider.chat/docs/config/dotenv.html), [coding conventions](https://aider.chat/docs/usage/conventions.html), [in-chat commands](https://aider.chat/docs/usage/commands.html), [options reference](https://aider.chat/docs/config/options.html)
-

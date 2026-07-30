@@ -28,4 +28,3 @@ Treat those notes as current compatibility evidence and practical guidance; when
 - **plugins**: Cursor supports plugins, but this registry does not claim a portable package path or `plugin.json` schema; manual/unsupported
 - **memory**: Cursor Memories are managed by Cursor and scoped to repositories; no portable file migration target is claimed
 - **other**: `.cursorignore` is not AI context migration data
-

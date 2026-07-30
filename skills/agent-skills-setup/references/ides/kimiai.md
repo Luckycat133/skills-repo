@@ -28,4 +28,3 @@ Treat those notes as current compatibility evidence and practical guidance; when
 - **memory**: no native memory · sessions at `~/.kimi-code/sessions/<workDirKey>/<id>/` (context.jsonl, wire.jsonl, state.json) · plans at `~/.kimi-code/plans/<slug>.md`
 - **other**: `~/.kimi-code/config.toml` (main config, TOML NOT JSON) · `~/.kimi-code/tui.toml` · `~/.kimi-code/credentials/` · `~/.kimi-code/mcp-oauth/`
 - **note**: Path is `~/.kimi-code/` NOT `~/.kimi/`; config is `config.toml` NOT `config.json`; legacy kimi-cli deprecated
-

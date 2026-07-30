@@ -28,4 +28,3 @@ Treat those notes as current compatibility evidence and practical guidance; when
 - **hooks**: the `hooks` key in user, project, or local settings JSON; no standalone hooks file is documented.
 - **memory**: auto memory is machine-local at `~/.claude/projects/<project>/memory/`. Do not auto-migrate auto memory or assume fixed topic filenames; use `/memory` to inspect it and manually select portable context.
 - **sources**: [settings](https://code.claude.com/docs/en/settings), [MCP](https://code.claude.com/docs/en/mcp), [memory](https://code.claude.com/docs/en/memory), [skills](https://code.claude.com/docs/en/slash-commands), [subagents](https://code.claude.com/docs/en/sub-agents), [hooks](https://code.claude.com/docs/en/hooks).
-

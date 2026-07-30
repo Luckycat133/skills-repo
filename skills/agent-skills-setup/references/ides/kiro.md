@@ -29,4 +29,3 @@ Treat those notes as current compatibility evidence and practical guidance; when
 - **sources**: [Kiro Skills](https://kiro.dev/docs/skills/), [Kiro MCP](https://kiro.dev/docs/mcp/configuration/), [Kiro steering](https://kiro.dev/docs/steering/), [Kiro IDE custom agents](https://kiro.dev/docs/custom-agents/), [Kiro CLI custom-agent configuration](https://kiro.dev/docs/cli/custom-agents/configuration-reference/), [Kiro IDE hooks](https://kiro.dev/docs/hooks/), [Kiro IDE changelog](https://kiro.dev/changelog/ide/)
 
 ---
-

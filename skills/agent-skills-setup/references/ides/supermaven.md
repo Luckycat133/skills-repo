@@ -22,4 +22,3 @@ Treat those notes as current compatibility evidence and practical guidance; when
 - **automatic paths**: none documented. Do not treat `~/.supermaven` as a global Skills/config directory, `.supermaven` as a project namespace, or `.supermavenignore` as instruction rules.
 - **skills/rules/prompts/MCP/config/project**: manual/host-editor only; no portable Supermaven-owned file schema is published by the first-party sources above.
 - **evidence gap**: Supermaven's official web and host-plugin documentation do not publish a portable per-OS Skills, rules, MCP, prompt, or standalone config path/schema. The mapper therefore leaves every automatic object unsupported and fails closed.
-

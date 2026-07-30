@@ -22,4 +22,3 @@ Treat those notes as current compatibility evidence and practical guidance; when
 - **mcp**: global `~/.tabnine/mcp_servers.json` · project `.tabnine/mcp_servers.json` · root_key `mcpServers` · JSON · stdio auto from command, HTTP from url
 - **rules**: `.tabnine/guidelines/`
 - **other**: Enterprise MCP Governance (Admin Console whitelist)
-

@@ -23,4 +23,3 @@ Treat those notes as current compatibility evidence and practical guidance; when
 - **skills / rules / prompts / MCP / project config**: unsupported by core Neovim and intentionally empty in `ide-paths.json`; plugin-specific AI integrations are separate products and are not treated as native Neovim mappings
 - **automatic migration**: config path is diagnostic-only. The generic mapper fails closed for any migration involving Neovim because it cannot safely convert another IDE's schema into Lua or replace an existing Neovim config without manual review
 - **sources**: [Neovim startup and standard paths](https://neovim.io/doc/user/starting/), [Neovim Lua guide](https://neovim.io/doc/user/lua-guide/), [Neovim Nvim introduction](https://neovim.io/doc/user/nvim/)
-

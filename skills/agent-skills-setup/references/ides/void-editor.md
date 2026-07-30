@@ -26,4 +26,3 @@ Treat those notes as current compatibility evidence and practical guidance; when
 - **sources**: [Void official site](https://voideditor.com/), [Void repository](https://github.com/voideditor/void), [Void releases](https://github.com/voideditor/void/releases), [product.json](https://raw.githubusercontent.com/voideditor/void/main/product.json), [custom MCP service](https://github.com/voideditor/void/blob/main/src/vs/workbench/contrib/void/common/mcpService.ts), [native MCP discovery](https://github.com/voideditor/void/blob/main/src/vs/workbench/contrib/mcp/common/discovery/configMcpDiscovery.ts), [`.voidrules` consumer](https://github.com/voideditor/void/blob/main/src/vs/workbench/contrib/void/browser/convertToLLMMessageService.ts), [Void changelog](https://voideditor.com/changelog)
 
 ---
-

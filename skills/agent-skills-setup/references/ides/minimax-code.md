@@ -6,4 +6,3 @@
 - **memory**: 3-tier: session-level + agent-level + global-level (experience accumulation, long-term knowledge)
 - **schedule**: built-in task scheduler (daily reports, email checks, periodic inspection)
 - **note**: Official recommends mmx CLI over MCP; desktop config not file-exposed
-

@@ -7,4 +7,3 @@
 - **agents**: built-in Oracle, Librarian, Painter, Code Review; custom via plugin API
 - **hooks**: `~/.config/amp/plugins/*.ts` (TypeScript; events: session.start, agent.start/end, tool.result)
 - **note**: Native HTTP+OAuth+DCR; no mcp-remote needed
-

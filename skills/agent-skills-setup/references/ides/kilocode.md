@@ -25,4 +25,3 @@ Treat those notes as current compatibility evidence and practical guidance; when
 - **sources**: [Kilo Skills](https://kilo.ai/docs/customize/skills), [Kilo MCP](https://kilo.ai/docs/automate/mcp/using-in-kilo-code)
 
 ---
-

@@ -25,4 +25,3 @@ Treat those notes as current compatibility evidence and practical guidance; when
 - **agents**: `.comate/agents/` · global `~/.comate/agents/`
 - **note**: Three-tier config (global/project/local); .mdr is unique format
 - **sources**: [Comate Skills](https://cloud.baidu.com/doc/COMATE/s/Nmma28iqe), [Comate MCP.json](https://cloud.baidu.com/doc/COMATE/s/Ymir0x2ye)
-

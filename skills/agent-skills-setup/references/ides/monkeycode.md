@@ -4,4 +4,3 @@
 - **rules**: SDD (Spec-Driven Development) specification files
 - **skills**: MonkeyScan security scanning · Git async workflow (@Monickname task dispatch)
 - **note**: Enterprise security-focused; AGPL-3.0 fully open source; supports offline private deployment
-

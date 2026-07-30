@@ -23,4 +23,3 @@ Treat those notes as current compatibility evidence and practical guidance; when
 - **mcp**: manual/UI/extension-managed only; PearAI's official repositories do not publish a portable MCP file, root key, or server schema.
 - **rules/skills/prompts/config**: manual only; no PearAI-owned portable paths or file schemas are documented in the official repositories.
 - **evidence gap**: the repositories establish provenance (VS Code + Continue forks), not PearAI storage paths or configuration schemas. The mapper therefore fails closed rather than treating PearAI as VS Code, Cursor, or Continue.
-

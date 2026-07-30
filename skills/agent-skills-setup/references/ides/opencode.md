@@ -28,4 +28,3 @@ Treat those notes as current compatibility evidence and practical guidance; when
 - **memory**: via plugins (OpenMemory, short-term-memory, agent-memory)
 - **note**: V2 currently reads the same config locations and translates V1-shaped files in memory. Do not mix V1 and V2 field names in one file. MCP migration preserves unrelated top-level settings; `backup` merges same-version servers after a snapshot, while an explicit version change replaces only the MCP container.
 - **sources**: [OpenCode V1 Skills](https://opencode.ai/docs/skills/), [OpenCode V1 MCP](https://opencode.ai/docs/mcp/), [OpenCode V1 config](https://opencode.ai/docs/config/), [OpenCode V2 MCP](https://opencode.ai/v2/docs/mcp-servers), [V1 → V2 migration](https://opencode.ai/v2/docs/migrate-v1)
-

@@ -28,4 +28,3 @@ Treat those notes as current compatibility evidence and practical guidance; when
 - **settings/config**: `~/.cline/data/settings/global-settings.json` and `providers.json` are CLI/shared state; provider settings can contain credentials. Whole-config migration is unsupported; do not copy `config.json`, settings, providers, sessions, or secrets automatically.
 - **memory**: no official portable memory-bank contract; `memory-bank/*.md` is a community methodology and manual context review only
 - **other**: `.clineignore`
-

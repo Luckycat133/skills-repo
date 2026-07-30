@@ -26,4 +26,3 @@ Treat those notes as current compatibility evidence and practical guidance; when
 - **config**: unsupported for generic cross-IDE copying; `settings.json` is Zed's native settings/MCP file, not a portable whole-IDE config target
 - **agents**: via `agent_servers` config (ACP protocol to external agents)
 - **note**: GUI-launched Zed lacks shell PATH — use absolute paths
-

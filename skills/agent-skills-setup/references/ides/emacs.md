@@ -24,4 +24,3 @@ Treat those notes as current compatibility evidence and practical guidance; when
 - **config**: unsupported for automatic migration. Init files and `.dir-locals.el` are Emacs Lisp with user-selected locations and semantics; review and adapt them manually rather than copying another IDE's config
 - **third-party boundary**: packages such as `gptel` and `mcp.el` can add AI/MCP features, but their package-specific paths and schemas are not native Emacs mappings and are outside this registry's automatic migration
 - **sources**: [The Emacs Initialization File](https://www.gnu.org/software/emacs/manual/html_node/emacs/Init-File.html), [How Emacs Finds Your Init File](https://www.gnu.org/software/emacs/manual/html_node/emacs/Find-Init.html), [Per-Directory Local Variables](https://www.gnu.org/software/emacs/manual/html_node/emacs/Directory-Variables.html)
-
