@@ -9,7 +9,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MIGRATION_SCRIPT="${SCRIPT_DIR}/smart-ide-migration.sh"
 PATHS_FILE="${SCRIPT_DIR}/../references/ide-paths.json"
-REGISTRY_FILE="${SCRIPT_DIR}/../references/ide-registry.md"
+IDE_REFERENCE="${SCRIPT_DIR}/../references/ides/claude.md"
 
 failures=0
 
@@ -68,10 +68,10 @@ for expected_text in \
     '.claude/settings.local.json' \
     'legacy compatibility' \
     'Do not auto-migrate auto memory'; do
-    if grep -Fq "$expected_text" "$REGISTRY_FILE"; then
-        echo "PASS: registry documents '${expected_text}'"
+    if grep -Fq "$expected_text" "$IDE_REFERENCE"; then
+        echo "PASS: Claude reference documents '${expected_text}'"
     else
-        echo "FAIL: registry lacks '${expected_text}'" >&2
+        echo "FAIL: Claude reference lacks '${expected_text}'" >&2
         failures=$((failures + 1))
     fi
 done

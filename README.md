@@ -56,12 +56,24 @@ skills-repo/
 ├── scripts/
 └── skills/
     └── agent-skills-setup/
+        ├── SKILL.md              # small, always-loaded decision workflow
+        ├── references/           # conditional, task-specific guidance
+        │   └── ides/             # one reference per IDE or agent
+        └── scripts/              # entry points, helpers, and regression tests
 ```
 
 ## Conventions
 
 - `skills/` stores publishable skill folders.
 - `docs/` stores development notes, release plans, validation notes, and maintenance checklists.
+- Keep a skill's `SKILL.md` to its trigger, safety gates, and core workflow.
+  Put format-specific or phase-specific instructions in `references/`, and state
+  the exact condition for loading each file.
+- For cross-IDE work, use the two selected files under `references/ides/` rather
+  than loading a single aggregate registry. See `references/ide-registry.md`
+  only as an index for an unfamiliar identifier.
+- `scripts/README.md` separates agent-facing migration entry points from
+  maintainer-only `test-*.sh` regression suites.
 - GitHub `main` is the canonical source of truth; do not edit installed copies.
 - Product-specific skills stay with their canonical product repository.
 
@@ -80,10 +92,11 @@ Covered mainstream IDE ecosystems now include 40 IDEs & agents (Copilot, Cursor,
 3. `validate-all.sh` discovers and executes every colocated focused suite. Use
    `bash validate-all.sh --list-tests` to audit the exact list; useful individual
    entry points include:
-   - `bash skills/agent-skills-setup/scripts/verify-ide-config.sh` — asserts resolved IDE paths match `references/ide-registry.md` (235 checks).
-   - `bash skills/agent-skills-setup/scripts/test-ide-paths.sh` — cross-platform drift test between `references/ide-paths.json`, the registry, and the script (453 checks).
+   - `bash skills/agent-skills-setup/scripts/test-ide-paths.sh` — cross-platform drift test between `references/ide-paths.json`, per-IDE references, and the script (453 checks).
    - `bash skills/agent-skills-setup/scripts/test-migration.sh` — migration engine tests (50 checks, isolated temp HOME).
    - `bash skills/agent-skills-setup/scripts/test-security-audit-boundary.sh` — verifies repository-only automation cannot enter the publishable Skill.
+   - `bash skills/agent-skills-setup/scripts/test-progressive-disclosure.sh` — keeps the always-loaded migration workflow small and verifies its conditional reference routes.
+   - `bash skills/agent-skills-setup/scripts/test-reference-layout.sh` — ensures every mapper IDE has an independent reference and the skill routes source/target reads to it.
    - `bash skills/agent-skills-setup/scripts/test-mcp-secret-redaction.sh` — literal-secret redaction, explicit MCP source/schema preview, symlink identity, and environment-reference conversion regressions.
    - `bash skills/agent-skills-setup/scripts/test-conflict-strategies.sh` — strategy semantics plus fail-closed rejection of unknown values before target writes.
 4. Merge only after the validation workflow passes.

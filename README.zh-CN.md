@@ -78,8 +78,7 @@ skills-repo/
 1. 在 GitHub 分支下编辑 `skills/` 中的技能。
 2. 运行 `bash validate-all.sh`。
 3. 针对 `agent-skills-setup` 的改动，还需运行聚焦的验证套件：
-   - `bash skills/agent-skills-setup/scripts/verify-ide-config.sh` — 断言已解析的 IDE 路径与 `references/ide-registry.md` 一致（235 项检查）。
-   - `bash skills/agent-skills-setup/scripts/test-ide-paths.sh` — `references/ide-paths.json` 与脚本之间的漂移测试（450 项检查）。
+   - `bash skills/agent-skills-setup/scripts/test-ide-paths.sh` — `references/ide-paths.json`、每 IDE reference 与脚本之间的跨平台漂移测试（453 项检查）。
    - `bash skills/agent-skills-setup/scripts/test-migration.sh` — 迁移引擎测试（50 项检查，隔离的临时 HOME）。
    - `bash skills/agent-skills-setup/scripts/test-security-audit-boundary.sh` — 验证仓库级自动化不会进入可发布 Skill。
 4. 仅在验证工作流通过后合并。

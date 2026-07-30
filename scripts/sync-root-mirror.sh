@@ -21,6 +21,7 @@
 # Usage:
 #   bash scripts/sync-root-mirror.sh            # write root SKILL.md
 #   bash scripts/sync-root-mirror.sh --check    # exit 1 if root is out of sync
+#   bash scripts/sync-root-mirror.sh --output <path>  # render elsewhere without touching root
 #
 set -euo pipefail
 
@@ -29,6 +30,31 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 CANONICAL="$REPO_ROOT/skills/agent-skills-setup/SKILL.md"
 ROOT_MIRROR="$REPO_ROOT/SKILL.md"
+OUTPUT_PATH="$ROOT_MIRROR"
+CHECK_ONLY=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --check)
+      CHECK_ONLY=true
+      ;;
+    --output)
+      [[ $# -ge 2 ]] || { echo "ERROR: --output requires a path" >&2; exit 2; }
+      OUTPUT_PATH="$2"
+      shift
+      ;;
+    *)
+      echo "ERROR: unknown argument: $1" >&2
+      exit 2
+      ;;
+  esac
+  shift
+done
+
+if [[ "$CHECK_ONLY" == true && "$OUTPUT_PATH" != "$ROOT_MIRROR" ]]; then
+  echo "ERROR: --check cannot be combined with --output" >&2
+  exit 2
+fi
 
 if [[ ! -f "$CANONICAL" ]]; then
   echo "ERROR: canonical skill not found at $CANONICAL" >&2
@@ -54,11 +80,15 @@ with open(sys.argv[1], "r", encoding="utf-8") as f:
     text = f.read()
 # Prefix-based rewrite: any references/, scripts/, assets/ followed by a filename with extension
 rewritten = re.sub(r"(?<!skills/agent-skills-setup/)\b(references|scripts|assets)/([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)", r"skills/agent-skills-setup/\1/\2", text)
+# Also rewrite Markdown links to nested reference directories. The main skill
+# routes selected IDEs to references/ides/<name>.md, whose link target is the
+# directory index rather than a single filename.
+rewritten = re.sub(r"(?<=\]\()(?<!skills/agent-skills-setup/)\b(references|scripts|assets)/", r"skills/agent-skills-setup/\1/", rewritten)
 sys.stdout.write(rewritten)
 ' "$CANONICAL"
 }
 
-if [[ "${1:-}" == "--check" ]]; then
+if [[ "$CHECK_ONLY" == true ]]; then
   tmp="$(mktemp)"
   trap 'rm -f "$tmp"' EXIT
   build_mirror > "$tmp"
@@ -72,9 +102,11 @@ if [[ "${1:-}" == "--check" ]]; then
   fi
 fi
 
-# Atomic write via temporary file
-tmp_write="$(mktemp "${ROOT_MIRROR}.tmp.XXXXXX")"
+# Atomic write via temporary file. --output is useful for tests and previews
+# that must not mutate the checked-in root mirror.
+output_dir="$(cd "$(dirname "$OUTPUT_PATH")" && pwd)"
+tmp_write="$(mktemp "${output_dir}/.$(basename "$OUTPUT_PATH").tmp.XXXXXX")"
 trap 'rm -f "$tmp_write"' EXIT
 build_mirror > "$tmp_write"
-mv "$tmp_write" "$ROOT_MIRROR"
-echo "Regenerated $ROOT_MIRROR from canonical ($(wc -l < "$CANONICAL") lines)."
+mv "$tmp_write" "$OUTPUT_PATH"
+echo "Regenerated $OUTPUT_PATH from canonical ($(wc -l < "$CANONICAL") lines)."

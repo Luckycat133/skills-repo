@@ -5274,7 +5274,7 @@ main() {
     fi
 
     # Suppress the banner in read-only diagnostic mode so --print-path emits only
-    # the resolved path on stdout (keeps verify-ide-config.sh comparisons exact).
+    # the resolved path on stdout (keeps test-ide-paths.sh comparisons exact).
     if [[ -z "$PRINT_PATH_IDE" ]]; then
         print_header
     fi

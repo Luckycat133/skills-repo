@@ -29,8 +29,8 @@ Español: Este documento resume el flujo exacto y los metadatos recomendados par
 - skill 目录中包含有效的 `SKILL.md`。
 - Release docs and changelog are already updated.
 - 发布文档和 changelog 已更新。
-- The `--version` must equal the current `version:` field in `skills/agent-skills-setup/SKILL.md` (currently `0.6.8`); update it on every release.
-- `--version` 必须与 `skills/agent-skills-setup/SKILL.md` 中当前的 `version:` 一致（当前为 `0.6.8`），每次发布时同步更新。
+- The `--version` must equal the current `version:` field in `skills/agent-skills-setup/SKILL.md` (currently `0.6.9`); update it on every release.
+- `--version` 必须与 `skills/agent-skills-setup/SKILL.md` 中当前的 `version:` 一致（当前为 `0.6.9`），每次发布时同步更新。
 
 ## Recommended Commands / 推荐命令
 
@@ -43,7 +43,7 @@ bash scripts/prepare-clawhub-release.sh \
     --skill-dir skills/agent-skills-setup \
     --slug agent-skills-setup \
     --name "Agent Skills Setup" \
-    --version 0.6.8 \
+    --version 0.6.9 \
     --tags latest,setup,skills,openclaw,cross-ide \
     --changelog "Remediate the ClawHub audit by narrowing the artifact to migration, excluding copied environment files, removing literal secret ingestion and recursive force deletion, and documenting preview-first OpenClaw migration."
 ```
@@ -57,7 +57,7 @@ bash scripts/prepare-clawhub-release.sh \
     --skill-dir skills/agent-skills-setup \
     --slug agent-skills-setup \
     --name "Agent Skills Setup" \
-    --version 0.6.8 \
+    --version 0.6.9 \
     --tags latest,setup,skills,openclaw,cross-ide \
     --changelog "Remediate the ClawHub audit by narrowing the artifact to migration, excluding copied environment files, removing literal secret ingestion and recursive force deletion, and documenting preview-first OpenClaw migration." \
     --publish
@@ -78,9 +78,9 @@ Suggested short description for registry pages:
 
 建议用于注册表页面的一句话简介：
 
-`A cross-agent skills setup workflow for Antigravity, OpenClaw, Copilot, Codex, Claude Code, and Trae.`
+`A scoped AI-assistant context migration workflow for supported IDEs and agents.`
 
-`一个面向 Antigravity、OpenClaw、Copilot、Codex、Claude Code 和 Trae 的跨代理 skill 配置工作流。`
+`一个面向受支持 IDE 与 agent 的、范围明确的 AI 助手上下文迁移工作流。`
 
 ## Post-Publish Checklist / 发布后检查项
 

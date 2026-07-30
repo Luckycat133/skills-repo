@@ -78,8 +78,7 @@ Los ecosistemas de IDE principales cubiertos ahora incluyen 40 IDEs y agentes (C
 1. Edita la skill en `skills/` en una rama de GitHub.
 2. Ejecuta `bash validate-all.sh`.
 3. Para cambios en `agent-skills-setup`, ejecuta también la suite de verificación enfocada:
-   - `bash skills/agent-skills-setup/scripts/verify-ide-config.sh` — verifica que las rutas de IDE resueltas coincidan con `references/ide-registry.md` (235 comprobaciones).
-   - `bash skills/agent-skills-setup/scripts/test-ide-paths.sh` — prueba de deriva entre `references/ide-paths.json` y el script (450 comprobaciones).
+   - `bash skills/agent-skills-setup/scripts/test-ide-paths.sh` — prueba de deriva multiplataforma entre `references/ide-paths.json`, las referencias por IDE y el script (453 comprobaciones).
    - `bash skills/agent-skills-setup/scripts/test-migration.sh` — pruebas del motor de migración (50 comprobaciones, HOME temporal aislado).
    - `bash skills/agent-skills-setup/scripts/test-security-audit-boundary.sh` — verifica que la automatización del repositorio no entre en el Skill publicable.
 4. Fusiona solo después de que el flujo de validación pase.

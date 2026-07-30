@@ -8,7 +8,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MIGRATION_SCRIPT="${SCRIPT_DIR}/smart-ide-migration.sh"
 PATHS_FILE="${SCRIPT_DIR}/../references/ide-paths.json"
-REGISTRY_FILE="${SCRIPT_DIR}/../references/ide-registry.md"
+IDE_REFERENCE="${SCRIPT_DIR}/../references/ides/claude-desktop.md"
 SKILL_FILE="${SCRIPT_DIR}/../SKILL.md"
 
 case "$(uname -s)" in
@@ -48,20 +48,20 @@ assert entry["mcp"]["linux"] == ""
 assert entry["mcp"]["windows"] == "%APPDATA%\\Claude\\claude_desktop_config.json"
 PYEOF
 
-section="$(sed -n '/^### claude-desktop (Claude Desktop app)$/,/^### claude (Claude Code)$/p' "$REGISTRY_FILE")"
+section="$(<"$IDE_REFERENCE")"
 for required in \
     'https://modelcontextprotocol.io/docs/develop/connect-local-servers' \
     'https://claude.com/docs/connectors/building/mcpb' \
     'https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop' \
     'https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp'; do
     if ! grep -Fq "$required" <<< "$section"; then
-        echo "FAIL: Claude Desktop registry is missing source ${required}" >&2
+        echo "FAIL: Claude Desktop reference is missing source ${required}" >&2
         exit 1
     fi
 done
 
 if ! grep -Fq 'claude_desktop_config.json' <<< "$section"; then
-    echo "FAIL: Claude Desktop registry is missing the documented legacy JSON path" >&2
+    echo "FAIL: Claude Desktop reference is missing the documented legacy JSON path" >&2
     exit 1
 fi
 

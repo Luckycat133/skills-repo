@@ -33,20 +33,16 @@ Español: Esta carpeta reúne la planificación, validación, publicación e ite
 - `distribution-guide.md`：发布、市场渠道和曝光计划
 - `clawhub-release.md`: exact ClawHub release commands and metadata
 - `clawhub-release.md`：ClawHub 发布命令和元数据说明
-- `cross-ide-capabilities-migration.md`: full migration playbook across capabilities, prompts, configurations, rules, and workflows
-- `cross-ide-capabilities-migration.md`：覆盖 capabilities、prompts、configurations、rules、workflows 的跨 IDE 迁移总指南
 - `HI-001-ide-paths-single-source.md`: design note on single-source-of-truth for IDE paths (drives `scripts/ide-paths.json` + `test-ide-paths.sh`)
 - `HI-001-ide-paths-single-source.md`：IDE 路径单一真源（single-source-of-truth）的架构设计说明（驱动 `scripts/ide-paths.json` 与 `test-ide-paths.sh`）
 
 ## Current Workflow / 当前流程
 
-1. Edit the source skill under Antigravity.
-2. 在 Antigravity 中修改源技能。
-3. Sync it to local IDE installations.
-4. 将其同步到本地各 IDE 安装目录。
-5. Import the updated skill into this repository.
-6. 把更新后的技能导入到本仓库。
-7. Update release, validation, and bilingual docs here before publishing.
-8. 在这里补齐发布、验证和双语文档后再准备发布。
-9. Run `test-mcp-secret-redaction.sh` for explicit-source dry-run/schema, symlink identity, and environment-reference conversion regressions.
-10. 运行 `test-mcp-secret-redaction.sh`，覆盖显式来源预览/schema、符号链接同源与环境引用转换回归。
+1. Edit the canonical skill under `skills/agent-skills-setup/` in this repository.
+2. 在本仓库的 `skills/agent-skills-setup/` 中编辑 canonical skill。
+3. Regenerate the root mirror with `bash scripts/sync-root-mirror.sh`.
+4. 使用 `bash scripts/sync-root-mirror.sh` 生成根目录镜像。
+5. Update active release and maintenance documentation when behavior changes.
+6. 行为变化时更新有效的发布与维护文档。
+7. Run `bash validate-all.sh`, including the explicit-source, redaction, path, and progressive-disclosure regressions.
+8. 运行 `bash validate-all.sh`，覆盖显式来源、脱敏、路径与渐进式披露回归。

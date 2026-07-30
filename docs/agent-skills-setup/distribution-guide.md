@@ -43,7 +43,6 @@ Cross-IDE migration implementation reference:
 
 跨 IDE 迁移实施参考：
 
-- `docs/agent-skills-setup/cross-ide-capabilities-migration.md`
 
 Mainstream IDE coverage:
 
@@ -123,9 +122,9 @@ Short description:
 
 简短描述：
 
-`agent-skills-setup` is a multi-agent skill setup workflow for Antigravity, Claude Code, Codex, Copilot, Trae, and OpenClaw, with sync, validation, and publishing helpers.
+`agent-skills-setup` is a scoped AI-assistant context migration skill for supported IDEs and agents. Repository-level tooling provides validation and publishing support; those maintainer tools are not part of the publishable skill workflow.
 
-`agent-skills-setup` 是一个面向 Antigravity、Claude Code、Codex、Copilot、Trae 和 OpenClaw 的多代理 skill 配置工作流，提供同步、验证和发布辅助能力。
+`agent-skills-setup` 是一个面向受支持 IDE 与 agent 的、范围明确的 AI 助手上下文迁移 skill。验证与发布支持由仓库级维护工具提供，不属于可发布 skill 的执行流程。
 
 ## Post-Release Visibility / 发布后的曝光动作
 

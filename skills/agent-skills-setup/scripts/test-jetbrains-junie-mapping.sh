@@ -5,7 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MIGRATION_SCRIPT="${SCRIPT_DIR}/smart-ide-migration.sh"
 PATHS_FILE="${SCRIPT_DIR}/../references/ide-paths.json"
-REGISTRY_FILE="${SCRIPT_DIR}/../references/ide-registry.md"
+IDE_REFERENCE="${SCRIPT_DIR}/../references/ides/jetbrains.md"
 TMP_ROOT="$(mktemp -d /tmp/agent-skills-jetbrains-fixture.XXXXXX)"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 
@@ -53,10 +53,10 @@ assert entry == expected, (entry, expected)
 PYEOF
 
 for path in '~/.junie/skills' '.junie/skills' '.junie/AGENTS.md' '~/.junie/mcp/mcp.json' '.junie/mcp/mcp.json'; do
-    grep -Fq "$path" "$REGISTRY_FILE"
+    grep -Fq "$path" "$IDE_REFERENCE"
 done
 
-if grep -Fq -- '- **rules**: project `.junie/guidelines.md`' "$REGISTRY_FILE"; then
+if grep -Fq -- '- **rules**: project `.junie/guidelines.md`' "$IDE_REFERENCE"; then
     echo "FAIL: stale JetBrains IDE guidelines mapping remains" >&2
     exit 1
 fi

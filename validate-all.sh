@@ -52,12 +52,10 @@ if [[ -f "$SCRIPT_DIR/scripts/test-validate-all-coverage.sh" ]]; then
   bash "$SCRIPT_DIR/scripts/test-validate-all-coverage.sh"
 fi
 
-# Registry verification plus every focused regression test. Test discovery is
-# deliberate here so adding test-<feature>.sh automatically extends local/CI
-# validation instead of requiring a second hand-maintained list.
+# Every focused regression test. Test discovery is deliberate here so adding
+# test-<feature>.sh automatically extends local/CI validation instead of
+# requiring a second hand-maintained list.
 if [[ -d "$SETUP_SCRIPTS" ]]; then
-  echo "Running verify-ide-config.sh..."
-  bash "$SETUP_SCRIPTS/verify-ide-config.sh"
   while IFS= read -r test_script; do
     echo "Running $(basename "$test_script")..."
     bash "$test_script"

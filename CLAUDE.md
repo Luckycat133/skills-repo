@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Regenerate root `SKILL.md` mirror**: `bash scripts/sync-root-mirror.sh`
 
 ### Testing Suites
-- **Validate IDE config paths against registry**: `bash skills/agent-skills-setup/scripts/verify-ide-config.sh`
+- **Validate IDE config paths against JSON and per-IDE references**: `bash skills/agent-skills-setup/scripts/test-ide-paths.sh`
 - **Test IDE path schema drift**: `bash skills/agent-skills-setup/scripts/test-ide-paths.sh`
 - **Migration & sync engine integration tests**: `bash skills/agent-skills-setup/scripts/test-migration.sh`
 - **Full Smart IDE Migration tests**: `bash skills/agent-skills-setup/scripts/test-smart-ide-migration.sh`

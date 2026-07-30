@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.9] - 2026-07-30
+
+### Skill architecture
+
+- Split the always-loaded `agent-skills-setup` workflow into a small routing
+  entry point and conditional references for migration safety, MCP conversion,
+  file-backed object rules, and verification evidence. The entry point now
+  directs the agent to load only the source/target registry sections and the
+  reference required by the selected object or phase.
+- Added `test-progressive-disclosure.sh` to prevent the entry point from
+  regrowing past 150 lines or losing an explicit route to a required reference.
+- Replaced the aggregate IDE registry with an index and 63 independent
+  `references/ides/<ide>.md` files. The 40 IDE identifiers supported by the
+  mapper each have a matching reference, while additional documented platforms
+  remain individually browseable.
+- Reframed the entry workflow and safeguards as recommendations and portability
+  experience that agents can adapt to the user's stated goals. Script-level
+  confirmation and redaction behavior remains unchanged.
+- Added a script guide plus layout and root-mirror regressions; the mirror now
+  rewrites nested IDE-reference links correctly.
+- Made `references/ide-paths.json` the documented path contract: a generator
+  now refreshes the path summary in all 40 mapper IDE references, and an
+  up-to-date check runs in the focused test suite. Removed the redundant
+  hand-maintained `verify-ide-config.sh` validator.
+- Added a non-mutating `--output` mode to the root-mirror synchronizer, so its
+  regression test renders to a temporary file instead of rewriting `SKILL.md`.
+- Updated maintainer-facing guides to separate repository release work from the
+  publishable skill's migration behavior.
+- Removed the superseded generic publishing reference and the draft migration
+  playbook that documented scripts never shipped by this repository.
+
 ## [0.6.8] - 2026-07-29
 
 ### Security audit remediation

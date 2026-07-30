@@ -22,7 +22,8 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REGISTRY="$SCRIPT_DIR/../references/ide-registry.md"
+TRAE_REFERENCE="$SCRIPT_DIR/../references/ides/trae.md"
+TRAE_CN_REFERENCE="$SCRIPT_DIR/../references/ides/trae-cn.md"
 MIGRATION="$SCRIPT_DIR/smart-ide-migration.sh"
 WORKSPACE="$(mktemp -d /tmp/agent-skills-trae-boundary.XXXXXX)"
 trap 'rm -rf "$WORKSPACE"' EXIT
@@ -35,27 +36,27 @@ fail() { CHECKS=$((CHECKS + 1)); FAIL=$((FAIL + 1)); echo "FAIL: $1" >&2; }
 
 # 1. Registry must document Trae Agent as a separate product under both
 #    `trae` and `trae-cn` sections, and must link the bytedance/trae-agent repo.
-if grep -Fq 'bytedance/trae-agent' "$REGISTRY"; then
-    pass "registry cites bytedance/trae-agent as a separate product"
+if grep -Fq 'bytedance/trae-agent' "$TRAE_REFERENCE" && grep -Fq 'bytedance/trae-agent' "$TRAE_CN_REFERENCE"; then
+    pass "Trae references cite bytedance/trae-agent as a separate product"
 else
-    fail "registry does not mention bytedance/trae-agent; users may confuse Trae IDE with Trae Agent"
+    fail "Trae references do not mention bytedance/trae-agent; users may confuse Trae IDE with Trae Agent"
 fi
 
 # 2. Registry must NOT claim a global Trae-IDE CLI/argv/settings file exists.
 #    The wording must be a *negative* prescription (do not infer) rather than
 #    a positive claim (no CLI exists).
-if grep -Eq '`?~/.trae(-cn)?/argv\.json`?:? +(still |also |is |are )?(published|documented|valid|supported)|Trae +IDE +has +a +(global|published) +(CLI|argv|settings)' "$REGISTRY"; then
-    fail "registry claims a global Trae-IDE CLI/argv/settings path exists"
+if grep -Eq '`?~/.trae(-cn)?/argv\.json`?:? +(still |also |is |are )?(published|documented|valid|supported)|Trae +IDE +has +a +(global|published) +(CLI|argv|settings)' "$TRAE_REFERENCE" "$TRAE_CN_REFERENCE"; then
+    fail "Trae references claim a global Trae-IDE CLI/argv/settings path exists"
 else
-    pass "registry does not assert a global Trae-IDE CLI/argv/settings file"
+    pass "Trae references do not assert a global Trae-IDE CLI/argv/settings file"
 fi
 
 # 3. Registry must NOT list trae-agent's `trae_config.yaml` as a portable
 #    global config under either the Trae IDE or Trae CN entries.
-if grep -Eq 'global +`?~/.trae(-cn)?/(trae_config\.yaml|trae_config\.json|settings\.json)`?' "$REGISTRY"; then
-    fail "registry promotes a Trae-Agent repo-local config file to global ~/.trae/ status"
+if grep -Eq 'global +`?~/.trae(-cn)?/(trae_config\.yaml|trae_config\.json|settings\.json)`?' "$TRAE_REFERENCE" "$TRAE_CN_REFERENCE"; then
+    fail "Trae references promote a Trae-Agent repo-local config file to global ~/.trae/ status"
 else
-    pass "registry does not promote trae_config.yaml to a global Trae IDE path"
+    pass "Trae references do not promote trae_config.yaml to a global Trae IDE path"
 fi
 
 # 4. Migration script must not register any IDE key named like a Trae Agent

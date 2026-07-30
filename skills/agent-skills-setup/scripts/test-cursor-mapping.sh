@@ -5,7 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MIGRATION_SCRIPT="$SCRIPT_DIR/smart-ide-migration.sh"
 PATHS_FILE="$SCRIPT_DIR/../references/ide-paths.json"
-REGISTRY_FILE="$SCRIPT_DIR/../references/ide-registry.md"
+IDE_REFERENCE="$SCRIPT_DIR/../references/ides/cursor.md"
 
 assert_path() {
     local object="$1" expected="$2" actual
@@ -46,8 +46,8 @@ for expected_text in \
     '.cursor/skills' \
     '.cursor/commands' \
     'manual/unsupported'; do
-    grep -Fq "$expected_text" "$REGISTRY_FILE" || {
-        echo "FAIL: registry lacks '${expected_text}'" >&2
+    grep -Fq "$expected_text" "$IDE_REFERENCE" || {
+        echo "FAIL: Cursor reference lacks '${expected_text}'" >&2
         exit 1
     }
 done

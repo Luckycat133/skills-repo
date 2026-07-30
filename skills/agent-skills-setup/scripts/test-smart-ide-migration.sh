@@ -890,8 +890,8 @@ grep -Eq '(Cursor rules|Trae CN rules)' <<< "$CN_PROMPT_OUTPUT"
 CN_CONFIG_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --source trae-cn --target cursor --workspace "$TMP_ROOT/project" --objects config --dry-run 2>&1)"
 grep -Fq 'target IDE has no specific config file' <<< "$CN_CONFIG_OUTPUT"
 
-if ! grep -Fq '**config**: unsupported' "$SCRIPT_DIR/../references/ide-registry.md"; then
-    echo "FAIL: Trae registry must mark config unsupported" >&2
+if ! grep -Fq '**config**: unsupported' "$SCRIPT_DIR/../references/ides/trae-cn.md"; then
+    echo "FAIL: Trae CN reference must mark config unsupported" >&2
     exit 1
 fi
 

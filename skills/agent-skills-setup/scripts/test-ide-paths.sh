@@ -2,14 +2,15 @@
 #
 # test-ide-paths.sh — Drift guard for per-IDE path mappings.
 #
-# SINGLE SOURCE OF TRUTH: skills/agent-skills-setup/references/ide-paths.json
-# (which mirrors ide-registry.md). For every ide/object pair in that JSON we
+# SINGLE SOURCE OF TRUTH: skills/agent-skills-setup/references/ide-paths.json.
+# The human-readable details live in one matching references/ides/<ide>.md
+# file per IDE. For every ide/object pair in that JSON we
 # call smart-ide-migration.sh --print-path and assert the resolved path equals
 # the JSON value. This catches drift between the script's hardcoded case
 # tables and the canonical registry/JSON.
 #
 # Additionally, for key IDEs, every non-empty JSON value on every supported OS
-# must literally appear in ide-registry.md. Checking all platforms avoids a
+# must literally appear in that IDE's reference. Checking all platforms avoids a
 # macOS run silently accepting abbreviated Linux/Windows documentation.
 #
 # Exits non-zero on ANY mismatch; exits 0 if all checks pass.
@@ -19,7 +20,7 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 JSON_FILE="${SCRIPT_DIR}/../references/ide-paths.json"
 MIGRATION_SCRIPT="${SCRIPT_DIR}/smart-ide-migration.sh"
-REGISTRY_FILE="${SCRIPT_DIR}/../references/ide-registry.md"
+IDE_REFERENCE_DIR="${SCRIPT_DIR}/../references/ides"
 
 if [[ ! -f "$JSON_FILE" ]]; then
     echo "ERROR: cannot find ide-paths.json at $JSON_FILE" >&2
@@ -254,13 +255,13 @@ for gemini_object in mcp project-mcp project-config config; do
     fi
 done
 
-# --- Registry cross-check for key IDEs ---
+# --- Per-IDE reference cross-check for key IDEs ---
 # For antigravity/kimiai/copilot/codex/workbuddy/claude/claude-desktop, every non-empty JSON value must literally
-# appear somewhere in ide-registry.md (the canonical human-readable source).
-if [[ -f "$REGISTRY_FILE" ]]; then
+# appear in that IDE's canonical human-readable reference.
+if [[ -d "$IDE_REFERENCE_DIR" ]]; then
     echo ""
     echo "========================================"
-    echo "Cross-check: key IDEs vs ide-registry.md"
+    echo "Cross-check: key IDEs vs per-IDE references"
     echo "========================================"
     echo ""
 
@@ -268,21 +269,21 @@ if [[ -f "$REGISTRY_FILE" ]]; then
     while IFS=$'\t' read -r ide jsonkey expected; do
         [[ -z "$expected" ]] && continue
         checks=$((checks + 1))
-        if grep -Fq "$expected" "$REGISTRY_FILE"; then
-            echo "PASS (registry): ${ide}/${jsonkey} present in ide-registry.md"
+        if grep -Fq "$expected" "$IDE_REFERENCE_DIR/${ide}.md"; then
+            echo "PASS (reference): ${ide}/${jsonkey} present in ${ide}.md"
         else
-            echo "FAIL (registry): ${ide}/${jsonkey} value '${expected}' NOT found in ide-registry.md"
+            echo "FAIL (reference): ${ide}/${jsonkey} value '${expected}' NOT found in ${ide}.md"
             failures=$((failures + 1))
         fi
     done <<< "$KEY_ROWS"
 else
-    echo "WARN: ide-registry.md not found at $REGISTRY_FILE; skipping registry cross-check" >&2
+    echo "WARN: per-IDE reference directory not found at $IDE_REFERENCE_DIR; skipping reference cross-check" >&2
 fi
 
 echo ""
 echo "========================================"
 if [[ $failures -eq 0 ]]; then
-    echo "ALL PASS: ${checks} checks matched ide-paths.json / ide-registry.md"
+    echo "ALL PASS: ${checks} checks matched ide-paths.json / per-IDE references"
     echo "========================================"
     exit 0
 else
