@@ -228,7 +228,7 @@ fi
 
 # ===========================================================================
 echo ""
-echo "== 7. Config migration also redacts secrets =="
+echo "== 7. Whole-config migration is a manual boundary =="
 mkdir -p "$HOME/.claude"
 cat > "$HOME/.claude/settings.json" <<'EOF'
 {
@@ -238,19 +238,13 @@ cat > "$HOME/.claude/settings.json" <<'EOF'
 }
 EOF
 run bash "$MIG" --source claude --target openclaw --objects config --strategy overwrite --yes
-if [[ -f "$HOME/.openclaw/openclaw.json" ]]; then
-    if grep -Fq "EXAMPLE_SETTINGS_API_KEY" "$HOME/.openclaw/openclaw.json"; then
-        check_fail "7: config migration leaked apiKey"
-    else
-        check_pass "7: config apiKey blanked"
-    fi
-    if grep -Fq '"editor.fontSize": 14' "$HOME/.openclaw/openclaw.json"; then check_pass "7: benign settings preserved"; else check_fail "7: benign settings lost"; fi
-    assert_valid_json "$HOME/.openclaw/openclaw.json" "7: migrated config is valid JSON"
-    if grep -Fq "[SECURITY]" "$OUT_FILE"; then check_pass "7: [SECURITY] warning printed for config redaction"; else check_fail "7: [SECURITY] warning missing for config redaction"; fi
-    [[ $LAST_RC -eq 0 ]] && check_pass "7: migration exited rc=0" || check_fail "7: migration exited rc=$LAST_RC (expected 0)"
+if [[ ! -e "$HOME/.openclaw/openclaw.json" ]]; then
+    check_pass "7: config boundary creates no target file"
 else
-    check_fail "7: config migration produced no target file"
+    check_fail "7: config boundary unexpectedly wrote a target file"
 fi
+if grep -Fq "automatic whole-IDE config migration is unsupported" "$OUT_FILE"; then check_pass "7: config boundary explains manual review"; else check_fail "7: config boundary message missing"; fi
+[[ $LAST_RC -eq 0 ]] && check_pass "7: boundary exits rc=0" || check_fail "7: boundary exited rc=$LAST_RC (expected 0)"
 
 # ===========================================================================
 echo ""
@@ -369,7 +363,7 @@ run_goose_manual_mcp "12"
 
 # ===========================================================================
 echo ""
-echo "== 13. Vector ⑤: compact single-line JSON with multiple secret keys =="
+echo "== 13. Compact config remains behind the manual boundary =="
 # A single line carrying several '\"secretKey\": \"value\"' pairs. The OLD
 # key/value line regex only matched the FIRST key on a line; the line redactor
 # must now blank EVERY secret-keyed value on the line (redact_kv), leaving
@@ -384,17 +378,12 @@ cat > "$HOME/.claude/settings.json" <<'EOF'
 EOF
 run bash "$MIG" --source claude --target openclaw --objects config --strategy overwrite --yes
 D13="$HOME/.openclaw/openclaw.json"
-if [[ -f "$D13" ]]; then
-    if grep -Fq "AK_SL" "$D13"; then check_fail "13: compact line apiKey leaked"; else check_pass "13: compact line apiKey blanked"; fi
-    if grep -Fq "TOK_SL" "$D13"; then check_fail "13: compact line token leaked"; else check_pass "13: compact line token blanked"; fi
-    if grep -Fq "PW_SL" "$D13"; then check_fail "13: compact line password leaked"; else check_pass "13: compact line password blanked"; fi
-    if grep -Fq "SEC_NESTED" "$D13"; then check_fail "13: second compact line secret leaked"; else check_pass "13: second compact line secret blanked"; fi
-    if grep -Fq "keep-this-too" "$D13"; then check_pass "13: non-secret field preserved"; else check_fail "13: non-secret field lost"; fi
-    assert_valid_json "$D13" "13: compact-line migrated config is valid JSON"
-    [[ $LAST_RC -eq 0 ]] && check_pass "13: migration exited rc=0" || check_fail "13: migration exited rc=$LAST_RC (expected 0)"
+if [[ ! -e "$D13" ]]; then
+    check_pass "13: compact config boundary creates no target file"
 else
-    check_fail "13: compact-line config migration produced no file"
+    check_fail "13: compact config boundary unexpectedly wrote a target file"
 fi
+if grep -Fq "automatic whole-IDE config migration is unsupported" "$OUT_FILE"; then check_pass "13: compact config boundary explains manual review"; else check_fail "13: compact config boundary message missing"; fi
 
 # ===========================================================================
 echo ""
@@ -495,15 +484,12 @@ cat > "$HOME/.claude/settings.json" <<'EOF'
 EOF
 run bash "$MIG" --source claude --target openclaw --objects config --strategy overwrite --yes
 D17="$HOME/.openclaw/openclaw.json"
-if [[ -f "$D17" ]]; then
-    if grep -Fq "ghp_abcdefghijklmnopqrst" "$D17"; then check_fail "17: ghp_ provider value under modelKey leaked"; else check_pass "17: ghp_ provider value blanked under non-secret key"; fi
-    if grep -Fq "AKIAIOSFODNN7EXAMPLE" "$D17"; then check_fail "17: AKIA provider value under svcAccount leaked"; else check_pass "17: AKIA provider value blanked under non-secret key"; fi
-    if grep -Fq '"editor.fontSize": 14' "$D17"; then check_pass "17: benign config preserved"; else check_fail "17: benign config lost"; fi
-    assert_valid_json "$D17" "17: config migrated to valid JSON"
-    [[ $LAST_RC -eq 0 ]] && check_pass "17: config migration exited rc=0" || check_fail "17: config migration exited rc=$LAST_RC (expected 0)"
+if [[ ! -e "$D17" ]]; then
+    check_pass "17: provider-bearing config boundary creates no target file"
 else
-    check_fail "17: config migration produced no target file"
+    check_fail "17: provider-bearing config boundary unexpectedly wrote a target file"
 fi
+if grep -Fq "automatic whole-IDE config migration is unsupported" "$OUT_FILE"; then check_pass "17: provider-bearing config boundary explains manual review"; else check_fail "17: provider-bearing config boundary message missing"; fi
 
 # ===========================================================================
 echo ""
@@ -537,20 +523,16 @@ else
 fi
 if grep -Fq "[SECURITY]" "$OUT_FILE"; then check_pass "18a: [SECURITY] warning emitted when python3 missing"; else check_fail "18a: [SECURITY] warning missing for no-python3 path"; fi
 
-# 18b. config with a live secret -> same fail-closed guarantee.
+# 18b. Config remains manual even when the redactor is unavailable.
 mkdir -p "$HOME/.claude"
 cat > "$HOME/.claude/settings.json" <<'EOF'
 { "apiKey": "sk-ant-CONFIGSECRETMUSTNOTLEAK", "telemetry": "off" }
 EOF
 run_no_python3 bash "$MIG" --source claude --target openclaw --objects config --strategy overwrite --yes
 if [[ ! -e "$HOME/.openclaw/openclaw.json" ]]; then
-    check_pass "18b: config copy absent (fail-closed removed the un-redacted file)"
+    check_pass "18b: config boundary creates no file without python3"
 else
-    if grep -Fq "sk-ant-CONFIGSECRETMUSTNOTLEAK" "$HOME/.openclaw/openclaw.json"; then
-        check_fail "18b: config secret LEAKED despite missing python3"
-    else
-        check_fail "18b: config copy left on disk without secret (should have been deleted)"
-    fi
+    check_fail "18b: config boundary unexpectedly wrote a file without python3"
 fi
 
 # ===========================================================================
@@ -781,10 +763,10 @@ cat > "$HOME/.claude/settings.json" <<EOF
 { "webhook": "https://example.test/hook?api_key=\${env:SAFE_REF}&note=${PROVIDER_PREFIX}${PROVIDER_BODY}" }
 EOF
 run bash "$MIG" --source claude --target openclaw --objects config --strategy overwrite --yes
-if grep -Fq "${PROVIDER_PREFIX}${PROVIDER_BODY}" "$HOME/.openclaw/openclaw.json"; then
-    check_fail "23b: generic config redactor leaked a second literal credential"
+if [[ ! -e "$HOME/.openclaw/openclaw.json" ]]; then
+    check_pass "23b: mixed-reference config remains unwritten at the manual boundary"
 else
-    check_pass "23b: generic config redactor blanks mixed-reference credential URLs"
+    check_fail "23b: generic config boundary unexpectedly wrote a target file"
 fi
 
 # ===========================================================================

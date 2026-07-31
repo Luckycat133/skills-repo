@@ -19,7 +19,7 @@ Treat those notes as current compatibility evidence and practical guidance; when
 
 <!-- END GENERATED: ide-paths.json summary -->
 - **detect**: `~/.zcode/`
-- **mcp**: global `~/.zcode/cli/config.json` · project `.zcode/config.json` · root_key `mcp.servers` (dot-path; also accepts `mcpServers`) · JSON · stdio+SSE+HTTP · can import from ~/.claude, ~/.codex, ~/.config/opencode, ~/.agents
+- **mcp**: global `~/.zcode/cli/config.json` · project `.zcode/config.json` · root_key `mcp.servers` (dot-path; also accepts `mcpServers`) · JSON · stdio+SSE+HTTP · can import from ~/.claude, ~/.codex, ~/.config/opencode, ~/.agents. Imports still require transport review: legacy SSE must not be silently relabelled as HTTP or Streamable HTTP.
 - **rules**: global `~/.zcode/AGENTS.md` · project `AGENTS.md` (uses AGENTS.md NOT CLAUDE.md; onboarding one-time CLAUDE.md import only)
 - **skills**: global `~/.zcode/skills/<name>/SKILL.md`; project import target is UI-managed and no stable project Skills path is published in the reviewed docs
 - **commands**: user-level + project-level commands dirs (Markdown)

@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.11] - 2026-07-31
+
+### Security
+
+- Removed generic whole-file `config` migration and recursive whole-tree
+  `project` migration. Both objects now fail closed with a manual boundary;
+  dedicated skills, rules, prompts, and project-MCP mappings remain available.
+- MCP conversion now removes `autoApprove`, `enabledTools`, and
+  `disabledTools` so an imported endpoint cannot inherit another client's tool
+  execution grants.
+- Replaced the migration fixture's recursive variable-and-glob cleanup with a
+  temporary-root-contained `find -depth -delete` helper.
+
+### Documentation and verification
+
+- Documented the manual config/project boundary and target-local MCP approval
+  policy, with regression coverage for all four security-audit findings.
+- Published `0.6.11` to [ClawHub](https://clawhub.ai/luckycat133/skills/agent-skills-setup).
+  ClawHub accepted the artifact; its asynchronous security evidence and
+  generated skill card remain pending at publication time.
+
+## [0.6.10] - 2026-07-31
+
+### Changed
+
+- Updated all relevant MCP migration guidance for the 2026-07-28 protocol
+  revision. The Skill now distinguishes legacy HTTP+SSE from Streamable HTTP,
+  treats a bare URL as transport-ambiguous, and prohibits documentation from
+  presenting a transport relabel as a protocol upgrade.
+- Documented the client-configuration boundary: protocol-version headers,
+  session and SSE-resumption state, handshakes, subscriptions, OAuth tokens,
+  refresh state, and client-registration records are not portable MCP server
+  configuration. Target clients negotiate the protocol and authorize again.
+- Clarified the affected mapper IDE references that advertise SSE, HTTP,
+  Streamable HTTP, OAuth, or product-managed endpoints, including the
+  requirement to retain an explicit documented transport and use a replacement
+  endpoint supplied by the server owner. Updated the ClawHub release guide and
+  canonical Skill metadata for version `0.6.10`.
+
 ## [0.6.9] - 2026-07-30
 
 ### Skill architecture

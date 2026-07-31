@@ -19,7 +19,7 @@ Treat those notes as current compatibility evidence and practical guidance; when
 
 <!-- END GENERATED: ide-paths.json summary -->
 - **detect**: `~/.comate/`
-- **mcp**: global `~/.comate/mcp.json` · project `.comate/mcp.json` · local `.comate/mcp.local.json` · root_key `mcpServers` · JSON · type `stdio|sse|streamableHttp`
+- **mcp**: global `~/.comate/mcp.json` · project `.comate/mcp.json` · local `.comate/mcp.local.json` · root_key `mcpServers` · JSON · type `stdio|sse|streamableHttp`. `sse` is legacy compatibility and `streamableHttp` is a distinct transport: retain the source's explicit documented type or stop for review; never infer one from `url` alone.
 - **rules**: `.comate/rules/*.mdr` — unique .mdr format (Markdown + Comate extensions) · Cursor Rules compatible · 4 activation modes
 - **skills**: `.agents/skills/` or `.comate/skills/` · global `~/.comate/skills/`
 - **agents**: `.comate/agents/` · global `~/.comate/agents/`

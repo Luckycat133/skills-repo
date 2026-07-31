@@ -19,7 +19,7 @@ Treat those notes as current compatibility evidence and practical guidance; when
 
 <!-- END GENERATED: ide-paths.json summary -->
 - **detect**: `~/.openclaw/`
-- **mcp**: global `~/.openclaw/openclaw.json` · root_key `mcp.servers` (nested JSON path) · local `command` + `args`; remote `url` + `transport: "streamable-http"` · static config only
+- **mcp**: global `~/.openclaw/openclaw.json` · root_key `mcp.servers` (nested JSON path) · local `command` + `args`; remote `url` + `transport: "streamable-http"` · static config only. The explicit transport is required; do not substitute a legacy SSE URL or add protocol/session headers to this static client configuration.
 - **rules/context**: active workspace `AGENTS.md`; default `~/.openclaw/workspace`, configurable through `agents.defaults.workspace` in `openclaw.json`
 - **skills**: workspace `<workspace>/skills/` · project-agent `<workspace>/.agents/skills/` · personal `~/.agents/skills/` · managed `~/.openclaw/skills/`; precedence is workspace, project-agent, personal, managed
 - **config**: `~/.openclaw/openclaw.json`

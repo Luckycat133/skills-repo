@@ -25,7 +25,10 @@ needed.
 OpenClaw stores MCP servers under the nested JSON path `mcp.servers`.
 
 - Local servers use `command` plus optional `args`.
-- Remote servers require `url` and `transport: "streamable-http"`.
+- Remote servers require `url` and `transport: "streamable-http"`. This is a
+  client configuration choice, not a license to relabel a legacy SSE endpoint:
+  use a Streamable HTTP URL supplied by the server owner and let OpenClaw
+  negotiate protocol details at runtime.
 - Reject entries that mix local and remote endpoint shapes.
 - Blank literal credentials before writing. Preserve only an exact symbolic
   environment reference whose target syntax is documented.

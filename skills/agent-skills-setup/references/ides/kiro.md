@@ -19,7 +19,7 @@ Treat those notes as current compatibility evidence and practical guidance; when
 
 <!-- END GENERATED: ide-paths.json summary -->
 - **detect**: `~/.kiro/`
-- **mcp**: global `~/.kiro/settings/mcp.json` · project `.kiro/settings/mcp.json` · root_key `mcpServers` · JSON · stdio+HTTP+OAuth
+- **mcp**: global `~/.kiro/settings/mcp.json` · project `.kiro/settings/mcp.json` · root_key `mcpServers` · JSON · stdio+HTTP+OAuth. Migrate only reviewed endpoint metadata; do not copy OAuth/token state or infer a remote transport from a URL, and authorize again in Kiro.
 - **rules**: project `.kiro/steering/*.md` · global `~/.kiro/steering/*.md` · frontmatter: inclusion (always|fileMatch|auto|manual)
 - **skills**: global `~/.kiro/skills/<name>/SKILL.md` · project `.kiro/skills/<name>/SKILL.md`
 - **agents (IDE)**: project `.kiro/agents/*.md` · user `~/.kiro/agents/*.md` · Markdown/YAML frontmatter; current IDE custom-agent files use prompt/body plus Kiro-specific tool tags and permissions, so only identity/body is potentially reusable and the mapper keeps them manual

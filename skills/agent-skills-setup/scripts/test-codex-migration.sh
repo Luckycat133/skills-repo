@@ -75,5 +75,5 @@ if [[ -e "$TARGET_CONFIG" ]]; then
     exit 1
 fi
 
-grep -Fq 'manual migration required' "$CONFIG_OUTPUT"
+grep -Fq 'automatic whole-IDE config migration is unsupported' "$CONFIG_OUTPUT"
 echo "Codex migration mapping test passed"

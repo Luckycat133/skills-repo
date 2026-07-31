@@ -29,8 +29,20 @@ mkdir -p "$HOME"
 # Temp output capture for the last script invocation.
 OUT_FILE="$TMP_ROOT/last.out"
 
+safe_remove_fixture_path() {
+    local candidate="$1"
+
+    case "$candidate" in
+        "$TMP_ROOT"/*) ;;
+        *) return 1 ;;
+    esac
+    [[ -e "$candidate" || -L "$candidate" ]] || return 0
+    find "$candidate" -depth -delete
+}
+
 cleanup() {
-    rm -rf "$TMP_ROOT"
+    [[ -d "$TMP_ROOT" && "$TMP_ROOT" == /tmp/agent-skills-migration-test.* ]] || return 0
+    find "$TMP_ROOT" -depth -delete
 }
 trap cleanup EXIT
 
@@ -107,7 +119,13 @@ EOF
 cat > "$HOME/.claude.json" <<'EOF'
 {
   "mcpServers": {
-    "demo-server": { "command": "echo", "args": [] }
+    "demo-server": {
+      "command": "echo",
+      "args": [],
+      "autoApprove": ["shell"],
+      "enabledTools": ["read"],
+      "disabledTools": ["write"]
+    }
   }
 }
 EOF
@@ -138,12 +156,12 @@ assert_contains "$OUT_FILE" "config"  "A1: plan mentions config"
 
 # MCP: dry-run must print a PLAN, never a (false) success. The fixed logic sets
 # status "skipped" for mcp in dry-run; the success wording only appears on a real
-# conversion. Kimi's whole config is intentionally manual because its target
-# schema is TOML, so the config object must report the manual boundary instead
-# of pretending to be a copy plan.
+# conversion. Whole-IDE config is intentionally manual for every target, so
+# the config object must report the manual boundary instead of pretending to be
+# a copy plan.
 assert_contains "$OUT_FILE" "DRY-RUN: converting MCP config" "A1: mcp plan printed in dry-run"
 assert_not_contains "$OUT_FILE" "MCP config converted"     "A1: mcp NOT marked success in dry-run (C1)"
-assert_contains "$OUT_FILE" "Kimi Code config.toml"       "A1: config manual boundary printed"
+assert_contains "$OUT_FILE" "automatic whole-IDE config migration is unsupported" "A1: config manual boundary printed"
 assert_not_contains "$OUT_FILE" "config file copied"       "A1: config NOT marked success in dry-run (C2)"
 
 # --- A2. Real execution lands in correct locations (3 targets) --------------
@@ -179,6 +197,23 @@ assert_contains "$HOME/.kimi-code/mcp.json" "demo-server" "A4: mcp server presen
 assert_not_contains "$OUT_FILE" "[✗] mcp" "A4: mcp not failed"
 assert_contains "$OUT_FILE" "mcp" "A4: mcp reported in output"
 
+# Approval lists grant tool execution privileges in some IDEs. MCP migration
+# may transfer endpoint metadata, but it must never carry these grants across
+# products.
+assert_not_contains "$HOME/.kimi-code/mcp.json" "autoApprove" "A4: MCP strips autoApprove grants"
+assert_not_contains "$HOME/.kimi-code/mcp.json" "enabledTools" "A4: MCP strips enabledTools grants"
+assert_not_contains "$HOME/.kimi-code/mcp.json" "disabledTools" "A4: MCP strips disabledTools grants"
+
+# --- A5. Generic whole-config migration is fail-closed --------------------
+CONFIG_TGT="$HOME/.cursor/settings.json"
+run bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+    --source claude --target cursor \
+    --workspace "$WS" \
+    --objects config --yes
+assert_eq "$LAST_RC" "0" "A5: config boundary exits 0"
+assert_not_exists "$CONFIG_TGT" "A5: generic config boundary creates no target config"
+assert_contains "$OUT_FILE" "automatic whole-IDE config migration is unsupported" "A5: generic config boundary explains manual review"
+
 # ===========================================================================
 # C. Confirmation gate (--yes) — script must never write without approval
 # ===========================================================================
@@ -188,7 +223,7 @@ echo "== C. confirmation gate (--yes) =="
 
 # --- C1. Non-interactive without --yes: abort (rc=2) and ZERO writes --------
 GATE_TGT="$HOME/.codeium/windsurf"
-rm -rf "$GATE_TGT"
+safe_remove_fixture_path "$GATE_TGT"
 run bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source claude --target windsurf \
     --workspace "$WS" \
@@ -205,7 +240,7 @@ assert_eq "$LAST_RC" "0" "C2: --yes proceeds (rc=0)"
 assert_file "$GATE_TGT/skills/demo-skill/SKILL.md" "C2: --yes migration wrote target skill"
 
 # --- C3. --dry-run without --yes: previews with ZERO writes ------------------
-rm -rf "$GATE_TGT"
+safe_remove_fixture_path "$GATE_TGT"
 run bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source claude --target windsurf \
     --workspace "$WS" \
@@ -214,85 +249,57 @@ assert_eq "$LAST_RC" "0" "C3: dry-run exits 0 without --yes"
 assert_not_exists "$GATE_TGT" "C3: dry-run performs zero writes (no target dir created)"
 
 # ===========================================================================
-# D. project object — backup + fail-closed secret redaction (C3/L5 fix)
+# D. project object — whole-tree migration is fail-closed
 # ===========================================================================
 # Source project lives under WORKSPACE_ROOT ($WS): source=claude -> .claude
 # Target project (codex) -> .agents (codex project config lives under .agents; .codex is its own credential-bearing CLI dir).
 
 echo ""
-echo "== D. project object (backup + secret redaction) =="
+echo "== D. project object (manual boundary) =="
 
 SRC_PROJ="$WS/.claude"
-rm -rf "$SRC_PROJ"
+safe_remove_fixture_path "$SRC_PROJ"
 mkdir -p "$SRC_PROJ"
-# A secret-bearing env file and a secret-bearing json file. Environment files
-# are source-local secret stores and must be excluded from the copied tree;
-# structured config is copied only after redaction.
+# These representative files must never be copied as an opaque project tree.
 printf 'API_KEY=EXAMPLE_SECRET_VALUE_1234567890\nPASSWORD=example-password-xyz\n' > "$SRC_PROJ/.env"
 printf '{ "token": "example-token-value-1234567890", "name": "ok" }\n' > "$SRC_PROJ/svc.json"
-# A harmless, non-secret file that must survive the copy untouched.
 printf 'name: demo\n' > "$SRC_PROJ/notes.yaml"
 
 D_TGT="$WS/.agents"
-rm -rf "$D_TGT" "$WS"/.agents.bak.*
+safe_remove_fixture_path "$D_TGT"
+for backup_path in "$WS"/.agents.bak.*; do
+    [[ -e "$backup_path" || -L "$backup_path" ]] || continue
+    safe_remove_fixture_path "$backup_path"
+done
 
-# --- D1. dry-run: zero writes, plan printed -------------------------------
+# --- D1. dry-run: zero writes, manual boundary printed --------------------
 run bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source claude --target codex \
     --workspace "$WS" \
     --objects project --dry-run
 assert_eq "$LAST_RC" "0" "D1: project dry-run exits 0"
 assert_not_exists "$D_TGT" "D1: project dry-run performs ZERO writes"
+assert_contains "$OUT_FILE" "automatic whole-project configuration migration is unsupported" "D1: project dry-run explains manual boundary"
 
-# --- D2. real migration with --yes (default strategy = backup) -----------
+# --- D2. real execution is also a manual boundary -------------------------
 run bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source claude --target codex \
     --workspace "$WS" \
     --objects project --yes
 assert_eq "$LAST_RC" "0" "D2: project migration exits 0"
-assert_dir "$D_TGT" "D2: project target dir created"
-# SECURITY: do not copy .env files even temporarily into the final target.
-assert_not_exists "$D_TGT/.env" "D2: source .env excluded from target copy"
-assert_not_contains "$D_TGT/svc.json" "example-token-value-1234567890" "D2: json secret redacted from copy"
-assert_contains "$OUT_FILE" "[SECURITY]" "D2: redaction count reported to user"
-# Non-secret content is preserved.
-assert_contains "$D_TGT/notes.yaml" "name: demo" "D2: non-secret file preserved"
-# CRITICAL: the SOURCE is never redacted (fail-open-safe: untouched source = recoverable).
+assert_not_exists "$D_TGT" "D2: project boundary creates no target tree"
+assert_contains "$OUT_FILE" "automatic whole-project configuration migration is unsupported" "D2: project boundary explains manual review"
 assert_contains "$SRC_PROJ/.env" "EXAMPLE_SECRET_VALUE_1234567890" "D2: SOURCE secret untouched"
 assert_contains "$SRC_PROJ/svc.json" "example-token-value-1234567890" "D2: SOURCE json secret untouched"
 
-# --- D3. re-run with existing target: must BACK UP first -----------------
-run bash "$SCRIPT_DIR/smart-ide-migration.sh" \
-    --source claude --target codex \
-    --workspace "$WS" \
-    --objects project --yes
-assert_eq "$LAST_RC" "0" "D3: second migration exits 0"
-if ls -d "$WS"/.agents.bak.* >/dev/null 2>&1; then check_pass "D3: existing project target backed up before overwrite"; else check_fail "D3: existing project target backed up before overwrite"; fi
-# The backup itself must NOT contain live secrets (it is the previously-redacted copy).
-BK=$(ls -d "$WS"/.agents.bak.* 2>/dev/null | head -1)
-if [[ -n "$BK" ]]; then
-    assert_not_exists "$BK/.env" "D3: backup contains no copied .env file"
+# Recursive cleanup of variables plus a glob can delete an unintended tree.
+# Keep this test pattern-specific so other isolated test fixtures can retain
+# their independently reviewed cleanup helpers.
+if grep -Eq 'rm[[:space:]]+-r[f][[:space:]]+"\$D_TGT"[[:space:]]+"\$WS"/.agents.bak.\*' "$0"; then
+    check_fail "D3: project-fixture cleanup avoids recursive variable/glob deletion"
+else
+    check_pass "D3: project-fixture cleanup avoids recursive variable/glob deletion"
 fi
-
-# --- D4. --strategy skip on existing target: no write, no new backup ----
-bk_before=$(ls -d "$WS"/.agents.bak.* 2>/dev/null | wc -l | tr -d ' ')
-run bash "$SCRIPT_DIR/smart-ide-migration.sh" \
-    --source claude --target codex \
-    --workspace "$WS" \
-    --objects project --yes --strategy skip
-assert_eq "$LAST_RC" "0" "D4: skip strategy exits 0"
-bk_after=$(ls -d "$WS"/.agents.bak.* 2>/dev/null | wc -l | tr -d ' ')
-assert_eq "$bk_after" "$bk_before" "D4: skip created no new backup"
-assert_not_exists "$D_TGT/.env" "D4: skipped target still has no copied .env file"
-
-# --- D5. --strategy overwrite: removes target and re-copies + redacts ---
-run bash "$SCRIPT_DIR/smart-ide-migration.sh" \
-    --source claude --target codex \
-    --workspace "$WS" \
-    --objects project --yes --strategy overwrite
-assert_eq "$LAST_RC" "0" "D5: overwrite strategy exits 0"
-assert_not_exists "$D_TGT/.env" "D5: overwrite still excludes source .env"
-assert_contains "$D_TGT/notes.yaml" "name: demo" "D5: overwrite preserved non-secret file"
 
 # Skill cleanup after redaction failure must use the same guarded deletion
 # helper as overwrite handling. Direct recursive deletion of computed paths is

@@ -81,7 +81,9 @@ skills-repo/
 
 - `agent-skills-setup`: consent-gated migration of selected AI assistant context between named IDEs and agents.
 
-Cross-IDE migration scope now includes capabilities, prompts, configurations, rules, and workflows.
+Cross-IDE migration scope covers capabilities, prompts, rules, workflows, and
+supported MCP objects. Whole IDE configuration files and opaque project trees
+are manual-only boundaries.
 
 Covered mainstream IDE ecosystems now include 40 IDEs & agents (Copilot, Cursor, Windsurf, JetBrains, Claude Code, Claude Desktop, Codex, OpenClaw, Trae, Trae CN, Antigravity, Kimi AI, Amazon Q, Gemini CLI, Zed, VS Code, Goose CLI, OpenCode, Continue, Roo Code, Cline, Kilo Code, Kiro, Augment Code, Baidu Comate, Tencent CodeBuddy, ZCode, Void Editor, Aider, Tabnine, Replit, Blackbox, Neovim, Emacs, Cody, Supermaven, Codeium, PearAI, Pieces, WorkBuddy).
 

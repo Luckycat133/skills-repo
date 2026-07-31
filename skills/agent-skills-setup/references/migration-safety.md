@@ -12,8 +12,15 @@ departure to the user.
   symlinks, as a reason to discuss intent before continuing.
 - When JSON, JSONC, TOML, YAML, or a transport is unsupported, describe the
   manual option rather than presenting an unvalidated copy as equivalent.
+- MCP transport labels are not interchangeable: a bare remote URL is
+  insufficient to infer one, and legacy `sse` must not be silently upgraded to
+  Streamable HTTP. Do not add protocol headers, session IDs, or handshake state
+  to a client configuration; those belong to the runtime connection.
 - Excluding copied `.env` and `.env.*` files usually avoids moving unrelated
   credentials; preserve the source copy regardless of the target strategy.
+- Whole IDE config files and opaque project configuration trees are not copied.
+  Treat `config` and `project` as manual review boundaries; migrate only a
+  supported dedicated object with an explicit source and target schema.
 
 ## Credentials and destructive operations
 
@@ -22,6 +29,10 @@ departure to the user.
 - The bundled script blanks literal credentials. It can preserve or translate
   an exact documented environment reference; mixed, default, and command-
   substitution syntax benefit from manual review.
+- OAuth tokens, refresh state, client-registration records, and session state
+  are not migration inputs. Preserve only documented non-secret connection
+  fields, then authorize again in the target client against the target server's
+  discovered issuer.
 - If redaction cannot establish a safe result, explain that outcome and offer a
   manual reconstruction. The script limits target-tree removal to containment
   and symlink-guarded paths.

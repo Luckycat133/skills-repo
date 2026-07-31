@@ -82,7 +82,7 @@ grep -Fq 'Windsurf/Devin rules use scoped files; automatic migration is unsuppor
 PROJECT_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source windsurf --target cursor --workspace "$WORKSPACE" \
     --objects project --dry-run 2>&1)"
-grep -Fq 'Windsurf/Devin .windsurf mixes Skills, rules, workflows, memories, and application state' <<< "$PROJECT_OUTPUT"
+grep -Fq 'automatic whole-project configuration migration is unsupported' <<< "$PROJECT_OUTPUT"
 
 PROMPT_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source windsurf --target cursor --workspace "$WORKSPACE" \

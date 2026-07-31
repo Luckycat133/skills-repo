@@ -29,8 +29,18 @@ Español: Este documento resume el flujo exacto y los metadatos recomendados par
 - skill 目录中包含有效的 `SKILL.md`。
 - Release docs and changelog are already updated.
 - 发布文档和 changelog 已更新。
-- The `--version` must equal the current `version:` field in `skills/agent-skills-setup/SKILL.md` (currently `0.6.9`); update it on every release.
-- `--version` 必须与 `skills/agent-skills-setup/SKILL.md` 中当前的 `version:` 一致（当前为 `0.6.9`），每次发布时同步更新。
+- The `--version` must equal the current `version:` field in `skills/agent-skills-setup/SKILL.md` (currently `0.6.11`); update it on every release.
+- `--version` 必须与 `skills/agent-skills-setup/SKILL.md` 中当前的 `version:` 一致（当前为 `0.6.11`），每次发布时同步更新。
+
+## Current release / 当前发布状态
+
+- `agent-skills-setup` `0.6.11` was published to
+  [ClawHub](https://clawhub.ai/luckycat133/skills/agent-skills-setup) on
+  2026-07-31. The artifact was accepted; asynchronous security evidence and
+  `skill-card.md` generation were still pending when this record was updated.
+- `agent-skills-setup` `0.6.11` 已于 2026-07-31 发布到
+  [ClawHub](https://clawhub.ai/luckycat133/skills/agent-skills-setup)。工件已被
+  接收；更新本记录时，异步安全证据与 `skill-card.md` 仍在生成中。
 
 ## Recommended Commands / 推荐命令
 
@@ -43,9 +53,9 @@ bash scripts/prepare-clawhub-release.sh \
     --skill-dir skills/agent-skills-setup \
     --slug agent-skills-setup \
     --name "Agent Skills Setup" \
-    --version 0.6.9 \
+    --version 0.6.11 \
     --tags latest,setup,skills,openclaw,cross-ide \
-    --changelog "Remediate the ClawHub audit by narrowing the artifact to migration, excluding copied environment files, removing literal secret ingestion and recursive force deletion, and documenting preview-first OpenClaw migration."
+    --changelog "Fail closed for whole IDE config and project-tree migration; remove inherited MCP tool-approval grants."
 ```
 
 Publish immediately after validation:
@@ -57,9 +67,9 @@ bash scripts/prepare-clawhub-release.sh \
     --skill-dir skills/agent-skills-setup \
     --slug agent-skills-setup \
     --name "Agent Skills Setup" \
-    --version 0.6.9 \
+    --version 0.6.11 \
     --tags latest,setup,skills,openclaw,cross-ide \
-    --changelog "Remediate the ClawHub audit by narrowing the artifact to migration, excluding copied environment files, removing literal secret ingestion and recursive force deletion, and documenting preview-first OpenClaw migration." \
+    --changelog "Fail closed for whole IDE config and project-tree migration; remove inherited MCP tool-approval grants." \
     --publish
 ```
 

@@ -372,17 +372,7 @@ for source in roo-code void-editor trae trae-cn jetbrains opencode kilocode kimi
     PROJECT_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
         --source "$source" --target claude --workspace "$PROJECT" \
         --objects project --dry-run 2>&1)"
-    case "$source" in
-        trae|trae-cn)
-            grep -Fq 'TRAE .trae project namespace' <<< "$PROJECT_OUTPUT"
-            ;;
-        jetbrains)
-            grep -Fq 'JetBrains .junie is a mixed Junie namespace' <<< "$PROJECT_OUTPUT"
-            ;;
-        *)
-            grep -Fq 'project namespace' <<< "$PROJECT_OUTPUT"
-            ;;
-    esac
+    grep -Fq 'automatic whole-project configuration migration is unsupported' <<< "$PROJECT_OUTPUT"
 done
 
 echo "Remaining IDE mapping tests passed"

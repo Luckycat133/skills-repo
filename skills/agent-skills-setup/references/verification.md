@@ -12,9 +12,15 @@ The MCP evidence array contains:
 - backup path when one was created.
 
 Report those fields together with any manual follow-up. Static parse success
-does not prove credentials, OAuth, permissions, or server connectivity.
+does not prove the selected transport, protocol-version compatibility,
+credentials, OAuth, permissions, or server connectivity. It also cannot prove
+that a legacy `sse` endpoint has a compatible Streamable HTTP replacement.
 
 Then use the target's native discovery surface when available, such as
 `claude mcp list`, `codex mcp list`, `opencode mcp list`, `opencode2 mcp list`,
 `copilot mcp list`, or the IDE MCP panel. Read the selected target section in
 [ide-registry.md](ide-registry.md) for the authoritative method.
+
+Do not manually add `MCP-Protocol-Version`, session, or SSE-resumption headers
+to make a migrated entry work. A current client negotiates the MCP revision at
+connection time; authorization is completed again in that target client.

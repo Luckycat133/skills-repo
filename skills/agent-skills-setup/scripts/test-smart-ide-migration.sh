@@ -43,7 +43,7 @@ grep -Fq 'source directory does not exist:' <<< "$CODEIUM_SKILLS_OUTPUT"
 
 CODEIUM_PROJECT_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source codeium --target cursor --workspace "$TMP_ROOT/codeium-project" --objects project --dry-run 2>&1)"
-grep -Fq 'source IDE does not support project-level configuration' <<< "$CODEIUM_PROJECT_OUTPUT"
+grep -Fq 'automatic whole-project configuration migration is unsupported' <<< "$CODEIUM_PROJECT_OUTPUT"
 
 # Pieces is a PiecesOS-backed MCP server/provider, not a file-backed IDE
 # configuration host. Exercise every path object and the unsupported object
@@ -151,10 +151,10 @@ printf '%s\n' '{ pkgs }: { deps = []; }' > "$REPLIT_PROJECT/replit.nix"
 
 REPLIT_PROJECT_OUTPUT="$(bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source replit --target claude --workspace "$REPLIT_PROJECT" --objects project --dry-run 2>&1)"
-grep -Fq 'Replit project app/runtime files (.replit, replit.nix) are manual' <<< "$REPLIT_PROJECT_OUTPUT"
+grep -Fq 'automatic whole-project configuration migration is unsupported' <<< "$REPLIT_PROJECT_OUTPUT"
 REPLIT_CONFIG_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source replit --target claude --workspace "$REPLIT_PROJECT" --objects config --dry-run 2>&1)"
-grep -Fq 'Replit app configuration (.replit/replit.nix) is project-scoped and manual' <<< "$REPLIT_CONFIG_OUTPUT"
+grep -Fq 'automatic whole-IDE config migration is unsupported' <<< "$REPLIT_CONFIG_OUTPUT"
 REPLIT_MCP_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source replit --target claude --workspace "$REPLIT_PROJECT" --objects mcp --dry-run 2>&1)"
 grep -Fq 'Replit MCP connections are cloud/UI-managed through Integrations; no local MCP file is migrated' <<< "$REPLIT_MCP_OUTPUT"
@@ -260,8 +260,8 @@ for supermaven_message in \
     'Supermaven has no documented portable instruction/rules file' \
     'Supermaven has no documented portable prompt-template directory' \
     'Supermaven has no documented portable MCP file or server schema' \
-    'Supermaven has no documented portable standalone config file' \
-    'Supermaven has no documented portable project configuration namespace'; do
+    'automatic whole-IDE config migration is unsupported' \
+    'automatic whole-project configuration migration is unsupported'; do
     grep -Fq "$supermaven_message" <<< "$SUPERMAVEN_OUTPUT" || {
         echo "FAIL: missing Supermaven manual boundary: $supermaven_message"
         exit 1
@@ -518,7 +518,7 @@ HOME="$GOOSE_SKILL_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
 # object must fail closed and leave the target untouched.
 GOOSE_PROJECT_OUTPUT="$(bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source goose-cli --target cursor --workspace "$GOOSE_PROJECT" --objects project --dry-run 2>&1)"
-grep -Fq 'Goose .goose contains scoped recipes and memory, not a portable project config tree' <<< "$GOOSE_PROJECT_OUTPUT"
+grep -Fq 'automatic whole-project configuration migration is unsupported' <<< "$GOOSE_PROJECT_OUTPUT"
 
 # Local hint files are the supported low-risk Goose rules object. A source
 # Markdown rules file can be prepared for Goose's .goosehints target.
@@ -560,7 +560,7 @@ grep -Fq 'Goose config.yaml uses YAML extensions; automatic MCP migration is uns
 }
 GOOSE_CONFIG_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source claude --target goose-cli --objects config --yes --strategy overwrite 2>&1)"
-grep -Fq 'Goose config.yaml is YAML and combines provider/extensions/settings; automatic config migration is unsupported' <<< "$GOOSE_CONFIG_OUTPUT"
+grep -Fq 'automatic whole-IDE config migration is unsupported' <<< "$GOOSE_CONFIG_OUTPUT"
 [[ "$(cat "$TEST_HOME/.config/goose/secrets.yaml")" == *'__goose_file_inert_fixture__'* ]] || {
     echo "FAIL: Goose secrets fixture was modified during config audit" >&2
     exit 1
@@ -620,7 +620,7 @@ grep -Fq 'read:' <<< "$AIDER_RULE_OUTPUT"
 
 AIDER_CONFIG_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source claude --target aider --workspace "$TMP_ROOT/aider-project" --objects config --dry-run 2>&1)"
-grep -Fq 'Aider .aider.conf.yml' <<< "$AIDER_CONFIG_OUTPUT"
+grep -Fq 'automatic whole-IDE config migration is unsupported' <<< "$AIDER_CONFIG_OUTPUT"
 [[ ! -e "$TMP_ROOT/aider-project/.aider.conf.yml" ]] || {
     echo "FAIL: Aider YAML config boundary created a file during dry-run" >&2
     exit 1
@@ -743,7 +743,7 @@ printf '%s\n' 'Use the fixture rule.' > "$TMP_ROOT/project/.amazonq/rules/style.
 Q_RULE_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --source amazon-q --target cursor --workspace "$TMP_ROOT/project" --objects rules --dry-run 2>&1)"
 grep -Fq 'Amazon Q rules use .amazonq/rules/*.md; manual migration required' <<< "$Q_RULE_OUTPUT"
 Q_PROJECT_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --source amazon-q --target cursor --workspace "$TMP_ROOT/project" --objects project --dry-run 2>&1)"
-grep -Fq 'Amazon Q project namespace .amazonq is manual' <<< "$Q_PROJECT_OUTPUT"
+grep -Fq 'automatic whole-project configuration migration is unsupported' <<< "$Q_PROJECT_OUTPUT"
 Q_MCP_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --source amazon-q --target cursor --workspace "$TMP_ROOT/project" --objects mcp --dry-run 2>&1)"
 grep -Fq 'Amazon Q: standard IDE MCP uses' <<< "$Q_MCP_OUTPUT"
 
@@ -783,7 +783,7 @@ mkdir -p "$(dirname "$NEOVIM_CONFIG_FIXTURE")"
 printf '%s\n' 'return {}' > "$NEOVIM_CONFIG_FIXTURE"
 NEOVIM_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source codex --target neovim --objects config --yes --strategy overwrite 2>&1)"
-grep -Fq 'Neovim init.lua' <<< "$NEOVIM_OUTPUT"
+grep -Fq 'automatic whole-IDE config migration is unsupported' <<< "$NEOVIM_OUTPUT"
 [[ "$(cat "$NEOVIM_CONFIG_FIXTURE")" == 'return {}' ]] || {
     echo "FAIL: Neovim config fail-closed path modified the fixture" >&2
     exit 1
@@ -888,9 +888,9 @@ grep -Fq '.trae/commands/*' <<< "$CN_PROMPT_OUTPUT"
 grep -Eq '(Cursor rules|Trae CN rules)' <<< "$CN_PROMPT_OUTPUT"
 
 CN_CONFIG_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --source trae-cn --target cursor --workspace "$TMP_ROOT/project" --objects config --dry-run 2>&1)"
-grep -Fq 'target IDE has no specific config file' <<< "$CN_CONFIG_OUTPUT"
+grep -Fq 'automatic whole-IDE config migration is unsupported' <<< "$CN_CONFIG_OUTPUT"
 
-if ! grep -Fq '**config**: unsupported' "$SCRIPT_DIR/../references/ides/trae-cn.md"; then
+if ! grep -Fq '**config/argv**: empty/unsupported' "$SCRIPT_DIR/../references/ides/trae-cn.md"; then
     echo "FAIL: Trae CN reference must mark config unsupported" >&2
     exit 1
 fi
@@ -952,7 +952,7 @@ assert data["mcpServers"]["remote"]["url"] == "https://example.invalid/mcp"
 PY
 
 TABNINE_PROJECT_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --source tabnine --target cursor --workspace "$TMP_ROOT/tabnine-project" --objects project --dry-run 2>&1)"
-grep -Fq 'Tabnine .tabnine is a mixed guideline/MCP namespace; automatic whole-directory migration is unsupported' <<< "$TABNINE_PROJECT_OUTPUT"
+grep -Fq 'automatic whole-project configuration migration is unsupported' <<< "$TABNINE_PROJECT_OUTPUT"
 
 HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source codex \

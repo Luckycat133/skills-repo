@@ -10,7 +10,7 @@
 
 ---
 name: agent-skills-setup
-version: 0.6.9
+version: 0.6.11
 license: MIT
 description: >
   Use this skill when a user explicitly asks to migrate, move, transfer, copy,
@@ -75,11 +75,21 @@ scope and risk of their own configuration.
   keeps a migration easy to review and avoids pulling in unrelated context.
 - A practical default is `skills,rules,prompts`. Call out that MCP, config,
   project, agents, hooks, and memory can carry more product-specific behavior.
+- `config` and `project` are deliberate manual boundaries: the bundled mapper
+  never copies a whole IDE config file or opaque project configuration tree.
+  Rebuild only reviewed, documented settings or choose a dedicated object such
+  as skills, rules, prompts, or project MCP.
 - Offer a value-free `--dry-run` first. The bundled script requires `--yes` for
   writes, so a reviewed preview is the natural handoff point for consent.
 - Treat chat history, OAuth state, databases, vector indexes, workspace
   storage, UI settings, and generated memory as poor portability candidates;
   help the user select human-readable context instead when appropriate.
+- Treat MCP server configuration as an endpoint description, not a portable
+  protocol-runtime snapshot. Do not infer a transport from a bare URL, relabel
+  legacy `sse` as Streamable HTTP, or copy OAuth tokens/session state; retain an
+  explicitly supported transport and have the target client re-authorize. Do
+  not transfer `autoApprove`, `enabledTools`, `disabledTools`, or equivalent
+  execution permissions; the target starts without inherited tool grants.
 - **The Claude Desktop app MCP surface is partly UI-managed:** suggest reviewing
   **Settings → Extensions** and **Settings → Connectors** rather than inferring
   or rewriting those entries from its legacy local JSON.

@@ -93,7 +93,7 @@ else
 fi
 
 CONFIG_SCOPE_OUTPUT="$(HOME="$FIXTURE_HOME" bash "$MIGRATION_SCRIPT" --source cursor --target claude --workspace "$FIXTURE_WORKSPACE" --objects config --dry-run 2>&1)"
-if grep -Fq 'only user settings.json is mapped automatically' <<< "$CONFIG_SCOPE_OUTPUT"; then
+if grep -Fq 'automatic whole-IDE config migration is unsupported' <<< "$CONFIG_SCOPE_OUTPUT"; then
     echo "PASS: Claude settings fixture preserves project/local scopes for manual review"
 else
     echo "FAIL: Claude settings fixture must label project/local scopes manual" >&2

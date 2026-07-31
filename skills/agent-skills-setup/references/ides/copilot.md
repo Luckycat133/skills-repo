@@ -20,7 +20,7 @@ Treat those notes as current compatibility evidence and practical guidance; when
 <!-- END GENERATED: ide-paths.json summary -->
 - **detect**: `~/.copilot/`
 - **alias**: migration-script key `copilot` (GitHub Copilot CLI, not VS Code Copilot)
-- **mcp**: global `~/.copilot/mcp-config.json` · project `.mcp.json` / `.github/mcp.json` · root_key `mcpServers` · JSON. CLI transports: `local` / `stdio` (command + args) and `http` / `sse` (url); `tools` is required. Project files take precedence over user definitions on a name collision. The generic mapper migrates only the global file and leaves both project files for manual review.
+- **mcp**: global `~/.copilot/mcp-config.json` · project `.mcp.json` / `.github/mcp.json` · root_key `mcpServers` · JSON. CLI transports: `local` / `stdio` (command + args) and `http` / `sse` (url); `tools` is required. Treat `sse` as legacy compatibility and do not relabel it as `http` merely because both use a URL. Project files take precedence over user definitions on a name collision. The generic mapper migrates only the global file and leaves both project files for manual review.
 - **rules**: project `.github/copilot-instructions.md` · `.github/instructions/**/*.instructions.md` · agent instructions `AGENTS.md` / root `CLAUDE.md` / `GEMINI.md` · personal `~/.copilot/copilot-instructions.md` / `~/.copilot/instructions/**/*.instructions.md`
 - **skills**: project `.github/skills/<name>/SKILL.md` / `.claude/skills/<name>/SKILL.md` / `.agents/skills/<name>/SKILL.md` · personal `~/.copilot/skills/<name>/SKILL.md` / `~/.agents/skills/<name>/SKILL.md`
 - **prompts**: unsupported — `.github/prompts/*.prompt.md` is for Copilot IDE surfaces, not Copilot CLI

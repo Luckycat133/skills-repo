@@ -29,7 +29,7 @@ fi
 grep -Fq 'target IDE has no global skills directory' <<<"$output"
 grep -Fq 'target IDE does not support rules files' <<<"$output"
 grep -Fq 'target IDE does not support MCP configuration' <<<"$output"
-grep -Fq 'target IDE has no specific config file' <<<"$output"
-grep -Fq 'target IDE does not support project-level configuration' <<<"$output"
+grep -Fq 'automatic whole-IDE config migration is unsupported' <<<"$output"
+grep -Fq 'automatic whole-project configuration migration is unsupported' <<<"$output"
 
 echo "Emacs mapping boundary test passed"

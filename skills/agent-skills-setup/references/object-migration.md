@@ -8,7 +8,7 @@ portable defaults and the kinds of product-specific behavior worth reviewing.
 | **skills** | File-backed Skill directories; preserve the complete directory. |
 | **rules** | Supported Markdown instruction files/directories. |
 | **prompts** | Supported prompt/command Markdown with target review. |
-| **config / project** | Narrow file/tree copy with backup and redaction. |
+| **config / project** | Manual-only boundary; whole files and opaque trees are never copied. |
 | **agents / hooks / memory** | Diagnostic/manual by default; product-specific review is usually clearer than a generic copy. |
 
 - **Skills:** preserve the whole named directory, including `SKILL.md`, scripts,
@@ -20,8 +20,10 @@ portable defaults and the kinds of product-specific behavior worth reviewing.
   a conversation with the user rather than an ordinary overwrite.
 - **Prompts:** documented file-backed prompt formats are the most portable.
   Gemini TOML commands and UI/enterprise prompt libraries benefit from review.
-- **Config / project:** prefer the selected narrow file or tree, using the
-  conflict and redaction rules in [migration-safety.md](migration-safety.md).
+- **Config / project:** rebuild only reviewed, documented target settings.
+  The mapper intentionally does not copy a whole IDE config file or a project
+  configuration tree. Use dedicated `skills`, `rules`, `prompts`, or
+  `project-mcp` objects where their source and target schemas are supported.
 - **Agents:** permission, tool, model, hook, and MCP formats differ too widely
   for a generic converter. Recreate reviewed prompt content deliberately.
 - **Hooks:** rebuild a hook after reviewing the

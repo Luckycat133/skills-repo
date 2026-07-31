@@ -19,7 +19,7 @@ Treat those notes as current compatibility evidence and practical guidance; when
 
 <!-- END GENERATED: ide-paths.json summary -->
 - **detect**: no stable, documented installation-detection path used by this mapper; manual only
-- **mcp**: global `~/.cursor/mcp.json` · project `.cursor/mcp.json` · root_key `mcpServers` · JSON · official docs describe stdio, SSE, and Streamable HTTP; environment interpolation uses `${env:NAME}`
+- **mcp**: global `~/.cursor/mcp.json` · project `.cursor/mcp.json` · root_key `mcpServers` · JSON · official docs describe stdio, legacy SSE, and Streamable HTTP; environment interpolation uses `${env:NAME}`. These client options are not interchangeable migration targets: retain an explicit documented transport and do not infer one from a bare URL.
 - **rules**: canonical project directory `.cursor/rules/*.mdc` · frontmatter includes `description`, `globs`, and `alwaysApply`; root `.cursorrules` is legacy/deprecated compatibility
 - **skills**: project `.cursor/skills/<name>/SKILL.md` · global `~/.cursor/skills/<name>/SKILL.md`; `.agents/skills/` is a separate cross-tool compatibility location, not the Cursor canonical project path
 - **commands**: project `.cursor/commands/*.md` · plain Markdown commands; command-to-skill conversion is not performed automatically here

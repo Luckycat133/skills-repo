@@ -2423,6 +2423,20 @@ if not servers:
     sys.exit(3)
 normalize_environment_references(servers)
 redact_node(servers)
+# Execution-approval lists are target-product trust decisions, not portable
+# MCP endpoint metadata. Always omit them so an imported server starts without
+# inherited tool grants; the user can review and grant access in the target.
+def strip_execution_approvals(node):
+    if isinstance(node, dict):
+        for key in ("autoApprove", "enabledTools", "disabledTools"):
+            node.pop(key, None)
+        for value in node.values():
+            strip_execution_approvals(value)
+    elif isinstance(node, list):
+        for value in node:
+            strip_execution_approvals(value)
+
+strip_execution_approvals(servers)
 # GitHub Copilot CLI accepts only these documented transports. Do not write
 # a configuration which needs a guessed transport or looks like an IDE-only
 # schema: report it as manual instead. A local entry may omit `type` because
@@ -2450,9 +2464,8 @@ if target_ide == "copilot":
         elif not isinstance(server.get("url"), str):
             sys.exit(4)
 # Cline's extension and CLI MCP files both use an object rooted at
-# `mcpServers`. Validate the minimum server shape before writing; preserve
-# documented optional fields such as disabled, autoApprove, timeout, and
-# transportType without guessing their values.
+# `mcpServers`. Validate the minimum server shape before writing; retain only
+# non-execution metadata such as disabled, timeout, and transportType.
 if target_ide == "cline":
     if not isinstance(servers, dict):
         sys.exit(7)
@@ -2466,8 +2479,6 @@ if target_ide == "cline":
         if has_command and "args" in server and not isinstance(server["args"], list):
             sys.exit(7)
         if "env" in server and not isinstance(server["env"], dict):
-            sys.exit(7)
-        if "autoApprove" in server and not isinstance(server["autoApprove"], list):
             sys.exit(7)
         if "disabled" in server and not isinstance(server["disabled"], bool):
             sys.exit(7)
@@ -2653,9 +2664,6 @@ if target_ide in {"kimiai", "kiro", "zcode"}:
                 sys.exit(12)
         for key in ("startupTimeoutMs", "toolTimeoutMs", "timeout"):
             if key in server and (not isinstance(server[key], (int, float)) or isinstance(server[key], bool)):
-                sys.exit(12)
-        for key in ("enabledTools", "disabledTools", "autoApprove"):
-            if key in server and (not isinstance(server[key], list) or not all(isinstance(item, str) for item in server[key])):
                 sys.exit(12)
 # WorkBuddy desktop's official MCP guide only documents a local command-based
 # mcpServers shape: command (string), optional args (string array), and
@@ -3109,7 +3117,7 @@ PYEOF
         fi
         if [[ "$target_ide" == "cline" && "$json_conversion_rc" -eq 7 ]]; then
             CONV_RESULT="failed"
-            CONV_DETAIL="Cline MCP mcpServers schema is invalid or ambiguous; review manually (each server needs exactly one command or url, with args/env/autoApprove/disabled/timeout types validated)"
+            CONV_DETAIL="Cline MCP mcpServers schema is invalid or ambiguous; review manually (each server needs exactly one command or url, with args/env/disabled/timeout types validated)"
             return
         fi
         if [[ "$target_ide" == "gemini-cli" && "$json_conversion_rc" -eq 8 ]]; then
@@ -4254,277 +4262,10 @@ migrate_config() {
     local target_ide="$2"
 
     MIGRATION_TOTAL=$((MIGRATION_TOTAL + 1))
-
-    # Goose config.yaml is YAML and combines provider/model settings,
-    # extensions, permissions, and slash_commands. It is not a portable
-    # whole-IDE schema and can refer to secrets stored separately in
-    # secrets.yaml/keyring; fail closed instead of byte-copying it into a
-    # different IDE or overwriting it from a different format.
-    if [[ "$source_ide" == "goose-cli" || "$target_ide" == "goose-cli" ]]; then
-        set_status "config" "manual"
-        set_message "config" "Goose config.yaml is YAML and combines provider/extensions/settings; automatic config migration is unsupported"
-        set_manual_step "config" "Goose: review ~/.config/goose/config.yaml, permission.yaml, secrets.yaml/keyring, prompts/, and slash_commands separately; do not copy another IDE config into Goose YAML"
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    # Gemini CLI whole settings.json is a target-specific schema; copying
-    # another IDE's config into it would silently alter unrelated settings.
-    if [[ "$source_ide" == "gemini-cli" || "$target_ide" == "gemini-cli" ]]; then
-        set_status "config" "manual"
-        set_message "config" "Gemini CLI settings.json schema requires manual review; automatic whole-config migration is unsupported"
-        set_manual_step "config" "Gemini CLI: review ~/.gemini/settings.json and project .gemini/settings.json manually; preserve settings schema, context.fileName, MCP, and trust policy"
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    # OpenCode's JSON/JSONC config is target-specific, merged across global
-    # and project scopes, and may reference MCP auth, plugins, commands,
-    # agents, and instructions. The MCP sub-object has a dedicated converter;
-    # whole-config copying is intentionally fail-closed.
-    if [[ "$source_ide" == "opencode" || "$target_ide" == "opencode" ]]; then
-        set_status "config" "manual"
-        set_message "config" "OpenCode opencode.json/opencode.jsonc is a merged target-specific schema; automatic whole-config migration is unsupported"
-        set_manual_step "config" "OpenCode: review ~/.config/opencode/opencode.json, project opencode.json, OPENCODE_CONFIG/OPENCODE_CONFIG_CONTENT, JSONC comments, plugins, agents, commands, instructions, MCP, and auth state manually"
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    if [[ "$source_ide" == "kimiai" || "$target_ide" == "kimiai" ]]; then
-        set_status "config" "manual"
-        set_message "config" "Kimi Code config.toml is a target-specific TOML config; whole-file auto migration unsupported" 
-        set_manual_step "config" "Kimi Code: review ~/.kimi-code/config.toml, KIMI_CODE_HOME, tui.toml, credentials, hooks, and provider settings manually; do not copy another IDE schema into TOML"
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    if [[ "$source_ide" == "augment-code" || "$target_ide" == "augment-code" ]]; then
-        set_status "config" "manual"
-        set_message "config" "Augment settings.json combines providers, MCP, permissions, and project precedence; whole-config migration is unsupported"
-        set_manual_step "config" "Augment: review ~/.augment/settings.json, .augment/settings.json, and .augment/settings.local.json manually; preserve project precedence and reconfigure credentials"
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    if [[ "$source_ide" == "tencent-codebuddy" || "$target_ide" == "tencent-codebuddy" ]]; then
-        set_status "config" "manual"
-        set_message "config" "CodeBuddy settings.json is a target-specific layered security config; whole-file auto migration unsupported" 
-        set_manual_step "config" "CodeBuddy: review ~/.codebuddy/settings.json, .codebuddy/settings.json, .codebuddy/settings.local.json, permissions, hooks, and memory manually"
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    if [[ "$source_ide" == "zcode" || "$target_ide" == "zcode" ]]; then
-        set_status "config" "manual"
-        set_message "config" "ZCode config.json is a target-specific config containing MCP/plugin/Agent state; whole-file auto migration unsupported" 
-        set_manual_step "config" "ZCode: review ~/.zcode/cli/config.json and .zcode/config.json manually; preserve mcp.servers, plugins, agents, hooks, and GUI-managed credentials"
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    # Blackbox configure is interactive and its storage path/schema is not
-    # published in the current first-party CLI docs.
-    if [[ "$source_ide" == "blackbox" || "$target_ide" == "blackbox" ]]; then
-        set_status "config" "manual"
-        set_message "config" "Blackbox configure's storage path and Schema are not disclosed in official docs; auto config migration unsupported" 
-        set_manual_step "config" "Blackbox: run/review official blackbox configure flow; do not infer ~/.blackbox or copy ~/.blackbox private state" 
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    if [[ "$source_ide" == "pieces" || "$target_ide" == "pieces" ]]; then
-        set_status "config" "manual"
-        set_message "config" "Pieces has no documented portable whole-IDE config file"
-        set_manual_step "config" "Pieces: review PiecesOS/Desktop Settings and CLI state manually; never copy PiecesOS database directories or infer ~/.pieces as a config file"
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    # .replit and replit.nix configure the app runtime/build environment and
-    # are project-scoped. They are not portable AI settings and must not be
-    # copied through the generic config object.
-    if [[ "$source_ide" == "replit" || "$target_ide" == "replit" ]]; then
-        set_status "config" "manual"
-        set_message "config" "Replit app configuration (.replit/replit.nix) is project-scoped and manual"
-        set_manual_step "config" "Review .replit and replit.nix separately as Replit app/runtime configuration; do not copy them as AI config, skills, or MCP"
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    if [[ "$source_ide" == "cody" || "$target_ide" == "cody" ]]; then
-        set_status "config" "manual"
-        set_message "config" "Cody has no documented portable whole-IDE config file; automatic config migration is unsupported"
-        set_manual_step "config" "Cody: review only the documented extension settings surface (VS Code settings.json or JetBrains cody_settings.json); do not infer ~/.config/cody or cody.json"
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    # Supermaven settings are configured through the host editor extension or
-    # the official Neovim plugin's setup() call. No standalone portable
-    # Supermaven config file/schema is documented, so fail closed.
-    if [[ "$source_ide" == "supermaven" || "$target_ide" == "supermaven" ]]; then
-        set_status "config" "manual"
-        set_message "config" "Supermaven has no documented portable standalone config file; automatic config migration is unsupported"
-        set_manual_step "config" "Supermaven: review host-editor settings or supermaven-nvim setup() manually; do not copy ~/.supermaven runtime storage or another IDE's settings file"
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    # config.yaml is the current Continue format; config.json is deprecated.
-    # This mapper has no YAML parser or schema-aware Continue JSON↔YAML
-    # converter, so fail closed instead of copying one format into the other.
-    if [[ "$source_ide" == "continue" || "$target_ide" == "continue" ]]; then
-        set_status "config" "manual"
-        set_message "config" "Continue uses YAML/array configuration; automatic MCP/config migration is unsupported"
-        set_manual_step "config" "Review ~/.continue/config.yaml manually; do not copy it as JSON or copy another IDE's config into it. Legacy config.json and .continuerc.json require the official YAML migration guide"
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    local source_config
-    source_config=$(get_config_file "$source_ide")
-    local target_config
-    target_config=$(get_config_file "$target_ide")
-
-    # Aider's YAML config is a target-specific schema. This mapper only knows
-    # how to expose its documented path; copying another IDE's config into it
-    # (or copying it elsewhere) would be an unsafe format/precedence change.
-    if [[ "$source_ide" == "aider" || "$target_ide" == "aider" ]]; then
-        set_status "config" "manual"
-        set_message "config" "Aider .aider.conf.yml is YAML/CLI config, cross-IDE auto migration unsupported" 
-        set_manual_step "config" "manually review Aider's .aider.conf.yml, AIDER_* env vars, .env, CLI flags and --config/--env-file; do not copy other IDE config directly as Aider YAML" 
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    if [[ -z "$target_config" ]]; then
-        set_status "config" "manual"
-        set_message "config" "target IDE has no specific config file, manual migration required" 
-        set_manual_step "config" "target IDE ($target_ide) does not support automatic config migration, please handle manually" 
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    # Neovim documents init.lua/init.vim as editor configuration, but it does
-    # not define a portable AI-IDE object format. A generic byte-for-byte copy
-    # from another IDE would produce invalid or unsafe Lua, while copying a
-    # Neovim init.lua can silently replace a user's editor configuration.
-    # Keep the diagnostic config path, but fail closed for automatic migration.
-    if [[ "$source_ide" == "neovim" || "$target_ide" == "neovim" ]]; then
-        set_status "config" "manual"
-        set_message "config" "Neovim init.lua is editor config, cross-IDE auto conversion unsupported, manual review needed" 
-        set_manual_step "config" "manually review ~/.config/nvim/init.lua (or init.vim); do not copy other IDE config directly as Neovim Lua, and do not overwrite existing config with auto migration" 
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    # Claude Code has distinct user, project, and local settings scopes. Add
-    # the scope warning before the source-exists check so a migration from an
-    # IDE without a portable config still reports the manual review required
-    # for the Claude target.
-    if [[ "$source_ide" == "claude" || "$target_ide" == "claude" ]]; then
-        set_manual_step "config" "Claude Code: only user settings.json is mapped automatically; review project .claude/settings.json and local .claude/settings.local.json manually"
-    fi
-
-    if [[ -z "$source_config" ]]; then
-        set_status "config" "skipped"
-        set_message "config" "source IDE has no specific config file" 
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    print_progress "MIGRATE" "Migrating IDE config..." 
-
-    if [[ ! -f "$source_config" ]]; then
-        set_status "config" "absent"
-        set_message "config" "source config file does not exist: $source_config" 
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    # Codex config.toml can carry MCP tables and hooks. Copying it to another
-    # IDE would be an invalid schema transfer, and copying another IDE's config
-    # into Codex could silently overwrite a trusted-project boundary. Keep all
-    # Codex config migration manual; project config remains diagnostic-only.
-    if [[ "$source_ide" == "codex" || "$target_ide" == "codex" ]]; then
-        set_status "config" "manual"
-        set_message "config" "Codex config.toml auto migration unsupported, manual migration required" 
-        set_manual_step "config" "manually review Codex user ~/.codex/config.toml and trusted project .codex/config.toml; do not copy TOML, MCP or hooks config across IDEs" 
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    if [[ $DRY_RUN -eq 1 ]]; then
-        echo "  DRY-RUN: copying config file" 
-        echo "    source: $source_config" 
-        echo "    target: $target_config" 
-        # Dry-run only prints the plan; never mark success.
-        set_status "config" "skipped"
-        set_message "config" "DRY-RUN: planned config file copy" 
-        return 0
-    fi
-
-    mkdir -p "$(dirname "$target_config")"
-
-    if [[ -e "$target_config" ]]; then
-        case "$STRATEGY" in
-            skip)
-                echo "  [SKIP] target config file already exists: $target_config" 
-                set_status "config" "skipped"
-                set_message "config" "target config file already exists, skip (strategy: skip)" 
-                MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-                return 0
-                ;;
-            backup)
-                local ts
-                ts="$(date +%Y%m%d%H%M%S).$$"
-                cp -r "$target_config" "$target_config.bak.$ts"
-                echo "  [BACKUP] backed up existing config file: $target_config.bak.$ts" 
-                ;;
-            overwrite)
-                rm -f "$target_config"
-                ;;
-        esac
-    fi
-
-    # A true cross-IDE config conversion is rarely meaningful (schemas differ
-    # per IDE). We perform a real transfer (read + copy) and mark it "copied"
-    # with a manual step, NEVER "success" implying full conversion, and never
-    # a no-op.
-    if cp "$source_config" "$target_config"; then
-        if [[ -s "$target_config" ]]; then
-            echo "  [COPY] copied config file: $target_config" 
-            # SECURITY: settings/config files routinely embed API keys and
-            # tokens. Strip them from the COPY (never the source) — same
-            # policy as MCP migration.
-            local config_redacted
-            if config_redacted=$(redact_secrets_in_file "$target_config"); then
-                if [[ "${config_redacted:-0}" -gt 0 ]]; then
-                    echo "  [SECURITY] cleared $config_redacted suspected secret values, please reconfigure credentials in target IDE" 
-                    set_manual_step "config" "config file's $config_redacted secrets have been cleared, need to re-enter in target IDE" 
-                fi
-                set_status "config" "copied"
-                set_message "config" "config file copied (manual format adjustment may be needed, secrets cleared): $target_config" 
-                set_manual_step "config" "check and adjust IDE config file format ($source_ide -> $target_ide)" 
-                MIGRATION_SUCCESS=$((MIGRATION_SUCCESS + 1))
-            else
-                echo "  [FAIL] config file redaction failed, target copy deleted to prevent secret leak" 
-                set_status "config" "failed"
-                set_message "config" "config file redaction failed, target copy deleted to prevent secret leak (source file untouched)" 
-                MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
-            fi
-        else
-            echo "  [FAIL] config file empty after copy" 
-            set_status "config" "failed"
-        set_message "config" "config file empty after copy" 
-            MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
-        fi
-    else
-        echo "  [FAIL] config file copy failed" 
-        set_status "config" "failed"
-        set_message "config" "config file copy failed" 
-        MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
-    fi
+    set_status "config" "manual"
+    set_message "config" "automatic whole-IDE config migration is unsupported"
+    set_manual_step "config" "Review only documented, object-specific settings for $source_ide -> $target_ide. Rebuild target config manually; do not copy opaque IDE config files, credentials, permissions, hooks, or trust state."
+    MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
 }
 
 # Redact secrets in every config-like text file under a migrated project
@@ -4599,355 +4340,10 @@ migrate_project() {
     local target_ide="$2"
 
     MIGRATION_TOTAL=$((MIGRATION_TOTAL + 1))
-
-    # .goose is a mixed local namespace for recipes and Memory files. It is
-    # not a generic project config root and must never be copied opaquely.
-    if [[ "$source_ide" == "goose-cli" || "$target_ide" == "goose-cli" ]]; then
-        set_status "project" "manual"
-        set_message "project" "Goose .goose contains scoped recipes and memory, not a portable project config tree"
-        set_manual_step "project" "Goose: review .goose/recipes/*.yaml and .goose/memory/ independently; migrate .goosehints and .agents/skills through their dedicated objects, never copy the whole .goose directory"
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    if [[ "$source_ide" == "vscode" || "$target_ide" == "vscode" ]]; then
-        set_status "project" "manual"
-        set_message "project" "VS Code .vscode mixes MCP, settings, tasks, launch, and extension state"
-        set_manual_step "project" "VS Code: review .vscode/mcp.json, settings.json, tasks.json, launch.json, and extension state separately; use dedicated MCP/rules/prompt objects instead of copying the whole .vscode directory"
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    if [[ "$source_ide" == "windsurf" || "$target_ide" == "windsurf" ]]; then
-        set_status "project" "manual"
-        set_message "project" "Windsurf/Devin .windsurf mixes Skills, rules, workflows, memories, and application state"
-        set_manual_step "project" "Windsurf/Devin: review .windsurf/ objects separately; migrate Skills, rules, workflows, and MCP by their documented scopes, and never copy the whole namespace"
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    if [[ "$source_ide" == "opencode" || "$target_ide" == "opencode" ||
-          "$source_ide" == "kilocode" || "$target_ide" == "kilocode" ||
-          "$source_ide" == "kimiai" || "$target_ide" == "kimiai" ||
-          "$source_ide" == "workbuddy" || "$target_ide" == "workbuddy" ||
-          "$source_ide" == "kiro" || "$target_ide" == "kiro" ||
-          "$source_ide" == "augment-code" || "$target_ide" == "augment-code" ||
-          "$source_ide" == "baidu-comate" || "$target_ide" == "baidu-comate" ||
-          "$source_ide" == "tencent-codebuddy" || "$target_ide" == "tencent-codebuddy" ||
-          "$source_ide" == "zcode" || "$target_ide" == "zcode" ||
-          "$source_ide" == "roo-code" || "$target_ide" == "roo-code" ||
-          "$source_ide" == "void-editor" || "$target_ide" == "void-editor" ]]; then
-        set_status "project" "manual"
-        set_message "project" "target IDE's project namespace mixes Skills, rules, MCP, Agent or app state; whole-directory auto migration unsupported" 
-        set_manual_step "project" "review project objects separately: Roo .roo/, OpenCode .opencode/, Kilo .kilo/, Kimi .kimi-code/, WorkBuddy .workbuddy/, Kiro .kiro/, Augment .augment/, Comate .comate/, CodeBuddy .codebuddy/, ZCode .zcode/; Void has no verified portable project directory; use respective project-skills/project-mcp/rules objects" 
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    # Gemini CLI's .gemini namespace mixes settings, Skills, commands, agents,
-    # and memory. Never copy it opaquely as a generic project configuration.
-    if [[ "$source_ide" == "gemini-cli" || "$target_ide" == "gemini-cli" ]]; then
-        set_status "project" "manual"
-        set_message "project" "Gemini CLI .gemini is a mixed settings/Skills/commands namespace; whole-project migration is unsupported"
-        set_manual_step "project" "Gemini CLI: review .gemini/settings.json, .gemini/skills, .gemini/commands, .gemini/agents, and GEMINI.md separately; preserve each documented scope/schema"
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    # `.blackbox` is a mixed Blackbox workspace namespace whose only
-    # documented portable object here is `.blackbox/skills`. Never copy the
-    # whole directory opaquely.
-    if [[ "$source_ide" == "blackbox" || "$target_ide" == "blackbox" ]]; then
-        set_status "project" "manual"
-        set_message "project" "Blackbox .blackbox is a mixed workspace namespace; whole project directory auto migration unsupported" 
-        set_manual_step "project" "Blackbox: only review/migrate .blackbox/skills/ per official docs; do not copy entire .blackbox or infer its private config files" 
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    if [[ "$source_ide" == "pieces" || "$target_ide" == "pieces" ]]; then
-        set_status "project" "manual"
-        set_message "project" "Pieces has no documented portable repository configuration namespace"
-        set_manual_step "project" "Pieces: do not copy .pieces as an opaque project directory; configure host-IDE project instructions/MCP separately and keep PiecesOS data local"
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    # Replit's .replit file is app/runtime configuration, not a portable
-    # project context directory. Keep this boundary manual so a project
-    # migration cannot silently copy build/run settings across IDEs.
-    if [[ "$source_ide" == "replit" || "$target_ide" == "replit" ]]; then
-        set_status "project" "manual"
-        set_message "project" "Replit project app/runtime files (.replit, replit.nix) are manual"
-        set_manual_step "project" "Review .replit and replit.nix as Replit app/runtime files; migrate only replit.md or .agents/skills through their dedicated object scopes"
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    if [[ "$source_ide" == "cody" || "$target_ide" == "cody" ]]; then
-        set_status "project" "manual"
-        set_message "project" "Cody has no documented portable project configuration namespace"
-        set_manual_step "project" "Cody: do not copy .cody as an opaque project directory; review instructions, prompts, MCP, and extension settings separately in their documented surfaces"
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    # Supermaven has no documented project configuration namespace. The
-    # first-party maintainer describes .supermavenignore as an indexing
-    # exclusion file only; it is not a portable project settings tree.
-    if [[ "$source_ide" == "supermaven" || "$target_ide" == "supermaven" ]]; then
-        set_status "project" "manual"
-        set_message "project" "Supermaven has no documented portable project configuration namespace"
-        set_manual_step "project" "Supermaven: preserve .supermavenignore only for repository indexing exclusions and review host-editor/Neovim settings manually; do not copy it as project config"
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    # .continue is a mixed workspace namespace (models, rules, prompts, and
-    # MCP blocks). It is not a generic project-config tree, so copying it from
-    # or into another IDE would cross YAML/JSON and scope boundaries.
-    if [[ "$source_ide" == "continue" || "$target_ide" == "continue" ]]; then
-        set_status "project" "manual"
-        set_message "project" "Continue .continue workspace blocks require manual migration"
-        set_manual_step "project" "Review .continue/models, .continue/rules, .continue/prompts, and .continue/mcpServers individually; preserve each documented schema and scope"
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    # Tabnine's .tabnine directory mixes guideline files and project MCP.
-    # Never copy it opaquely as a generic project config tree.
-    if [[ "$source_ide" == "tabnine" || "$target_ide" == "tabnine" ]]; then
-        set_status "project" "manual"
-        set_message "project" "Tabnine .tabnine is a mixed guideline/MCP namespace; automatic whole-directory migration is unsupported"
-        set_manual_step "project" "Review .tabnine/guidelines/*.md and .tabnine/mcp_servers.json separately; preserve project scope and configure MCP permissions through Tabnine Settings"
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    local source_project
-    source_project=$(get_project_path "$source_ide")
-    local target_project
-    target_project=$(get_project_path "$target_ide")
-
-    # .amazonq is a multi-object Amazon Q project namespace, not a portable
-    # whole-project configuration format. Do not copy its MCP/rules files as
-    # an opaque directory.
-    if [[ "$source_ide" == "amazon-q" || "$target_ide" == "amazon-q" ]]; then
-        set_status "project" "manual"
-        set_message "project" "Amazon Q project namespace .amazonq is manual; rules and MCP have separate schemas/scopes"
-        set_manual_step "project" "Review .amazonq/rules/*.md and .amazonq/default.json separately; do not copy the entire .amazonq directory"
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    if [[ "$source_ide" == "jetbrains" || "$target_ide" == "jetbrains" ]]; then
-        set_status "project" "manual"
-        set_message "project" "JetBrains .junie is a mixed Junie namespace; whole-directory migration is unsupported"
-        set_manual_step "project" "Junie: review .junie/skills, .junie/AGENTS.md, legacy .junie/guidelines.md, and .junie/mcp/mcp.json separately; do not copy the whole .junie directory or Junie CLI config.json"
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    # Both TRAE builds use a mixed project namespace containing Skills, Rules,
-    # MCP, commands, agents, hooks, memory, and state. Never copy `.trae/`
-    # opaquely; use the dedicated object paths and manual boundaries above.
-    if [[ "$source_ide" == "trae" || "$target_ide" == "trae" || "$source_ide" == "trae-cn" || "$target_ide" == "trae-cn" ]]; then
-        set_status "project" "manual"
-        set_message "project" "TRAE .trae project namespace mixes Skills, Rules, MCP, commands, agents, hooks, memory, and state" 
-        set_manual_step "project" "TRAE: review .trae/ objects separately; migrate Skills, .trae/rules, .trae/commands, .trae/mcp.json, agents, hooks, memory, and skill-config.json by their documented scopes; do not copy the whole namespace"
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    # Antigravity's .agents project namespace mixes Skills, rules, MCP,
-    # hooks, plugins, and other product state. Dedicated object mappings are
-    # available, but opaque whole-project copying would cross those schemas.
-    if [[ "$source_ide" == "antigravity" || "$target_ide" == "antigravity" ]]; then
-        set_status "project" "manual"
-        set_message "project" "Antigravity .agents project namespace mixes Skills, rules, MCP, hooks, plugins, and product state"
-        set_manual_step "project" "Antigravity: review .agents/skills, .agents/rules, .agents/mcp_config.json, .agents/hooks.json, and .agents/plugins separately; the IDE and CLI share some locations but are different product surfaces; do not copy .agents opaquely"
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    # Aider's project file is YAML with Aider-specific option names and
-    # precedence. Do not byte-copy another IDE's project config into it, or
-    # export it as another IDE's project format; both directions require a
-    # deliberate manual translation.
-    if [[ "$source_ide" == "aider" || "$target_ide" == "aider" ]]; then
-        set_status "project" "manual"
-        set_message "project" "Aider .aider.conf.yml project config needs manual review, auto copy disabled" 
-        set_manual_step "project" "manually review project root .aider.conf.yml; rebuild per Aider's YAML options, read list, CLI priority and AIDER_*/.env sources, do not directly copy other IDE config" 
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    if [[ -z "$source_project" ]]; then
-        set_status "project" "skipped"
-        set_message "project" "source IDE does not support project-level configuration" 
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    if [[ -z "$target_project" ]]; then
-        set_status "project" "skipped"
-        set_message "project" "target IDE does not support project-level configuration" 
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    print_progress "MIGRATE" "Migrating project-level configuration..." 
-
-    local source_path="$WORKSPACE_ROOT/$source_project"
-    local target_path="$WORKSPACE_ROOT/$target_project"
-
-    if [[ ! -e "$source_path" ]]; then
-        set_status "project" "skipped"
-        set_message "project" "source project config does not exist: $source_project" 
-        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-        return 0
-    fi
-
-    if [[ $DRY_RUN -eq 1 ]]; then
-        if [[ -d "$source_path" ]]; then
-            echo "  DRY-RUN: cp -r $source_path $target_path"
-        else
-            echo "  DRY-RUN: cp $source_path $target_path"
-        fi
-        set_status "project" "success"
-        set_message "project" "project config ready to migrate" 
-    else
-        if [[ -d "$source_path" ]]; then
-            # Apply the migration strategy to an EXISTING target (dir or file).
-            if [[ -e "$target_path" ]]; then
-                case "$STRATEGY" in
-                    skip)
-                        echo "  [SKIP] target project config already exists: $target_project" 
-                        set_status "project" "skipped"
-                        set_message "project" "target project config already exists, skip (strategy: skip)" 
-                        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-                        return 0
-                        ;;
-                    backup)
-                        local ts
-                        ts="$(date +%Y%m%d%H%M%S).$$"
-                        cp -r "$target_path" "$target_path.bak.$ts"
-                        echo "  [BACKUP] backed up existing project config: $target_project.bak.$ts" 
-                        ;;
-                    overwrite)
-                        if ! safe_remove_path_within "$WORKSPACE_ROOT" "$target_path"; then
-                            set_status "project" "failed"
-                            set_message "project" "refused unsafe target project deletion"
-                            MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
-                            return 0
-                        fi
-                        ;;
-                esac
-            fi
-            mkdir -p "$target_path"
-            # Guard: refuse to report success if the source tree is empty
-            # (e.g. only non-tracked dotfiles), so we never claim a
-            # zero-byte transfer as "success".
-            local src_files
-            src_files=$(find "$source_path" -type f 2>/dev/null | wc -l | tr -d ' ')
-            if [[ "${src_files:-0}" -eq 0 ]]; then
-                set_status "project" "skipped"
-            set_message "project" "source project config directory is empty: $source_project" 
-                MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-                return 0
-            fi
-            if cp -r "$source_path"/. "$target_path"/; then
-                if [[ $(find "$target_path" -type f 2>/dev/null | wc -l | tr -d ' ') -eq 0 ]]; then
-                    set_status "project" "failed"
-                    set_message "project" "project config empty after copy" 
-                    MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
-                else
-                    echo "  [OK] migrated project config directory" 
-                    # SECURITY: project trees routinely bundle .env / .toml /
-                    # json credentials (local service configs, etc.). Strip
-                    # them from the COPY (never the source) — same policy as
-                    # the mcp and config migrations. Fail-closed: if any file
-                    # cannot be redacted, the whole copy is removed so no
-                    # secret-bearing file is left on disk.
-                    local proj_redacted proj_rc=0
-                    proj_redacted=$(redact_project_copy "$target_path") || proj_rc=$?
-                    if [[ "$proj_rc" -ne 0 ]]; then
-                        echo "  [FAIL] project config redaction failed, target copy deleted to prevent secret leak" 
-                        safe_remove_path_within "$WORKSPACE_ROOT" "$target_path" || true
-                        set_status "project" "failed"
-                    set_message "project" "project config redaction failed, target copy deleted to prevent secret leak (source file untouched)" 
-                        MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
-                    else
-                        if [[ "${proj_redacted:-0}" -gt 0 ]]; then
-                        echo "  [SECURITY] cleared $proj_redacted suspected secret values, check credentials in target project and reconfigure" 
-                        set_manual_step "project" "project config's $proj_redacted secrets have been cleared, please re-enter in target IDE (e.g. .env / config file)" 
-                        fi
-                        set_status "project" "success"
-                    set_message "project" "project config directory migrated, secrets cleared: $target_project" 
-                        MIGRATION_SUCCESS=$((MIGRATION_SUCCESS + 1))
-                    fi
-                fi
-            else
-                set_status "project" "failed"
-                    set_message "project" "project config migration failed" 
-                MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
-            fi
-        else
-            # Single project-level config FILE case (e.g. .dir-locals.el,
-            # .aider.conf.yml, .github/copilot-instructions.md).
-            if [[ -e "$target_path" ]]; then
-                case "$STRATEGY" in
-                    skip)
-                        echo "  [SKIP] target project config file already exists: $target_project" 
-                        set_status "project" "skipped"
-                        set_message "project" "target project config file already exists, skip (strategy: skip)" 
-                        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-                        return 0
-                        ;;
-                    backup)
-                        local ts
-                        ts="$(date +%Y%m%d%H%M%S).$$"
-                        cp "$target_path" "$target_path.bak.$ts"
-                        echo "  [BACKUP] backed up existing project config file: $target_project.bak.$ts" 
-                        ;;
-                    overwrite)
-                        rm -f "$target_path"
-                        ;;
-                esac
-            fi
-            mkdir -p "$(dirname "$target_path")"
-            if cp "$source_path" "$target_path"; then
-                if [[ ! -s "$target_path" ]]; then
-                    set_status "project" "failed"
-                    set_message "project" "project config file empty after copy" 
-                    MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
-                else
-                    echo "  [OK] migrated project config file" 
-                    local proj_redacted proj_rc=0
-                    proj_redacted=$(redact_project_copy "$target_path") || proj_rc=$?
-                    if [[ "$proj_rc" -ne 0 ]]; then
-                        echo "  [FAIL] project config redaction failed, target copy deleted to prevent secret leak" 
-                        rm -f "$target_path"
-                        set_status "project" "failed"
-                    set_message "project" "project config redaction failed, target copy deleted to prevent secret leak (source file untouched)" 
-                        MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
-                    else
-                        if [[ "${proj_redacted:-0}" -gt 0 ]]; then
-                        echo "  [SECURITY] cleared $proj_redacted suspected secret values, check credentials in target project and reconfigure" 
-                        set_manual_step "project" "project config's $proj_redacted secrets have been cleared, please re-enter in target IDE" 
-                        fi
-                        set_status "project" "success"
-                    set_message "project" "project config file migrated, secrets cleared: $target_project" 
-                        MIGRATION_SUCCESS=$((MIGRATION_SUCCESS + 1))
-                    fi
-                fi
-            else
-                set_status "project" "failed"
-                    set_message "project" "project config file migration failed" 
-                MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
-            fi
-        fi
-    fi
+    set_status "project" "manual"
+    set_message "project" "automatic whole-project configuration migration is unsupported"
+    set_manual_step "project" "Review dedicated objects for $source_ide -> $target_ide (skills, rules, prompts, and project MCP) one at a time. Do not copy opaque project directories, credentials, permissions, hooks, or trust state."
+    MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
 }
 
 manual_only_object() {

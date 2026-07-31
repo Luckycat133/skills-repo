@@ -19,7 +19,7 @@ Treat those notes as current compatibility evidence and practical guidance; when
 
 <!-- END GENERATED: ide-paths.json summary -->
 - **detect**: `~/.augment/`
-- **mcp**: global `~/.augment/settings.json` · project `.augment/settings.json` / `.augment/settings.local.json` · root_key `mcpServers` · JSON · stdio+HTTP/SSE
+- **mcp**: global `~/.augment/settings.json` · project `.augment/settings.json` / `.augment/settings.local.json` · root_key `mcpServers` · JSON · stdio+HTTP/SSE. Keep a remote `http` or legacy `sse` type explicit during review; a URL alone cannot safely select or upgrade the transport.
 - **rules**: user `~/.augment/rules/*.md` · workspace `.augment/rules/*.md` · `.augment-guidelines`; frontmatter: always_apply, agent_requested (manual is IDE-only)
 - **skills**: project `.augment/skills/<name>/SKILL.md` · global `~/.augment/skills/` · also loads `~/.claude/skills/`, `~/.agents/skills/` · frontmatter: name, description, agent, fork, color
 - **commands**: global `~/.augment/commands/`

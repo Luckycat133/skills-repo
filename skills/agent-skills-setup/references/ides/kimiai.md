@@ -19,7 +19,7 @@ Treat those notes as current compatibility evidence and practical guidance; when
 
 <!-- END GENERATED: ide-paths.json summary -->
 - **detect**: `~/.kimi-code/` (env var `KIMI_CODE_HOME` overrides; legacy kimi-cli used `~/.kimi/` with `KIMI_SHARE_DIR`)
-- **mcp**: global `~/.kimi-code/mcp.json` · project `<cwd>/.kimi-code/mcp.json` · root_key `mcpServers` · JSON · stdio+HTTP+SSE · `kimi mcp list`
+- **mcp**: global `~/.kimi-code/mcp.json` · project `<cwd>/.kimi-code/mcp.json` · root_key `mcpServers` · JSON · stdio+HTTP+SSE · `kimi mcp list`. Retain the documented explicit remote transport during review; do not treat a legacy SSE URL as a Streamable HTTP endpoint or copy the separate `mcp-oauth` state.
 - **rules**: global `~/.kimi-code/AGENTS.md` · project `AGENTS.md` (also `.kimi-code/AGENTS.md`, any subdir) · `/init` auto-generates
 - **skills**: global `~/.kimi-code/skills/` / `~/.agents/skills/` · project `.kimi-code/skills/` / `.agents/skills/` · extra dirs via `config.toml extra_skill_dirs`
 - **commands**: built-in slash commands (`/mcp`, `/init`, `/skill:<name>`, `/hooks`, `/config`) · plugin commands (`<plugin>:<cmd>`) · NO standalone commands dir

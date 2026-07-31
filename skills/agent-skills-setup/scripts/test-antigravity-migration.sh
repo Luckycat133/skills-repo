@@ -63,7 +63,7 @@ PROJECT_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --workspace "$WORKSPACE" \
     --objects project \
     --dry-run 2>&1)"
-grep -Fq "Antigravity .agents project namespace mixes" <<< "$PROJECT_OUTPUT"
+grep -Fq "automatic whole-project configuration migration is unsupported" <<< "$PROJECT_OUTPUT"
 
 mkdir -p "$(dirname "$CURSOR_MCP")"
 printf '%s\n' \
