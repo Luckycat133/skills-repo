@@ -1,9 +1,5 @@
 #!/usr/bin/env bash
 
-# Focused VS Code fixture test. It validates documented workspace mappings and
-# proves that workspace MCP conversion is schema-aware while user-scope MCP
-# migration fails closed without writing a guessed platform path. No VS Code
-# process or real user configuration is touched.
 
 set -euo pipefail
 
@@ -37,7 +33,6 @@ printf '%s\n' '{"mcpServers":{"fixture":{"command":"node","args":["server.js"]}}
 
 OUTPUT="$TMP_ROOT/migration.txt"
 mkdir -p "$TMP_ROOT/workspace"
-# --scope project reads the project .mcp.json, so place the source there.
 cp "$TEST_HOME/.claude.json" "$TMP_ROOT/workspace/.mcp.json"
 HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source claude --target vscode --objects mcp --scope project --yes --strategy backup \
@@ -92,9 +87,6 @@ HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     exit 1
 }
 
-# Project Skills use an explicit scope and preserve the complete skill
-# directory (entrypoint plus supporting resources). This must not touch the
-# user-global source/target roots.
 SKILL_WORKSPACE="$TMP_ROOT/project-skills-workspace"
 mkdir -p "$SKILL_WORKSPACE/.cursor/skills/demo-skill/scripts" "$SKILL_WORKSPACE/.cursor/skills/demo-skill/references"
 printf '%s\n' '---' 'name: demo-skill' 'description: project fixture' '---' 'Use the fixture.' > "$SKILL_WORKSPACE/.cursor/skills/demo-skill/SKILL.md"
@@ -117,8 +109,6 @@ HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     exit 1
 }
 
-# Explicit project-mcp uses the workspace file resolver rather than the
-# user-level ~/.claude.json path. Both Claude and Cursor use mcpServers here.
 PROJECT_MCP_WORKSPACE="$TMP_ROOT/project-mcp-workspace"
 mkdir -p "$PROJECT_MCP_WORKSPACE"
 printf '%s\n' '{"mcpServers":{"project-fixture":{"command":"node","args":["server.js"]}}}' > "$PROJECT_MCP_WORKSPACE/.mcp.json"
@@ -135,9 +125,6 @@ PYEOF
     exit 1
 }
 
-# Agents, hooks, and memory are explicit diagnostic/manual objects. They must
-# report their boundaries without creating guessed directories or executing
-# hook commands.
 MANUAL_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source cursor --target vscode --workspace "$TMP_ROOT/manual-workspace" \
     --objects agents,hooks,memory --dry-run 2>&1)"

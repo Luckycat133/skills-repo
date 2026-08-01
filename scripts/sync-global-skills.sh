@@ -2,8 +2,6 @@
 
 set -euo pipefail
 
-# SOURCE OF TRUTH: skills/agent-skills-setup/references/ide-registry.md (and ide-paths.json).
-# Keep these functions in sync with that file. Drift is caught by test-ide-paths.sh.
 SOURCE_DIR="${AGENT_SKILLS_SOURCE_DIR:-${HOME}/.gemini/config/skills}"
 CLAUDE_DIR="${AGENT_SKILLS_CLAUDE_DIR:-${HOME}/.claude/skills}"
 CODEX_DIR="${AGENT_SKILLS_CODEX_DIR:-${HOME}/.agents/skills}"
@@ -16,8 +14,6 @@ DRY_RUN=0
 CONFIRM=0
 TARGETS_RAW="claude,codex,copilot,openclaw,trae,trae-cn"
 
-# MED-P1: track every mktemp artifact and clean them on any exit path
-# (verify_directory_inventory previously leaked its list files on early return).
 TMP_FILES=()
 cleanup_tmp_files() {
     local f
@@ -32,16 +28,12 @@ usage() {
     cat <<'EOF'
 Usage: sync-global-skills.sh [--dry-run] [--targets claude,codex,copilot,openclaw,trae,trae-cn]
 
-Mirrors Antigravity global capabilities (skills) into supported IDE global skill directories.
-Antigravity is treated as the source of truth. WorkBuddy Skills are Marketplace/UI-managed
-and intentionally are not a filesystem sync target.
+Mirror Antigravity global Skills into supported IDE directories. WorkBuddy is UI-managed and excluded.
 
 Options:
-  --dry-run              Preview rsync operations without modifying files.
+  --dry-run              Preview without modifying files.
   --targets <list>       Comma-separated subset of targets to sync.
-  --yes                  Apply the mirror. REQUIRED for any destructive change;
-                         without it the script refuses to run (rsync -a --delete
-                         removes skills in targets that are absent from the source).
+  --yes                  Apply the `rsync -a --delete` mirror.
   -h, --help             Show this help text.
 EOF
 }
@@ -81,15 +73,26 @@ if [[ ! -d "$SOURCE_DIR" ]]; then
     exit 1
 fi
 
-contains_target() {
-    local needle="$1"
-    local item
+target_dir() {
+    case "$1" in
+        claude) printf '%s\n' "$CLAUDE_DIR" ;;
+        codex) printf '%s\n' "$CODEX_DIR" ;;
+        copilot) printf '%s\n' "$COPILOT_DIR" ;;
+        openclaw) printf '%s\n' "$OPENCLAW_DIR" ;;
+        trae) printf '%s\n' "$TRAE_DIR" ;;
+        trae-cn) printf '%s\n' "$TRAE_CN_DIR" ;;
+    esac
+}
 
-    for item in "${TARGETS[@]}"; do
-        [[ "$item" == "$needle" ]] && return 0
-    done
-
-    return 1
+target_label() {
+    case "$1" in
+        claude) printf 'Claude' ;;
+        codex) printf 'Codex' ;;
+        copilot) printf 'Copilot' ;;
+        openclaw) printf 'OpenClaw' ;;
+        trae) printf 'Trae' ;;
+        trae-cn) printf 'Trae CN' ;;
+    esac
 }
 
 split_targets() {
@@ -125,10 +128,6 @@ rsync_mirror() {
     local dest="$2"
     shift 2
 
-    # MED-P8: detect rsync and fall back to a cp-based mirror when absent
-    # (e.g. minimal containers). The fallback emulates `rsync -a --delete`
-    # by clearing the destination first, always preserving `.system/`
-    # (the only protect-filter any caller uses, for Codex).
     if ! command -v rsync >/dev/null 2>&1; then
         if [[ $DRY_RUN -eq 1 ]]; then
             echo "DRY-RUN (no rsync): would mirror $src/ -> $dest/ via cp -R (preserving .system/)"
@@ -202,9 +201,6 @@ verify_shared_directories() {
     echo "VERIFY PASS: $label content matches Antigravity"
 }
 
-# Copilot is handled by the shared rsync_mirror path (full skill directories),
-# consistent with smart-ide-migration.sh H4. No custom flattening to <name>.md.
-
 split_targets "$TARGETS_RAW"
 ensure_targets_valid
 
@@ -227,60 +223,24 @@ if [[ $DRY_RUN -eq 0 ]]; then
     echo "Any skill present in a target but missing from the source will be deleted." >&2
 fi
 
-if contains_target claude; then
-    mkdir -p "$CLAUDE_DIR"
-    rsync_mirror "$SOURCE_DIR" "$CLAUDE_DIR"
-fi
-
-if contains_target codex; then
-    mkdir -p "$CODEX_DIR"
-    rsync_mirror "$SOURCE_DIR" "$CODEX_DIR" --filter='P .system/'
-fi
-
-if contains_target trae; then
-    mkdir -p "$TRAE_DIR"
-    rsync_mirror "$SOURCE_DIR" "$TRAE_DIR"
-fi
-
-if contains_target trae-cn; then
-    mkdir -p "$TRAE_CN_DIR"
-    rsync_mirror "$SOURCE_DIR" "$TRAE_CN_DIR"
-fi
-
-if contains_target openclaw; then
-    mkdir -p "$OPENCLAW_DIR"
-    rsync_mirror "$SOURCE_DIR" "$OPENCLAW_DIR"
-fi
-
-if contains_target copilot; then
-    mkdir -p "$COPILOT_DIR"
-    rsync_mirror "$SOURCE_DIR" "$COPILOT_DIR"
-fi
+for target in "${TARGETS[@]}"; do
+    destination="$(target_dir "$target")"
+    mkdir -p "$destination"
+    if [[ "$target" == "codex" ]]; then
+        rsync_mirror "$SOURCE_DIR" "$destination" --filter='P .system/'
+    else
+        rsync_mirror "$SOURCE_DIR" "$destination"
+    fi
+done
 
 if [[ $DRY_RUN -eq 0 ]]; then
-    if contains_target claude; then
-        verify_directory_inventory "$SOURCE_DIR" "$CLAUDE_DIR" "Claude" && verify_shared_directories "$CLAUDE_DIR" "Claude" || VERIFY_FAILED=1
-    fi
-
-    if contains_target codex; then
-        verify_directory_inventory "$SOURCE_DIR" "$CODEX_DIR" "Codex" && verify_shared_directories "$CODEX_DIR" "Codex" || VERIFY_FAILED=1
-    fi
-
-    if contains_target trae; then
-        verify_directory_inventory "$SOURCE_DIR" "$TRAE_DIR" "Trae" && verify_shared_directories "$TRAE_DIR" "Trae" || VERIFY_FAILED=1
-    fi
-
-    if contains_target trae-cn; then
-        verify_directory_inventory "$SOURCE_DIR" "$TRAE_CN_DIR" "Trae CN" && verify_shared_directories "$TRAE_CN_DIR" "Trae CN" || VERIFY_FAILED=1
-    fi
-
-    if contains_target openclaw; then
-        verify_directory_inventory "$SOURCE_DIR" "$OPENCLAW_DIR" "OpenClaw" && verify_shared_directories "$OPENCLAW_DIR" "OpenClaw" || VERIFY_FAILED=1
-    fi
-
-    if contains_target copilot; then
-        verify_directory_inventory "$SOURCE_DIR" "$COPILOT_DIR" "Copilot" && verify_shared_directories "$COPILOT_DIR" "Copilot" || VERIFY_FAILED=1
-    fi
+    for target in "${TARGETS[@]}"; do
+        destination="$(target_dir "$target")"
+        label="$(target_label "$target")"
+        verify_directory_inventory "$SOURCE_DIR" "$destination" "$label" \
+            && verify_shared_directories "$destination" "$label" \
+            || VERIFY_FAILED=1
+    done
 
     if [[ $VERIFY_FAILED -ne 0 ]]; then
         echo "Sync finished with verification failures" >&2

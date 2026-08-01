@@ -1,63 +1,15 @@
 # Migration safety and conflicts
 
-Use this reference when a migration may write configuration. It offers
-practical defaults for keeping the plan reviewable; explain any intentional
-departure to the user.
+Use before a migration can write. Inspect only the named source, target, and workspace; stop for source/target identity (including symlinks), unsupported formats, or unclear intent. `config` and opaque `project` trees are manual-only. Exclude `.env` and `.env.*`; preserve the source.
 
-## Path and input boundaries
-
-- Prefer the two IDEs and optional workspace named by the user over broad
-  discovery. This keeps the plan understandable and limits incidental data.
-- Treat source and target paths that resolve to the same file, including
-  symlinks, as a reason to discuss intent before continuing.
-- When JSON, JSONC, TOML, YAML, or a transport is unsupported, describe the
-  manual option rather than presenting an unvalidated copy as equivalent.
-- MCP transport labels are not interchangeable: a bare remote URL is
-  insufficient to infer one, and legacy `sse` must not be silently upgraded to
-  Streamable HTTP. Do not add protocol headers, session IDs, or handshake state
-  to a client configuration; those belong to the runtime connection.
-- Excluding copied `.env` and `.env.*` files usually avoids moving unrelated
-  credentials; preserve the source copy regardless of the target strategy.
-- Whole IDE config files and opaque project configuration trees are not copied.
-  Treat `config` and `project` as manual review boundaries; migrate only a
-  supported dedicated object with an explicit source and target schema.
-
-## Credentials and destructive operations
-
-- A dry run is useful because it parses the selected source without creating
-  target output or exposing raw configuration values.
-- The bundled script blanks literal credentials. It can preserve or translate
-  an exact documented environment reference; mixed, default, and command-
-  substitution syntax benefit from manual review.
-- OAuth tokens, refresh state, client-registration records, and session state
-  are not migration inputs. Preserve only documented non-secret connection
-  fields, then authorize again in the target client against the target server's
-  discovered issuer.
-- If redaction cannot establish a safe result, explain that outcome and offer a
-  manual reconstruction. The script limits target-tree removal to containment
-  and symlink-guarded paths.
-
-## Conflict strategies
+Use [mcp-transport.md](mcp-transport.md) for remote transport, OAuth, or protocol state. The script blanks literal credentials and may translate an exact documented environment reference; mixed or complex expressions need manual reconstruction. Its removal paths are containment- and symlink-guarded.
 
 | Strategy | Existing selected object |
-|---|---|
-| `skip` | Preserve it and leave that object unchanged. |
-| `backup` (default) | Create `.bak.<timestamp>`, then merge; same-name source entries become active. |
-| `overwrite` | Replace only the selected object, without a backup. |
+| --- | --- |
+| `skip` | Leave unchanged. |
+| `backup` (default) | Save `.bak.<timestamp>`, then merge. |
+| `overwrite` | Replace only the selected object, without backup. |
 
-For MCP in a shared configuration file, every strategy preserves unrelated
-top-level settings. `overwrite` replaces the selected server map, not the whole
-file. For directory-backed skills or projects, the selected same-name directory
-or tree is the object. When another strategy is requested, clarify its desired
-semantics before resolving or writing; a renamed `<name>_migrated` entry is not
-part of the built-in strategies.
+For shared MCP configuration, preserve unrelated settings; `overwrite` replaces only the selected server map. Do not invent renamed fallback entries.
 
-## Preview and consent
-
-An effective first response restates source, target, objects, scope, and
-workspace; calls out manual boundaries or credential risk; and offers an exact
-`--dry-run` command. Keep the distinction between a preview and an apply clear.
-
-After approval, the bundled script uses `--yes` for writes and `--json` is often
-the clearest reporting mode. Share resolved paths, parse result, source
-integrity, target evidence, backup path, and any manual follow-ups.
+Restate source, target, objects, scope, workspace, boundaries, and strategy; offer an exact value-free `--dry-run`. After approval, use `--yes` and usually `--json`; report paths, parse result, source integrity, target evidence, backup, and manual follow-ups.

@@ -12,11 +12,6 @@ ROOT = Path(__file__).resolve().parents[1]
 SKILLS = ROOT / "skills"
 errors: list[str] = []
 
-# Provider-key value formats (CR-001 fix). Kept in sync with the runtime
-# redactor in skills/agent-skills-setup/scripts/smart-ide-migration.sh so the
-# publish-time validator and the migration-time redactor never drift. These
-# shapes never carry a secret-like KEY name, so the key-name heuristics miss
-# them; we match the credential value directly.
 SECRET = re.compile(
     r"(?:sk-[A-Za-z0-9_-]{16,}"
     r"|gh[pousr]_[A-Za-z0-9]{20,}"
@@ -94,8 +89,6 @@ def validate_skill(skill_dir: Path) -> None:
 
     if name != skill_dir.name:
         errors.append(f"{path.relative_to(ROOT)}: name must match directory ({skill_dir.name})")
-    # MED-P5: guard the split — a SKILL.md without frontmatter delimiters
-    # would raise IndexError on [1] and crash the whole validation run.
     fm_parts = text.split("---", 2)
     fm_body = fm_parts[1] if len(fm_parts) > 1 else ""
     if not description and "description:" not in fm_body:
@@ -120,10 +113,6 @@ def validate_skill(skill_dir: Path) -> None:
 
 
 def _is_test_file(path: Path) -> bool:
-    # Test/fixture files intentionally contain secret-shaped strings and
-    # absolute paths (e.g. redaction fixtures, provider-key samples). They are
-    # not publishable skill content, so scanning them would only produce false
-    # positives. Skip them — same spirit as gitleaks path exclusions.
     name = path.name
     if name.startswith(("test-", "test_")) or name == "conftest.py":
         return True

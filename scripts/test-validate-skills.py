@@ -35,8 +35,6 @@ def check(name: str, cond: bool) -> None:
         FAIL += 1
 
 
-# ---------------------------------------------------------------------------
-# 1. SECRET must match every well-known provider-key value format.
 providers = {
     "sk-": "sk-ant-abcdefghijklmnopqrstuvw",
     "ghp_": "ghp_abcdefghijklmnopqrstuv",
@@ -51,7 +49,6 @@ providers = {
 for label, val in providers.items():
     check(f"SECRET matches {label} value", bool(vs.SECRET.search(val)))
 
-# 2. SECRET must NOT false-positive on benign strings.
 for benign in [
     "sk-",
     "sk-short",
@@ -62,12 +59,10 @@ for benign in [
 ]:
     check(f"SECRET ignores benign {benign!r}", not vs.SECRET.search(benign))
 
-# 3. PRIVATE_PATH catches machine-specific absolute paths, ignores relative.
 check("PRIVATE_PATH matches /Users/...", bool(vs.PRIVATE_PATH.search("/Users/jack/.config/secret")))
 check("PRIVATE_PATH matches /home/...", bool(vs.PRIVATE_PATH.search("/home/alice/.ssh/id_rsa")))
 check("PRIVATE_PATH ignores relative", not vs.PRIVATE_PATH.search("~/.config/secret"))
 
-# 4. validate_skill() end-to-end branches.
 tmp = tempfile.mkdtemp()
 vs.ROOT = pathlib.Path(tmp)  # keep relative_to() valid for our out-of-tree fixture
 
@@ -83,7 +78,6 @@ def write_skill(body: str) -> pathlib.Path:
     return skill_dir
 
 
-# 4a. embedded provider secret in description
 vs.errors.clear()
 write_skill(
     "---\n"
@@ -99,7 +93,6 @@ check(
 )
 vs.errors.clear()
 
-# 4b. private absolute path
 write_skill(
     "---\n"
     "name: demo-skill\n"
@@ -114,7 +107,6 @@ check(
 )
 vs.errors.clear()
 
-# 4c. broken relative link
 write_skill(
     "---\n"
     "name: demo-skill\n"
@@ -129,7 +121,6 @@ check(
 )
 vs.errors.clear()
 
-# 4d. clean skill passes with no errors
 write_skill(
     "---\n"
     "name: demo-skill\n"

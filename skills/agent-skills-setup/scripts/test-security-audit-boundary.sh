@@ -26,10 +26,13 @@ if grep -Eq '^  - (install|network):' "$SKILL_ROOT/SKILL.md"; then
     fail "publishable Skill still declares install/network authority"
 fi
 
+[[ ! -e "$SKILL_ROOT/references/openclaw.md" ]] || \
+    fail "OpenClaw-specific guidance must live in the selected IDE reference"
+
 if rg -n --glob '!test-security-audit-boundary.sh' \
     -- '--env\)|--env-file\)|install\.sh|install -g|curl -fsSL|metadata\.openclaw\.install' \
     "$SKILL_ROOT/scripts" "$SKILL_ROOT/SKILL.md" \
-    "$SKILL_ROOT/references/openclaw.md" >/dev/null; then
+    "$SKILL_ROOT/references/ides/openclaw.md" >/dev/null; then
     fail "publishable Skill still exposes installation or literal-secret ingestion paths"
 fi
 
@@ -38,17 +41,17 @@ if rg -n 'rm[[:space:]]+-[^[:space:]]*r[^[:space:]]*f|rm[[:space:]]+-[^[:space:]
     fail "migration script still contains raw recursive force deletion"
 fi
 
-python3 - "$SKILL_ROOT/references/openclaw.md" <<'PY'
+python3 - "$SKILL_ROOT/SKILL.md" <<'PY'
 from pathlib import Path
 import sys
 
 text = Path(sys.argv[1]).read_text(encoding="utf-8")
-heading = text.find("## 5. Safe migration workflow")
+heading = text.find("## Workflow")
 dry_run = text.find("--dry-run", heading)
 apply = text.find("--yes", heading)
 if heading < 0 or dry_run < 0 or apply < 0 or dry_run > apply:
     raise SystemExit(
-        "FAIL: OpenClaw workflow must put an explicit dry-run before the approved apply"
+        "FAIL: migration workflow must put an explicit dry-run before the approved apply"
     )
 PY
 

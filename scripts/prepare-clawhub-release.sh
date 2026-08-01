@@ -1,14 +1,8 @@
 #!/usr/bin/env bash
-#
-# prepare-clawhub-release.sh — SINGLE RESPONSIBILITY: validate a skill folder and
-# construct/run the `clawhub publish` command for release.
-# Canonical publish command: `clawhub publish`. (`npx skills add` is for CONSUMERS
-# installing a published skill, NOT for publishing.)
-# This script does NOT build the public repo layout or README; that is done upstream by
-# export-public-skill.sh (see ./export-public-skill.sh), which must prepare the public
-# GitHub repository before this script publishes it to ClawHub.
-#
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/openclaw-common.sh"
 
 SKILL_DIR=""
 SKILL_DIR_ABS=""
@@ -24,7 +18,7 @@ usage() {
     cat <<'EOF'
 Usage: prepare-clawhub-release.sh [options]
 
-Validate a skill folder and print or run the exact ClawHub publish command.
+Validate a Skill and print or run its ClawHub publish command.
 
 Options:
   --skill-dir <dir>         Path to the skill folder to publish.
@@ -37,15 +31,6 @@ Options:
   --publish                 Execute `clawhub publish` after validation.
   -h, --help                Show this help text.
 EOF
-}
-
-die() {
-    echo "ERROR: $*" >&2
-    exit 1
-}
-
-command_exists() {
-    command -v "$1" >/dev/null 2>&1
 }
 
 while [[ $# -gt 0 ]]; do

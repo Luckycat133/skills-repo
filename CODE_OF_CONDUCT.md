@@ -1,36 +1,7 @@
-# Code Of Conduct
+# Code of Conduct
 
-## Expected Behavior
+Be respectful, direct, and rigorous. Discuss the work rather than people, and share enough context for bugs and proposals.
 
-- Be respectful and direct.
-- Assume good intent, but keep technical discussions rigorous.
-- Focus feedback on the work, not the person.
-- Share context clearly when reporting bugs or proposing changes.
+Harassment, threats, discrimination, abusive language, bad-faith disruption, and sharing private information without consent are unacceptable. Maintainers may correct, warn, temporarily ban, or permanently ban participants according to severity and repetition.
 
-## Unacceptable Behavior
-
-- Harassment, threats, or abusive language.
-- Discriminatory or hateful conduct.
-- Deliberate disruption, spam, or bad-faith review cycles.
-- Sharing private information without consent.
-
-## Enforcement
-
-Project maintainers may remove or reject contributions that do not meet these expectations.
-
-### Enforcement guidelines
-
-1. **Correction** — for a first slip, a maintainer reaches out privately with a clear, specific note about the behavior and the expected change.
-2. **Warning** — if the behavior continues, a public or private warning is issued citing this Code of Conduct.
-3. **Temporary ban** — repeated or serious violations result in a temporary ban from project spaces.
-4. **Permanent ban** — sustained abuse, threats, or hateful conduct leads to a permanent removal from the project.
-
-Maintainers apply these steps consistently and proportionally; context and intent are taken into account.
-
-## Scope
-
-This Code of Conduct applies to all project spaces — issues, pull requests, discussions, and any other official communication channels — as well as public representations of the project by maintainers or contributors.
-
-## Reporting
-
-Report unacceptable behavior to the repository maintainer via a private GitHub Security Advisory or by emailing `<conduct-contact@example.com>` (replace with the real contact before publishing). All reports are reviewed promptly and kept confidential to the extent possible.
+This applies to all project spaces and public project representation. Report an incident privately through a [GitHub Security Advisory](https://docs.github.com/en/code-security/security-advisories) or `<conduct-contact@example.com>` (replace before publishing). Reports are handled promptly and confidentially where possible.

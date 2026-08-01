@@ -1,67 +1,12 @@
-# Release Checklist
+# 发布检查清单
 
-> **文档元信息** ｜ 更新日期：2026-07-29 ｜ 作者：skills-repo 维护组 ｜ 类型：发布清单 ｜ 状态：已发布
+- [ ] `SKILL.md` 描述具体、可触发；根镜像已同步。
+- [ ] `bash validate-all.sh` 在干净 checkout 通过。
+- [ ] 迁移保持 dry-run、显式 `--yes`、冲突策略、脱敏和 fail-closed 边界。
+- [ ] 聚焦测试覆盖路径漂移、MCP schema/transport、秘密处理、符号链接、目标冲突和零预览写入。
+- [ ] 可发布 Skill 不包含安装、发布、全局同步或字面环境值写入工具。
+- [ ] 公开文件不含私有路径、凭据或机器特定假设；`.env` 不复制。
+- [ ] 支持的 IDE/安装渠道、README、变更记录和发行文档一致。
+- [ ] ClawHub 的 slug、版本、标签和简短 changelog 已准备；发布后已 inspect。
 
-## 中文
-
-- 确认 `SKILL.md` 的描述足够具体、准确，并能触发正确的使用场景。
-- 确认打包脚本通过 shell 语法检查。
-- 确认仓库级 OpenClaw 工具至少通过一次隔离环境验证，且不被打进发布 Skill。
-- 确认跨 IDE 迁移先走 staging 模式，再通过 strict 校验后才允许 direct 写入。
-- 确认真实机器测试没有写入用户原有 `~/.openclaw` 配置，或已明确记录任何例外行为。
-- 确认公开文档中不包含私有路径、机器特定假设或敏感信息。
-- 确认所有支持代理的安装说明都是当前有效版本。
-- 确认新增主流 IDE（Cursor、Windsurf、JetBrains、Trae CN）至少完成一次 dry-run 冒烟验证。
-- 确认 ClawHub、`skills.sh`、Awesome Copilot 的发布说明与当前官方行为一致。
-- 确认 ClawHub 发布命令、slug、版本号和 changelog 文案已经准备完成。
-- 确认 README、CHANGELOG 和分发文档已更新为中英双语。
-- 确认 `bash validate-all.sh` 在干净本地 checkout 上通过（已完成 R1 修复：校验器通过 `git ls-files` 跳过被忽略的路径）。
-- 确认脱敏覆盖 provider-key 值格式（`sk-`/`ghp_`/`AKIA`/`xoxb`/`ya29`/`AIza`），且 `test-mcp-secret-redaction.sh` 含这些值的 fixture。
-- 确认无 `python3` 时 `redact_secrets_in_file` 走 fail-closed（拒绝复制或报错），绝不返“成功”却零脱敏（CR-002）。
-- 确认 CI 实际执行全量测试套件（`validate-all.sh` 自动发现并执行 `skills/agent-skills-setup/scripts/test-*.sh`，用 `--list-tests` 审计清单）。
-- 确认迁移副本完全排除 `.env` / `.env.*`，源文件保持不变；其他文件继续先脱敏再写入目标。
-- 确认可发布 Skill 不包含安装、发布、全局镜像、依赖执行或字面环境值写入工具；这些能力仅保留在仓库级 `scripts/`。
-- 确认所有递归目标清理都经过父目录包含关系和符号链接保护，并使用不跟随链接的受控树清理。
-- 确认 OpenClaw 迁移文档先给出 `--dry-run`，经明确批准后才给出 `--yes`。
-- 确认非 MCP 对象（skills/agents/hooks/memory）复制时也经脱敏或至少扫描告警（MED-S3）。
-- 确认 root `SKILL.md` 镜像写入为原子操作（已完成 G4/MED-P4 修复：临时文件 + `mv` 替换，且采用前缀 link 自动重写）。
-- 确认 `--source-mcp-file` 的正常输入、错误 root/schema、符号链接同源和 `--scope both` 拒绝场景均有回归；dry-run 会真实解析但不写 workspace/target。
-- 确认字面凭据与混合/复杂表达式 fail-closed，而精确 Cursor `${env:NAME}` 引用转换为 OpenCode `{env:NAME}`；canonical `SKILL.md` 更新后通过同步脚本生成 root 镜像。
-- 确认 Eval 4 在隔离 workspace 中实际执行 dry-run/apply，并以目标文件和 source digest 证明零预览写入、正确转换及源不变，而不是只检查回答文字。
-- 确认 VS Code 用户级 MCP 保持 active-Profile/manual 边界，不推测 default Profile 路径；项目级仍解析为 `.vscode/mcp.json`。
-- 确认 MCP `skip`/`backup`/`overwrite` 策略在共享配置中保留无关字段，并有同名 server 回归；不得再声称创建 `<name>_migrated`。
-- 确认未知 `--strategy` 在任何目标写入前返回非零，且已有目标逐字节不变、无备份或成功记录。
-- 确认 OpenCode V1 与 V2 fixture 均通过，V2 使用 `mcp.servers` 且 `--json` 报告含完整 `evidence.mcp` 证据链。
-- 确认 `evals/evals.json` 的 8 个行为案例与 `evals/trigger-evals.json` 的 20 个正负触发案例通过 coverage test。
-
-## English
-
-- Verify the `SKILL.md` description is specific, accurate, and triggerable for the intended use case.
-- Verify bundled scripts pass shell syntax checks.
-- Verify repository-level OpenClaw tools pass an isolated-environment run and are not packaged in the publishable Skill.
-- Verify cross-IDE migration runs in staging mode first, then passes strict validation before any direct-write rollout.
-- Verify real-machine testing did not write into the user's existing `~/.openclaw` state, or explicitly document any exception.
-- Remove private paths, machine-specific assumptions, and sensitive material from public-facing docs.
-- Confirm install instructions for all supported agents are current.
-- Verify newly added mainstream IDE targets (Cursor, Windsurf, JetBrains, Trae CN) pass at least one dry-run smoke test.
-- Confirm ClawHub, `skills.sh`, and Awesome Copilot guidance still matches current official behavior.
-- Confirm the ClawHub publish command, slug, version, and changelog text are ready.
-- Confirm the README, CHANGELOG, and distribution docs are updated in both Chinese and English.
-- Confirm `bash validate-all.sh` passes on a clean local checkout (R1 resolved: validator uses git ls-files to skip ignored paths).
-- Confirm redaction covers provider-key value formats (`sk-`/`ghp_`/`AKIA`/`xoxb`/`ya29`/`AIza`) and `test-mcp-secret-redaction.sh` includes fixtures with these values.
-- Confirm `redact_secrets_in_file` fails closed when `python3` is missing (refuses copy or errors) — never returns "success" with zero redaction (CR-002).
-- Confirm CI actually runs every focused suite (`validate-all.sh --list-tests` enumerates all colocated `test-*.sh` files and the default run executes each one).
-- Confirm migration copies exclude `.env` / `.env.*` entirely while leaving source files unchanged; redact other files before target writes.
-- Confirm the publishable Skill excludes installation, publication, global mirroring, dependency execution, and literal environment-value ingestion tools; keep them only under repository-level `scripts/`.
-- Confirm every recursive target cleanup validates parent containment and symlinks and uses non-following controlled tree cleanup.
-- Confirm the OpenClaw migration guide presents `--dry-run` before any explicitly approved `--yes` apply.
-- Confirm non-MCP objects (skills/agents/hooks/memory) are also redacted on copy, or at least scanned with a warning (MED-S3).
-- Confirm the root `SKILL.md` mirror write is atomic (G4/MED-P4 resolved: temp file + `mv` with prefix-based link rewriting).
-- Confirm `--source-mcp-file` covers valid input, wrong root/schema, symlink self-target, and rejected `--scope both`; dry-run must parse the source without writing workspace/target output.
-- Confirm literal credentials and mixed/complex expressions fail closed, exact Cursor `${env:NAME}` references become OpenCode `{env:NAME}`, and the root mirror is generated from the canonical `SKILL.md`.
-- Confirm Eval 4 actually executes dry-run/apply in an isolated workspace and uses target-file plus source-digest evidence, rather than grading response text alone.
-- Confirm VS Code user MCP remains active-Profile/manual and no default Profile path is guessed; project MCP still resolves to `.vscode/mcp.json`.
-- Confirm MCP `skip`/`backup`/`overwrite` preserve unrelated shared-config fields and cover same-name servers; never claim a `<name>_migrated` entry is created.
-- Confirm an unknown `--strategy` exits non-zero before any target write, leaving an existing target byte-for-byte unchanged with no backup or success record.
-- Confirm OpenCode V1 and V2 fixtures pass, V2 uses `mcp.servers`, and `--json` includes the complete `evidence.mcp` chain.
-- Confirm the eight behavior evals and balanced 20-case trigger eval set pass `test-eval-coverage.sh`.
+完整命令见 [ClawHub 发布流程](clawhub-release.md)；细粒度回归由 `validate-all.sh` 自动发现的 `test-*.sh` 维护。

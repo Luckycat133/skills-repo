@@ -1,145 +1,55 @@
 # Skills Repository
 
-> Status: Active Development · Canonical Skill Source
-
 [![GitHub Repo](https://img.shields.io/badge/GitHub-Luckycat133%2Fskills--repo-181717?logo=github)](https://github.com/Luckycat133/skills-repo)
 [![License](https://img.shields.io/badge/License-MIT-b7285.svg)](LICENSE)
-[![OpenClaw Ready](https://img.shields.io/badge/OpenClaw-Ready-1f7a8c)](skills/agent-skills-setup/references/openclaw.md)
+[![OpenClaw Ready](https://img.shields.io/badge/OpenClaw-Ready-1f7a8c)](skills/agent-skills-setup/references/ides/openclaw.md)
 
-> 🌐 Languages: **English** · [中文](README.zh-CN.md) · [日本語](README.ja-JP.md) · [Español](README.es.md)
+> Languages: **English** · [中文](README.zh-CN.md) · [日本語](README.ja-JP.md) · [Español](README.es.md)
 
-AI Assistant Capabilities (formerly skills) with a local-first authoring workflow and a practical path to public release.
+Reusable AI-assistant skills, authored locally and published from GitHub.
 
 ## Install
 
-Install the `agent-skills-setup` skill into your agent environment:
-
-**ClawHub (OpenClaw-native)**
-
 ```bash
+# OpenClaw
 openclaw skills install @luckycat133/agent-skills-setup
-```
 
-**skills.sh (cross-agent, Vercel)**
-
-```bash
+# skills.sh
 npx skills add Luckycat133/skills-repo
 ```
 
-Source repository: [Luckycat133/skills-repo](https://github.com/Luckycat133/skills-repo)
-
-## Table Of Contents
-
-- [Quick Summary](#quick-summary)
-- [Install](#install)
-- [Structure](#structure)
-- [Conventions](#conventions)
-- [Current Capability Module](#current-capability-module)
-- [Development Workflow](#development-workflow)
-- [Importing Skills](#importing-skills)
-- [Open Source Metadata](#open-source-metadata)
-- [Publishing](#publishing)
-
-## Quick Summary
-
-| Language | Summary |
-| --- | --- |
-| English | Maintain a migration-only public Skill while keeping OpenClaw automation and release tooling at repository scope. |
-
-## Structure
+## Layout
 
 ```text
 skills-repo/
-├── README.md
-├── docs/
-│   └── agent-skills-setup/
-├── scripts/
-└── skills/
-    └── agent-skills-setup/
-        ├── SKILL.md              # small, always-loaded decision workflow
-        ├── references/           # conditional, task-specific guidance
-        │   └── ides/             # one reference per IDE or agent
-        └── scripts/              # entry points, helpers, and regression tests
+├── docs/                         # active maintainer guidance
+├── scripts/                      # repository tooling
+└── skills/agent-skills-setup/    # canonical publishable skill
+    ├── SKILL.md
+    ├── references/
+    └── scripts/
 ```
 
-## Conventions
+## `agent-skills-setup`
 
-- `skills/` stores publishable skill folders.
-- `docs/` stores development notes, release plans, validation notes, and maintenance checklists.
-- Keep a skill's `SKILL.md` to its trigger, safety gates, and core workflow.
-  Put format-specific or phase-specific instructions in `references/`, and state
-  the exact condition for loading each file.
-- For cross-IDE work, use the two selected files under `references/ides/` rather
-  than loading a single aggregate registry. See `references/ide-registry.md`
-  only as an index for an unfamiliar identifier.
-- `scripts/README.md` separates agent-facing migration entry points from
-  maintainer-only `test-*.sh` regression suites.
-- GitHub `main` is the canonical source of truth; do not edit installed copies.
-- Product-specific skills stay with their canonical product repository.
+Consent-gated migration of selected assistant context between supported IDEs and agents. It handles documented skills, rules, prompts, and MCP objects; whole IDE configuration and opaque project trees stay manual. See the [IDE registry](skills/agent-skills-setup/references/ide-registry.md) for the 40 supported identifiers.
 
-## Current Capability Module
+## Develop
 
-- `agent-skills-setup`: consent-gated migration of selected AI assistant context between named IDEs and agents.
-
-Cross-IDE migration scope covers capabilities, prompts, rules, workflows, and
-supported MCP objects. Whole IDE configuration files and opaque project trees
-are manual-only boundaries.
-
-Covered mainstream IDE ecosystems now include 40 IDEs & agents (Copilot, Cursor, Windsurf, JetBrains, Claude Code, Claude Desktop, Codex, OpenClaw, Trae, Trae CN, Antigravity, Kimi AI, Amazon Q, Gemini CLI, Zed, VS Code, Goose CLI, OpenCode, Continue, Roo Code, Cline, Kilo Code, Kiro, Augment Code, Baidu Comate, Tencent CodeBuddy, ZCode, Void Editor, Aider, Tabnine, Replit, Blackbox, Neovim, Emacs, Cody, Supermaven, Codeium, PearAI, Pieces, WorkBuddy).
-
-## Development Workflow
-
-1. Edit the skill under `skills/` in a GitHub branch.
+1. Edit `skills/agent-skills-setup/`, never the generated root `SKILL.md`.
 2. Run `bash validate-all.sh`.
-3. `validate-all.sh` discovers and executes every colocated focused suite. Use
-   `bash validate-all.sh --list-tests` to audit the exact list; useful individual
-   entry points include:
-   - `bash skills/agent-skills-setup/scripts/test-ide-paths.sh` — cross-platform drift test between `references/ide-paths.json`, per-IDE references, and the script (453 checks).
-   - `bash skills/agent-skills-setup/scripts/test-migration.sh` — migration engine tests (50 checks, isolated temp HOME).
-   - `bash skills/agent-skills-setup/scripts/test-security-audit-boundary.sh` — verifies repository-only automation cannot enter the publishable Skill.
-   - `bash skills/agent-skills-setup/scripts/test-progressive-disclosure.sh` — keeps the always-loaded migration workflow small and verifies its conditional reference routes.
-   - `bash skills/agent-skills-setup/scripts/test-reference-layout.sh` — ensures every mapper IDE has an independent reference and the skill routes source/target reads to it.
-   - `bash skills/agent-skills-setup/scripts/test-mcp-secret-redaction.sh` — literal-secret redaction, explicit MCP source/schema preview, symlink identity, and environment-reference conversion regressions.
-   - `bash skills/agent-skills-setup/scripts/test-conflict-strategies.sh` — strategy semantics plus fail-closed rejection of unknown values before target writes.
-4. Merge only after the validation workflow passes.
-5. Install the merged version into an agent environment:
+3. Regenerate the root mirror after canonical-skill edits: `bash scripts/sync-root-mirror.sh`.
+4. Merge only after validation, then install with `bash install.sh` or a target-specific sync script.
 
-```bash
-bash install.sh
-bash sync-to-codex.sh
-bash sync-to-openclaw.sh
-```
+Existing targets are preserved unless `--force` explicitly requests a timestamped backup and replacement. To review an external skill, use `bash scripts/import-agent-skill.sh <source-dir> <skill-name>` in a branch.
 
-Existing targets are never overwritten silently. Pass `--force` only when you want the installer to move the current copy to a timestamped backup and replace it.
+## Release
 
-## Importing Skills
+GitHub is canonical; ClawHub, `skills.sh`, and Awesome Copilot are distribution channels. Before release, run validation, review `THIRD_PARTY_NOTICES.md`, and remove private paths, secrets, and machine-specific assumptions.
 
-The legacy import helper is only for bringing an external skill into a review branch. Imported content is not canonical until validation and merge.
+## Project
 
-Use the bundled import script:
-
-```bash
-bash scripts/import-agent-skill.sh \
-    ~/.gemini/config/skills/agent-skills-setup \
-    agent-skills-setup
-```
-
-## Open Source Metadata
-
-- License: MIT
-- Contributions: see `CONTRIBUTING.md`
-- Security reporting: see `SECURITY.md`
-- Community expectations: see `CODE_OF_CONDUCT.md`
-
-## Publishing
-
-This repository is designed to support both private local development and public distribution.
-
-Current distribution lanes:
-
-- GitHub repository as the canonical public source.
-- ClawHub for OpenClaw-native publishing and versioned updates.
-- `skills.sh` for cross-agent discovery.
-- The awesome-copilot community list, for curated Copilot visibility (tracked as a separate distribution lane).
-
-Before publishing, run `bash validate-all.sh`, review `THIRD_PARTY_NOTICES.md`, and confirm the repository contains no private paths, local secrets, or machine-specific assumptions.
+- [Contributing](CONTRIBUTING.md)
+- [Security](SECURITY.md)
+- [Code of conduct](CODE_OF_CONDUCT.md)
+- [License](LICENSE)

@@ -2,6 +2,7 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_DIR="${AGENT_SKILLS_SOURCE_DIR:-${HOME}/.gemini/config/skills}"
 STATE_DIR="${OPENCLAW_STATE_DIR:-${HOME}/.openclaw}"
 MANAGED_DIR="${AGENT_SKILLS_OPENCLAW_DIR:-${STATE_DIR}/skills}"
@@ -15,65 +16,28 @@ SKIP_DOCTOR=0
 declare -a WORKSPACES=()
 declare -a AGENTS=()
 declare -a REQUESTED_SKILLS=()
+source "${SCRIPT_DIR}/openclaw-common.sh"
 
 usage() {
     cat <<'EOF'
 Usage: update-openclaw-skills.sh [options]
 
-Update the OpenClaw runtime, registry-managed skills, and mirrored local skills.
+Update OpenClaw, registry skills, and local mirrors.
 
 Options:
   --source <dir>          Source skill root. Default: ~/.gemini/config/skills
   --managed-dir <dir>     Managed OpenClaw skill directory. Default: ~/.openclaw/skills
-  --workspace <dir>       Run ClawHub/mirror updates for this workspace. Repeatable.
-  --agent <id:workspace>  Add a workspace via agent notation. Repeatable.
-  --skills <list>         Comma-separated subset of skills to mirror-update.
+  --workspace <dir>       Update this workspace. Repeatable.
+  --agent <id:workspace>  Add workspace by agent notation. Repeatable.
+  --skills <list>         Comma-separated mirror subset.
   --skip-runtime          Do not run `openclaw update`.
   --skip-clawhub          Do not run `clawhub update --all`.
   --skip-mirror           Do not run local rsync mirror updates.
-    --skip-doctor           Do not run `openclaw doctor` after updates.
-  --dry-run               Preview commands and rsync changes without applying.
-  --yes                   Confirm destructive mirror. REQUIRED to apply the local
-                          rsync mirror: it uses `rsync -a --delete`, which removes
-                          any file in a destination skill dir that is absent from
-                          the source. Without --yes (and not in --dry-run), the
-                          script refuses the mirror step. Preview first with --dry-run.
+  --skip-doctor           Do not run `openclaw doctor` after updates.
+  --dry-run               Preview commands and mirror changes.
+  --yes                   Apply the local `rsync -a --delete` mirror; preview first.
   -h, --help              Show this help text.
 EOF
-}
-
-die() {
-    echo "ERROR: $*" >&2
-    exit 1
-}
-
-run_cmd() {
-    printf '+ '
-    printf '%q ' "$@"
-    printf '\n'
-    if [[ $DRY_RUN -eq 0 ]]; then
-        "$@"
-    fi
-}
-
-command_exists() {
-    command -v "$1" >/dev/null 2>&1
-}
-
-split_csv_into_array() {
-    local raw="$1"
-    local output_name="$2"
-    local old_ifs="$IFS"
-    local -a parsed=()
-
-    IFS=',' read -r -a parsed <<< "$raw"
-    IFS="$old_ifs"
-
-    eval "$output_name=()"
-    local item
-    for item in "${parsed[@]}"; do
-        eval "$output_name+=(\"\$item\")"
-    done
 }
 
 while [[ $# -gt 0 ]]; do
@@ -152,12 +116,19 @@ if [[ ${#AGENTS[@]} -gt 0 ]]; then
     done
 fi
 
+mirror_destinations() {
+    printf '%s\n' "$MANAGED_DIR"
+    local workspace
+    for workspace in "${WORKSPACES[@]}"; do
+        printf '%s/skills\n' "$workspace"
+    done
+}
+
 mirror_selected_skills() {
     local destination_root="$1"
     local skill_name
     local -a rsync_cmd=(rsync -a --delete)
 
-    # MED-P8: fail with a clear hint instead of a raw "command not found".
     if ! command -v rsync >/dev/null 2>&1; then
         die "rsync not found; the mirror step requires rsync (macOS: xcode-select --install, Debian/Ubuntu: apt install rsync). Re-run with --skip-mirror to update the runtime only."
     fi
@@ -209,12 +180,7 @@ if [[ $SKIP_MIRROR -eq 0 ]]; then
         echo "REFUSING destructive mirror: this mirrors with 'rsync -a --delete', which" >&2
         echo "removes any file in a destination skill dir that is absent from the source." >&2
         echo "Affected destinations:" >&2
-        echo "  $MANAGED_DIR" >&2
-        if [[ ${#WORKSPACES[@]} -gt 0 ]]; then
-            for workspace in "${WORKSPACES[@]}"; do
-                echo "  $workspace/skills" >&2
-            done
-        fi
+        mirror_destinations | sed 's/^/  /' >&2
         echo "Preview a plan first with --dry-run, then rerun with --yes to apply" >&2
         echo "(or pass --skip-mirror to skip local mirroring entirely)." >&2
         exit 1
@@ -222,21 +188,13 @@ if [[ $SKIP_MIRROR -eq 0 ]]; then
 
     if [[ $DRY_RUN -eq 0 ]]; then
         echo "WARNING: applying destructive mirror (rsync -a --delete) to:" >&2
-        echo "  $MANAGED_DIR" >&2
-        if [[ ${#WORKSPACES[@]} -gt 0 ]]; then
-            for workspace in "${WORKSPACES[@]}"; do
-                echo "  $workspace/skills" >&2
-            done
-        fi
+        mirror_destinations | sed 's/^/  /' >&2
         echo "Any file present in a destination but missing from the source will be deleted." >&2
     fi
 
-    mirror_selected_skills "$MANAGED_DIR"
-    if [[ ${#WORKSPACES[@]} -gt 0 ]]; then
-        for workspace in "${WORKSPACES[@]}"; do
-            mirror_selected_skills "$workspace/skills"
-        done
-    fi
+    while IFS= read -r destination; do
+        mirror_selected_skills "$destination"
+    done < <(mirror_destinations)
 fi
 
 if [[ $DRY_RUN -eq 0 && $SKIP_DOCTOR -eq 0 ]] && command_exists openclaw; then

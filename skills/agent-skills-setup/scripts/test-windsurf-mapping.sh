@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Fixture-only checks for the current Windsurf/Devin Desktop mapping.
 
 set -euo pipefail
 

@@ -1,31 +1,24 @@
 # Repository Guidelines
 
-## Project Structure & Module Organization
+## Layout
 
-`skills/agent-skills-setup/` is the canonical publishable skill. Its `SKILL.md` defines behavior, `scripts/` contains migration and synchronization tools, `references/` stores IDE metadata and supporting guidance, and `assets/` holds reusable templates. The root `SKILL.md` is generated for distribution; edit the canonical copy and run `bash scripts/sync-root-mirror.sh`. Repository-wide utilities live in `scripts/`. Keep only active design and release guidance for this repository's own skill in `docs/agent-skills-setup/`; temporary audits, evaluation outputs, and reviews of unrelated user-level skills do not belong in this repository. Shell integration tests are colocated with the skill as `skills/agent-skills-setup/scripts/test-*.sh`.
+`skills/agent-skills-setup/` is the canonical publishable skill: `SKILL.md` defines behavior, `references/` holds conditional guidance, `scripts/` holds migration tools and colocated `test-*.sh` suites, and `assets/` holds reusable templates. The root `SKILL.md` is generated; edit the canonical file and run `bash scripts/sync-root-mirror.sh`. Keep repository tooling in `scripts/` and only active, repository-owned guidance in `docs/agent-skills-setup/`.
 
-## Build, Test, and Development Commands
+## Validate
 
-- `bash validate-all.sh` runs shell syntax checks, Python skill validation, mirror verification, and the core regression suites.
-- `python3 scripts/validate_skills.py` checks skill frontmatter, names, relative links, secrets, and private paths.
-- `bash scripts/sync-root-mirror.sh --check` verifies that the root mirror is current; omit `--check` to regenerate it.
-- `bash skills/agent-skills-setup/scripts/test-migration.sh` runs isolated migration and global-sync integration tests.
-- `bash skills/agent-skills-setup/scripts/test-<ide>-mapping.sh` exercises one IDE mapping, such as `test-cursor-mapping.sh`.
+- `bash validate-all.sh` — required before a PR; runs syntax, validation, mirror checks, and focused suites.
+- `python3 scripts/validate_skills.py` — frontmatter, links, secrets, and private-path checks.
+- `bash scripts/sync-root-mirror.sh --check` — verify the generated mirror.
+- `bash skills/agent-skills-setup/scripts/test-<feature>.sh` — run a focused regression, for example `test-cursor-mapping.sh`.
 
-Run the full validation command before opening a pull request.
+## Style
 
-## Coding Style & Naming Conventions
+Use portable Bash (`#!/usr/bin/env bash`, quoted variables, `set -euo pipefail`) and four-space indentation. Python uses type hints, `pathlib`, and preferably the standard library. Use lowercase kebab-case names and concise Markdown with relative links. Do not edit generated mirrors.
 
-Write portable Bash with `#!/usr/bin/env bash`, quoted variables, descriptive uppercase environment variables, and `set -euo pipefail` unless a test intentionally accumulates failures. Use four-space indentation in shell and Python. Python utilities should use type hints, `pathlib`, and standard-library dependencies where practical. Name skills and directories in lowercase kebab-case; name tests `test-<feature>.sh`. Keep Markdown concise and use relative repository links. Never edit generated mirrors directly.
+## Changes
 
-## Testing Guidelines
+Keep changes focused; add a nearby regression for changed behavior, including success and failure/dry-run paths. Tests must use isolated temporary directories and never touch real agent configuration. Use Conventional Commits. PRs explain scope, affected IDEs, and validation; update the README, docs, and changelog when behavior or release steps change.
 
-Tests use self-contained Bash harnesses with temporary directories and explicit `PASS`/`FAIL` assertions. Do not read from or write to a contributor's real agent configuration. Add regression coverage beside the affected script, and verify both success and failure or dry-run behavior. No numeric coverage threshold is enforced; changed behavior must be exercised by a focused test and `validate-all.sh`.
+## Security
 
-## Commit & Pull Request Guidelines
-
-Follow the repository's Conventional Commit pattern, for example `fix(security): redact MCP secrets` or `docs: update release guidance`. Keep commits focused. Pull requests should explain what changed and why, identify affected skills or IDEs, link relevant issues, and report validation commands run. Include screenshots only for user-visible documentation or UI changes. Update `README.md`, relevant `docs/` files, and `CHANGELOG.md` when behavior, configuration, or release steps change.
-
-## Security & Configuration
-
-Do not commit credentials, private absolute paths, or machine-specific assumptions. Preserve dry-run and confirmation safeguards in migration tools, and follow `SECURITY.md` for vulnerability reports.
+Never commit credentials, private absolute paths, or machine-specific assumptions. Preserve dry-run and confirmation safeguards. Follow `SECURITY.md` for vulnerability reports.

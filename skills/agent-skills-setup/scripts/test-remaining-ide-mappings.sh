@@ -139,9 +139,6 @@ write_claude_fixture() {
 }
 
 write_workbuddy_fixture() {
-    # WorkBuddy desktop's documented portable example is local-only:
-    # command plus optional args/env. Keep the remote fixture out of its
-    # positive test; remote/metadata shapes are covered as fail-closed below.
     printf '%s\n' '{"mcpServers":{"local":{"command":"node","args":["server.js","--token","workbuddy-token"],"env":{"API_KEY":"workbuddy-api-key"}}}}' > "$TEST_HOME/.claude.json"
 }
 
@@ -188,8 +185,6 @@ for target in opencode kilocode kimiai jetbrains workbuddy void-editor kiro augm
     assert_not_contains "$target_file" "live-bearer"
 done
 
-# Roo Code's project MCP file is officially documented and can be migrated in
-# explicit project scope. Global Roo MCP remains UI-managed/manual.
 printf '%s\n' '{"mcpServers":{"roo-project":{"command":"node","args":["server.js"],"env":{"API_KEY":"__roo_project_inert_fixture__"}}}}' > "$PROJECT/.mcp.json"
 HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source claude --target roo-code --workspace "$PROJECT" \
@@ -220,8 +215,6 @@ assert_contains "$(mcp_target_path zcode)" '"mcp"'
 assert_contains "$(mcp_target_path zcode)" '"servers"'
 assert_contains "$(mcp_target_path tencent-codebuddy)" '"mcpServers"'
 
-# WorkBuddy desktop does not have first-party evidence for portable remote
-# URL/SSE/headers entries. The converter must fail closed and leave no target.
 rm -f "$(mcp_target_path workbuddy)"
 printf '%s\n' '{"mcpServers":{"remote":{"type":"sse","url":"https://example.invalid/mcp","headers":{"Authorization":"Bearer __workbuddy_inert_fixture__"}}}}' > "$TEST_HOME/.claude.json"
 HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
@@ -233,8 +226,6 @@ assert_contains "$OUTPUT" "WorkBuddy desktop MCP schema"
     exit 1
 }
 
-# Void's custom MCP store has the same fail-closed boundary for authenticated
-# remote entries: the archived runtime does not establish header forwarding.
 rm -f "$(mcp_target_path void-editor)"
 printf '%s\n' '{"mcpServers":{"remote":{"url":"https://example.invalid/mcp","headers":{"Authorization":"Bearer __void_inert_fixture__"}}}}' > "$TEST_HOME/.claude.json"
 HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
@@ -246,8 +237,6 @@ assert_contains "$OUTPUT" "Void MCP schema"
     exit 1
 }
 
-# A URL-only remote entry is the narrow remote shape the Void source can
-# represent; it must be written without inventing headers or transport keys.
 printf '%s\n' '{"mcpServers":{"remote":{"url":"https://example.invalid/mcp"}}}' > "$TEST_HOME/.claude.json"
 HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source claude --target void-editor --workspace "$PROJECT" \
@@ -255,8 +244,6 @@ HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
 python3 -m json.tool "$(mcp_target_path void-editor)" >/dev/null
 assert_contains "$(mcp_target_path void-editor)" '"url": "https://example.invalid/mcp"'
 
-# Junie has no verified portable remote target shape in the reviewed IDE
-# docs; reject foreign remote/type/headers data instead of writing it.
 rm -f "$(mcp_target_path jetbrains)"
 printf '%s\n' '{"mcpServers":{"remote":{"type":"sse","url":"https://example.invalid/mcp","headers":{"Authorization":"Bearer __junie_inert_fixture__"}}}}' > "$TEST_HOME/.claude.json"
 HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
@@ -277,8 +264,6 @@ assert_contains "$TEST_HOME/.comate/mcp.json" '"type": "stdio"'
 assert_contains "$TEST_HOME/.comate/mcp.json" '"type": "sse"'
 assert_not_contains "$TEST_HOME/.comate/mcp.json" "__comate_inert_fixture__"
 
-# Exercise the JSONC reader with Kilo's documented comments/trailing-comma
-# format, then convert its native `mcp` root into OpenCode's JSON config.
 mkdir -p "$TEST_HOME/.config/kilo"
 printf '%s\n' '// Kilo JSONC fixture' '{' '  "mcp": {' '    "fixture": {' '      "type": "local",' '      "command": ["node", "server.js"],' '      "environment": {"API_KEY": ""},' '    },' '  },' '}' > "$TEST_HOME/.config/kilo/kilo.jsonc"
 HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
@@ -287,9 +272,6 @@ HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
 python3 -m json.tool "$TEST_HOME/.config/opencode/opencode.json" >/dev/null
 assert_contains "$TEST_HOME/.config/opencode/opencode.json" '"fixture"'
 
-# Comate requires an explicit transport type. A rejected overwrite must be
-# transactional: keep the previously valid target byte-for-byte instead of
-# replacing it with invalid data or deleting recoverable configuration.
 COMATE_BEFORE="$TMP_ROOT/comate-before.json"
 cp "$TEST_HOME/.comate/mcp.json" "$COMATE_BEFORE"
 printf '%s\n' '{"mcpServers":{"ambiguous":{"command":"node"}}}' > "$TEST_HOME/.claude.json"
@@ -302,9 +284,6 @@ cmp -s "$COMATE_BEFORE" "$TEST_HOME/.comate/mcp.json" || {
     exit 1
 }
 
-# Invalid non-array args must fail closed rather than being silently dropped
-# when a command-array source is normalized for the scalar-command targets.
-# As above, failure preserves the last valid target.
 ZCODE_BEFORE="$TMP_ROOT/zcode-before.json"
 cp "$TEST_HOME/.zcode/cli/config.json" "$ZCODE_BEFORE"
 printf '%s\n' '{"mcpServers":{"ambiguous":{"command":["node","server.js"],"args":"not-an-array"}}}' > "$TEST_HOME/.claude.json"
@@ -317,9 +296,6 @@ cmp -s "$ZCODE_BEFORE" "$TEST_HOME/.zcode/cli/config.json" || {
     exit 1
 }
 
-# CodeBuddy's official Skills docs publish both global and project roots. A
-# real global migration must therefore copy the complete Skill directory,
-# including SKILL.md and bundled resources, rather than report manual.
 mkdir -p "$TEST_HOME/.claude/skills/code-review/scripts"
 printf '%s\n' '---' 'name: code-review' 'description: Review code' '---' 'Review the code.' > "$TEST_HOME/.claude/skills/code-review/SKILL.md"
 printf '%s\n' '#!/usr/bin/env bash' 'echo review' > "$TEST_HOME/.claude/skills/code-review/scripts/review.sh"
@@ -335,18 +311,12 @@ HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     exit 1
 }
 
-# Junie prefers the project-local .junie/AGENTS.md target. A source root
-# instruction file is copied there; the whole .junie namespace remains guarded
-# below.
 printf '%s\n' 'Junie project instruction' > "$PROJECT/CLAUDE.md"
 HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source claude --target jetbrains --workspace "$PROJECT" \
     --objects rules --yes --strategy overwrite > "$OUTPUT" 2>&1
 assert_contains "$PROJECT/.junie/AGENTS.md" "Junie project instruction"
 
-# WorkBuddy's official desktop docs describe marketplace/local-package import
-# and do not publish a filesystem Skills root. Keep the generic filesystem
-# migration fail-closed instead of creating ~/.workbuddy/skills heuristically.
 rm -rf "$TEST_HOME/.workbuddy/skills"
 HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source claude --target workbuddy --workspace "$PROJECT" \
@@ -357,17 +327,12 @@ assert_contains "$OUTPUT" "WorkBuddy"
     exit 1
 }
 
-# Void consumes a plain-text .voidrules file at the workspace-folder root.
-# This narrow project-file copy is safe; whole .void-editor/.vscode namespaces
-# remain manual and are covered by the project guard below.
 printf '%s\n' 'Void workspace instruction' > "$PROJECT/CLAUDE.md"
 HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source claude --target void-editor --workspace "$PROJECT" \
     --objects rules --yes --strategy overwrite > "$OUTPUT" 2>&1
 assert_contains "$PROJECT/.voidrules" "Void workspace instruction"
 
-# Whole project namespaces are mixed-format/mixed-scope for every remaining
-# IDE. Verify the guard is present for each one and no directory is copied.
 for source in roo-code void-editor trae trae-cn jetbrains opencode kilocode kimiai workbuddy kiro augment-code baidu-comate tencent-codebuddy zcode; do
     PROJECT_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
         --source "$source" --target claude --workspace "$PROJECT" \

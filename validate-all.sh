@@ -34,27 +34,18 @@ shopt -u nullglob
 
 python3 "$SCRIPT_DIR/scripts/validate_skills.py"
 
-# Validator regression tests (HI-004): pin the SECRET/PRIVATE_PATH regex and
-# the per-branch detection so a future regex drift can't let a secret through.
 if [[ -f "$SCRIPT_DIR/scripts/test-validate-skills.py" ]]; then
   python3 "$SCRIPT_DIR/scripts/test-validate-skills.py"
 fi
 
-# Ensure the repository-root SKILL.md mirror stays in sync with the canonical
-# skill copy. Regenerate with: bash scripts/sync-root-mirror.sh
 if [[ -f "$SCRIPT_DIR/scripts/sync-root-mirror.sh" ]]; then
   bash "$SCRIPT_DIR/scripts/sync-root-mirror.sh" --check
 fi
 
-# Keep the validation entry point honest: every focused test colocated with
-# the Skill must be discoverable through --list-tests and executed below.
 if [[ -f "$SCRIPT_DIR/scripts/test-validate-all-coverage.sh" ]]; then
   bash "$SCRIPT_DIR/scripts/test-validate-all-coverage.sh"
 fi
 
-# Every focused regression test. Test discovery is deliberate here so adding
-# test-<feature>.sh automatically extends local/CI validation instead of
-# requiring a second hand-maintained list.
 if [[ -d "$SETUP_SCRIPTS" ]]; then
   while IFS= read -r test_script; do
     echo "Running $(basename "$test_script")..."

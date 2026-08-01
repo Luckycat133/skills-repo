@@ -11,8 +11,10 @@ fail() {
     exit 1
 }
 
-[[ $(wc -l < "$SKILL_FILE") -le 150 ]] || \
-    fail "SKILL.md must keep its always-loaded workflow to 150 lines or fewer"
+[[ $(wc -l < "$SKILL_FILE") -le 100 ]] || \
+    fail "SKILL.md must keep its always-loaded workflow to 100 lines or fewer"
+[[ $(wc -w < "$SKILL_FILE") -le 600 ]] || \
+    fail "SKILL.md must keep its always-loaded workflow to 600 words or fewer"
 
 for reference in \
     references/migration-safety.md \

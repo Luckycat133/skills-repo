@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
 
-# Focused Emacs boundary test. Emacs itself has init files and directory-local
-# variables, but no native skills/rules/MCP/config migration schema. All of
-# those mappings must therefore be empty and fail closed in the generic tool.
 
 set -euo pipefail
 

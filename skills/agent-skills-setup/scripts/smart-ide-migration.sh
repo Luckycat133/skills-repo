@@ -4,7 +4,6 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Unified, agent-readable output helpers (logging, status tokens, JSON).
 source "${SCRIPT_DIR}/common.sh"
 
 SOURCE_IDE=""
@@ -33,6 +32,35 @@ MIGRATION_STATUS_FILE=""
 MIGRATION_MESSAGES_FILE=""
 MIGRATION_MANUAL_FILE=""
 MIGRATION_EVIDENCE_FILE=""
+PATH_RESOLVER="${SCRIPT_DIR}/ide-paths.tsv"
+
+registry_platform() {
+    case "$(uname -s)" in
+        Darwin) printf 'darwin' ;;
+        Linux) printf 'linux' ;;
+        *) printf 'windows' ;;
+    esac
+}
+
+registry_path() {
+    local ide="$1"
+    local object="$2"
+    local platform
+    local path
+
+    [[ -r "$PATH_RESOLVER" ]] || {
+        log_error "generated path resolver is missing: $PATH_RESOLVER"
+        return 1
+    }
+    platform="$(registry_platform)"
+    path="$(awk -F $'\t' -v ide="$ide" -v object="$object" -v platform="$platform" '
+        $1 == ide && $2 == object && ($3 == "*" || $3 == platform) { print $4; exit }
+    ' "$PATH_RESOLVER")"
+    case "$path" in
+        \~/*) printf '%s/%s\n' "$HOME" "${path#\~/}" ;;
+        *) printf '%s\n' "$path" ;;
+    esac
+}
 
 get_ide_name() {
     local ide="$1"
@@ -81,17 +109,8 @@ get_ide_name() {
     esac
 }
 
-# SOURCE OF TRUTH: skills/agent-skills-setup/references/ide-registry.md (and ide-paths.json).
-# Keep these functions in sync with that file. Drift is caught by test-ide-paths.sh.
 get_global_path() {
-    local ide="$1"
-    case "$ide" in
-        # Antigravity publishes two product/version surfaces with different
-        # global Skills paths: the IDE Skills page names
-        # ~/.gemini/antigravity/skills, while the current shared 2.0 Skills
-        # page names ~/.gemini/config/skills. Prefer an explicit override;
-        # otherwise preserve an existing legacy IDE tree and use the current
-        # shared path for a fresh install. Never merge both trees implicitly.
+    case "$1" in
         antigravity)
             if [[ -n "${ANTIGRAVITY_SKILLS_DIR:-}" ]]; then
                 echo "${ANTIGRAVITY_SKILLS_DIR}"
@@ -101,183 +120,42 @@ get_global_path() {
                 echo "${HOME}/.gemini/config/skills"
             fi
             ;;
-        claude)      echo "${HOME}/.claude/skills" ;;
-        codex)       echo "${HOME}/.agents/skills" ;;
-        copilot)     echo "${HOME}/.copilot/skills" ;;
-        cursor)      echo "${HOME}/.cursor/skills" ;;
-        # Current Devin Desktop/Windsurf docs use the ~/.codeium/windsurf
-        # application namespace for global skills. This is not a separate
-        # legacy Codeium target; the current app still stores data there.
-        windsurf)    echo "${HOME}/.codeium/windsurf/skills" ;;
-        # Junie documents user skills under ~/.junie/skills. This is Junie,
-        # not JetBrains AI Assistant's GUI-managed settings.
-        jetbrains)   echo "${HOME}/.junie/skills" ;;
-        openclaw)    echo "${HOME}/.openclaw/skills" ;;
-        trae)        echo "${HOME}/.trae/skills" ;;
-        trae-cn)     echo "${HOME}/.trae-cn/skills" ;;
-        # VS Code documents personal skills under ~/.copilot/skills (or
-        # ~/.agents/skills). Use the VS Code-documented Copilot location;
-        # ~/.vscode is application data, not a skills directory.
-        vscode)      echo "${HOME}/.copilot/skills" ;;
-        zed)         echo "${HOME}/.agents/skills" ;;
-        # Neovim is an editor, not an AI IDE. Its config directory is not a
-        # skills store; do not invent a global skills mapping.
-        neovim)      echo "" ;;
-        # GNU Emacs has no native SKILL.md/skills directory. Third-party
-        # packages must not be represented as native Emacs support.
-        emacs)       echo "" ;;
-        # Continue's .continue directory contains YAML config blocks, not
-        # SKILL.md directories. Do not invent a skills mapping.
-        continue)    echo "" ;;
-        # Aider has no documented native skills directory. Its ~/.aider.conf.yml
-        # is configuration, not a Skills store.
-        aider)       echo "" ;;
-        roo-code)    echo "${HOME}/.roo/skills" ;;
-        cline)       echo "${HOME}/.cline/skills" ;;
-        # Amazon Q has no documented Agent Skills directory. Its ~/.aws/amazonq
-        # tree contains IDE/CLI state, prompts, and agent/MCP files with
-        # different scopes; never treat the whole tree as portable skills.
-        amazon-q)    echo "" ;;
-        # cody/codeium/tabnine/blackbox: no official Agent Skills directory.
-        # Returning "" avoids emitting glob literals (e.g. sourcegraph.cody*)
-        # that would otherwise be turned into illegal directory names by mkdir -p.
-        cody)        echo "" ;;
-        # Codeium is a legacy product name for Windsurf. Its generic
-        # ~/.codeium namespace is shared/current state, not a Skills store.
-        codeium)     echo "" ;;
-        tabnine)     echo "" ;;
-        # Replit's documented user-level skills are cloud/account managed;
-        # only the project Agent Skills directory has a published filesystem
-        # path (.agents/skills). Never treat ~/.replit as a skills tree.
-        replit)      echo "" ;;
-        # PearAI's official repositories document its VS Code/Continue
-        # provenance, but no portable skills directory. Do not infer the
-        # application namespace as a skills store.
-        pearai)      echo "" ;;
-        # Supermaven's official surfaces are host-editor extensions. The
-        # maintainer-described ~/.supermaven tree contains sm-agent runtime
-        # binaries/cache, not portable Agent Skills.
-        supermaven)  echo "" ;;
-        # Pieces is a PiecesOS-backed MCP server/desktop integration, not a
-        # file-backed Agent Skills host. The official docs do not define a
-        # ~/.pieces Skills directory; keep the object unsupported.
-        pieces)      echo "" ;;
-        blackbox)    echo "" ;;
-        # Gemini CLI's user Skills root is the documented ~/.gemini/skills
-        # directory; ~/.gemini also contains settings, commands, agents, and
-        # private state and must never be copied as a Skills tree.
-        gemini-cli)  echo "${HOME}/.gemini/skills" ;;
-        # Current Goose Agent Skills use the cross-agent standard locations.
-        # ~/.config/goose is the application/config namespace, not a Skills
-        # directory; legacy ~/.config/goose/skills is not the canonical path.
-        goose-cli)   echo "${HOME}/.agents/skills" ;;
-        # OpenCode's global Skills root is the plural skills directory. The
-        # parent also contains config, agents, commands, plugins, and other
-        # application data, so never expose ~/.config/opencode as a Skills
-        # target.
-        opencode)    echo "${HOME}/.config/opencode/skills" ;;
-        kilocode)    echo "${HOME}/.kilo/skills" ;;
-        kimiai)      echo "${HOME}/.kimi-code/skills" ;;
-        # WorkBuddy's official docs expose Skills through the marketplace/UI,
-        # but do not publish a portable filesystem Skills directory. Keep this
-        # empty rather than inferring one from its application namespace.
-        workbuddy)   echo "" ;;
-        # claude-desktop is MCP-only (no skills dir).
-        claude-desktop)    echo "" ;;
-        kiro)              echo "${HOME}/.kiro/skills" ;;
-        augment-code)      echo "${HOME}/.augment/skills" ;;
-        void-editor)       echo "" ;;
-        baidu-comate)      echo "${HOME}/.comate/skills" ;;
-        tencent-codebuddy) echo "${HOME}/.codebuddy/skills" ;;
-        zcode)             echo "${HOME}/.zcode/skills" ;;
-        *)           echo "" ;;
+        *) registry_path "$1" global ;;
     esac
 }
 
 get_project_path() {
     local ide="$1"
-    # Returns the project-level path for an IDE. NOTE: this may be a DIRECTORY
-    # (e.g. .vscode, skills, .cursor) OR a FILE (e.g. .dir-locals.el,
-    # .aider.conf.yml, .github/copilot-instructions.md). Callers that create
-    # paths must guard against file-type returns: use
-    # `mkdir -p "$(dirname "$path")"` for files, never `mkdir -p "$path"` on a
-    # file path.
     case "$ide" in
         antigravity) echo ".agents" ;;
         claude)      echo ".claude" ;;
-        # Codex project config lives under .agents (agent defs + skills);
-        # .codex is the CLI's own config dir (may hold config.toml with
-        # credentials) and must NOT be copied as an opaque project tree.
         codex)       echo ".agents" ;;
-        # GitHub Copilot CLI project configuration root. Skills and
-        # instructions have their own migration paths below.
         copilot)     echo ".github" ;;
         cursor)      echo ".cursor" ;;
-        # `.windsurf` mixes Skills, rules, workflows, memories, and app state;
-        # expose only the dedicated object paths and keep whole-project copy
-        # fail-closed/manual.
         windsurf)    echo "" ;;
         jetbrains)   echo ".junie" ;;
-        # No fixed repository-relative OpenClaw project config root; the
-        # active workspace is selected by agents.defaults.workspace.
         openclaw)    echo "" ;;
         trae)        echo ".trae" ;;
         trae-cn)     echo ".trae" ;;
         vscode)      echo ".vscode" ;;
-        # .zed contains native settings/tasks/debug files, not a portable
-        # project-config target for this generic migrator.
         zed)         echo "" ;;
-        # Neovim has no documented project skills/config root.
         neovim)      echo "" ;;
-        # .dir-locals.el is native directory-local variables, not a generic
-        # project context format; keep cross-IDE project copying manual.
         emacs)       echo "" ;;
-        # Continue's workspace configuration blocks live under .continue.
         continue)    echo ".continue" ;;
-        # Aider does not document project Skills; .aider.conf.yml is YAML
-        # configuration and must not be exposed as a skills path.
         aider)       echo ".aider.conf.yml" ;;
         roo-code)    echo ".roo" ;;
-        # .cline contains several object-specific stores (skills/rules,
-        # hooks/plugins, and project state). Do not expose it as a generic
-        # project-config copy target; use the dedicated object mappings.
         cline)       echo "" ;;
-        # .amazonq contains multiple Q-specific scopes (rules and MCP). It is
-        # diagnostic-only here; migrate_project refuses to copy the whole
-        # directory because that would mix formats and scopes.
         amazon-q)    echo ".amazonq" ;;
-        # Cody has no documented portable project configuration namespace.
-        # Do not infer the historical .cody directory.
         cody)        echo "" ;;
-        # No standalone Codeium project configuration path is documented.
-        # Do not treat generic .codeium state as portable project config.
         codeium)     echo "" ;;
-        # Tabnine documents guidelines, not Agent Skills, under .tabnine.
         tabnine)     echo "" ;;
-        # Replit project app configuration is .replit; skills use the
-        # separate get_project_skills_path resolver below.
         replit)      echo ".replit" ;;
-        # PearAI has no documented repository-relative project namespace.
         pearai)      echo "" ;;
-        # Supermaven has no documented repository-relative project namespace.
-        # .supermavenignore is an indexing-exclusion file, not project config.
         supermaven)  echo "" ;;
-        # Pieces has no documented repository-relative project namespace for
-        # portable AI configuration. Do not infer .pieces from old heuristics.
         pieces)      echo "" ;;
-        # .gemini is the project settings namespace. Skills have their own
-        # dedicated path below and the whole namespace is not portable.
         gemini-cli)  echo ".gemini" ;;
-        # Blackbox documents .blackbox as the project workspace namespace for
-        # Skills. It is not a portable whole-project configuration target;
-        # migrate_project has a fail-closed guard for this mixed namespace.
         blackbox)    echo ".blackbox" ;;
-        # .goose is a mixed local namespace for recipes and Memory files, not
-        # a generic project configuration tree. migrate_project() handles it
-        # manually; this diagnostic path is retained for object discovery.
         goose-cli)   echo ".goose" ;;
-        # .opencode is a mixed project namespace (skills, agents, commands,
-        # plugins, etc.); project Skills have a dedicated resolver below.
         opencode)    echo ".opencode" ;;
         kilocode)    echo ".kilo" ;;
         kimiai)      echo ".kimi-code" ;;
@@ -285,8 +163,6 @@ get_project_path() {
         claude-desktop)    echo "" ;;  # desktop app: no project-level config
         kiro)              echo ".kiro" ;;
         augment-code)      echo ".augment" ;;
-        # Void's repository contains .voidrules, but no verified portable
-        # whole-project namespace. Keep project migration fail-closed/manual.
         void-editor)       echo "" ;;
         baidu-comate)      echo ".comate" ;;
         tencent-codebuddy) echo ".codebuddy" ;;
@@ -295,88 +171,15 @@ get_project_path() {
     esac
 }
 
-# Project skills are separate from an IDE's project configuration directory.
-# Codex documents .agents/skills as its project skill location while reserving
-# .codex for trusted project configuration such as config.toml and hooks.json.
 get_project_skills_path() {
-    local ide="$1"
-    case "$ide" in
-        antigravity) echo ".agents/skills" ;;
-        claude)      echo ".claude/skills" ;;
-        codex)       echo ".agents/skills" ;;
-        copilot)     echo ".github/skills" ;;
-        cursor)      echo ".cursor/skills" ;;
-        windsurf)    echo ".windsurf/skills" ;;
-        jetbrains)   echo ".junie/skills" ;;
-        openclaw)    echo "skills" ;;
-        trae)        echo ".trae/skills" ;;
-        trae-cn)     echo ".trae/skills" ;;
-        vscode)      echo ".github/skills" ;;
-        zed)         echo ".agents/skills" ;;
-        # Neovim has no documented project skills format.
-        neovim)      echo "" ;;
-        # .dir-locals.el is Emacs Lisp data, not a portable skills format.
-        emacs)       echo "" ;;
-        # Continue has no documented SKILL.md project format.
-        continue)    echo "" ;;
-        aider)       echo "" ;;
-        roo-code)    echo ".roo/skills" ;;
-        cline)       echo ".cline/skills" ;;
-        # No official Amazon Q Agent Skills path is documented.
-        amazon-q)    echo "" ;;
-        # Cody has no documented Agent Skills directory.
-        cody)        echo "" ;;
-        # Codeium was rebranded as Windsurf; current project Skills belong
-        # to .windsurf/skills and are intentionally not duplicated here.
-        codeium)     echo "" ;;
-        # Tabnine has no documented Agent Skills directory.
-        tabnine)     echo "" ;;
-        # Replit project skills use the Agent Skills standard, not .replit.
-        replit)      echo ".agents/skills" ;;
-        # PearAI has no documented project Skills directory.
-        pearai)      echo "" ;;
-        # Supermaven has no Agent Skills format or project Skills directory.
-        supermaven)  echo "" ;;
-        # PiecesOS stores workflow memory in its own platform data store; it
-        # does not document a project SKILL.md directory.
-        pieces)      echo "" ;;
-        # Blackbox CLI documents project skills below .blackbox/skills.
-        # There is no documented global Skills directory.
-        blackbox)    echo ".blackbox/skills" ;;
-        gemini-cli)  echo ".gemini/skills" ;;
-        # Goose uses the universal Agent Skills project location. The .goose
-        # namespace is only a backward-compatible Skills location and is not
-        # the canonical project target.
-        goose-cli)   echo ".agents/skills" ;;
-        opencode)    echo ".opencode/skills" ;;
-        kilocode)    echo ".kilo/skills" ;;
-        kimiai)      echo ".kimi-code/skills" ;;
-        workbuddy)   echo "" ;;
-        claude-desktop) echo "" ;;
-        kiro)        echo ".kiro/skills" ;;
-        augment-code) echo ".augment/skills" ;;
-        void-editor) echo "" ;;
-        baidu-comate) echo ".comate/skills" ;;
-        tencent-codebuddy) echo ".codebuddy/skills" ;;
-        zcode)       echo "" ;;
-        *)           echo "" ;;
-    esac
+    registry_path "$1" project-skills
 }
 
-# Project-scoped MCP configuration is separate from both the project
-# configuration directory and the user/local MCP store. This resolver is used
-# by the explicit `--scope project` / `--objects project-mcp` path; entries whose
-# schema or precedence is not safe remain guarded as manual in migrate_mcp().
 get_amazon_q_project_mcp_path() {
     local project_root="${WORKSPACE_ROOT:-$(pwd)}"
     local default_path="${project_root}/.amazonq/default.json"
     local legacy_path="${project_root}/.amazonq/mcp.json"
 
-    # The current IDE guide names .amazonq/default.json. Preserve an existing
-    # legacy file when a workspace was already configured. The separate
-    # .amazonq/agents/default.json path is documented by another Q surface but
-    # AWS does not publish a version/implementation discriminator; it is
-    # handled as an explicit manual boundary below rather than guessed here.
     if [[ -f "$default_path" ]]; then
         echo ".amazonq/default.json"
     elif [[ -f "$legacy_path" ]]; then
@@ -387,251 +190,43 @@ get_amazon_q_project_mcp_path() {
 }
 
 get_project_mcp_path() {
-    local ide="$1"
-    case "$ide" in
-        antigravity) echo ".agents/mcp_config.json" ;;
-        claude) echo ".mcp.json" ;;
-        codex) echo ".codex/config.toml" ;;
-        # GitHub Copilot CLI also discovers .github/mcp.json.  This resolver
-        # exposes the root-level canonical path only; migration never picks
-        # between the two project files automatically.
-        copilot) echo ".mcp.json" ;;
-        cursor) echo ".cursor/mcp.json" ;;
-        zed) echo ".zed/settings.json" ;;
-        # VS Code's documented workspace MCP file is portable. User MCP is
-        # intentionally absent from get_mcp_path because its official path is
-        # exposed through the active profile/UI rather than a portable path.
-        vscode) echo ".vscode/mcp.json" ;;
-        jetbrains) echo ".junie/mcp/mcp.json" ;;
-        # Trae documents project MCP in the project .trae directory. The
-        # generic workflow only exposes this as a diagnostic/manual path.
-        trae) echo ".trae/mcp.json" ;;
-        trae-cn) echo ".trae/mcp.json" ;;
-        # Roo documents project MCP at .roo/mcp.json. Its global MCP is still
-        # extension-settings/UI managed, so this project path remains manual.
-        roo-code) echo ".roo/mcp.json" ;;
-        # Cline's CLI reference documents a project .cline/mcp.json file with
-        # the mcpServers root. It is separate from the global MCP stores.
-        cline) echo ".cline/mcp.json" ;;
-        # Current Amazon Q IDE workspaces use .amazonq/default.json. If an
-        # existing agents/default.json or legacy mcp.json is present, retain
-        # that configured store; see get_amazon_q_project_mcp_path().
-        amazon-q) echo "$(get_amazon_q_project_mcp_path)" ;;
-        # Continue's project MCP path is a directory of standalone YAML/JSON
-        # blocks, not one MCP file. This is diagnostic/manual only.
-        continue) echo ".continue/mcpServers" ;;
-        # Tabnine documents this project-scoped JSON file; permissions and
-        # project precedence remain manual even when the file is selected.
-        tabnine) echo ".tabnine/mcp_servers.json" ;;
-        # Gemini CLI uses the same JSON settings file at user and project
-        # scope. Project settings remain subject to trust/precedence review.
-        gemini-cli) echo ".gemini/settings.json" ;;
-        # OpenCode stores project MCP in the project-root opencode.json;
-        # precedence and merge semantics stay explicit in the report.
-        opencode) echo "opencode.json" ;;
-        kilocode) echo ".kilo/kilo.jsonc" ;;
-        kimiai) echo ".kimi-code/mcp.json" ;;
-        workbuddy) echo ".workbuddy/mcp.json" ;;
-        kiro) echo ".kiro/settings/mcp.json" ;;
-        augment-code) echo ".augment/settings.json" ;;
-        baidu-comate) echo ".comate/mcp.json" ;;
-        # Void's inherited VS Code MCP contribution discovers this workspace
-        # file with root `servers`; the Void-specific writer never targets it.
-        void-editor) echo ".vscode/mcp.json" ;;
-        # CodeBuddy's documented project MCP file is root-level .mcp.json;
-        # the .codebuddy directory contains settings/agents/skills instead.
-        tencent-codebuddy) echo ".mcp.json" ;;
-        zcode) echo ".zcode/config.json" ;;
-        # Pieces has no client-side project MCP file; its MCP endpoint is
-        # configured in the consuming IDE.
-        pieces) echo "" ;;
-        # Supermaven has no documented project MCP file or server schema.
-        supermaven) echo "" ;;
-        *)      echo "" ;;
+    case "$1" in
+        amazon-q) get_amazon_q_project_mcp_path ;;
+        *) registry_path "$1" project-mcp ;;
     esac
 }
 
-# Project configuration is also diagnostic-only. Codex loads this file only
-# for trusted projects, and it can contain MCP and hook settings; it must not
-# be conflated with the .agents project-skill directory or copied by the
-# generic global-config migration.
 get_project_config_file() {
-    local ide="$1"
-    case "$ide" in
-        claude) echo ".claude/settings.json" ;;
-        codex) echo ".codex/config.toml" ;;
-        # Gemini CLI project settings are JSON and share the exact path with
-        # project MCP. This is diagnostic-only; migrate_config refuses to
-        # copy a foreign IDE schema into settings.json.
-        gemini-cli) echo ".gemini/settings.json" ;;
-        # OpenCode's project config is the root opencode.json file. It is a
-        # merged, target-specific schema and is diagnostic/manual here.
-        opencode) echo "opencode.json" ;;
-        kilocode) echo ".kilo/kilo.jsonc" ;;
-        augment-code) echo ".augment/settings.json" ;;
-        tencent-codebuddy) echo ".codebuddy/settings.json" ;;
-        zcode) echo ".zcode/config.json" ;;
-        # Diagnostic only: .replit is app/runtime configuration, never an AI
-        # skills or generic project-context copy target.
-        replit) echo ".replit" ;;
-        # PiecesOS data and settings are application-managed, not a portable
-        # project config file.
-        pieces) echo "" ;;
-        # Supermaven has no documented project config file.
-        supermaven) echo "" ;;
-        *)     echo "" ;;
-    esac
+    registry_path "$1" project-config
 }
 
 get_rules_file() {
-    local ide="$1"
-    case "$ide" in
-        # Cursor rules are a directory of MDC files; migration handles this
-        # as manual because the generic rules copier only supports one file.
-        cursor)      echo ".cursor/rules" ;;
-        # Current Devin Desktop prefers .devin/rules/*.md and keeps
-        # .windsurf/rules/*.md/.windsurfrules for compatibility. The generic
-        # single-file migrator must treat the directory form as manual.
-        windsurf)    echo ".devin/rules" ;;
-        copilot)     echo ".github/copilot-instructions.md" ;;
-        vscode)      echo ".github/copilot-instructions.md" ;;
-        openclaw)    echo "AGENTS.md" ;;
-        claude)      echo "CLAUDE.md" ;;
-        aider)       echo "CONVENTIONS.md" ;;
-        cline)       echo ".clinerules" ;;
-        # Continue rules are a directory of Markdown/YAML rule blocks. The
-        # single-file rules copier cannot flatten or reinterpret the block
-        # directory safely.
-        continue)    echo ".continue/rules" ;;
-        # Tabnine guidelines are a directory of Markdown files. The generic
-        # rules copier only supports one file, so migrate_rules fails closed.
-        tabnine)     echo ".tabnine/guidelines" ;;
-        # Supermaven's .supermavenignore controls repository indexing only; it
-        # is not an instruction/rules file and must not be copied as one.
-        supermaven)  echo "" ;;
-        roo-code)    echo ".roorules" ;;
-        # Cody has no documented project-instructions file.
-        cody)        echo "" ;;
-        # PearAI has no documented portable rules file or directory.
-        pearai)      echo "" ;;
-        # Blackbox's first-party docs do not define a portable rules file or
-        # directory. Do not infer .blackbox/rules or a root instruction file.
-        blackbox)    echo "" ;;
-        # Pieces rules/context are managed by PiecesOS and the host
-        # integration; no portable project rules file is documented.
-        pieces)       echo "" ;;
-        codex)       echo "AGENTS.md" ;;
-        gemini-cli)  echo "GEMINI.md" ;;
-        goose-cli)   echo ".goosehints" ;;
-        opencode)    echo "AGENTS.md" ;;
-        kilocode)    echo "AGENTS.md" ;;
-        kimiai)      echo "AGENTS.md" ;;
-        zed)         echo "AGENTS.md" ;;
-        zcode)       echo "AGENTS.md" ;;
-        # Antigravity IDE workspace rules are a directory. The global
-        # ~/.gemini/GEMINI.md rule is outside this project resolver.
-        antigravity) echo ".agents/rules" ;;
-        # Amazon Q project rules are a directory of Markdown files.
-        amazon-q)    echo ".amazonq/rules" ;;
-        # Junie in JetBrains IDEs reads repository-root AGENTS.md. The
-        # .junie/guidelines.md location belongs to Junie CLI documentation.
-        # Junie now prefers .junie/AGENTS.md; root AGENTS.md and legacy
-        # .junie/guidelines.md remain compatibility inputs handled manually
-        # by migrate_rules when the canonical file is absent.
-        jetbrains)   echo ".junie/AGENTS.md" ;;
-        # Replit Agent reads project instructions from the root replit.md.
-        replit)      echo "replit.md" ;;
-        void-editor) echo ".voidrules" ;;
-        tencent-codebuddy) echo "CODEBUDDY.md" ;;
-        # Kilo/Kiro/Augment/Comate rules are directory-scoped, not a single
-        # file. Their dedicated migration objects remain manual below.
-        # Kiro/Augment/Comate rules are directory-scoped and handled by
-        # explicit manual guards below rather than flattened by this
-        # single-file resolver.
-        kiro|augment-code|baidu-comate) echo "" ;;
-        trae|trae-cn) echo ".trae/rules" ;;
-        # Pieces does not provide a portable project rules file.
-        pieces)       echo "" ;;
-        *)           echo "" ;;
-    esac
+    registry_path "$1" rules
 }
 
 get_prompts_path() {
     local ide="$1"
     case "$ide" in
-        # VS Code workspace prompt files are documented here. The user-level
-        # location is UI/profile-managed and has no portable official path.
         vscode)      echo ".github/prompts" ;;
         cursor)      echo ".cursor/commands" ;;
         windsurf)    echo ".windsurf/workflows" ;;
-        # Copilot prompt files are supported by IDE surfaces, not the CLI.
-        # The canonical copilot target is GitHub Copilot CLI, so do not
-        # offer an unsupported prompt-file migration target here.
-        # OpenClaw documents skills and workspace bootstrap files, not a
-        # standalone prompt-template directory.
         openclaw)    echo "" ;;
         continue)    echo ".continue/prompts" ;;
-        # Cline calls reusable prompt-like files workflows. The documented
-        # workflow locations are not a prompt-template contract, so keep the
-        # generic prompts object manual rather than copying into a guessed
-        # directory.
         cline)       echo "" ;;
-        # Blackbox documents /skill commands, not a prompt-template directory.
         blackbox)    echo "" ;;
-        # Claude Code still loads this legacy compatibility location. New
-        # commands should be skills under .claude/skills instead.
         claude)      echo ".claude/commands" ;;
         gemini-cli)  echo ".gemini/commands" ;;
-        # Goose prompt templates are global files under ~/.config/goose and
-        # slash commands are YAML entries in config.yaml. The generic prompt
-        # copier is project-relative and cannot safely migrate either form.
         goose-cli)   echo "" ;;
-        # OpenCode custom command files are Markdown under the project
-        # .opencode namespace. Global commands live under
-        # ~/.config/opencode/commands and are outside this project-relative
-        # object; migrate_prompts handles only the documented project files.
         opencode)    echo ".opencode/commands" ;;
-        # Roo Code slash commands are documented Markdown files. They are
-        # exposed through the prompts object with a manual semantic review;
-        # this does not claim that Roo modes or command permissions convert.
         roo-code)    echo ".roo/commands" ;;
         trae|trae-cn) echo ".trae/commands" ;;
-        # Pieces prompt and memory workflows are handled by PiecesOS/host UI,
-        # not a portable prompt-template directory.
         pieces)      echo "" ;;
         *)           echo "" ;;
     esac
 }
 
 get_mcp_path() {
-    local ide="$1"
-    case "$ide" in
-        # The official international docs do not publish a stable user-scope
-        # MCP file path, so global MCP is UI/manual only.
-        trae) echo "" ;;
-        # TRAE CN's official docs document project .trae/mcp.json and the
-        # Settings/raw-JSON workflow, but do not publish a stable user MCP
-        # filesystem path. Do not promote community/forum paths to an
-        # automatic target.
-        trae-cn)     echo "" ;;
-        openclaw)    echo "${HOME}/.openclaw/openclaw.json" ;;
-        # User-scope MCP mapping. Claude Code stores both user and local MCP
-        # scope in this file; this mapper only handles the user-level server
-        # map. Shared project scope is .mcp.json (get_project_mcp_path) and
-        # local per-project entries require manual review.
-        claude)      echo "${HOME}/.claude.json" ;;
-        # Continue's global file is YAML and its mcpServers value is an
-        # array. The generic mapper exposes this path for diagnosis only.
-        continue)    echo "${HOME}/.continue/config.yaml" ;;
-        # Cline's MCP settings live in the VS Code extension globalStorage
-        # (confirmed by docs.cline.bot/mcp and multiple independent sources,
-        # 2026-07: the file is cline_mcp_settings.json under
-        # saoudrizwan.claude-dev/settings/ in the VS Code user-data dir). The
-        # legacy ~/.cline/mcp.json CLI alternative is detected by migrate_mcp()
-        # and reported for manual selection when both files exist; --print-path
-        # returns the authoritative globalStorage path. CLINE_MCP_PATH overrides
-        # everything for non-standard installs (e.g. VS Code Insiders, VSCodium,
-        # or a relocated --user-data-dir).
+    case "$1" in
         cline)
             if [[ -n "${CLINE_MCP_PATH:-}" ]]; then
                 echo "${CLINE_MCP_PATH}"
@@ -642,38 +237,6 @@ get_mcp_path() {
                     *)      echo "${HOME}/AppData/Roaming/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json" ;;
                 esac
             fi ;;
-        cursor)      echo "${HOME}/.cursor/mcp.json" ;;
-        # Roo's official docs identify the global extension settings directory
-        # but do not publish a stable literal filesystem path. Do not guess
-        # VS Code globalStorage or Cline's similarly named file.
-        roo-code)    echo "" ;;
-        windsurf)    echo "${HOME}/.codeium/windsurf/mcp_config.json" ;;
-        jetbrains)   echo "${HOME}/.junie/mcp/mcp.json" ;;
-        antigravity) echo "${HOME}/.gemini/config/mcp_config.json" ;;
-        # Kilo Code's global config is ~/.config/kilo/kilo.jsonc; its project
-        # files are exposed separately through project-mcp/project-config.
-        kilocode)    echo "${HOME}/.config/kilo/kilo.jsonc" ;;
-        gemini-cli)  echo "${HOME}/.gemini/settings.json" ;;
-        goose-cli)   echo "${HOME}/.config/goose/config.yaml" ;;
-        codex)       echo "${HOME}/.codex/config.toml" ;;
-        # Aider has no native MCP configuration; .aider.conf.yml is not MCP.
-        aider)       echo "" ;;
-        kimiai)      echo "${HOME}/.kimi-code/mcp.json" ;;
-        workbuddy)   echo "${HOME}/.workbuddy/mcp.json" ;;
-        # copilot = GitHub Copilot CLI: ~/.copilot/mcp-config.json, root key
-        # mcpServers (project .mcp.json ALSO uses mcpServers, unlike VS Code).
-        copilot)     echo "${HOME}/.copilot/mcp-config.json" ;;
-        # VS Code user MCP belongs to the active Profile. Default, named,
-        # Insiders/VSCodium, and relocated --user-data-dir installations do
-        # not share one safely inferable path. Resolve it through
-        # "MCP: Open User Configuration" instead of guessing a profile.
-        vscode)      echo "" ;;
-        zed)         echo "${HOME}/.config/zed/settings.json" ;;
-        opencode)    echo "${HOME}/.config/opencode/opencode.json" ;;
-        # The current IDE guide names default.json; the overview page and
-        # language-server source also expose agents/default.json, while
-        # mcp.json is a documented legacy store. Prefer the current file for a
-        # fresh install, but preserve whichever configured file already exists.
         amazon-q)
             local q_default="${HOME}/.aws/amazonq/default.json"
             local q_legacy="${HOME}/.aws/amazonq/mcp.json"
@@ -685,25 +248,6 @@ get_mcp_path() {
                 echo "$q_default"
             fi
             ;;
-        # PearAI MCP storage/schema is not published by its official
-        # repositories; UI/extension-managed settings are manual only.
-        pearai)      echo "" ;;
-        # Blackbox documents only the bundled `blackbox mcp` command, not a
-        # portable user/project MCP file or server-map schema.
-        blackbox)    echo "" ;;
-        # Pieces exposes MCP as a server from PiecesOS. MCP client files are
-        # configured in the host IDE, not in a Pieces-owned file path.
-        pieces)      echo "" ;;
-        # Supermaven is a completion extension with no documented MCP file or
-        # portable server schema. Do not infer one from the host editor.
-        supermaven)  echo "" ;;
-        # Cody MCP is a cody.mcpServers extension setting/UI surface, not a
-        # documented standalone file. Keep automatic file migration empty.
-        cody)        echo "" ;;
-        tabnine)     echo "${HOME}/.tabnine/mcp_servers.json" ;;
-        # Claude Desktop's legacy local MCP JSON path is officially documented
-        # for macOS and Windows. Linux Desktop has no equivalently documented
-        # path in the current local-MCP guide, so it remains UI/manual there.
         claude-desktop)
             case "$(uname -s)" in
                 Darwin)
@@ -717,98 +261,17 @@ get_mcp_path() {
                     ;;
             esac
             ;;
-        kiro)              echo "${HOME}/.kiro/settings/mcp.json" ;;
-        augment-code)      echo "${HOME}/.augment/settings.json" ;;
-        # Void's first-party source resolves MCP to userHome/dataFolderName/
-        # mcp.json; product.json sets dataFolderName to .void-editor.
-        void-editor)       echo "${HOME}/.void-editor/mcp.json" ;;
-        baidu-comate)      echo "${HOME}/.comate/mcp.json" ;;
-        # CodeBuddy Code's official MCP docs define the user file and its
-        # precedence: ~/.codebuddy/.mcp.json, then legacy alternatives.
-        tencent-codebuddy) echo "${HOME}/.codebuddy/.mcp.json" ;;
-        zcode)             echo "${HOME}/.zcode/cli/config.json" ;;
-        *)           echo "" ;;
+        *) registry_path "$1" mcp ;;
     esac
 }
 
 get_config_file() {
-    local ide="$1"
-    case "$ide" in
-        # Do not infer argv.json or another undocumented global config path.
-        trae) echo "" ;;
-        trae-cn)     echo "" ;;
-        openclaw)    echo "${HOME}/.openclaw/openclaw.json" ;;
-        # Cursor's settings database path is not a documented migration
-        # contract for this tool; do not infer a platform-specific target.
-        cursor)      echo "" ;;
-        # windsurf: no documented standalone settings file (config lives in
-        # ~/.codeium/windsurf/) — empty prevents inventing one.
-        windsurf)    echo "" ;;
-        # VS Code settings have platform-specific documented paths, but this
-        # generic mapper has no portable platform selector and settings are
-        # outside the supported migration objects. Keep it manual/empty.
-        vscode)      echo "" ;;
-        # Zed settings are native editor configuration, not a portable
-        # whole-IDE config target for this mapper.
-        zed)         echo "" ;;
-        neovim)      echo "${HOME}/.config/nvim/init.lua" ;;
-        # Emacs supports several init-file locations (including ~/.emacs,
-        # ~/.emacs.el, ~/.emacs.d/init.el, and XDG init.el). A single guessed
-        # path and generic copy would be unsafe; handle init.el manually.
-        emacs)       echo "" ;;
-        continue)    echo "${HOME}/.continue/config.yaml" ;;
-        aider)       echo "${HOME}/.aider.conf.yml" ;;
-        # Cline's config directory contains provider credentials and mutable
-        # application state. There is no safe portable whole-config target;
-        # never copy the obsolete/undocumented ~/.cline/config.json.
-        cline)       echo "" ;;
-        # roo-code: no standalone global config file documented (settings sit
-        # in VS Code extension storage) — empty prevents inventing one.
-        roo-code)    echo "" ;;
-        # User settings mapping. Project and local settings have separate
-        # documented scopes and are not collapsed into this single file path.
-        claude)      echo "${HOME}/.claude/settings.json" ;;
-        # .replit and replit.nix are project app/runtime files, not a global
-        # AI config path. Keep the global config resolver empty.
-        replit)      echo "" ;;
-        # PearAI has no documented portable whole-config file.
-        pearai)      echo "" ;;
-        # `blackbox configure` is interactive and its storage path/schema is
-        # not published in the current first-party CLI docs.
-        blackbox)    echo "" ;;
-        # PiecesOS/Desktop settings and its local database are not a portable
-        # whole-IDE config file and must never be copied as one.
-        pieces)      echo "" ;;
-        # Supermaven settings live in the host editor/Neovim configuration;
-        # no standalone portable config file is documented.
-        supermaven)  echo "" ;;
-        gemini-cli)  echo "${HOME}/.gemini/settings.json" ;;
-        goose-cli)   echo "${HOME}/.config/goose/config.yaml" ;;
-        codex)       echo "${HOME}/.codex/config.toml" ;;
-        opencode)    echo "${HOME}/.config/opencode/opencode.json" ;;
-        kilocode)    echo "${HOME}/.config/kilo/kilo.jsonc" ;;
-        kimiai)      echo "${HOME}/.kimi-code/config.toml" ;;
-        tencent-codebuddy) echo "${HOME}/.codebuddy/settings.json" ;;
-        augment-code)      echo "${HOME}/.augment/settings.json" ;;
-        zcode)             echo "${HOME}/.zcode/cli/config.json" ;;
-        # Claude Desktop settings and extension state are UI-managed; do not
-        # treat the legacy local MCP JSON as a portable whole-config file.
-        claude-desktop) echo "" ;;
-        *)           echo "" ;;
-    esac
+    registry_path "$1" config
 }
 
-# Returns the MCP server map root key used by an IDE's MCP config file.
-# Mirrors the IDE Registry (mcpServers | servers | context_servers |
-# mcp.servers | mcp | extensions). Used by convert_mcp_file to map between
-# source and target formats.
 get_mcp_root_key() {
     local ide="$1"
     local scope="${2:-global}"
-    # Void's project MCP path is the inherited VS Code `.vscode/mcp.json`
-    # (see `get_project_mcp_path`), which uses the VS Code `servers` root
-    # key — NOT the legacy Void-global `mcpServers` schema. At user/global
-    # scope, Void uses its own `~/.void-editor/mcp.json` with `mcpServers`.
     if [[ "$ide" == "void-editor" && "$scope" == "project" ]]; then
         echo "servers"
         return 0
@@ -828,19 +291,11 @@ get_mcp_root_key() {
             fi
             ;;
         kilocode)    echo "mcp" ;;
-        # VS Code user-level mcp.json uses `servers` (NOT mcpServers).
         vscode)      echo "servers" ;;
-        # zcode natively nests under mcp.servers (dot-path), but it also
-        # accepts a flat mcpServers key (import-compat), which is what
-        # convert_mcp_file can produce with a single top-level key.
         zcode)       echo "mcp.servers" ;;
-        # Aider has no native MCP root key; keep MCP conversion fail-closed.
         aider)       echo "" ;;
-        # Blackbox has no documented portable MCP root key.
         blackbox)    echo "" ;;
-        # Pieces is the MCP provider/server, not a client-side MCP schema.
         pieces)      echo "" ;;
-        # Supermaven has no documented MCP file or root key.
         supermaven)  echo "" ;;
         *)           echo "" ;;
     esac
@@ -848,96 +303,34 @@ get_mcp_root_key() {
 
 usage() {
     cat <<'EOF'
-IDE Migration Tool - Migrate configuration between different AI IDEs
+Scoped IDE-context migration. Preview first; add --yes only after approval.
 
-Usage: smart-ide-migration.sh [options]
+Usage: smart-ide-migration.sh --source <ide> --target <ide> [options]
 
-Required arguments:
-  --source <ide>         source IDE (which IDE to migrate from)
-  --target <ide>         target IDE (which IDE to migrate to)
+  --workspace <dir>       Workspace (default: current directory)
+  --objects <csv>         skills,rules,prompts,mcp,project-mcp,config,project,
+                          agents,hooks,memory (default: skills,rules,prompts)
+  --scope global|project|both   Skills/MCP scope (default: global)
+  --strategy skip|backup|overwrite   Existing-object handling (default: backup)
+  --source-mcp-file <file>      Reviewed JSON/JSONC MCP input
+  --opencode-version v1|v2      OpenCode target MCP schema
+  --report <file>               Save report
+  --json                        Emit JSON evidence
+  --print-path <ide> <object>   Read-only path lookup
+  --dry-run                     Parse and preview without writes
+  --yes, -y                     Confirm writes
+  -h, --help                    Show help
 
-Optional arguments:
-  --workspace <dir>      workspace root directory (default: current directory)
-  --objects <list>       content types to migrate (comma-separated)
-  --source-mcp-file <file>
-                          explicit MCP source file; --source still defines its schema
-  --opencode-version <v1|v2>
-                          OpenCode target MCP schema (default: v1 legacy-compatible)
-  --scope <scope>        Skills/MCP scope: global, project, both (default: global)
-  --strategy <mode>      migration strategy: skip, overwrite, backup (default: backup)
-                          skip preserves an existing object; backup snapshots then merges;
-                          overwrite replaces only the selected object without a backup
-  --report <file>        save migration report to file
-  --dry-run              preview mode, does not actually modify files
-  --yes, -y              confirm writing. Explicit confirmation required when not in dry-run:
-                          interactive terminal will prompt [y/N]; non-interactive environment (CI/agent) lacking
-                          --yes will abort immediately and write no files
-  --print-path <ide> <object>
-                          read-only diagnosis: print resolved paths for the specified IDE/object type and exit (no side effects)
-                          object ∈ global|project|project-skills|mcp|project-mcp|project-config|config|rules|prompts|commands
-  -h, --help             show help information
+IDs: antigravity claude claude-desktop codex copilot cursor windsurf jetbrains
+     openclaw trae trae-cn vscode zed neovim emacs continue aider roo-code cline
+     amazon-q cody codeium tabnine replit pearai supermaven pieces blackbox
+     gemini-cli goose-cli opencode kilocode kimiai workbuddy kiro augment-code
+     void-editor baidu-comate tencent-codebuddy zcode
+     copilot      - GitHub Copilot CLI
 
-Supported IDEs:
-  antigravity  - Antigravity
-  claude       - Claude Code
-  codex        - OpenAI Codex CLI
-  copilot      - GitHub Copilot CLI
-  cursor       - Cursor
-  windsurf     - Windsurf
-  jetbrains    - JetBrains IDEs
-  openclaw     - OpenClaw
-  trae         - Trae (International version)
-  trae-cn      - Trae CN (China version)
-  vscode       - VS Code
-  zed          - Zed Editor
-  neovim       - Neovim
-  emacs        - Emacs
-  continue     - Continue.dev
-  aider        - Aider
-  roo-code     - Roo Code
-  cline        - Cline
-  amazon-q     - Amazon Q Developer
-  cody         - Sourcegraph Cody
-  codeium      - Codeium
-  tabnine      - Tabnine
-  replit       - Replit AI
-  pearai       - PearAI
-  supermaven   - Supermaven
-  pieces       - Pieces
-  blackbox     - Blackbox AI
-  kiro         - Kiro
-  augment-code - Augment Code
-  void-editor  - Void Editor
-  baidu-comate - Baidu Comate (ERNIE Code)
-  tencent-codebuddy - Tencent CodeBuddy
-  zcode        - ZCode (Zhipu)
-
-Supported CLI tools:
-  gemini-cli   - Gemini CLI (Google)
-  goose-cli    - Goose CLI (Block)
-  opencode     - OpenCode
-  kilocode     - Kilo Code
-  kimiai       - Kimi AI CLI
-  workbuddy    - WorkBuddy
-
-Content types:
-  skills       - skills/Skills (SKILL.md)
-  rules        - rules files (.cursorrules, .windsurfrules, etc.)
-  prompts      - prompt templates
-  mcp          - MCP server configuration
-  project-mcp  - explicitly migrate project MCP files (equivalent to --objects mcp --scope project)
-  config       - IDE configuration file
-  project      - project-level configuration
-  agents       - Agents/Subagents diagnosis (manual handling only, not auto-converted)
-  hooks        - lifecycle Hooks diagnosis (manual handling only, not copied or executed)
-  memory       - Memory/Memory Bank diagnosis (manual handling only, not copying generated state)
-
-Example (recommended two-stage: first --dry-run to preview, then add --yes to apply):
-  smart-ide-migration.sh --source trae-cn --target claude --dry-run
-  smart-ide-migration.sh --source trae-cn --target claude --yes
-  smart-ide-migration.sh --source cursor --target windsurf --objects skills,rules --dry-run
-  smart-ide-migration.sh --source cursor --target windsurf --objects skills,rules --yes
-  smart-ide-migration.sh --source openclaw --target copilot --dry-run
+Examples:
+  smart-ide-migration.sh --source cursor --target claude --objects skills,rules --dry-run
+  smart-ide-migration.sh --source cursor --target claude --objects skills,rules --yes --json
 EOF
 }
 
@@ -955,9 +348,6 @@ print_progress() {
     echo "[${step}] ${message}"
 }
 
-# Remove one verified tree without following symlinks. `find -depth -delete`
-# avoids passing a computed path to recursive force removal while still making
-# fail-closed cleanup deterministic on both BSD and GNU find.
 remove_verified_tree() {
     local target="$1"
 
@@ -972,14 +362,6 @@ remove_verified_tree() {
     fi
 }
 
-# Safely remove a single skill directory nested directly under a parent dir.
-# Guards against recursive-deletion foot-guns before deleting anything:
-#   - both the parent dir and the skill name must be non-empty (an empty
-#     variable would collapse the path and risk wiping the parent or "/");
-#   - the skill name must be a single path component (no "/", no "." / "..",
-#     no leading dash) so it cannot escape the parent via traversal;
-#   - the resolved target must exist and be a directory before removal.
-# On any violation it prints an error and returns non-zero WITHOUT deleting.
 safe_remove_skill_dir() {
     local parent="$1"
     local name="$2"
@@ -997,7 +379,6 @@ safe_remove_skill_dir() {
 
     local target="$parent/$name"
     if [[ -L "$target" ]]; then
-        # A symlink here could point outside the parent; unlink only the link.
         remove_verified_tree "$target"
         return $?
     fi
@@ -1009,10 +390,6 @@ safe_remove_skill_dir() {
     remove_verified_tree "$target"
 }
 
-# Remove one existing file or directory only when its resolved parent remains
-# inside the approved workspace root. The final component is handled without
-# following symlinks, preventing an overwrite or fail-closed cleanup from
-# escaping through a workspace-controlled link.
 safe_remove_path_within() {
     local allowed_root="$1"
     local target="$2"
@@ -1064,13 +441,6 @@ list_available_objects() {
     local source_ide="$1"
     local objects=""
 
-    # Source-resolution rule (single coherent rule for every object type):
-    #   - skills, mcp, config  -> user-GLOBAL location (HOME-based):
-    #       get_global_path / get_mcp_path / get_config_file
-    #   - rules, prompts, project -> workspace/PROJECT location (WORKSPACE_ROOT-based):
-    #       get_rules_file / get_prompts_path / get_project_path
-    # This keeps detection consistent: global objects are discovered from the
-    # user home, project objects from the current workspace root.
 
     local global_path
     global_path=$(get_global_path "$source_ide")
@@ -1080,11 +450,6 @@ list_available_objects() {
 
     local rules_file
     rules_file=$(get_rules_file "$source_ide")
-    # Some supported IDEs store rules in a directory (for example
-    # .cursor/rules, .devin/rules, or .agents/rules), while the generic
-    # single-file migrator will later route those through manual handling.
-    # Detect both files and directories here so the default object list does
-    # not silently hide an available rules directory.
     if [[ -n "$rules_file" ]] && [[ -e "$WORKSPACE_ROOT/$rules_file" ]]; then
         objects+="rules,"
     fi
@@ -1097,8 +462,6 @@ list_available_objects() {
 
     local mcp_path
     mcp_path=$(get_mcp_path "$source_ide")
-    # Project-relative MCP paths (e.g. Kilo's .kilo/kilo.jsonc) resolve
-    # against the workspace root, not the caller's cwd.
     if [[ -n "$mcp_path" && "$mcp_path" != /* ]]; then
         mcp_path="$WORKSPACE_ROOT/$mcp_path"
     fi
@@ -1135,9 +498,6 @@ cleanup_migration_files() {
     [[ -f "$MIGRATION_MANUAL_FILE" ]] && rm -f "$MIGRATION_MANUAL_FILE"
     [[ -f "$MIGRATION_EVIDENCE_FILE" ]] && rm -f "$MIGRATION_EVIDENCE_FILE"
     [[ -n "${REDACTOR_PY:-}" && -f "${REDACTOR_PY:-}" ]] && rm -f "$REDACTOR_PY"
-    # Always succeed: under `set -e` an EXIT-trap command that fails would
-    # override an explicit `exit 0` (e.g. the read-only --print-path mode,
-    # which never calls init_migration_files and leaves these vars empty).
     return 0
 }
 
@@ -1162,7 +522,6 @@ set_manual_step() {
 get_status() {
     local obj="$1"
     if [[ -f "$MIGRATION_STATUS_FILE" ]]; then
-        # awk with literal string compare — $obj is never treated as regex.
         awk -v o="$obj" -F: '$1 == o { sub(/^[^:]*:/, ""); print }' "$MIGRATION_STATUS_FILE" | tail -1
     fi
 }
@@ -1170,8 +529,6 @@ get_status() {
 get_message() {
     local obj="$1"
     if [[ -f "$MIGRATION_MESSAGES_FILE" ]]; then
-        # Parse only on the FIRST colon so values containing ':' (e.g.
-        # file://... URLs or Windows C: paths) are preserved intact.
         awk -v o="$obj" -F: '$1 == o { sub(/^[^:]*:/, ""); print }' "$MIGRATION_MESSAGES_FILE" | tail -1
     fi
 }
@@ -1270,8 +627,6 @@ record_mcp_evidence() {
         >> "$MIGRATION_EVIDENCE_FILE"
 }
 
-# MED-A1: shared existing-target strategy handling for skill migration.
-# Returns 0 = proceed with copy, 1 = skip this skill, 2 = hard failure.
 apply_skill_strategy() {
     local target_global="$1"
     local skill_name="$2"
@@ -1310,9 +665,6 @@ migrate_global_skills() {
         return 0
     fi
 
-    # Blackbox's documented Skills location is project-scoped
-    # .blackbox/skills. This generic operation migrates global skill
-    # directories and has no project-scope selector, so review it manually.
     if [[ "$source_ide" == "blackbox" || "$target_ide" == "blackbox" ]]; then
         MIGRATION_TOTAL=$((MIGRATION_TOTAL + 1))
         set_status "skills" "manual"
@@ -1330,9 +682,6 @@ migrate_global_skills() {
         return 0
     fi
 
-    # Supermaven is a host-editor completion extension. Its official
-    # surfaces document editor/Neovim configuration, not an Agent Skills
-    # directory; ~/.supermaven is runtime/binary storage, not a skill store.
     if [[ "$source_ide" == "supermaven" || "$target_ide" == "supermaven" ]]; then
         set_status "skills" "manual"
         set_message "skills" "Supermaven has no documented portable Agent Skills directory; automatic migration is unsupported"
@@ -1377,10 +726,6 @@ migrate_global_skills() {
     local target_global
     target_global=$(get_global_path "$target_ide")
 
-    # Guard against IDEs with no stable global skills directory (e.g.
-    # cody/codeium/tabnine/blackbox return ""). Without this, `mkdir -p ""`
-    # would fail under `set -e` and abort the whole script. This covers both
-    # the copilot branch and the generic branch below.
     if [[ -z "$target_global" ]]; then
         set_status "skills" "skipped"
         set_message "skills" "target IDE has no global skills directory, skip" 
@@ -1403,13 +748,6 @@ migrate_global_skills() {
     local failed_count=0
 
     if [[ "$target_ide" == "copilot" ]]; then
-        # The canonical copilot target is GitHub Copilot CLI. Its global skill
-        # directory is ~/.copilot/skills; .github/skills is a separate,
-        # project-scoped discovery location and is not a destination for this
-        # global-skills operation.
-        # Copy the ENTIRE skill directory so scripts/ references/ assets/ are
-        # preserved (consistent with CONVERT_SKILL and the non-copilot branch).
-        # Never create the target directory in dry-run mode (zero writes).
         if [[ $DRY_RUN -eq 0 ]]; then
             mkdir -p "$target_global"
         fi
@@ -1435,17 +773,10 @@ migrate_global_skills() {
                     fi
 
                     if cp -r "$skill_dir" "$target_global/$skill_name"; then
-                        # MED-S3: skill bundles may carry config/env files with
-                        # embedded credentials; redact the COPY (never the
-                        # source). Fail-closed: on redaction failure remove
-                        # the whole copied skill so no secret survives.
                         if redact_project_copy "$target_global/$skill_name" >/dev/null; then
                             echo "  [OK] migrated skill: $skill_name"
                             ((migrated_count++)) || true
                         else
-                            # SECURITY: fail-closed — remove only the direct
-                            # child copy through the same containment and
-                            # symlink guard used by overwrite handling.
                             safe_remove_skill_dir "$target_global" "$skill_name" || true
                             echo "  [FAIL] skill copy redaction failed, deleted copy to prevent key leak: $skill_name"
                             ((failed_count++)) || true
@@ -1461,7 +792,6 @@ migrate_global_skills() {
         set_manual_step "skills" "GitHub Copilot CLI: this operation only migrates global ~/.copilot/skills; for project skills, review .github/skills, .claude/skills or .agents/skills separately" 
 
     else
-        # Never create the target directory in dry-run mode (zero writes).
         if [[ $DRY_RUN -eq 0 ]]; then
             mkdir -p "$target_global"
         fi
@@ -1486,12 +816,10 @@ migrate_global_skills() {
                 fi
 
                 if cp -r "$skill_dir" "$target_global/$skill_name"; then
-                    # MED-S3: redact the copied skill bundle (fail-closed).
                     if redact_project_copy "$target_global/$skill_name" >/dev/null; then
                         echo "  [OK] migrated skill: $skill_name"
                         ((migrated_count++)) || true
                     else
-                        # SECURITY: fail-closed — see fail-closed note above.
                         safe_remove_skill_dir "$target_global" "$skill_name" || true
                         echo "  [FAIL] skill copy redaction failed, deleted copy to prevent key leak: $skill_name"
                         ((failed_count++)) || true
@@ -1585,12 +913,6 @@ migrate_project_skills() {
         return 0
     fi
 
-    # Refuse to operate when source and target resolve to the same path.
-    # antigravity/codex/zed (and several others) all share `.agents/skills`,
-    # and `claude → copilot` / `tencent-codebuddy` share `.mcp.json`. Without
-    # this guard, the backup strategy's `mv` would rename the source in
-    # place and the subsequent `cp -R` would fail; the overwrite strategy
-    # would recursively remove the source with no backup. Either path destroys data.
     if [[ "$(cd "$source_path" 2>/dev/null && pwd -P)" == "$(cd "$target_path" 2>/dev/null && pwd -P)" ]]; then
         set_status "skills" "manual"
         set_message "skills" "project Skills source and target resolve to the same path; refusing to self-overwrite"
@@ -1637,18 +959,11 @@ migrate_project_skills() {
             esac
         fi
 
-        # MED-S3 / MED-P3: skill bundles may carry config/env files with
-        # embedded credentials; redact the COPY (never the source).
-        # Fail-closed: on redaction failure remove the whole copied skill
-        # so no secret survives.
         if cp -R "$skill_dir" "$target_path/$skill_name" 2>/dev/null; then
             if redact_project_copy "$target_path/$skill_name" >/dev/null; then
                 echo "  [OK] migrated project skill: $skill_name"
                 migrated_count=$((migrated_count + 1))
             else
-                # SECURITY: fail-closed — remove only the direct child copy
-                # through the same containment and symlink guard used by
-                # overwrite handling.
                 safe_remove_skill_dir "$target_path" "$skill_name" || true
                 echo "  [FAIL] project skill redaction failed, deleted copy to prevent key leak: $skill_name"
                 failed_count=$((failed_count + 1))
@@ -1717,9 +1032,6 @@ migrate_rules() {
         return 0
     fi
 
-    # Supermaven's documented .supermavenignore is an indexing-exclusion
-    # file, not an instruction/rules format. Never flatten or copy it as AI
-    # rules; host-editor/Neovim settings require manual review.
     if [[ "$source_ide" == "supermaven" || "$target_ide" == "supermaven" ]]; then
         set_status "rules" "manual"
         set_message "rules" "Supermaven has no documented portable instruction/rules file; .supermavenignore only excludes indexed files"
@@ -1744,12 +1056,6 @@ migrate_rules() {
         return 0
     fi
 
-    # Current Devin Desktop/Windsurf rules are a directory of independently
-    # activated files (.devin/rules/*.md, with .windsurf/rules/*.md as the
-    # compatibility location). The legacy .windsurfrules file is also still
-    # read, but this generic single-file mapper cannot safely choose a scope,
-    # activation mode, or merge strategy. Keep all Windsurf rule transfers
-    # manual rather than flattening a directory or guessing schema.
     if [[ "$source_ide" == "windsurf" || "$target_ide" == "windsurf" ]]; then
         set_status "rules" "manual"
         set_message "rules" "Windsurf/Devin rules use scoped files; automatic migration is unsupported"
@@ -1766,9 +1072,6 @@ migrate_rules() {
         return 0
     fi
 
-    # Tabnine guidelines are a directory of Markdown files at global or
-    # project scope. The generic rules copier only supports one file and must
-    # not flatten or silently choose a guideline scope.
     if [[ "$source_ide" == "tabnine" || "$target_ide" == "tabnine" ]]; then
         set_status "rules" "manual"
         set_message "rules" "Tabnine guidelines use scoped .tabnine/guidelines/*.md files; automatic migration is unsupported"
@@ -1777,9 +1080,6 @@ migrate_rules() {
         return 0
     fi
 
-    # Antigravity IDE rules are a directory of independently activated files.
-    # This generic handler only has safe single-file copy semantics, so do not
-    # flatten, overwrite, or claim to migrate the documented directory.
     if [[ "$source_ide" == "antigravity" || "$target_ide" == "antigravity" ]]; then
         set_status "rules" "manual"
         set_message "rules" "Antigravity IDE rules use a directory; manual migration required"
@@ -1788,9 +1088,6 @@ migrate_rules() {
         return 0
     fi
 
-    # Amazon Q rules are a directory of Markdown files with Q-specific
-    # activation through the IDE. The generic single-file mapper cannot
-    # flatten or select files safely.
     if [[ "$source_ide" == "amazon-q" || "$target_ide" == "amazon-q" ]]; then
         set_status "rules" "manual"
         set_message "rules" "Amazon Q rules use .amazonq/rules/*.md; manual migration required"
@@ -1853,9 +1150,6 @@ migrate_rules() {
     target_rules=$(get_rules_file "$target_ide")
 
     if [[ "$source_ide" == "jetbrains" && ! -f "$WORKSPACE_ROOT/$source_rules" ]]; then
-        # Junie falls back from its preferred .junie/AGENTS.md to a root
-        # AGENTS.md, then legacy .junie/guidelines.md. Preserve the source
-        # file instead of treating the legacy locations as CLI-only.
         if [[ -f "$WORKSPACE_ROOT/AGENTS.md" ]]; then
             source_rules="AGENTS.md"
         elif [[ -f "$WORKSPACE_ROOT/.junie/guidelines.md" ]]; then
@@ -1881,10 +1175,6 @@ migrate_rules() {
         set_manual_step "rules" "VS Code: the single-file mapper handles .github/copilot-instructions.md only; review AGENTS.md and .github/instructions/**/*.instructions.md with their applyTo frontmatter manually"
     fi
 
-    # Cline rules are a directory of independently loaded Markdown/TXT files
-    # in .clinerules/ (and the CLI also uses .cline/rules/). The generic
-    # single-file copier cannot preserve that directory semantics or safely
-    # choose between the extension and CLI rule scopes.
     if [[ "$source_ide" == "cline" || "$target_ide" == "cline" ]]; then
         set_status "rules" "manual"
         set_message "rules" "Cline rules use directory-scoped files; manual migration required"
@@ -1898,8 +1188,6 @@ migrate_rules() {
         set_manual_step "rules" "Aider: review CONVENTIONS.md and add read: CONVENTIONS.md to the appropriate .aider.conf.yml manually; do not treat Aider config as a skills or MCP file"
     fi
 
-    # Cursor rules are a directory of MDC files, not a single portable rule
-    # file. Do not flatten, overwrite, or guess a frontmatter conversion.
     if [[ "$source_ide" == "cursor" || "$target_ide" == "cursor" ]]; then
         set_status "rules" "manual"
         set_message "rules" "Cursor rules use .cursor/rules/*.mdc; manual migration required"
@@ -1909,10 +1197,6 @@ migrate_rules() {
     fi
 
     if [[ "$source_ide" == "void-editor" || "$target_ide" == "void-editor" ]]; then
-        # The first-party consumer reads plain-text `.voidrules` only from
-        # each workspace-folder root. The generic operation can therefore
-        # copy one project-root file safely; global AI Instructions and
-        # multi-root merge behavior remain manual.
         set_manual_step "rules" "Void: .voidrules is a workspace-root plaintext instruction file; automatic copy is limited to the selected project root, while global AI Instructions and multi-root ordering require manual review"
     fi
 
@@ -1977,9 +1261,6 @@ migrate_prompts() {
         return 0
     fi
 
-    # Gemini CLI commands are TOML files with a required `prompt` field, not
-    # Markdown prompt templates. The generic prompts copier cannot translate
-    # this schema safely.
     if [[ "$source_ide" == "gemini-cli" || "$target_ide" == "gemini-cli" ]]; then
         set_status "prompts" "manual"
         set_message "prompts" "Gemini CLI commands use TOML; automatic prompt migration is unsupported"
@@ -1988,8 +1269,6 @@ migrate_prompts() {
         return 0
     fi
 
-    # Supermaven's official docs describe inline completion/chat in the host
-    # editor, not a portable prompt-template directory or file schema.
     if [[ "$source_ide" == "supermaven" || "$target_ide" == "supermaven" ]]; then
         set_status "prompts" "manual"
         set_message "prompts" "Supermaven has no documented portable prompt-template directory; automatic migration is unsupported"
@@ -2006,10 +1285,6 @@ migrate_prompts() {
         return 0
     fi
 
-    # Goose prompt templates are global files under ~/.config/goose/prompts/;
-    # project slash commands are YAML entries in config.yaml, not a portable
-    # prompt directory. This project-relative copier cannot safely migrate
-    # either scope or schema, so keep every Goose prompt transfer manual.
     if [[ "$source_ide" == "goose-cli" || "$target_ide" == "goose-cli" ]]; then
         set_status "prompts" "manual"
         set_message "prompts" "Goose prompt templates are global files and slash commands are config.yaml entries; automatic migration is unsupported"
@@ -2018,9 +1293,6 @@ migrate_prompts() {
         return 0
     fi
 
-    # TRAE Commands are Markdown files with product-specific frontmatter and
-    # nesting rules. They are not generic prompt templates; keep the exact
-    # project path visible for manual review rather than converting bodies.
     if [[ "$source_ide" == "trae" || "$target_ide" == "trae" ||
           "$source_ide" == "trae-cn" || "$target_ide" == "trae-cn" ]]; then
         set_status "prompts" "manual"
@@ -2030,9 +1302,6 @@ migrate_prompts() {
         return 0
     fi
 
-    # Windsurf/Devin workflows are independently invoked slash commands with
-    # their own frontmatter and length limits. They are not generic prompt
-    # templates, so do not flatten or copy them into another IDE's command dir.
     if [[ "$source_ide" == "windsurf" || "$target_ide" == "windsurf" ]]; then
         set_status "prompts" "manual"
         set_message "prompts" "Windsurf/Devin workflows use a product-specific directory and invocation model"
@@ -2129,10 +1398,6 @@ migrate_prompts() {
     fi
 }
 
-# Reads a source MCP config, maps the server root key into the target IDE's
-# format, and writes the result to the target file. Sets the global variables
-# CONV_RESULT (success|copied|failed) and CONV_DETAIL (human message) for the
-# caller. NEVER reports success when zero bytes were actually transferred.
 convert_mcp_file() {
     local src="$1" src_key="$2" dst="$3" dst_key="$4" target_ide="$5" strategy="$6" target_version="$7"
     CONV_RESULT=""
@@ -2145,12 +1410,6 @@ convert_mcp_file() {
         return
     fi
 
-    # Only perform a true root-key conversion when BOTH the source and target
-    # are JSON files. If either side is TOML/YAML (or any other format) we
-    # cannot truly convert, so we fall back to a verbatim copy and report
-    # "copied" (never a false "success"). In every path we strip literal or
-    # ambiguous credentials before target write. Exact supported environment
-    # references contain no live value and may be preserved or translated.
     local src_ext dst_ext
     src_ext="${src##*.}"
     dst_ext="${dst##*.}"
@@ -2162,17 +1421,9 @@ import json, os, re, sys
 from urllib.parse import parse_qsl, urlsplit
 src, src_key, dst, dst_key, target_ide, strategy, target_version = sys.argv[1], (sys.argv[2] or ""), sys.argv[3], (sys.argv[4] or ""), sys.argv[5], sys.argv[6], sys.argv[7]
 SECRET_KEY_RE = re.compile(r"(?i)(api[_-]?key|token|secret|password|passwd|authorization|auth|bearer|private[_-]?key|access[_-]?key|client[_-]?secret|session|cookie)", re.IGNORECASE)
-# Broadened to catch credential-bearing DB/connection URIs (postgres://user:pass@,
-# mysql://..., redis://..., etc.), not just http(s).
 URL_CRED_RE = re.compile(r"^(?:https?|postgres|postgresql|mysql|mongodb|mongodb\+srv|redis|ftp|amqp|sqlserver)://[^:@/\s]+:[^@/\s]+@", re.IGNORECASE)
 URL_TOKEN_RE = re.compile(r"^(https?://)[^/\s]*:(//)?[A-Za-z0-9_\-]{16,}", re.IGNORECASE)
-# Query-string credentials: ?key=..., ?token=..., ?secret=..., ?access_token=...
 QUERY_CRED_RE = re.compile(r"[?&](key|token|secret|access[_-]?token|api[_-]?key)=[A-Za-z0-9_\-]{12,}", re.IGNORECASE)
-# Provider-key value formats (CR-001 fix). These never carry a secret-like KEY
-# name, so the key-name heuristics above miss them entirely. Explicitly match
-# well-known credential shapes so e.g. `sk-ant-...`/`ghp_...`/`AKIA...` are
-# blanked even when the surrounding key is innocuous (MY_KEY, WEBHOOK_URL...).
-# Kept in sync with validate_skills.py::SECRET and the config/project redactor.
 PROVIDER_SECRET_RE = re.compile(r"(?:sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|tvly-[A-Za-z0-9_-]{16,}|AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}|ya29\.[A-Za-z0-9_-]+|AIza[0-9A-Za-z_-]{35}|sk_live_[A-Za-z0-9]{16,})")
 SAFE_ENV_REF_TOKEN = r"(?:\$\{env:[A-Za-z_][A-Za-z0-9_]*\}|\$\{[A-Za-z_][A-Za-z0-9_]*\}|\{env:[A-Za-z_][A-Za-z0-9_]*\})"
 SAFE_ENV_REF_RE = re.compile(SAFE_ENV_REF_TOKEN)
@@ -2230,15 +1481,11 @@ def normalize_environment_references(node):
     return node
 
 def redact_value(v):
-    # Strings that look like a credential/secret get blanked (key name kept).
     if isinstance(v, str):
         if is_safe_reference_value(v):
             return v
         if PROVIDER_SECRET_RE.search(v):
             return ""
-        # A secret keyword appearing inside a value (e.g. a bare bearer/token
-        # string) — but only when the value has no spaces, so prose such as
-        # "my password is secret" is never touched.
         if SECRET_KEY_RE.search(v) and ' ' not in v:
             return ""
         if URL_CRED_RE.match(v) or URL_TOKEN_RE.match(v):
@@ -2247,14 +1494,8 @@ def redact_value(v):
             return ""
     return v
 
-# CLI flag that names a secret (e.g. --token, --api-key). The flag itself is
-# kept; only its VALUE (the next argv element, or the =-suffix) is blanked.
 FLAG_RE = re.compile(r"^--?[A-Za-z0-9_\-]+$")
 FLAG_EQ_RE = re.compile(r"^(--?[A-Za-z0-9_\-]+)=(.+)$")
-# Conventional SHORT flags that carry credentials (mysql/psql -p, -t token,
-# -k key). Their names don't contain a secret keyword, so SECRET_KEY_RE can't
-# catch them. Deliberate over-redaction tradeoff: the blanked value is always
-# recoverable from the untouched SOURCE config.
 SHORT_SECRET_FLAGS = {"-p", "-t", "-k"}
 
 def redact_node(node, key_ctx=""):
@@ -2263,15 +1504,10 @@ def redact_node(node, key_ctx=""):
             if isinstance(v, (dict, list)):
                 redact_node(v, k)
             elif isinstance(v, str) and SECRET_KEY_RE.search(k) and not is_safe_reference_value(v):
-                # key name itself signals a secret (e.g. "apiKey", "token")
                 node[k] = ""
             else:
                 node[k] = redact_value(v)
     elif isinstance(node, list):
-        # Arrays leak secrets two ways: (a) the PARENT key is secret-like
-        # ("API_KEYS": ["a","b"]) -> blank every string element; (b) argv-style
-        # flag pairs ("args": ["--token","val"] or ["--token=val"]) -> keep the
-        # flag, blank its value.
         parent_secret = bool(SECRET_KEY_RE.search(key_ctx or ""))
         blank_next = False
         for i, item in enumerate(node):
@@ -2298,8 +1534,6 @@ def redact_node(node, key_ctx=""):
                 blank_next = False
 
 def _strip_jsonc(text):
-    # JSONC is JSON plus comments/trailing commas. Strip only comment markers
-    # outside quoted strings so URLs such as https://... remain untouched.
     out = []
     i = 0
     in_string = False
@@ -2417,15 +1651,9 @@ if isinstance(data, dict):
 else:
     servers = {}
 if not servers:
-    # No servers were extracted (empty/absent root key). Never report a
-    # "success" for a zero-server transfer; signal the caller to fall back
-    # to a verbatim copy instead.
     sys.exit(3)
 normalize_environment_references(servers)
 redact_node(servers)
-# Execution-approval lists are target-product trust decisions, not portable
-# MCP endpoint metadata. Always omit them so an imported server starts without
-# inherited tool grants; the user can review and grant access in the target.
 def strip_execution_approvals(node):
     if isinstance(node, dict):
         for key in ("autoApprove", "enabledTools", "disabledTools"):
@@ -2437,11 +1665,6 @@ def strip_execution_approvals(node):
             strip_execution_approvals(value)
 
 strip_execution_approvals(servers)
-# GitHub Copilot CLI accepts only these documented transports. Do not write
-# a configuration which needs a guessed transport or looks like an IDE-only
-# schema: report it as manual instead. A local entry may omit `type` because
-# the CLI documents `local` as its default, but still needs command, args, and
-# tools. Remote entries must state http or sse and provide a URL.
 if target_ide == "copilot":
     supported_types = {"local", "stdio", "http", "sse"}
     if not isinstance(servers, dict):
@@ -2463,9 +1686,6 @@ if target_ide == "copilot":
                 sys.exit(4)
         elif not isinstance(server.get("url"), str):
             sys.exit(4)
-# Cline's extension and CLI MCP files both use an object rooted at
-# `mcpServers`. Validate the minimum server shape before writing; retain only
-# non-execution metadata such as disabled, timeout, and transportType.
 if target_ide == "cline":
     if not isinstance(servers, dict):
         sys.exit(7)
@@ -2484,12 +1704,6 @@ if target_ide == "cline":
             sys.exit(7)
         if "timeout" in server and not isinstance(server["timeout"], (int, float)):
             sys.exit(7)
-# Void's custom first-party MCP implementation reads a JSON `mcpServers` map.
-# Its local shape is command/args/env. The archived runtime recognizes a URL
-# for remote entries, but its declared headers are not reliably passed to the
-# transport; reject headers and all other extra fields rather than claiming
-# authenticated remote conversion is safe. `type`/`transport` are accepted
-# only as validated source discriminators and are removed from the target.
 if target_ide == "void-editor":
     if not isinstance(servers, dict):
         sys.exit(15)
@@ -2520,12 +1734,6 @@ if target_ide == "void-editor":
                 sys.exit(15)
             if set(server) - {"url"}:
                 sys.exit(15)
-# Gemini CLI settings.json has a documented mcpServers object whose entries
-# must expose command (stdio), url (SSE), or httpUrl (Streamable HTTP). The
-# official docs warn against underscores in server aliases because policy FQN
-# parsing splits on underscores. Reject ambiguous aliases/shapes instead of
-# silently renaming an alias that may also be referenced by policies or
-# mcp.allowed/mcp.excluded settings.
 if target_ide == "gemini-cli":
     if not isinstance(servers, dict):
         sys.exit(8)
@@ -2553,9 +1761,6 @@ if target_ide == "gemini-cli":
         for key in ("includeTools", "excludeTools"):
             if key in server and (not isinstance(server[key], list) or not all(isinstance(item, str) for item in server[key])):
                 sys.exit(8)
-# Kilo Code's JSONC config uses `mcp` with an explicit type discriminator.
-# Normalize the common command/args/env shape into Kilo's documented
-# type=local + command-array + environment form, or type=remote + url.
 if target_ide == "kilocode":
     if not isinstance(servers, dict):
         sys.exit(10)
@@ -2605,12 +1810,6 @@ if target_ide == "kilocode":
             sys.exit(10)
         if "oauth" in server and not isinstance(server["oauth"], (bool, dict)):
             sys.exit(10)
-# Kimi Code, Kiro, and ZCode use an mcpServers-like map with a scalar command
-# plus args for stdio and url/headers for remote servers. A command array from
-# OpenCode is unambiguous: its first element is the command and the remainder
-# are args. Remove foreign type discriminators after that endpoint
-# normalization; Kimi retains an explicit `transport=sse` only when the
-# source explicitly supplied SSE.
 if target_ide in {"kimiai", "kiro", "zcode"}:
     if not isinstance(servers, dict):
         sys.exit(12)
@@ -2665,12 +1864,6 @@ if target_ide in {"kimiai", "kiro", "zcode"}:
         for key in ("startupTimeoutMs", "toolTimeoutMs", "timeout"):
             if key in server and (not isinstance(server[key], (int, float)) or isinstance(server[key], bool)):
                 sys.exit(12)
-# WorkBuddy desktop's official MCP guide only documents a local command-based
-# mcpServers shape: command (string), optional args (string array), and
-# optional env (string map). The desktop docs do not establish remote URL,
-# headers, type, transport, or arbitrary metadata as a portable file format.
-# Reject those entries instead of silently emitting an unsupported desktop
-# configuration. This intentionally differs from CodeBuddy Code CLI.
 if target_ide == "workbuddy":
     if not isinstance(servers, dict):
         sys.exit(16)
@@ -2684,10 +1877,6 @@ if target_ide == "workbuddy":
             sys.exit(16)
         if "env" in server and (not isinstance(server["env"], dict) or not all(isinstance(key, str) and isinstance(value, str) for key, value in server["env"].items())):
             sys.exit(16)
-# Junie in JetBrains documents a local mcpServers shape with command/args/env.
-# Keep remote/type/transport/unknown fields manual until the IDE docs establish
-# a portable target schema for them; this prevents a foreign IDE's remote
-# discriminator from being written into Junie's mcp.json.
 if target_ide == "jetbrains":
     if not isinstance(servers, dict):
         sys.exit(17)
@@ -2700,10 +1889,6 @@ if target_ide == "jetbrains":
             sys.exit(17)
         if "env" in server and (not isinstance(server["env"], dict) or not all(isinstance(key, str) and isinstance(value, str) for key, value in server["env"].items())):
             sys.exit(17)
-# Augment uses mcpServers. Local servers use command/args/env; remote servers
-# must retain an explicit documented http or sse type because a bare URL does
-# not identify the transport. OpenCode's command array is normalized to the
-# scalar command plus args shape.
 if target_ide == "augment-code":
     if not isinstance(servers, dict):
         sys.exit(13)
@@ -2739,9 +1924,6 @@ if target_ide == "augment-code":
                 sys.exit(13)
         if "enabled" in server and not isinstance(server["enabled"], bool):
             sys.exit(13)
-# Comate's first-party MCP guide requires type (stdio/sse/streamableHttp),
-# command for stdio, and url for remote entries. Accept the guide's older
-# transportType spelling as an input alias, but write the canonical `type`.
 if target_ide == "baidu-comate":
     if not isinstance(servers, dict):
         sys.exit(14)
@@ -2773,12 +1955,6 @@ if target_ide == "baidu-comate":
                 sys.exit(14)
         if "disabled" in server and not isinstance(server["disabled"], bool):
             sys.exit(14)
-# OpenCode's documented `mcp` entries are discriminated by type. Local
-# servers require a command ARRAY and use `environment`; remote servers
-# require a URL and use `headers`/`oauth`. Convert common mcpServers shapes
-# deliberately instead of copying a foreign `env`, scalar command, or
-# transport discriminator into opencode.json. Reject ambiguous entries and
-# invalid target JSON rather than guessing.
 if target_ide == "opencode":
     if not isinstance(servers, dict):
         sys.exit(10)
@@ -2791,8 +1967,6 @@ if target_ide == "opencode":
             sys.exit(10)
         source_type = server.get("type")
         if "transport" in server:
-            # OpenCode does not use a transport key; accepting one would
-            # silently carry an IDE/CLI-specific discriminator.
             sys.exit(10)
         if has_command:
             if source_type not in (None, "local", "stdio"):
@@ -2871,11 +2045,6 @@ if target_ide == "opencode":
                         sys.exit(10)
                     if old_key in oauth:
                         oauth[new_key] = oauth.pop(old_key)
-# VS Code's `servers` schema is not interchangeable with a generic
-# `mcpServers` object. Local stdio entries may omit `type`; remote entries
-# require the documented `http`/`sse` discriminator. Reject foreign fields
-# such as Windsurf's `serverUrl` or a generic `transport` instead of silently
-# emitting an invalid `.vscode/mcp.json`.
 if target_ide == "vscode":
     if not isinstance(servers, dict):
         sys.exit(6)
@@ -2927,11 +2096,6 @@ if target_ide == "vscode":
                 sys.exit(6)
             if "oauth" in server and not isinstance(server["oauth"], dict):
                 sys.exit(6)
-# Windsurf/Devin Desktop uses a plain `mcpServers` map. Its documented local
-# shape is command/args/env; remote HTTP uses exactly one of serverUrl or url,
-# with optional string headers. It does not use VS Code's `type` or a generic
-# `transport` discriminator. Keep only this documented intersection so a
-# foreign schema cannot be written to ~/.codeium/windsurf/mcp_config.json.
 if target_ide == "windsurf":
     if not isinstance(servers, dict):
         sys.exit(18)
@@ -2970,9 +2134,6 @@ if target_ide == "windsurf":
                 or not all(isinstance(key, str) and isinstance(value, str) for key, value in server["headers"].items())
             ):
                 sys.exit(18)
-# OpenClaw's managed registry is nested at mcp.servers. Do not guess a
-# transport for a remote URL: only the documented canonical transport, or the
-# documented CLI compatibility type `http`, is safe to normalize.
 if target_ide == "openclaw":
     if not isinstance(servers, dict):
         sys.exit(5)
@@ -2985,9 +2146,6 @@ if target_ide == "openclaw":
                 server["transport"] = "streamable-http"
             elif transport != "streamable-http":
                 sys.exit(5)
-# Zed's documented context_servers entries use command/args/env for local
-# servers or url/headers for remote servers. Do not copy another IDE's
-# transport/type discriminator into settings.json or infer its meaning.
 if target_ide == "zed":
     if not isinstance(servers, dict):
         sys.exit(6)
@@ -3010,9 +2168,6 @@ if target_ide == "zed":
                 sys.exit(6)
             if "headers" in server and not isinstance(server["headers"], dict):
                 sys.exit(6)
-# Antigravity IDE's documented remote-MCP schema uses serverUrl. Preserve
-# local stdio entries unchanged, but canonicalize an imported remote `url`
-# field before writing the shared Antigravity config.
 if target_ide == "antigravity" and isinstance(servers, dict):
     for server in servers.values():
         if isinstance(server, dict) and "url" in server:
@@ -3033,19 +2188,11 @@ if not isinstance(existing, dict):
 if target_ide == "opencode" and isinstance(existing.get("mcp"), dict):
     existing_mcp = existing["mcp"]
     if target_version == "v2":
-        # V1 stores server names directly under mcp. Never leave those beside
-        # native V2 mcp.servers; the whole selected MCP object is replaced
-        # while unrelated top-level settings and the strategy backup remain.
         if any(key not in {"servers", "timeout"} for key in existing_mcp):
             existing["mcp"] = {}
     elif "servers" in existing_mcp:
-        # The inverse migration follows the same rule: do not mix a native V2
-        # container with direct V1 server names.
         existing["mcp"] = {}
 if strategy == "overwrite":
-    # Replace only the selected MCP map. Shared target files such as
-    # opencode.json/settings.json may hold unrelated user settings that an MCP
-    # migration must not delete.
     if dst_key:
         write_path(existing, dst_key, {})
     else:
@@ -3077,9 +2224,6 @@ PYEOF
             fi
             return
         fi
-        # Exit 4 is reserved for a GitHub Copilot CLI schema/transport that
-        # the official documentation does not support. Do not fall back to a
-        # verbatim copy: that would write an invalid CLI configuration.
         if [[ "$target_ide" == "copilot" && "$json_conversion_rc" -eq 4 ]]; then
             CONV_RESULT="failed"
             CONV_DETAIL="GitHub Copilot CLI MCP transport/schema is unsupported; review manually (supported: local, stdio, http, sse)"
@@ -3170,22 +2314,13 @@ PYEOF
             CONV_DETAIL="OpenCode MCP schema is invalid or ambiguous; review manually (local requires type=local plus command array/environment, remote requires type=remote plus url/headers/oauth)"
             return
         fi
-        # Gemini's target is always JSON settings.json. An invalid source
-        # document or a document without an MCP server map must not fall back
-        # to an opaque copy that would overwrite settings.json with YAML,
-        # TOML, or another IDE's unrelated configuration.
         if [[ "$target_ide" == "gemini-cli" ]]; then
             CONV_RESULT="failed"
             CONV_DETAIL="Gemini CLI MCP source is not a valid non-empty JSON mcpServers map; manual conversion required"
             return
         fi
-        # exit 2 (not JSON) or exit 3 (empty server map) -> fall through to a
-        # verbatim copy so we never report a false "success"
     fi
 
-    # Gemini CLI's target settings.json is never a verbatim-copy fallback.
-    # Without JSON-aware conversion there is no safe way to produce a valid
-    # target, so fail closed for non-JSON sources as well.
     if [[ "$target_ide" == "gemini-cli" ]]; then
         CONV_RESULT="failed"
         CONV_DETAIL="Gemini CLI MCP requires a JSON mcpServers conversion; source format is unsupported for automatic migration"
@@ -3216,22 +2351,12 @@ PYEOF
         return
     fi
 
-    # An explicit source override is a strict import contract. It changes only
-    # the file location; it must still match the declared source IDE's schema.
-    # Never copy an arbitrary override file as-is into a target config.
     if [[ -n "${SOURCE_MCP_FILE:-}" ]]; then
         CONV_RESULT="failed"
         CONV_DETAIL="explicit MCP source did not pass schema conversion; copy-as-is fallback is disabled"
         return
     fi
 
-    # Fallback: copy as-is, then strip secrets from the COPY (not the source).
-    # Marked "copied" (not "success") because the format was not truly
-    # converted and manual adjustment is expected.
-    #
-    # MED-A2: the fallback is now an EXPLICIT policy, not an implicit code
-    # path. Set MCP_ALLOW_COPY_FALLBACK=0 to run strictly fail-closed: any
-    # combination that cannot be truly converted is failed instead of copied.
     if [[ "${MCP_ALLOW_COPY_FALLBACK:-1}" -ne 1 ]]; then
         CONV_RESULT="failed"
         CONV_DETAIL="source/target MCP format not directly compatible, and copy-as-is fallback is disabled (MCP_ALLOW_COPY_FALLBACK=0)" 
@@ -3257,9 +2382,6 @@ PYEOF
     fi
 }
 
-# Read and validate a JSON/JSONC MCP source without creating a target or
-# echoing any configuration values. This makes dry-run a real source check,
-# including for --source-mcp-file, while keeping preview strictly zero-write.
 inspect_mcp_source_file() {
     local src="$1" src_key="$2"
 
@@ -3393,35 +2515,12 @@ print(f"  validated MCP source: {len(servers)} server entries at root key {root_
 PYEOF
 }
 
-# Strip likely secrets from a config file in place (env values, bearer/API
-# keys, URL-embedded credentials, auth headers, query-string creds). Works on
-# JSON/TOML/YAML by redacting quoted values whose key name is secret-like or
-# whose value looks like a credential. Keys are preserved; values are blanked.
-#
-# IMPORTANT: this must only ever touch LEAF values. A line like `"secret-env": {`
-# has a secret-looking KEY but its value is a container (`{`), NOT a secret — so
-# we skip it. Otherwise the whole object would be replaced with `""` and the
-# file (e.g. JSON) would be corrupted. Trailing commas (always present in
-# json.dump output) are handled too.
-#
-# Returns, on stdout, the number of values actually redacted (0 when none).
-# Shared redaction engine (HI-003 / MED-P7): the Python redactor is written
-# ONCE to a temp .py file and reused by BOTH redact_secrets_in_file (single
-# file) and redact_project_copy (whole tree in ONE python process instead of
-# one fork per file). Regex constants are kept in sync with
-# scripts/validate_skills.py::SECRET and the MCP redactor above; drift is
-# guarded by the pattern-sync regression test.
 REDACTOR_PY=""
 ensure_redactor_script() {
     if [[ -n "${REDACTOR_PY:-}" && -f "${REDACTOR_PY:-}" ]]; then
         return 0
     fi
-    # NOTE: BSD/macOS mktemp requires the XXXXXX to be the FINAL component —
-    # a trailing ".py" suffix would make mktemp fail outright. python3 does
-    # not need the extension when the script is passed by path.
     REDACTOR_PY=$(mktemp "${TMPDIR:-/tmp}/redact-engine.XXXXXX") || return 1
-    # NOTE: plain redirect (NOT $(...) command substitution) — bash 3.2
-    # (macOS default) mis-parses quotes in command-substituted heredocs.
     cat >"$REDACTOR_PY" <<'PYEOF'
 import os, re, sys
 from urllib.parse import parse_qsl, urlsplit
@@ -3430,17 +2529,11 @@ SECRET_KEY_RE = re.compile(r"(?i)(api[_-]?key|token|secret|password|passwd|autho
 URL_CRED_RE = re.compile(r"^(?:https?|postgres|postgresql|mysql|mongodb|mongodb\+srv|redis|ftp|amqp|sqlserver)://[^:@/\s]+:[^@/\s]+@", re.IGNORECASE)
 URL_TOKEN_RE = re.compile(r"^(https?://)[^/\s]*:(//)?[A-Za-z0-9_\-]{16,}", re.IGNORECASE)
 QUERY_CRED_RE = re.compile(r"[?&](key|token|secret|access[_-]?token|api[_-]?key)=[A-Za-z0-9_\-]{12,}", re.IGNORECASE)
-# Provider-key value formats (CR-001 fix). See the identical definition in the
-# MCP redactor above — kept in sync with validate_skills.py::SECRET.
 PROVIDER_SECRET_RE = re.compile(r"(?:sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|tvly-[A-Za-z0-9_-]{16,}|AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}|ya29\.[A-Za-z0-9_-]+|AIza[0-9A-Za-z_-]{35}|sk_live_[A-Za-z0-9]{16,})")
 SAFE_ENV_REF_TOKEN = r"(?:\$\{env:[A-Za-z_][A-Za-z0-9_]*\}|\$\{[A-Za-z_][A-Za-z0-9_]*\}|\{env:[A-Za-z_][A-Za-z0-9_]*\})"
 SAFE_ENV_REF_RE = re.compile(SAFE_ENV_REF_TOKEN)
 SAFE_ENV_REF_FULL_RE = re.compile(r"^" + SAFE_ENV_REF_TOKEN + r"$")
 SAFE_BEARER_REF_RE = re.compile(r"^Bearer\s+" + SAFE_ENV_REF_TOKEN + r"$", re.IGNORECASE)
-# Conventional SHORT flags that carry credentials (mysql/psql -p, -t token,
-# -k key). Their names don't contain a secret keyword, so SECRET_KEY_RE can't
-# catch them. Deliberate over-redaction tradeoff: the blanked value is always
-# recoverable from the untouched SOURCE config.
 SHORT_SECRET_FLAGS = {"-p", "-t", "-k"}
 FLAG_RE = re.compile(r"^--?[A-Za-z0-9_\-]+$")
 FLAG_EQ_RE = re.compile(r"^(--?[A-Za-z0-9_\-]+)=(.+)$")
@@ -3478,9 +2571,6 @@ def is_secret_value(val):
         return True
     if QUERY_CRED_RE.search(val):
         return True
-    # A secret keyword appearing inside a value (e.g. a bare bearer/token
-    # string) — but only when the value has no spaces, so prose such as
-    # "my password is secret" is never touched.
     if SECRET_KEY_RE.search(val) and ' ' not in val:
         return True
     return False
@@ -3489,13 +2579,11 @@ def is_secret_key(key):
     return bool(SECRET_KEY_RE.search(key or ""))
 
 def is_secret_flag(tok):
-    # CLI flag that names a secret: --token, --api-key, or short -p/-t/-k.
     if tok in SHORT_SECRET_FLAGS:
         return True
     return bool(FLAG_RE.match(tok) and SECRET_KEY_RE.search(tok))
 
 def blank_all_quoted(text, preserve_safe_refs=False):
-    # Blank every nonempty quoted element; return (new_text, n_blanked).
     n = [0]
     def repl(m):
         if preserve_safe_refs and is_safe_reference_value(m.group(1)):
@@ -3509,19 +2597,10 @@ def redact_one(file):
     TMP = file + ".redact.tmp"
     count = 0
     out = []
-    # Depth of a multi-line array opened by a secret-like key (e.g.
-    # "API_KEYS": [ ...elements on following lines... ]). Every quoted string
-    # element inside such an array is blanked.
     secret_array_depth = 0
-    # argv cross-line state: a secret CLI flag seen on a previous line whose
-    # value lives on the next line (e.g. JSON '"-p",' then '"MySecret"', or
-    # YAML "- --token" then "- sk-live-xxx", or an unclosed inline array).
     flag_pending = False
 
     def redact_kv(m):
-        # Vector ⑤: blank the VALUE of EVERY secret-like keyed pair on a line,
-        # not just the first. Only touches quoted leaf values ("v"), never
-        # containers ("{") or arrays ("["). The key (and its quoting) is kept.
         nonlocal count
         k = m.group(1).strip().rstrip(":").strip('"\'')
         value = m.group(2)
@@ -3535,7 +2614,6 @@ def redact_one(file):
 
     for raw in raw_lines:
         line = raw.rstrip("\n")
-        # ---- inside a multi-line secret-keyed array: blank every string element
         if secret_array_depth > 0:
             secret_array_depth += line.count("[") - line.count("]")
             stripped = line.strip()
@@ -3546,13 +2624,9 @@ def redact_one(file):
                     count += n
             out.append(line + "\n")
             continue
-        # ---- YAML/JSON list item: "- api_key: secret" / "- --token" / "- value"
         ym = re.match(r'^\s*-\s+(.*\S)\s*$', line)
         if ym:
             item = ym.group(1)
-            # NOTE: flag_pending must survive into CASE B — a bare list element
-            # may be the VALUE of a secret flag on the previous line (vector ④).
-            # Only a KEYED pair (CASE A) ends a pending argv pair.
             km = re.match(r'["\']?([A-Za-z0-9_.\-]+)["\']?\s*[:=]\s*(.*)$', item)
             if km:
                 flag_pending = False  # a keyed list line ends any pending pair
@@ -3567,8 +2641,6 @@ def redact_one(file):
                     elif rest.startswith("{") or rest == "":
                         pass
                     else:
-                        # Key IS secret -> blank the value unconditionally; the
-                        # value need not look secret itself (e.g. "tok-xyz-789").
                         qm = re.match(r'^["\'](.*)["\']\s*,?\s*$', rest)
                         if qm:
                             if qm.group(1) and not is_safe_reference_value(qm.group(1)):
@@ -3579,16 +2651,11 @@ def redact_one(file):
                             count += 1
                 out.append(line + "\n")
                 continue
-            # CASE B: list item is a bare element (a flag or a value)
             if flag_pending:
                 if FLAG_RE.match(item):
-                    # consecutive flags ('- -p' then '- -t'): the element is a
-                    # FLAG, not the pending value -> keep it, re-arm only if it
-                    # is itself a secret flag.
                     flag_pending = is_secret_flag(item)
                     out.append(line + "\n")
                     continue
-                # value of a preceding secret flag -> blank the whole element
                 if not is_safe_reference_value(item):
                     idx = line.rfind(item)
                     if idx != -1:
@@ -3597,8 +2664,6 @@ def redact_one(file):
                 flag_pending = False
                 out.append(line + "\n")
                 continue
-            # Arm pending when this element is a secret flag whose value is on the
-            # next line; or blank an inline "--flag=value" immediately (vector ④).
             if "=" in item:
                 eqm = FLAG_EQ_RE.match(item)
                 if eqm and (SECRET_KEY_RE.search(eqm.group(1)) or eqm.group(1) in SHORT_SECRET_FLAGS):
@@ -3612,12 +2677,7 @@ def redact_one(file):
                 flag_pending = True
                 out.append(line + "\n")
                 continue
-        # ---- Vector ⑤: blank every "secretKey":"value" pair on the line
         line = re.sub(r'("?[A-Za-z0-9_.\-]+"?\s*:\s*)"([^"]*)"', redact_kv, line)
-        # ---- normal keyed-line handling (single key + arrays + argv).
-        # Allow an optional `export ` prefix so POSIX-shell assignments like
-        # `export OPENAI_API_KEY="sk-..."` and `KEY="value"` match the same
-        # keyed-pair logic as JSON/TOML/YAML entries.
         m = re.match(r'^\s*(?:export\s+)?["\']?([A-Za-z0-9_.\-]+)["\']?\s*[:=]\s*(.*)$', line)
         if m:
             key, rest = m.group(1), m.group(2).strip()
@@ -3635,9 +2695,6 @@ def redact_one(file):
                     line = prefix + new_rest
                     count += n
                 else:
-                    # argv-style: --token "val" / --token=val / -p "val" inside one
-                    # line. Operate on the bracketed REST only so the key (which may
-                    # itself be quoted, e.g. JSON "args") is never clobbered.
                     elems = re.findall(r'["\'](.*?)["\']', rest)
                     blank_next = False
                     changed = False
@@ -3665,54 +2722,32 @@ def redact_one(file):
                             new_elems.append(e)
                     if changed:
                         it = iter(new_elems)
-                        # Vector ②: next() must NEVER raise StopIteration. Any extra
-                        # quoted string on the line (e.g. the key itself) is kept
-                        # verbatim instead of crashing the whole redaction pass.
                         new_rest = re.sub(r'["\'](.*?)["\']', lambda mm: '"%s"' % next(it, mm.group(0)), rest)
                         prefix = re.match(r'^(\s*["\']?[A-Za-z0-9_.\-]+["\']?\s*[:=]\s*)', raw.rstrip("\n")).group(1)
                         line = prefix + new_rest
-                    # A secret flag at the END of an unclosed inline array has its
-                    # value on the following line (vector ①/④ cross-line).
                     if blank_next and not rest.rstrip().endswith("]"):
                         flag_pending = True
                 out.append(line + "\n")
                 continue
-            # Skip container lines ("key": {) and empty values — never
-            # redact an entire object just because its key looks secret.
             if rest in ("{", ""):
                 out.append(line + "\n")
                 continue
-            # Quoted string value, possibly with a trailing comma: "value",
-            # The trailing comma (present in JSON, absent in TOML/YAML) must be
-            # PRESERVED or the file becomes invalid JSON. Capture it in group 2.
             qm = re.match(r'^["\'](.*)["\']\s*,?\s*$', rest)
             if qm:
                 val = qm.group(1)
-                # A secret KEY alone is sufficient (value need not look secret,
-                # e.g. token: "tok-xyz-789"). redact_kv may have already blanked
-                # double-quoted pairs -> val == "" -> skip (no double count).
                 if val and ((key_secret and not is_safe_reference_value(val)) or is_secret_value(val)):
                     line = re.sub(r'([:=]\s*)["\'].*?["\'](\s*,?\s*)$', r'\1""\2', line)
                     count += 1
             else:
-                # Bare value (TOML/YAML, no surrounding quotes). A rest that
-                # STARTS with a quote but did not match the quoted-value regex
-                # is NOT a bare value — it is an array element like
-                # "--api-key=", (JSON) or an unterminated string; rewriting it
-                # would corrupt the file, so leave it untouched.
                 bare = rest.rstrip(',').strip()
                 if bare and not bare.startswith(('"', "'")) and ((key_secret and not is_safe_reference_value(bare)) or is_secret_value(bare)):
                     line = re.sub(r'[:=]\s*\S.*?(\s*,?\s*)$', r': ""\1', line)
                     count += 1
-        # ---- argv element lines standing alone (e.g. JSON array continuation
-        #      '"-p",' / '"MySecret"') — handle cross-line secret-flag pairs.
         if not line.strip().startswith("[") and not m:
             stripped = line.strip()
             if flag_pending:
                 mnext = re.match(r'^["\']?(--?[A-Za-z0-9_\-]+)["\']?,?\s*$', stripped)
                 if mnext and FLAG_RE.match(mnext.group(1)):
-                    # consecutive flags ('"-p",' then '"-t",'): keep the flag,
-                    # re-arm only if it is itself a secret flag.
                     flag_pending = is_secret_flag(mnext.group(1))
                 else:
                     new_line, n = blank_all_quoted(line, preserve_safe_refs=True)
@@ -3720,9 +2755,6 @@ def redact_one(file):
                         line = new_line
                         count += n
                     else:
-                        # bare (unquoted) value after a secret flag -> blank it.
-                        # Skip ALREADY-quoted tokens (e.g. an already-blanked "")
-                        # so we never strip a neighbouring comma on valid JSON.
                         if stripped and not stripped.startswith(('"', "'")):
                             line = re.sub(r'\S.*$', '""', line)
                             count += 1
@@ -3733,18 +2765,11 @@ def redact_one(file):
                     flag_pending = True
         out.append(line + "\n")
 
-    # Atomic replace: write the fully-redacted content to a temp file first,
-    # then swap it in. A crash mid-write can therefore never leave a
-    # half-redacted destination; exceptions bubble to the per-file handler.
     with open(TMP, "w") as f:
         f.writelines(out)
     os.replace(TMP, file)
     return count
 
-# Driver: process every file given on argv in ONE interpreter (MED-P7).
-# Per-file FAIL CLOSED: on any error the destination copy (and its temp) is
-# deleted — the untouched SOURCE config remains the recoverable source of
-# truth — and the run exits non-zero after finishing the remaining files.
 total = 0
 failed = 0
 for _f in sys.argv[1:]:
@@ -3757,18 +2782,11 @@ for _f in sys.argv[1:]:
             except OSError:
                 pass
         failed += 1
-# flush=True is REQUIRED: stdout is redirected to a file (block buffered).
 print(total, flush=True)
 sys.exit(4 if failed else 0)
 PYEOF
 }
 
-# SECURITY: CR-002 fail-closed deletion helper.
-# Removes freshly-made MIGRATION COPIES / temp files ONLY — never the source
-# config. The `--` terminator stops a copied filename that begins with `-`
-# (e.g. a malicious "-rf" entry inside a migrated project tree) from being
-# parsed as rm(1) options. Every caller passes a path it just `cp`'d into the
-# target IDE; source paths are never handed here.
 delete_copy_only() {
     rm -f -- "$@" 2>/dev/null || true
 }
@@ -3776,11 +2794,6 @@ delete_copy_only() {
 redact_secrets_in_file() {
     local file="$1"
     [[ -f "$file" ]] || { echo 0; return 0; }
-    # CR-002: fail-closed when python3 is unavailable. Without the redactor we
-    # cannot prove the COPY holds no secrets, so we must NOT leave it on disk
-    # (and must NOT report "success"). Delete the copy and return non-zero;
-    # every caller already treats a non-zero return as "secret-bearing copy
-    # removed, migration failed" (e.g. CONV_RESULT="failed" + "target file deleted").
     if ! command -v python3 >/dev/null 2>&1; then
         echo "  [SECURITY] python3 missing, cannot redact $file; target copy deleted to prevent secret leak (source file untouched)" >&2
         delete_copy_only "$file"
@@ -3799,8 +2812,6 @@ redact_secrets_in_file() {
     n=$(cat "$pyout" 2>/dev/null || echo "-1")
     rm -f "$pyout"
     if [[ $rc -ne 0 || -z "$n" || "$n" == "-1" ]]; then
-        # FAIL CLOSED (vector ②): python already removed the destination; make
-        # doubly sure nothing secret-bearing survives, then signal failure.
         delete_copy_only "$file" "${file}.redact.tmp"
         echo "  [SECURITY] secret redaction failed, target file deleted to prevent leak (source file untouched): $file" >&2
         echo "-1"
@@ -3821,11 +2832,6 @@ migrate_mcp() {
 
     MIGRATION_TOTAL=$((MIGRATION_TOTAL + 1))
 
-    # Goose stores extensions in YAML config.yaml under the `extensions` map.
-    # The generic MCP converter is JSON-root based and cannot safely translate
-    # Goose's type-specific fields (cmd/args/envs/uri/headers/enabled) or
-    # preserve the separate secret/config scopes. Never copy JSON into
-    # config.yaml or YAML out as another IDE's MCP file.
     if [[ "$source_ide" == "goose-cli" || "$target_ide" == "goose-cli" ]]; then
         set_status "mcp" "manual"
         set_message "mcp" "Goose config.yaml uses YAML extensions; automatic MCP migration is unsupported"
@@ -3834,9 +2840,6 @@ migrate_mcp() {
         return 0
     fi
 
-    # Gemini CLI's settings.json has a documented mcpServers object, but the
-    # generic MCP workflow must validate its target schema and keep project
-    # scope manual.
     if [[ "$source_ide" == "gemini-cli" || "$target_ide" == "gemini-cli" ]]; then
         set_manual_step "mcp" "Gemini CLI: selected ${scope_label} scope; review ~/.gemini/settings.json versus project .gemini/settings.json, preserve the mcpServers endpoint schema, and review project settings precedence"
     fi
@@ -3898,10 +2901,6 @@ migrate_mcp() {
         local q_project_legacy="${WORKSPACE_ROOT}/.amazonq/mcp.json"
         local q_project_agent="${WORKSPACE_ROOT}/.amazonq/agents/default.json"
 
-        # The dedicated IDE guide documents default.json/mcp.json, while an
-        # overview page and another Q surface mention agents/default.json.
-        # AWS publishes no version discriminator. Never guess that the latter
-        # is the same standard IDE store; require the user to choose it.
         if [[ "$scope" == "project" ]]; then
             if [[ -f "$q_project_agent" && ! -f "$q_project_default" && ! -f "$q_project_legacy" ]]; then
                 set_status "mcp" "manual"
@@ -3921,9 +2920,6 @@ migrate_mcp() {
         set_manual_step "mcp" "Amazon Q: standard IDE MCP uses ~/.aws/amazonq/default.json and .amazonq/default.json; existing legacy mcp.json is retained only as a legacy source/target. Workspace configuration takes precedence. Review useLegacyMcpJson, permissions, OAuth, CLI agent files, and the Q panel tools icon after this narrow mcpServers merge"
     fi
 
-    # The first-party Blackbox CLI docs describe `blackbox mcp` as running
-    # bundled servers, but publish no user/project config file or portable
-    # server-root schema. Keep both directions manual.
     if [[ "$source_ide" == "blackbox" || "$target_ide" == "blackbox" ]]; then
         set_status "mcp" "manual"
         set_message "mcp" "Blackbox only documents built-in blackbox mcp command; no portable MCP file or server Schema" 
@@ -3940,9 +2936,6 @@ migrate_mcp() {
         return 0
     fi
 
-    # Replit MCP connections are managed by the cloud Integrations surface;
-    # there is no documented local MCP file or portable server-root schema.
-    # Never infer one from .replit, replit.nix, or another IDE's config.
     if [[ "$source_ide" == "replit" || "$target_ide" == "replit" ]]; then
         set_status "mcp" "manual"
         set_message "mcp" "Replit MCP connections are cloud/UI-managed through Integrations; no local MCP file is migrated"
@@ -3959,9 +2952,6 @@ migrate_mcp() {
         return 0
     fi
 
-    # Supermaven is a completion plugin, not a documented MCP client. The
-    # official Supermaven surfaces publish no MCP file or server schema, so do
-    # not reinterpret a host editor's MCP settings as Supermaven config.
     if [[ "$source_ide" == "supermaven" || "$target_ide" == "supermaven" ]]; then
         set_status "mcp" "manual"
         set_message "mcp" "Supermaven has no documented portable MCP file or server schema; automatic migration is unsupported"
@@ -3970,9 +2960,6 @@ migrate_mcp() {
         return 0
     fi
 
-    # Continue's current config is YAML and mcpServers is an array of named
-    # entries. The generic converter only understands JSON object roots; a
-    # verbatim fallback would write invalid JSON/YAML or the wrong schema.
     if [[ "$source_ide" == "continue" || "$target_ide" == "continue" ]]; then
         set_status "mcp" "manual"
         set_message "mcp" "Continue uses YAML/array configuration; automatic MCP/config migration is unsupported"
@@ -3981,11 +2968,6 @@ migrate_mcp() {
         return 0
     fi
 
-    # Roo has a documented project file (.roo/mcp.json), but its global MCP
-    # file lives in an extension-managed settings directory whose exact path
-    # is not published by Roo's official docs. Project scope is safe to
-    # convert through the documented mcpServers JSON file; global scope stays
-    # manual and must never be confused with Cline or VS Code storage.
     if [[ "$source_ide" == "roo-code" || "$target_ide" == "roo-code" ]]; then
         if [[ "$scope" != "project" ]]; then
             set_status "mcp" "manual"
@@ -3997,11 +2979,6 @@ migrate_mcp() {
         set_manual_step "mcp" "Roo Code: project scope uses .roo/mcp.json with root mcpServers; review mode permissions, remote headers/auth, and extension behavior after the narrow JSON merge. Global MCP remains UI-managed"
     fi
 
-    # Cline's MCP settings live in the VS Code extension globalStorage
-    # (cline_mcp_settings.json under saoudrizwan.claude-dev/settings/). A
-    # legacy ~/.cline/mcp.json CLI alternative may also exist; when both are
-    # present without an explicit CLINE_MCP_PATH override, refuse an ambiguous
-    # global migration and ask the user to choose. Project scope is separate.
     if [[ "$source_ide" == "cline" || "$target_ide" == "cline" ]]; then
         if [[ "$scope" != "project" ]]; then
             local cline_primary
@@ -4046,9 +3023,6 @@ migrate_mcp() {
         set_manual_step "mcp" "explicit MCP source override: validate '$source_mcp' against the declared $source_ide schema; only the source location is overridden, while the target remains registry-resolved"
     fi
 
-    # VS Code's user MCP file is profile/UI-managed and intentionally has no
-    # portable path in this mapper. A workspace target is portable and is
-    # safe to write under the explicitly selected workspace root.
     if [[ "$scope" != "project" && -z "$source_mcp" && "$source_ide" == "vscode" ]]; then
         set_status "mcp" "manual"
         set_message "mcp" "VS Code user MCP is profile-managed; no absolute path was guessed"
@@ -4056,17 +3030,10 @@ migrate_mcp() {
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
     fi
-    # VS Code's user MCP file is profile/UI-managed and intentionally has no
-    # portable path in this mapper. A workspace target is portable and is
-    # safe to write under the explicitly selected workspace root — but ONLY
-    # when the user actually requested project scope, otherwise `--scope
-    # global` to vscode would still write the workspace path.
     if [[ "$target_ide" == "vscode" && "$scope" == "project" ]]; then
         target_mcp="$WORKSPACE_ROOT/.vscode/mcp.json"
     fi
 
-    # Project-relative MCP paths (e.g. Kilo's .kilo/kilo.jsonc) resolve
-    # against the workspace root, not the caller's cwd.
     if [[ -n "$source_mcp" && "$source_mcp" != /* ]]; then
         source_mcp="$WORKSPACE_ROOT/$source_mcp"
     fi
@@ -4089,12 +3056,6 @@ migrate_mcp() {
         return 0
     fi
 
-    # Refuse to operate when source and target resolve to the same file.
-    # Several IDEs share project-MCP paths: claude/copilot/tencent-codebuddy
-    # all map to `.mcp.json`; trae/trae-cn both map to `.trae/mcp.json`.
-    # Without this guard, either merge strategy would write the converted
-    # target map back into the only source file. Refuse the operation before
-    # a backup or conversion can mutate that source.
     local source_identity target_identity
     if command -v python3 >/dev/null 2>&1; then
         source_identity="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$source_mcp")"
@@ -4117,12 +3078,6 @@ migrate_mcp() {
         set_manual_step "mcp" "user MCP: this run only processes user-level file; project MCP, local scope, Workspace Trust and UI/profile state still need manual review" 
     fi
 
-    # Claude Code exposes project MCP through .mcp.json and keeps local MCP
-    # entries inside ~/.claude.json. This generic mapper has only one MCP
-    # object and therefore migrates a Claude endpoint at user scope only.
-    # Preserve the other documented scopes as an explicit manual review step
-    # instead of pretending that settings.local.json or a project directory is
-    # an interchangeable MCP target.
     if [[ "$source_ide" == "claude" || "$target_ide" == "claude" ]]; then
         set_manual_step "mcp" "Claude Code: selected ${scope_label} scope; review ~/.claude.json user/local entries, project .mcp.json, and local per-project entries manually"
     fi
@@ -4135,10 +3090,6 @@ migrate_mcp() {
         set_manual_step "mcp" "CodeBuddy Code: selected ${scope_label} scope; review ~/.codebuddy/.mcp.json, project .mcp.json, legacy ~/.codebuddy/mcp.json/~/.codebuddy.json, --mcp-config overrides, and .codebuddy/settings.json approval keys manually"
     fi
 
-    # Copilot CLI has two project-level files with the same mcpServers root.
-    # This generic mapper intentionally works only on the documented user
-    # file, because choosing .mcp.json versus .github/mcp.json would alter
-    # repository scope and precedence without user direction.
     if [[ "$source_ide" == "copilot" || "$target_ide" == "copilot" ]]; then
         set_manual_step "mcp" "GitHub Copilot CLI: selected ${scope_label} scope; review ~/.copilot/mcp-config.json and project .mcp.json/.github/mcp.json (both mcpServers) manually"
     fi
@@ -4154,10 +3105,6 @@ migrate_mcp() {
 
     source_sha256_before="$(sha256_file "$source_identity" 2>/dev/null || true)"
 
-    # Codex stores MCP servers as TOML tables in config.toml. This script has
-    # no TOML-aware MCP converter, so it must never copy JSON mcpServers into
-    # that file (nor claim a same-format Codex transfer is safe). Rebuild the
-    # server manually in the correct trusted user/project config scope.
     if [[ "$source_ide" == "codex" || "$target_ide" == "codex" ]]; then
         set_status "mcp" "manual"
         set_message "mcp" "Codex MCP config uses TOML; auto migration unsupported, manual migration required" 
@@ -4185,7 +3132,6 @@ migrate_mcp() {
         echo "  DRY-RUN: converting MCP config" 
         echo "    source: $source_mcp (root key: ${src_key:-none})" 
         echo "    target: $target_mcp (root key: ${dst_key:-none})" 
-        # Dry-run only prints the plan; never mark success.
         set_status "mcp" "skipped"
         set_message "mcp" "DRY-RUN: planned MCP config conversion (${src_key:-?} -> ${dst_key:-?})" 
         record_mcp_evidence "$scope" "$source_identity" "$target_identity" "$source_sha256_before"
@@ -4212,8 +3158,6 @@ migrate_mcp() {
                 echo "  [BACKUP] backed up existing MCP config: $target_mcp.bak.$ts" 
                 ;;
             overwrite)
-                # `convert_mcp_file` replaces only the selected server map so
-                # unrelated keys in a shared config file remain intact.
                 ;;
         esac
     fi
@@ -4268,23 +3212,12 @@ migrate_config() {
     MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
 }
 
-# Redact secrets in every config-like text file under a migrated project
-# tree (the COPY, never the source). Prints the total number of blanked
-# values. Fail-closed: redact_secrets_in_file already deletes a copy it
-# cannot redact; this helper then reports partial failure via rc=1.
 redact_project_copy() {
-    # MED-P7: collect all candidate files first, then redact them in ONE
-    # python interpreter (the shared engine loops over argv) instead of
-    # forking python once per file. Fail-closed semantics are preserved:
-    # any per-file failure deletes that copy and the engine exits non-zero.
     local root="$1"
     local total=0 had_fail=0 f rc=0 pyout
     local -a excluded_env_files=()
     local -a files=()
 
-    # .env files are secret stores, not portable configuration. Exclude them
-    # from the COPY entirely rather than briefly retaining and regex-redacting
-    # them. Include symlinks so a copied .env link cannot escape the target.
     while IFS= read -r -d '' f; do
         excluded_env_files+=("$f")
     done < <(find "$root" \( -type f -o -type l \) -name '.env*' -print0 2>/dev/null)
@@ -4305,10 +3238,6 @@ redact_project_copy() {
         return 0
     fi
 
-    # CR-002 fail-closed: no python3 -> we cannot prove the copies are clean.
-    # SECURITY: route through delete_copy_only() so the `--` terminator guards
-    # against a copied filename beginning with `-` being parsed as rm options,
-    # and the fail-closed surface is uniform with redact_secrets_in_file.
     if ! command -v python3 >/dev/null 2>&1; then
         echo "  [SECURITY] python3 missing, cannot redact project copy; candidate file deleted to prevent secret leak (source directory untouched)" >&2
         delete_copy_only "${files[@]}"
@@ -4406,8 +3335,6 @@ run_migration() {
                 ;;
             project-mcp)
                 migrate_mcp "$source_ide" "$target_ide" "project"
-                # Keep the explicit object name visible in reports while
-                # reusing the MCP converter's status/detail and manual notes.
                 local project_mcp_status project_mcp_message project_mcp_steps project_mcp_step
                 project_mcp_status=$(get_status "mcp")
                 project_mcp_message=$(get_message "mcp")
@@ -4525,7 +3452,6 @@ generate_report() {
     fi
 }
 
-# Emit a machine-readable JSON summary (used when MIGRATE_JSON=1 / --json).
 _emit_json_report() {
     local source_ide="$1"
     local target_ide="$2"
@@ -4669,8 +3595,6 @@ main() {
         exec 1>&2
     fi
 
-    # Suppress the banner in read-only diagnostic mode so --print-path emits only
-    # the resolved path on stdout (keeps test-ide-paths.sh comparisons exact).
     if [[ -z "$PRINT_PATH_IDE" ]]; then
         print_header
     fi
@@ -4884,9 +3808,6 @@ main() {
         fi
     fi
 
-    # An explicit source file is a strict import contract. Surface schema or
-    # conversion failure to automation through the process status as well as
-    # the human-readable report; never make a rejected override look accepted.
     if [[ -n "${SOURCE_MCP_FILE:-}" && $MIGRATION_FAILED -gt 0 ]]; then
         return 1
     fi

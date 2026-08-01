@@ -2,6 +2,7 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_DIR="${AGENT_SKILLS_SOURCE_DIR:-${HOME}/.gemini/config/skills}"
 STATE_DIR="${OPENCLAW_STATE_DIR:-${HOME}/.openclaw}"
 CONFIG_PATH="${OPENCLAW_CONFIG_PATH:-${STATE_DIR}/openclaw.json}"
@@ -16,6 +17,7 @@ WATCH_DEBOUNCE_MS=250
 SCOPE="both"
 DRY_RUN=0
 CONFIRM_WRITE=0
+source "${SCRIPT_DIR}/openclaw-common.sh"
 YES=0
 SKIP_OPENCLAW_INSTALL=0
 SKIP_CLAWHUB_INSTALL=0
@@ -29,9 +31,6 @@ declare -a ENV_ASSIGNMENTS=()
 declare -a API_KEY_ENV_ASSIGNMENTS=()
 declare -a REQUESTED_SKILLS=()
 
-# MED-P1: single global EXIT trap for every temp artifact. Individual code
-# paths register their mktemp results here instead of setting their own EXIT
-# traps (a second `trap ... EXIT` would silently replace the first one).
 declare -a GLOBAL_TMP_PATHS=()
 cleanup_global_tmp_paths() {
     local p
@@ -46,58 +45,36 @@ usage() {
     cat <<'EOF'
 Usage: auto-configure-openclaw-skills.sh [options]
 
-Install and configure OpenClaw skill support from the Antigravity source-of-truth.
+Configure OpenClaw Skills from the selected source.
 
 Options:
   --source <dir>                Source skill root. Default: ~/.gemini/config/skills
   --config <file>               OpenClaw config file. Default: ~/.openclaw/openclaw.json
   --managed-dir <dir>           Shared managed skill directory. Default: ~/.openclaw/skills
-  --workspace <dir>             Sync skills into <dir>/skills. Repeatable.
-  --agent <id:workspace>        Add/update agents.list[] and sync <workspace>/skills. Repeatable.
-  --default-agent <id>          Mark the matching --agent entry as default.
-  --skills <list>               Comma-separated subset of skills to sync. Default: all skills.
-  --scope managed|workspace|both
-                                Where to sync skills. Default: both.
+  --workspace <dir>             Sync <dir>/skills. Repeatable.
+  --agent <id:workspace>        Add/update agent and sync its workspace. Repeatable.
+  --default-agent <id>          Select matching agent as default.
+  --skills <list>               Comma-separated subset (default: all).
+  --scope managed|workspace|both  Destination scope (default: both).
   --node-manager <mgr>          npm | pnpm | yarn | bun. Default: npm.
   --prefer-brew true|false      Prefer Homebrew installers when available. Default: true.
-  --extra-dir <dir>             Append a shared skills.load.extraDirs entry. Repeatable.
-  --env <skill:KEY=VALUE>       Set skills.entries.<skill>.env.<KEY>. Repeatable.
-  --api-key-env <skill:ENVVAR>  Set skills.entries.<skill>.apiKey SecretRef. Repeatable.
-  --env-file <file>             Read skill:KEY=VALUE lines from <file> (blank
-                                lines and # comments ignored). Preferred over
-                                --env for real secrets: values never appear in
-                                argv, ps output, or shell history.
-  --watch true|false            Configure skills.load.watch. Default: true.
-  --watch-debounce-ms <ms>      Configure skills.load.watchDebounceMs. Default: 250.
-  --skip-openclaw-install       Do not install OpenClaw automatically.
-  --skip-clawhub-install        Do not install ClawHub automatically.
-  --skip-doctor                 Do not run `openclaw doctor` after applying changes.
-  --dry-run                     Print planned commands without changing the system.
-  --yes                         Confirm global installs, config writes, and replacement syncs.
+  --extra-dir <dir>             Append shared load path. Repeatable.
+  --env <skill:KEY=VALUE>       Set skill environment value. Repeatable.
+  --api-key-env <skill:ENVVAR>  Set skill API-key reference. Repeatable.
+  --env-file <file>             Read values; prefer for secrets to avoid argv/history.
+  --watch true|false            Enable watch (default: true).
+  --watch-debounce-ms <ms>      Watch debounce (default: 250).
+  --skip-openclaw-install       Skip OpenClaw install.
+  --skip-clawhub-install        Skip ClawHub install.
+  --skip-doctor                 Skip `openclaw doctor`.
+  --dry-run                     Preview without changes.
+  --yes                         Confirm installs, writes, and replacement syncs.
   -h, --help                    Show this help text.
 EOF
 }
 
-die() {
-    echo "ERROR: $*" >&2
-    exit 1
-}
-
 log() {
     echo "$*"
-}
-
-run_cmd() {
-    printf '+ '
-    printf '%q ' "$@"
-    printf '\n'
-    if [[ $DRY_RUN -eq 0 ]]; then
-        "$@"
-    fi
-}
-
-command_exists() {
-    command -v "$1" >/dev/null 2>&1
 }
 
 sha256_file() {
@@ -145,22 +122,6 @@ parse_bool() {
             die "Invalid boolean value: $1"
             ;;
     esac
-}
-
-split_csv_into_array() {
-    local raw="$1"
-    local output_name="$2"
-    local old_ifs="$IFS"
-    local -a parsed=()
-
-    IFS=',' read -r -a parsed <<< "$raw"
-    IFS="$old_ifs"
-
-    eval "$output_name=()"
-    local item
-    for item in "${parsed[@]}"; do
-        eval "$output_name+=(\"\$item\")"
-    done
 }
 
 ensure_supported_scope() {
@@ -242,8 +203,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         --env)
             [[ $# -ge 2 ]] || die "--env requires a value"
-            # MED-S2: literal secret values on the command line leak via ps,
-            # shell history, and CI logs. Warn and point to --env-file.
             if printf '%s' "$2" | grep -Eq '(sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|tvly-[A-Za-z0-9_-]{16,}|AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}|ya29\.[A-Za-z0-9_-]+|AIza[0-9A-Za-z_-]{35}|sk_live_[A-Za-z0-9]{16,})'; then
                 log "WARNING: the --env value looks like a real secret. Command-line arguments appear in ps output and shell history; prefer passing it via --env-file <file> (file mode 600)."
             fi
@@ -251,8 +210,6 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --env-file)
-            # MED-S2: read skill:KEY=VALUE assignments from a file so secret
-            # values never appear in argv / process listings / history.
             [[ $# -ge 2 ]] || die "--env-file requires a value"
             [[ -f "$2" ]] || die "--env-file: file not found: $2"
             [[ ! -L "$2" ]] || die "--env-file must be a regular file, not a symlink: $2"
@@ -262,7 +219,6 @@ while [[ $# -gt 0 ]]; do
                 die "--env-file must be readable only by its owner (chmod 600): $2"
             fi
             while IFS= read -r _env_line || [[ -n "$_env_line" ]]; do
-                # skip blanks and comments
                 [[ -z "$_env_line" || "$_env_line" == \#* ]] && continue
                 ENV_ASSIGNMENTS+=("$_env_line")
             done < "$2"
@@ -467,7 +423,6 @@ ensure_env_file_path() {
     fi
 
     touch "$ENV_FILE"
-    # MED-S1: .env may carry credentials; keep it owner-only at all times.
     chmod 600 "$ENV_FILE"
     if ! grep -Fqx "PATH=$path_entry:\$PATH" "$ENV_FILE" 2>/dev/null; then
         printf 'PATH=%s:$PATH\n' "$path_entry" >> "$ENV_FILE"

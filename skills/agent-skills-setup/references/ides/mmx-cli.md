@@ -1,6 +1,3 @@
 # mmx-cli (MiniMax CLI)
-- **detect**: `~/.mmx/`
-- **mcp**: N/A (mmx IS the tool, not an MCP client) · config `~/.mmx/config.json` · JSON · Zod validated
-- **skills**: `npx skills add MiniMax-AI/cli` symlinks to `~/.claude/skills/`, `~/.openclaw/skills/`, TRAE, OpenCode, etc.
-- **commands**: `mmx text chat`, `mmx image generate`, `mmx video generate`, `mmx speech synthesize`, `mmx music generate`, `mmx vision describe`, `mmx search query`
-- **note**: Region trap: global=api.minimax.io / cn=api.minimaxi.com (extra 'i'); API Key + Host must match region; `mmx config set --key region --value global|cn` if 401
+
+`mmx` is a tool, not an MCP client. Its config is JSON and its skills installer links into other products' paths; do not treat it as an independent migration target. Keep API region/host/key configuration manual.

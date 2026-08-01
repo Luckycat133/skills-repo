@@ -10,16 +10,14 @@
 
 ---
 name: agent-skills-setup
-version: 0.6.11
+version: 0.6.12
 license: MIT
 description: >
-  Use this skill when a user explicitly asks to migrate, move, transfer, copy,
-  convert, or sync AI-assistant context between IDEs or agents, including MCP
-  servers, rules, skills, prompts, commands, or project configuration. Offer a
-  scoped plan, relevant compatibility notes, and a preview before writing; then
-  adapt the process to the user's stated goals and risk tolerance. It is not
-  needed for explanations, setup, debugging, validation, installation, or a
-  same-tool copy unless that work is part of an explicit migration.
+  Use when a user explicitly asks to migrate, move, transfer, copy, convert, or
+  sync AI-assistant context between different IDEs or agents, including skills,
+  rules, prompts, commands, or MCP configuration. Preview a scoped change;
+  write only after approval. Do not use for explanation, installation,
+  debugging, validation, or same-tool copies.
 triggers:
   - migrate mcp config
   - move skills from cursor to claude
@@ -35,96 +33,60 @@ capabilities:
 
 # AI IDE Context Migration
 
-Use the user's requested scope as the starting point. Paths, schemas,
-credentials, and conflicts often differ between IDEs, so surface those
-differences early instead of assuming equivalent files or formats.
+Treat similarly named files as incompatible until their paths, schema,
+credentials, and conflict rules are checked.
 
-## Start with the smallest relevant context
+## Route
 
-1. Clarify the source, target, objects, scope, and (when relevant) workspace.
-   If a detail is missing but a safe assumption is obvious, state it; otherwise
-   ask a focused question.
-2. Start with [references/ides/<source>.md](skills/agent-skills-setup/references/ides/) and
-   [references/ides/<target>.md](skills/agent-skills-setup/references/ides/), substituting the selected
-   IDE identifiers. Use [skills/agent-skills-setup/references/ide-paths.json](skills/agent-skills-setup/references/ide-paths.json)
-   or `bash skills/agent-skills-setup/scripts/smart-ide-migration.sh --print-path` when a deterministic
-   path lookup would help.
-3. Load the conditional reference that fits the task. The index in
-   [skills/agent-skills-setup/references/ide-registry.md](skills/agent-skills-setup/references/ide-registry.md) is useful when an
-   IDE identifier is unfamiliar, but it is not required for ordinary work.
+1. Resolve source, target, objects, scope, and workspace. State a safe obvious
+   assumption; otherwise ask one focused question.
+2. Read [references/ides/<source>.md](skills/agent-skills-setup/references/ides/) and
+   [references/ides/<target>.md](skills/agent-skills-setup/references/ides/). Use
+   [ide-paths.json](skills/agent-skills-setup/references/ide-paths.json) or
+   `bash skills/agent-skills-setup/scripts/smart-ide-migration.sh --print-path` for a path lookup.
+   `iflycode` and `raccoon-ai` share the reference linked from
+   [ide-registry.md](skills/agent-skills-setup/references/ide-registry.md).
+3. Load only the needed reference:
 
-| Situation | Read this additional reference |
-|---|---|
-| Every migration before preview or apply | [skills/agent-skills-setup/references/migration-safety.md](skills/agent-skills-setup/references/migration-safety.md) |
-| `mcp` or `project-mcp`, or `--source-mcp-file` | [skills/agent-skills-setup/references/mcp-migration.md](skills/agent-skills-setup/references/mcp-migration.md) |
-| `skills`, `rules`, `prompts`, `config`, `project`, `agents`, `hooks`, or `memory` | [skills/agent-skills-setup/references/object-migration.md](skills/agent-skills-setup/references/object-migration.md) |
-| After an approved apply, or when reporting proof | [skills/agent-skills-setup/references/verification.md](skills/agent-skills-setup/references/verification.md) |
-| OpenClaw is source or target | [skills/agent-skills-setup/references/openclaw.md](skills/agent-skills-setup/references/openclaw.md) |
+| Situation | Read |
+| --- | --- |
+| Before preview or apply | [migration-safety.md](skills/agent-skills-setup/references/migration-safety.md) |
+| `mcp`, `project-mcp`, or `--source-mcp-file` | [mcp-migration.md](skills/agent-skills-setup/references/mcp-migration.md) |
+| Any other file-backed object | [object-migration.md](skills/agent-skills-setup/references/object-migration.md) |
+| Approved apply or proof | [verification.md](skills/agent-skills-setup/references/verification.md) |
 
-The per-IDE references provide platform paths, schemas, precedence, native
-verification, and portability notes. The script describes what can be automated
-today. If they disagree, point out the mismatch and suggest a review before
-applying changes.
+The per-IDE reference describes product behavior; the script describes what is
+automated. Flag a mismatch before applying.
 
-## Recommended safeguards
+## Recommendations
 
-These are recommendations, not a substitute for the user's judgment about the
-scope and risk of their own configuration.
+Apply these recommendations to the approved scope and risk.
 
-- Prefer the named source, target, and workspace over broad discovery. This
-  keeps a migration easy to review and avoids pulling in unrelated context.
-- A practical default is `skills,rules,prompts`. Call out that MCP, config,
-  project, agents, hooks, and memory can carry more product-specific behavior.
-- `config` and `project` are deliberate manual boundaries: the bundled mapper
-  never copies a whole IDE config file or opaque project configuration tree.
-  Rebuild only reviewed, documented settings or choose a dedicated object such
-  as skills, rules, prompts, or project MCP.
-- Offer a value-free `--dry-run` first. The bundled script requires `--yes` for
-  writes, so a reviewed preview is the natural handoff point for consent.
-- Treat chat history, OAuth state, databases, vector indexes, workspace
-  storage, UI settings, and generated memory as poor portability candidates;
-  help the user select human-readable context instead when appropriate.
-- Treat MCP server configuration as an endpoint description, not a portable
-  protocol-runtime snapshot. Do not infer a transport from a bare URL, relabel
-  legacy `sse` as Streamable HTTP, or copy OAuth tokens/session state; retain an
-  explicitly supported transport and have the target client re-authorize. Do
-  not transfer `autoApprove`, `enabledTools`, `disabledTools`, or equivalent
-  execution permissions; the target starts without inherited tool grants.
-- **The Claude Desktop app MCP surface is partly UI-managed:** suggest reviewing
-  **Settings → Extensions** and **Settings → Connectors** rather than inferring
-  or rewriting those entries from its legacy local JSON.
+- Inspect only named paths; default to `skills,rules,prompts`.
+- Keep whole `config` files and opaque `project` trees manual. Rebuild a
+  documented setting or migrate a dedicated supported object.
+- Never move secrets, OAuth/session state, runtime metadata, approval grants,
+  chat history, databases, or generated memory. Use manual reconstruction when
+  redaction or conversion is unclear.
+- Claude Desktop app MCP in **Settings → Extensions** and **Settings → Connectors** is UI-managed; do not infer or rewrite it from legacy JSON.
+- Offer value-free `--dry-run`; use `--yes` only after approval and normally
+  add `--json` for evidence.
 
 ## Workflow
 
-1. **Clarify** the migration goal and consult the two selected IDE references.
-2. **Plan** likely source/target paths and the object list; load the
-   relevant conditional reference.
-3. **Preview** with `--dry-run` when writes are in scope; report boundaries and
-   credential handling rather than implying completion.
-4. **Apply** after the user is comfortable with the plan, using the reviewed
-   command with `--yes` and normally `--json`.
-5. **Verify** with the JSON evidence and the target's native discovery method.
+1. Plan paths, objects, boundaries, and strategy.
+2. Run `--dry-run`; report credential handling without claiming completion.
+3. After approval, rerun the reviewed command with `--yes`.
+4. Report JSON evidence and native target discovery.
 
-For fragile configuration migrations, a preview gives the user a chance to
-catch a wrong path, scope, or conflict strategy. Preserve an existing target
-unless the chosen strategy and the user’s intent make replacement appropriate.
+## Commands
 
-## Script entry points
-
-- `skills/agent-skills-setup/scripts/smart-ide-migration.sh` — resolve paths, preview, apply, redact, and
-  emit JSON evidence. Run `bash skills/agent-skills-setup/scripts/smart-ide-migration.sh --help` when its
-  flags or supported objects are uncertain.
-- `skills/agent-skills-setup/scripts/test-ide-paths.sh` — maintainer regression that compares every
-  resolver result with `skills/agent-skills-setup/references/ide-paths.json` and its generated reference
-  summaries; it is useful when changing mappings, not for a user's migration.
-
-Run commands from this Skill directory, or use absolute script paths.
+Run `bash skills/agent-skills-setup/scripts/smart-ide-migration.sh --help` for flags. Commands run from
+this Skill directory.
 
 ~~~bash
-# Resolve one documented path without side effects.
 bash skills/agent-skills-setup/scripts/smart-ide-migration.sh --print-path cursor project-mcp
 
-# Preview an explicitly scoped low-risk migration.
 bash skills/agent-skills-setup/scripts/smart-ide-migration.sh \
   --source cursor --target claude --workspace /path/to/project \
   --objects skills,rules --scope project --dry-run

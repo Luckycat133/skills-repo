@@ -1,26 +1,5 @@
 # Verification and evidence
 
-Read this reference after an approved apply or when explaining proof. Use
-`--json` for automation rather than inventing a separate evidence harness.
+After an approved apply, use `--json` and report scope/status, canonical paths, source SHA-256 before/after, `source_unchanged`, target existence/hash/parse result, backup, and manual follow-up.
 
-The MCP evidence array contains:
-
-- effective scope and status;
-- canonical source and target paths;
-- source SHA-256 before/after and `source_unchanged`;
-- target existence, SHA-256, and parse validation; and
-- backup path when one was created.
-
-Report those fields together with any manual follow-up. Static parse success
-does not prove the selected transport, protocol-version compatibility,
-credentials, OAuth, permissions, or server connectivity. It also cannot prove
-that a legacy `sse` endpoint has a compatible Streamable HTTP replacement.
-
-Then use the target's native discovery surface when available, such as
-`claude mcp list`, `codex mcp list`, `opencode mcp list`, `opencode2 mcp list`,
-`copilot mcp list`, or the IDE MCP panel. Read the selected target section in
-[ide-registry.md](ide-registry.md) for the authoritative method.
-
-Do not manually add `MCP-Protocol-Version`, session, or SSE-resumption headers
-to make a migrated entry work. A current client negotiates the MCP revision at
-connection time; authorization is completed again in that target client.
+Parse success does not prove transport, protocol compatibility, credentials, OAuth, permissions, or connectivity. Check the target's native discovery surface (for example `claude mcp list`, `codex mcp list`, `opencode mcp list`, `copilot mcp list`, or its MCP panel) and consult [ide-registry.md](ide-registry.md). Apply [mcp-transport.md](mcp-transport.md) rather than adding protocol headers manually.

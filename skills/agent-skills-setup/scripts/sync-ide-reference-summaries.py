@@ -19,6 +19,15 @@ OBJECT_LABELS = {
     "project_config": "Project config",
     "config": "Config",
 }
+RESOLVER_OBJECTS = (
+    ("global", "global_skills"),
+    ("project-skills", "project_skills"),
+    ("rules", "rules"),
+    ("mcp", "mcp"),
+    ("project-mcp", "project_mcp"),
+    ("project-config", "project_config"),
+    ("config", "config"),
+)
 START = "<!-- GENERATED: ide-paths.json summary; do not edit this block -->"
 END = "<!-- END GENERATED: ide-paths.json summary -->"
 BLOCK_PATTERN = re.compile(
@@ -40,13 +49,23 @@ def format_value(value: object) -> str:
 
 
 def summary(ide: str, values: dict[str, object]) -> str:
+    if not any(
+        format_value(values.get(key, "")) != "Not mapped"
+        for key in OBJECT_LABELS
+    ):
+        return "\n".join(
+            [
+                START,
+                "",
+                "All automatic paths are unsupported.",
+                "",
+                END,
+                "",
+            ]
+        )
+
     rows = [
         START,
-        "",
-        "## Generated path summary",
-        "",
-        "This table is generated from `references/ide-paths.json`. The notes below explain product-specific behavior and portability trade-offs.",
-        "Treat those notes as current compatibility evidence and practical guidance; when a user chooses a different approach, explain the trade-off and distinguish it from a hard limit in the bundled script.",
         "",
         "| Object | Documented path |",
         "| --- | --- |",
@@ -75,10 +94,35 @@ def update_reference(path: Path, generated: str, check: bool) -> bool:
     return True
 
 
+def resolver_table(values: dict[str, dict[str, object]]) -> str:
+    rows = ["# GENERATED from references/ide-paths.json; do not edit."]
+    for ide, mapping in sorted(values.items()):
+        for object_name, json_key in RESOLVER_OBJECTS:
+            value = mapping.get(json_key, "")
+            entries = value.items() if isinstance(value, dict) else (("*", value),)
+            for platform, path in sorted(entries):
+                if not isinstance(path, str) or "\t" in path or "\n" in path:
+                    raise ValueError(f"{ide}/{json_key}: invalid resolver path")
+                row = f"{ide}\t{object_name}\t{platform}"
+                rows.append(f"{row}\t{path}" if path else row)
+    return "\n".join(rows) + "\n"
+
+
+def update_resolver(path: Path, generated: str, check: bool) -> bool:
+    current = path.read_text(encoding="utf-8") if path.is_file() else ""
+    if current == generated:
+        return False
+    if check:
+        raise ValueError(f"{path}: generated resolver is out of date")
+    path.write_text(generated, encoding="utf-8")
+    return True
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--paths", type=Path, required=True)
     parser.add_argument("--references", type=Path, required=True)
+    parser.add_argument("--resolver", type=Path)
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
 
@@ -91,12 +135,18 @@ def main() -> int:
                 raise ValueError(f"missing IDE reference: {reference}")
             if update_reference(reference, summary(ide, mapping), args.check):
                 changed += 1
+        resolver_changed = (
+            update_resolver(args.resolver, resolver_table(values), args.check)
+            if args.resolver
+            else False
+        )
     except ValueError as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 1
 
     verb = "Verified" if args.check else "Updated"
-    print(f"{verb} generated summaries for {len(values)} IDE references ({changed} changed).")
+    resolver_status = "" if not args.resolver else f"; resolver ({int(resolver_changed)} changed)"
+    print(f"{verb} generated summaries for {len(values)} IDE references ({changed} changed){resolver_status}.")
     return 0
 
 

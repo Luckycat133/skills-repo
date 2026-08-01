@@ -3,7 +3,6 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SOURCE_ROOT="$SCRIPT_DIR/skills"
-# Default target matches the registry: Codex (and other CLI agents) read global skills from ~/.agents/skills.
 TARGET_ROOT="${AGENT_SKILLS_DIR:-$HOME/.agents/skills}"
 SKILL_NAME=""
 FORCE=0

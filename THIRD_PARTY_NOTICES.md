@@ -1,11 +1,3 @@
 # Third-Party Notices
 
-This repository is the canonical source for Luckycat133's cross-product, reusable
-agent skills.
-
-No third-party skill content is currently bundled. When a skill or reference is
-adapted from another project, add its name, upstream URL, author, license, files
-used, and a short description of local changes here before merging.
-
-Product-specific skills remain in their canonical product repositories and are
-not duplicated here.
+No third-party skill content is bundled. Before adapting one, record its name, upstream URL, author, license, used files, and local changes here. Keep product-specific skills in their canonical repositories.

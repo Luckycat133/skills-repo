@@ -1,125 +1,55 @@
 # スキルリポジトリ
 
-> ステータス: 開発進行中 · 正規スキルソース
-
 [![GitHub Repo](https://img.shields.io/badge/GitHub-Luckycat133%2Fskills--repo-181717?logo=github)](https://github.com/Luckycat133/skills-repo)
 [![License](https://img.shields.io/badge/License-MIT-b7285.svg)](LICENSE)
-[![OpenClaw Ready](https://img.shields.io/badge/OpenClaw-Ready-1f7a8c)](skills/agent-skills-setup/references/openclaw.md)
+[![OpenClaw Ready](https://img.shields.io/badge/OpenClaw-Ready-1f7a8c)](skills/agent-skills-setup/references/ides/openclaw.md)
 
-> 🌐 Languages: [English](README.md) · [中文](README.zh-CN.md) · **日本語** · [Español](README.es.md)
+> Languages: [English](README.md) · [中文](README.zh-CN.md) · **日本語** · [Español](README.es.md)
 
-AI アシスタント機能（旧称 skills）を、ローカル優先の執筆ワークフローと、公開に向けた実践的な手順とともに提供します。
+ローカルで作成し、GitHub から公開する再利用可能な AI アシスタントスキルです。
 
 ## インストール
 
-エージェント環境に `agent-skills-setup` スキルをインストールします。
-
-**ClawHub (OpenClaw-native)**
-
 ```bash
+# OpenClaw
 openclaw skills install @luckycat133/agent-skills-setup
-```
 
-**skills.sh（クロスエージェント、Vercel）**
-
-```bash
+# skills.sh
 npx skills add Luckycat133/skills-repo
 ```
-
-ソースリポジトリ: [Luckycat133/skills-repo](https://github.com/Luckycat133/skills-repo)
-
-## 目次
-
-- [概要](#概要)
-- [インストール](#インストール)
-- [構成](#構成)
-- [規約](#規約)
-- [現在の機能モジュール](#現在の機能モジュール)
-- [開発ワークフロー](#開発ワークフロー)
-- [スキルのインポート](#スキルのインポート)
-- [オープンソースメタデータ](#オープンソースメタデータ)
-- [公開](#公開)
-
-## 概要
-
-| 言語 | 概要 |
-| --- | --- |
-| 日本語 | ローカル優先のワークフロー、OpenClaw 自動化、公開配布の手引きを通じて、再利用可能なエージェントスキルを構築・公開します。 |
 
 ## 構成
 
 ```text
 skills-repo/
-├── README.md
-├── docs/
-│   └── agent-skills-setup/
-├── scripts/
-└── skills/
-    └── agent-skills-setup/
+├── docs/                         # 現行の保守資料
+├── scripts/                      # リポジトリ用ツール
+└── skills/agent-skills-setup/    # 公開 Skill の正本
+    ├── SKILL.md
+    ├── references/
+    └── scripts/
 ```
 
-## 規約
+## `agent-skills-setup`
 
-- `skills/` は公開可能なスキルフォルダを格納します。
-- `docs/` は開発メモ、リリース計画、検証メモ、メンテナンスチェックリストを格納します。
-- GitHub の `main` ブランチが正規の情報源（単一の真実）です。インストール済みのコピーは編集しないでください。
-- プロダクト固有のスキルは、それぞれの正規のプロダクトリポジトリに置きます。
+明示的な同意後、対応 IDE とエージェント間で、文書化された skills、rules、prompts、MCP オブジェクトを移行します。IDE 全体の設定と不透明なプロジェクトツリーは手動確認が必要です。40 の識別子は [IDE registry](skills/agent-skills-setup/references/ide-registry.md) を参照してください。
 
-## 現在の機能モジュール
+## 開発
 
-- `agent-skills-setup`: マルチエージェント機能のインストール、同期、OpenClaw 自動化、および公開ワークフロー。
-
-クロス IDE 移行の対象範囲には、機能、プロンプト、設定、ルール、ワークフローが含まれるようになりました。
-
-現在カバーしている主流の IDE エコシステムは 40 の IDE およびエージェント（Copilot、Cursor、Windsurf、JetBrains、Claude Code、Claude Desktop、Codex、OpenClaw、Trae、Trae CN、Antigravity、Kimi AI、Amazon Q、Gemini CLI、Zed、VS Code、Goose CLI、OpenCode、Continue、Roo Code、Cline、Kilo Code、Kiro、Augment Code、Baidu Comate、Tencent CodeBuddy、ZCode、Void Editor、Aider、Tabnine、Replit、Blackbox、Neovim、Emacs、Cody、Supermaven、Codeium、PearAI、Pieces、WorkBuddy）です。
-
-## 開発ワークフロー
-
-1. GitHub のブランチ上で `skills/` 配下のスキルを編集します。
+1. `skills/agent-skills-setup/` を編集し、生成物の root `SKILL.md` は編集しません。
 2. `bash validate-all.sh` を実行します。
-3. `agent-skills-setup` の変更については、以下の焦点を絞った検証スイートも実行します。
-   - `bash skills/agent-skills-setup/scripts/test-ide-paths.sh` — `references/ide-paths.json`、IDE ごとの reference、スクリプト間のクロスプラットフォームのドリフトテストを行います（453 件のチェック）。
-   - `bash skills/agent-skills-setup/scripts/test-migration.sh` — 移行エンジンのテストを行います（50 件のチェック、分離された一時 HOME）。
-   - `bash skills/agent-skills-setup/scripts/test-security-audit-boundary.sh` — リポジトリ専用自動化が公開 Skill に入らないことを検証します。
-4. 検証ワークフローが通過してからのみ、マージします。
-5. マージ済みのバージョンをエージェント環境にインストールします。
+3. 正本の Skill を変えたら `bash scripts/sync-root-mirror.sh` を実行します。
+4. 検証後にマージし、`bash install.sh` または対象別 sync スクリプトで導入します。
 
-```bash
-bash install.sh
-bash sync-to-codex.sh
-bash sync-to-openclaw.sh
-```
-
-既存のターゲットがサイレントに上書きされることはありません。`--force` を指定するのは、インストーラーに現在のコピーをタイムスタンプ付きのバックアップへ移動させて置き換えたい場合のみにしてください。
-
-## スキルのインポート
-
-レガシーなインポートヘルパーは、外部のスキルをレビューブランチに取り込むためだけに使います。インポートした内容は、検証とマージが行われるまで正規のものではありません。
-
-同梱のインポートスクリプトを使用します。
-
-```bash
-bash scripts/import-agent-skill.sh \
-    ~/.gemini/config/skills/agent-skills-setup \
-    agent-skills-setup
-```
-
-## オープンソースメタデータ
-
-- ライセンス: MIT
-- コントリビューション: `CONTRIBUTING.md` を参照
-- セキュリティ報告: `SECURITY.md` を参照
-- コミュニティの期待: `CODE_OF_CONDUCT.md` を参照
+`--force` を明示しない限り既存の対象は保持されます。指定時はタイムスタンプ付きバックアップ後に置換します。外部 Skill はブランチで `bash scripts/import-agent-skill.sh <source-dir> <skill-name>` を使って確認します。
 
 ## 公開
 
-このリポジトリは、プライベートなローカル開発と公開配布の両方をサポートするように設計されています。
+GitHub が正本で、ClawHub、`skills.sh`、Awesome Copilot は配布経路です。公開前に検証を実行し、`THIRD_PARTY_NOTICES.md` を確認し、秘密情報・私有パス・環境依存を除去します。
 
-現在の配布チャネル:
+## プロジェクト
 
-- 正規の公開ソースとしての GitHub リポジトリ。
-- OpenClaw ネイティブな公開とバージョン管理された更新のための ClawHub。
-- クロスエージェントな発見のための `skills.sh`。
-- 厳選された Copilot の露出のための awesome-copilot コミュニティリスト（独立した配布チャネルとして追跡）。
-
-公開前に、`bash validate-all.sh` を実行し、`THIRD_PARTY_NOTICES.md` を確認し、リポジトリにプライベートなパス、ローカルのシークレット、またはマシン固有の前提が含まれていないことを確認してください。
+- [Contributing](CONTRIBUTING.md)
+- [Security](SECURITY.md)
+- [Code of conduct](CODE_OF_CONDUCT.md)
+- [License](LICENSE)

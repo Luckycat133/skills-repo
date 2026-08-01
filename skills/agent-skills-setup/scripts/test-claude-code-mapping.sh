@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-#
-# Regression guard for the documented Claude Code paths that the generic
-# migration mapper supports. This test is static: it only inspects mappings
-# and documentation and never starts Claude Code or writes a user config.
 
 set -euo pipefail
 

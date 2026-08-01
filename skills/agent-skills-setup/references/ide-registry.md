@@ -1,6 +1,9 @@
 # IDE Reference Index
 
-Read only the files for the selected source and target. Each file records that IDE’s documented paths, supported migration surfaces, and manual boundaries. `ide-paths.json` remains the structured path mapping consumed by scripts.
+Read only the selected source and target entries. Each link records documented
+paths, supported migration surfaces, and manual boundaries; a few UI-only
+clients intentionally share one reference. `ide-paths.json` remains the
+structured path mapping consumed by scripts.
 
 ## IDE references
 
@@ -57,8 +60,8 @@ Read only the files for the selected source and target. Each file records that I
 - [`qoder-cn`](ides/qoder-cn.md) — qoder-cn (Alibaba — formerly Tongyi Lingma, renamed 2026-05-20)
 - [`baidu-comate-ide`](ides/baidu-comate-ide.md) — baidu-comate-ide (Baidu — standalone IDE, distinct from plugin)
 - [`tencent-codebuddy-ide`](ides/tencent-codebuddy-ide.md) — tencent-codebuddy-ide (Tencent — standalone IDE, distinct from plugin)
-- [`iflycode`](ides/iflycode.md) — iflycode (iFlytek)
-- [`raccoon-ai`](ides/raccoon-ai.md) — raccoon-ai (SenseTime)
+- [`iflycode`](ides/ui-only-mcp.md) — iflycode (iFlytek; shared UI-only reference)
+- [`raccoon-ai`](ides/ui-only-mcp.md) — raccoon-ai (SenseTime; shared UI-only reference)
 - [`monkeycode`](ides/monkeycode.md) — monkeycode (Chaitin Tech)
 - [`vecli`](ides/vecli.md) — vecli (Volcano Engine)
 - [`bolt-new`](ides/bolt-new.md) — bolt-new (StackBlitz)

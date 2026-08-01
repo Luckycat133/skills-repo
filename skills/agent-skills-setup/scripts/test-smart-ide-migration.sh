@@ -12,28 +12,22 @@ NON_SKILL="$TEST_HOME/.agents/skills/not-a-skill"
 PRIVATE_STATE="$TEST_HOME/.codex/sessions"
 OUTPUT="$TMP_ROOT/dry-run.txt"
 
-# Codeium is a legacy product name, not a standalone Skills/MCP/config target.
-# A generic .codeium directory must remain manual/unsupported rather than being
-# interpreted as a project Skills tree or copied as opaque project config.
-assert_codeium_path() {
-    local object="$1"
-    local expected="$2"
+assert_path() {
+    local ide="$1"
+    local object="$2"
+    local expected="$3"
     local actual
-    actual="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --print-path codeium "$object" 2>/dev/null || true)"
+
+    actual="$(HOME="${4:-$TEST_HOME}" bash "$SCRIPT_DIR/smart-ide-migration.sh" --print-path "$ide" "$object" 2>/dev/null || true)"
     if [[ "$actual" != "$expected" ]]; then
-        echo "FAIL: codeium/${object} expected '${expected}', got '${actual}'" >&2
+        echo "FAIL: ${ide}/${object} expected '${expected}', got '${actual}'" >&2
         exit 1
     fi
 }
 
-assert_codeium_path global ""
-assert_codeium_path project ""
-assert_codeium_path project-skills ""
-assert_codeium_path rules ""
-assert_codeium_path mcp ""
-assert_codeium_path project-mcp ""
-assert_codeium_path project-config ""
-assert_codeium_path config ""
+for object in global project project-skills rules mcp project-mcp project-config config; do
+    assert_path codeium "$object" ""
+done
 
 mkdir -p "$TMP_ROOT/codeium-project/.codeium/skills/legacy-skill"
 printf '%s\n' '---' 'name: legacy-skill' 'description: legacy fixture' '---' > "$TMP_ROOT/codeium-project/.codeium/skills/legacy-skill/SKILL.md"
@@ -45,23 +39,8 @@ CODEIUM_PROJECT_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migratio
     --source codeium --target cursor --workspace "$TMP_ROOT/codeium-project" --objects project --dry-run 2>&1)"
 grep -Fq 'automatic whole-project configuration migration is unsupported' <<< "$CODEIUM_PROJECT_OUTPUT"
 
-# Pieces is a PiecesOS-backed MCP server/provider, not a file-backed IDE
-# configuration host. Exercise every path object and the unsupported object
-# boundary against stale-looking ~/.pieces/.pieces fixtures containing a fake
-# skill, rules, MCP JSON, and a secret. Nothing may be copied or created.
-assert_pieces_path() {
-    local object="$1"
-    local expected="$2"
-    local actual
-    actual="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --print-path pieces "$object" 2>/dev/null || true)"
-    if [[ "$actual" != "$expected" ]]; then
-        echo "FAIL: pieces/${object} expected '${expected}', got '${actual}'" >&2
-        exit 1
-    fi
-}
-
 for pieces_object in global project project-skills rules mcp project-mcp project-config config; do
-    assert_pieces_path "$pieces_object" ""
+    assert_path pieces "$pieces_object" ""
 done
 
 PIECES_PROJECT="$TMP_ROOT/pieces-project"
@@ -103,44 +82,18 @@ printf '%s\n' '---' 'name: demo-skill' 'description: Isolated migration fixture.
 printf '%s\n' 'must not migrate' > "$NON_SKILL/state.txt"
 printf '%s\n' 'private session fixture' > "$PRIVATE_STATE/session.jsonl"
 
-assert_path() {
-    local object="$1"
-    local expected="$2"
-    local actual
+assert_path codex project-skills ".agents/skills"
+assert_path codex mcp "~/.codex/config.toml"
+assert_path codex config "~/.codex/config.toml"
 
-    actual="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --print-path codex "$object")"
-    if [[ "$actual" != "$expected" ]]; then
-        echo "FAIL: codex/${object} expected '${expected}', got '${actual}'" >&2
-        exit 1
-    fi
-}
-
-assert_path project-skills ".agents/skills"
-assert_path mcp "~/.codex/config.toml"
-assert_path config "~/.codex/config.toml"
-
-# Replit keeps project Agent Skills and Agent instructions separate from app
-# configuration. Runtime files (.replit/replit.nix) must never be treated as
-# skills or copied by the generic project/config migration.
-assert_replit_path() {
-    local object="$1"
-    local expected="$2"
-    local actual
-    actual="$(bash "$SCRIPT_DIR/smart-ide-migration.sh" --print-path replit "$object" 2>/dev/null || true)"
-    if [[ "$actual" != "$expected" ]]; then
-        echo "FAIL: replit/${object} expected '${expected}', got '${actual}'" >&2
-        exit 1
-    fi
-}
-
-assert_replit_path global ""
-assert_replit_path project ".replit"
-assert_replit_path project-skills ".agents/skills"
-assert_replit_path rules "replit.md"
-assert_replit_path project-mcp ""
-assert_replit_path project-config ".replit"
-assert_replit_path mcp ""
-assert_replit_path config ""
+assert_path replit global ""
+assert_path replit project ".replit"
+assert_path replit project-skills ".agents/skills"
+assert_path replit rules "replit.md"
+assert_path replit project-mcp ""
+assert_path replit project-config ".replit"
+assert_path replit mcp ""
+assert_path replit config ""
 
 REPLIT_PROJECT="$TMP_ROOT/replit-project"
 mkdir -p "$REPLIT_PROJECT/.agents/skills/demo-skill"
@@ -166,47 +119,19 @@ grep -Fq 'Replit replit.md is a project-root living document maintained by Agent
 grep -Fq '# Replit fixture instructions' "$REPLIT_PROJECT/replit.md"
 ! grep -Fq '# source instructions' "$REPLIT_PROJECT/replit.md"
 
-assert_continue_path() {
-    local object="$1"
-    local expected="$2"
-    local actual
-    actual="$(bash "$SCRIPT_DIR/smart-ide-migration.sh" --print-path continue "$object" 2>/dev/null || true)"
-    if [[ "$actual" != "$expected" ]]; then
-        echo "FAIL: continue/${object} expected '${expected}', got '${actual}'" >&2
-        exit 1
-    fi
-}
-
-# Continue documents YAML config/block directories, not generic skills or a
-# root CONTINUE.md rules file. Its MCP block directory is diagnostic-only;
-# the generic JSON converter must not copy JSON into YAML or vice versa.
-assert_continue_path global ""
-assert_continue_path project ".continue"
-assert_continue_path project-skills ""
-assert_continue_path rules ".continue/rules"
-assert_continue_path project-mcp ".continue/mcpServers"
-assert_continue_path config "~/.continue/config.yaml"
+assert_path continue global ""
+assert_path continue project ".continue"
+assert_path continue project-skills ""
+assert_path continue rules ".continue/rules"
+assert_path continue project-mcp ".continue/mcpServers"
+assert_path continue config "~/.continue/config.yaml"
 
 CONTINUE_OUTPUT="$(bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source claude --target continue --objects mcp,config --dry-run 2>&1)"
 grep -Fq 'Continue uses YAML/array configuration; automatic MCP/config migration is unsupported' <<< "$CONTINUE_OUTPUT"
 
-# PearAI's official repositories document VS Code/Continue provenance, but no
-# PearAI-owned portable object paths or MCP root/schema. Every automatic
-# object must therefore fail closed; in particular, do not invent ~/.pearai,
-# .pearai, .pearairules, config.json, or a mcpServers root.
-assert_pearai_path() {
-    local object="$1"
-    local actual
-    actual="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --print-path pearai "$object" 2>/dev/null || true)"
-    if [[ -n "$actual" ]]; then
-        echo "FAIL: pearai/${object} must be unsupported, got '${actual}'" >&2
-        exit 1
-    fi
-}
-
 for pearai_object in global project project-skills rules mcp project-mcp project-config config; do
-    assert_pearai_path "$pearai_object"
+    assert_path pearai "$pearai_object" ""
 done
 
 PEARAI_SOURCE="$TMP_ROOT/pearai-source"
@@ -227,22 +152,8 @@ grep -Fq 'config:' <<< "$PEARAI_OUTPUT"
     exit 1
 }
 
-# Supermaven is a host-editor completion plugin, not a portable agent
-# configuration surface. The first-party maintainer-described ~/.supermaven
-# tree is runtime/binary storage and .supermavenignore only excludes files
-# from repository indexing; neither is a Skills/rules/config target.
-assert_supermaven_path() {
-    local object="$1"
-    local actual
-    actual="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --print-path supermaven "$object" 2>/dev/null || true)"
-    if [[ -n "$actual" ]]; then
-        echo "FAIL: supermaven/${object} must be unsupported/empty, got '${actual}'" >&2
-        exit 1
-    fi
-}
-
 for supermaven_object in global project project-skills rules mcp project-mcp project-config config; do
-    assert_supermaven_path "$supermaven_object"
+    assert_path supermaven "$supermaven_object" ""
 done
 
 SUPERMAVEN_HOME="$TMP_ROOT/supermaven-home"
@@ -302,30 +213,14 @@ grep -Fq 'Supermaven has no documented portable Agent Skills directory' <<< "$SU
     exit 1
 }
 
-# Blackbox's current first-party CLI docs document only project Skills at
-# .blackbox/skills/<name>/SKILL.md. There is no published global Skills path,
-# rules/prompts directory, MCP file/root, or configure-file path. Exercise the
-# one supported diagnostic object and verify every unsupported boundary stays
-# manual without copying secrets or the mixed .blackbox namespace.
-assert_blackbox_path() {
-    local object="$1"
-    local expected="$2"
-    local actual
-    actual="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --print-path blackbox "$object" 2>/dev/null || true)"
-    if [[ "$actual" != "$expected" ]]; then
-        echo "FAIL: blackbox/${object} expected '${expected}', got '${actual}'" >&2
-        exit 1
-    fi
-}
-
-assert_blackbox_path global ""
-assert_blackbox_path project ".blackbox"
-assert_blackbox_path project-skills ".blackbox/skills"
-assert_blackbox_path rules ""
-assert_blackbox_path mcp ""
-assert_blackbox_path project-mcp ""
-assert_blackbox_path project-config ""
-assert_blackbox_path config ""
+assert_path blackbox global ""
+assert_path blackbox project ".blackbox"
+assert_path blackbox project-skills ".blackbox/skills"
+assert_path blackbox rules ""
+assert_path blackbox mcp ""
+assert_path blackbox project-mcp ""
+assert_path blackbox project-config ""
+assert_path blackbox config ""
 
 BLACKBOX_HOME="$TMP_ROOT/blackbox-home"
 BLACKBOX_PROJECT="$TMP_ROOT/blackbox-project"
@@ -333,10 +228,6 @@ BLACKBOX_TARGET="$TMP_ROOT/blackbox-target"
 mkdir -p "$BLACKBOX_HOME/.agents/skills/from-codex" "$BLACKBOX_HOME/.codex" "$BLACKBOX_PROJECT/.blackbox/skills/from-blackbox"
 printf '%s\n' '---' 'name: from-codex' 'description: source fixture' '---' > "$BLACKBOX_HOME/.agents/skills/from-codex/SKILL.md"
 printf '%s\n' '---' 'name: from-blackbox' 'description: Blackbox project fixture' '---' > "$BLACKBOX_PROJECT/.blackbox/skills/from-blackbox/SKILL.md"
-# NOTE: Placeholder strings use clearly-fake values (not real provider prefixes
-# or "secret" / "key" keywords) so that secret-pattern scanners do not flag the
-# fixtures as exposed credentials. The redactor still matches these values via
-# the SECRET_KEY_RE keyword check on the KEY NAME; the VALUE side is inert.
 printf '%s\n' '{"apiKey":"__test_placeholder_value__"}' > "$BLACKBOX_PROJECT/.blackbox/private-state.json"
 printf '%s\n' 'provider = "codex-fixture"' 'apiKey = "__test_placeholder_value__"' > "$BLACKBOX_HOME/.codex/config.toml"
 
@@ -363,30 +254,14 @@ grep -Fq '__test_placeholder_value__' "$BLACKBOX_PROJECT/.blackbox/private-state
     exit 1
 }
 
-# Gemini CLI uses dedicated Skills paths but a mixed .gemini project namespace.
-# MCP is JSON at both user and project scope; the generic mapper converts only
-# the user file, validates Gemini's endpoint/alias schema, and redacts secrets.
-# Commands are TOML and whole settings/project namespaces are target-specific,
-# so prompt/config/project transfers must remain manual.
-assert_gemini_path() {
-    local object="$1"
-    local expected="$2"
-    local actual
-    actual="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --print-path gemini-cli "$object" 2>/dev/null || true)"
-    if [[ "$actual" != "$expected" ]]; then
-        echo "FAIL: gemini-cli/${object} expected '${expected}', got '${actual}'" >&2
-        exit 1
-    fi
-}
-
-assert_gemini_path global "~/.gemini/skills"
-assert_gemini_path project ".gemini"
-assert_gemini_path project-skills ".gemini/skills"
-assert_gemini_path rules "GEMINI.md"
-assert_gemini_path mcp "~/.gemini/settings.json"
-assert_gemini_path project-mcp ".gemini/settings.json"
-assert_gemini_path project-config ".gemini/settings.json"
-assert_gemini_path config "~/.gemini/settings.json"
+assert_path gemini-cli global "~/.gemini/skills"
+assert_path gemini-cli project ".gemini"
+assert_path gemini-cli project-skills ".gemini/skills"
+assert_path gemini-cli rules "GEMINI.md"
+assert_path gemini-cli mcp "~/.gemini/settings.json"
+assert_path gemini-cli project-mcp ".gemini/settings.json"
+assert_path gemini-cli project-config ".gemini/settings.json"
+assert_path gemini-cli config "~/.gemini/settings.json"
 
 GEMINI_PROJECT="$TMP_ROOT/gemini-project"
 mkdir -p "$GEMINI_PROJECT/.gemini/skills/demo-skill" "$GEMINI_PROJECT/.gemini/commands" "$GEMINI_PROJECT/.gemini/agents"
@@ -430,8 +305,6 @@ assert data["mcpServers"]["http-server"]["headers"]["Authorization"] == ""
 assert data["mcpServers"]["http-server"]["httpUrl"] == "https://example.invalid/mcp"
 PY
 
-# Invalid input must be rejected before overwrite mutates the last valid
-# shared settings file.
 GEMINI_TARGET_BEFORE="$TMP_ROOT/gemini-settings-before.json"
 cp "$TEST_HOME/.gemini/settings.json" "$GEMINI_TARGET_BEFORE"
 printf '%s\n' '{"mcpServers":{"bad_server":{"command":"node","args":[]}}}' > "$TEST_HOME/.claude.json"
@@ -464,29 +337,14 @@ grep -Fq 'Goose config.yaml uses YAML extensions; automatic MCP migration is uns
     exit 1
 }
 
-# Goose CLI current docs separate Agent Skills, context hints, recipes,
-# prompt templates, Memory, and YAML extension configuration. Verify every
-# mapper object path and exercise the safe Skills/rules paths plus the
-# YAML/secrets fail-closed boundaries. No Goose binary or live IDE is used.
-assert_goose_path() {
-    local object="$1"
-    local expected="$2"
-    local actual
-    actual="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --print-path goose-cli "$object" 2>/dev/null || true)"
-    if [[ "$actual" != "$expected" ]]; then
-        echo "FAIL: goose-cli/${object} expected '${expected}', got '${actual}'" >&2
-        exit 1
-    fi
-}
-
-assert_goose_path global "~/.agents/skills"
-assert_goose_path project ".goose"
-assert_goose_path project-skills ".agents/skills"
-assert_goose_path rules ".goosehints"
-assert_goose_path mcp "~/.config/goose/config.yaml"
-assert_goose_path project-mcp ""
-assert_goose_path project-config ""
-assert_goose_path config "~/.config/goose/config.yaml"
+assert_path goose-cli global "~/.agents/skills"
+assert_path goose-cli project ".goose"
+assert_path goose-cli project-skills ".agents/skills"
+assert_path goose-cli rules ".goosehints"
+assert_path goose-cli mcp "~/.config/goose/config.yaml"
+assert_path goose-cli project-mcp ""
+assert_path goose-cli project-config ""
+assert_path goose-cli config "~/.config/goose/config.yaml"
 
 GOOSE_PROJECT="$TMP_ROOT/goose-project"
 mkdir -p "$GOOSE_PROJECT/.goose/recipes" "$GOOSE_PROJECT/.goose/memory" "$GOOSE_PROJECT/.agents/skills/goose-project-skill" "$GOOSE_PROJECT/.claude/commands"
@@ -497,9 +355,6 @@ printf '%s\n' '# Claude fixture command' > "$GOOSE_PROJECT/.claude/commands/fixt
 printf '%s\n' '# Goose fixture rules' > "$GOOSE_PROJECT/.goosehints"
 printf '%s\n' '# Source rules fixture' > "$GOOSE_PROJECT/CLAUDE.md"
 
-# A global Skills migration to Goose must land in ~/.agents/skills, never in
-# ~/.config/goose or the mixed local .goose namespace. Keep this fixture in a
-# separate HOME so the later Codex isolation assertion remains one-skill-only.
 GOOSE_SKILL_HOME="$TMP_ROOT/goose-skill-home"
 mkdir -p "$GOOSE_SKILL_HOME/.cursor/skills/goose-global-skill"
 printf '%s\n' '---' 'name: goose-global-skill' 'description: Goose global skill fixture.' '---' > "$GOOSE_SKILL_HOME/.cursor/skills/goose-global-skill/SKILL.md"
@@ -514,21 +369,14 @@ HOME="$GOOSE_SKILL_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     exit 1
 }
 
-# Local .goose is a mixed recipes/memory namespace, so the generic project
-# object must fail closed and leave the target untouched.
 GOOSE_PROJECT_OUTPUT="$(bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source goose-cli --target cursor --workspace "$GOOSE_PROJECT" --objects project --dry-run 2>&1)"
 grep -Fq 'automatic whole-project configuration migration is unsupported' <<< "$GOOSE_PROJECT_OUTPUT"
 
-# Local hint files are the supported low-risk Goose rules object. A source
-# Markdown rules file can be prepared for Goose's .goosehints target.
 GOOSE_RULE_OUTPUT="$(bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source claude --target goose-cli --workspace "$GOOSE_PROJECT" --objects rules --dry-run 2>&1)"
 grep -Fq '.goosehints' <<< "$GOOSE_RULE_OUTPUT"
 
-# Goose prompt templates are global config files and slash commands are YAML
-# config entries; the project prompt copier must report manual and create no
-# .goose/prompts directory.
 GOOSE_PROMPT_OUTPUT="$(bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source claude --target goose-cli --workspace "$GOOSE_PROJECT" --objects prompts --dry-run 2>&1)"
 grep -Fq 'Goose prompt templates are global files and slash commands are config.yaml entries' <<< "$GOOSE_PROMPT_OUTPUT"
@@ -537,12 +385,6 @@ grep -Fq 'Goose prompt templates are global files and slash commands are config.
     exit 1
 }
 
-# Goose MCP/config are YAML and must not receive JSON root-key conversion or
-# verbatim JSON copied into config.yaml. Test both directions and preserve the
-# source sensitive-key YAML untouched while no target file is created.
-# NOTE: fixture VALUES are inert placeholders (no "secret"/"key"/"live"
-# substrings) so secret-pattern scanners do not flag them; the sensitive-key
-# semantics come from the KEY NAMES (API_KEY / OPENAI_API_KEY) only.
 mkdir -p "$TEST_HOME/.config/goose"
 printf '%s\n' 'extensions:' '  fixture:' '    type: stdio' '    cmd: node' '    args: [server.js]' '    envs:' '      API_KEY: __goose_inert_fixture__' '    enabled: true' > "$TEST_HOME/.config/goose/config.yaml"
 printf '%s\n' 'OPENAI_API_KEY: __goose_file_inert_fixture__' > "$TEST_HOME/.config/goose/secrets.yaml"
@@ -566,50 +408,25 @@ grep -Fq 'automatic whole-IDE config migration is unsupported' <<< "$GOOSE_CONFI
     exit 1
 }
 
-# Roo Code has native skill directories and a documented project MCP file, but
-# global MCP is extension-storage/UI managed and therefore manual-only.
-assert_roo_path() {
-    local object="$1"
-    local expected="$2"
-    local actual
-    actual="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --print-path roo-code "$object" 2>/dev/null || true)"
-    if [[ "$actual" != "$expected" ]]; then
-        echo "FAIL: roo-code/${object} expected '${expected}', got '${actual}'" >&2
-        exit 1
-    fi
-}
-
-assert_roo_path global "~/.roo/skills"
-assert_roo_path project ".roo"
-assert_roo_path project-skills ".roo/skills"
-assert_roo_path project-mcp ".roo/mcp.json"
-assert_roo_path mcp ""
-assert_roo_path rules ".roorules"
+assert_path roo-code global "~/.roo/skills"
+assert_path roo-code project ".roo"
+assert_path roo-code project-skills ".roo/skills"
+assert_path roo-code project-mcp ".roo/mcp.json"
+assert_path roo-code mcp ""
+assert_path roo-code rules ".roorules"
 
 ROO_MCP_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source claude --target roo-code --objects mcp --yes --strategy overwrite 2>&1)"
 grep -Fq 'Roo Code global MCP is extension-storage/UI managed' <<< "$ROO_MCP_OUTPUT"
 
-# Aider has YAML config and conventions, not native skills or MCP paths.
-assert_aider_path() {
-    local object="$1"
-    local expected="$2"
-    local actual
-    actual="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --print-path aider "$object" 2>/dev/null || true)"
-    if [[ "$actual" != "$expected" ]]; then
-        echo "FAIL: aider/${object} expected '${expected}', got '${actual}'" >&2
-        exit 1
-    fi
-}
-
-assert_aider_path global ""
-assert_aider_path project ".aider.conf.yml"
-assert_aider_path project-skills ""
-assert_aider_path rules "CONVENTIONS.md"
-assert_aider_path mcp ""
-assert_aider_path project-mcp ""
-assert_aider_path project-config ""
-assert_aider_path config "~/.aider.conf.yml"
+assert_path aider global ""
+assert_path aider project ".aider.conf.yml"
+assert_path aider project-skills ""
+assert_path aider rules "CONVENTIONS.md"
+assert_path aider mcp ""
+assert_path aider project-mcp ""
+assert_path aider project-config ""
+assert_path aider config "~/.aider.conf.yml"
 
 mkdir -p "$TMP_ROOT/aider-project"
 printf '%s\n' 'Follow the fixture conventions.' > "$TMP_ROOT/aider-project/CLAUDE.md"
@@ -626,10 +443,6 @@ grep -Fq 'automatic whole-IDE config migration is unsupported' <<< "$AIDER_CONFI
     exit 1
 }
 
-# Cline stores MCP settings in the VS Code extension globalStorage
-# (cline_mcp_settings.json under saoudrizwan.claude-dev/settings/). A legacy
-# ~/.cline/mcp.json CLI alternative may exist; when both are present without
-# CLINE_MCP_PATH, global migration is manual. Project MCP is .cline/mcp.json.
 case "$(uname -s)" in
     Darwin) CLINE_MCP_EXPECTED="~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"
             CLINE_MCP_TARGET="$TEST_HOME/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json" ;;
@@ -639,24 +452,13 @@ case "$(uname -s)" in
             CLINE_MCP_TARGET="$TEST_HOME/AppData/Roaming/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json" ;;
 esac
 
-assert_cline_path() {
-    local object="$1"
-    local expected="$2"
-    local actual
-    actual="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --print-path cline "$object" 2>/dev/null || true)"
-    if [[ "$actual" != "$expected" ]]; then
-        echo "FAIL: cline/${object} expected '${expected}', got '${actual}'" >&2
-        exit 1
-    fi
-}
-
-assert_cline_path global "~/.cline/skills"
-assert_cline_path project ""
-assert_cline_path project-skills ".cline/skills"
-assert_cline_path rules ".clinerules"
-assert_cline_path project-mcp ".cline/mcp.json"
-assert_cline_path config ""
-assert_cline_path mcp "$CLINE_MCP_EXPECTED"
+assert_path cline global "~/.cline/skills"
+assert_path cline project ""
+assert_path cline project-skills ".cline/skills"
+assert_path cline rules ".clinerules"
+assert_path cline project-mcp ".cline/mcp.json"
+assert_path cline config ""
+assert_path cline mcp "$CLINE_MCP_EXPECTED"
 
 printf '%s\n' '{"mcpServers":{"local":{"command":"node","args":["server.js"],"env":{"API_KEY":"do-not-copy"}},"remote":{"url":"https://example.invalid/mcp","transportType":"sse"}}}' > "$TEST_HOME/.claude.json"
 HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
@@ -684,8 +486,6 @@ cmp -s "$CLINE_TARGET_BEFORE" "$CLINE_MCP_TARGET" || {
     exit 1
 }
 
-# When both the globalStorage MCP settings and the legacy ~/.cline/mcp.json CLI
-# alternative exist, the mapper refuses an ambiguous global migration.
 rm -f "$CLINE_MCP_TARGET"
 mkdir -p "$(dirname "$CLINE_MCP_TARGET")"
 CLINE_ALT_TARGET="$TEST_HOME/.cline/mcp.json"
@@ -700,8 +500,6 @@ grep -Fq 'Cline has both the globalStorage MCP settings' <<< "$AMBIGUOUS_CLINE_O
 }
 rm -f "$CLINE_MCP_TARGET" "$CLINE_ALT_TARGET"
 
-# The CLI reference also documents project .cline/mcp.json. Exercise the
-# explicit project scope separately from the global/CLI ambiguity above.
 CLINE_PROJECT="$TMP_ROOT/cline-project"
 mkdir -p "$CLINE_PROJECT"
 printf '%s\n' '{"mcpServers":{"project-server":{"command":"node","args":["server.js"],"env":{"PROJECT_TOKEN":"do-not-copy"}}}}' > "$CLINE_PROJECT/.mcp.json"
@@ -714,29 +512,13 @@ data = json.load(open(sys.argv[1]))
 assert data["mcpServers"]["project-server"]["env"]["PROJECT_TOKEN"] == ""
 PY
 
-# Amazon Q keeps IDE MCP, project rules, prompts, and CLI agents in separate
-# scopes. The current IDE guide names default.json and mcp.json as legacy;
-# another Q surface names agents/default.json without a version discriminator.
-# The mapper uses default.json for fresh installs, preserves an existing legacy
-# mcp.json, and fails closed when only agents/default.json is present.
-assert_amazon_q_path() {
-    local object="$1"
-    local expected="$2"
-    local actual
-    actual="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --print-path amazon-q "$object" 2>/dev/null || true)"
-    if [[ "$actual" != "$expected" ]]; then
-        echo "FAIL: amazon-q/${object} expected '${expected}', got '${actual}'" >&2
-        exit 1
-    fi
-}
-
-assert_amazon_q_path global ""
-assert_amazon_q_path project ".amazonq"
-assert_amazon_q_path project-skills ""
-assert_amazon_q_path rules ".amazonq/rules"
-assert_amazon_q_path mcp "~/.aws/amazonq/default.json"
-assert_amazon_q_path project-mcp ".amazonq/default.json"
-assert_amazon_q_path config ""
+assert_path amazon-q global ""
+assert_path amazon-q project ".amazonq"
+assert_path amazon-q project-skills ""
+assert_path amazon-q rules ".amazonq/rules"
+assert_path amazon-q mcp "~/.aws/amazonq/default.json"
+assert_path amazon-q project-mcp ".amazonq/default.json"
+assert_path amazon-q config ""
 
 mkdir -p "$TMP_ROOT/project/.amazonq/rules" "$TEST_HOME/.aws/amazonq"
 printf '%s\n' 'Use the fixture rule.' > "$TMP_ROOT/project/.amazonq/rules/style.md"
@@ -747,10 +529,8 @@ grep -Fq 'automatic whole-project configuration migration is unsupported' <<< "$
 Q_MCP_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --source amazon-q --target cursor --workspace "$TMP_ROOT/project" --objects mcp --dry-run 2>&1)"
 grep -Fq 'Amazon Q: standard IDE MCP uses' <<< "$Q_MCP_OUTPUT"
 
-# Existing legacy configuration is selected instead of creating a second
-# default.json store; an agents/default.json-only installation is manual.
 printf '%s\n' '{"mcpServers":{}}' > "$TEST_HOME/.aws/amazonq/mcp.json"
-assert_amazon_q_path mcp "~/.aws/amazonq/mcp.json"
+assert_path amazon-q mcp "~/.aws/amazonq/mcp.json"
 rm -f "$TEST_HOME/.aws/amazonq/mcp.json"
 mkdir -p "$TEST_HOME/.aws/amazonq/agents"
 printf '%s\n' '{"mcpServers":{}}' > "$TEST_HOME/.aws/amazonq/agents/default.json"
@@ -758,25 +538,12 @@ Q_AGENT_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --
 grep -Fq 'agents/default.json exists but its IDE/CLI surface is ambiguous' <<< "$Q_AGENT_OUTPUT"
 rm -f "$TEST_HOME/.aws/amazonq/agents/default.json"
 
-# Neovim is an editor, not a native skills/MCP IDE. Only its documented
-# init.lua location is diagnostic; automatic config migration must fail closed.
-assert_neovim_path() {
-    local object="$1"
-    local expected="$2"
-    local actual
-    actual="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --print-path neovim "$object" 2>/dev/null || true)"
-    if [[ "$actual" != "$expected" ]]; then
-        echo "FAIL: neovim/${object} expected '${expected}', got '${actual}'" >&2
-        exit 1
-    fi
-}
-
-assert_neovim_path global ""
-assert_neovim_path project ""
-assert_neovim_path project-skills ""
-assert_neovim_path rules ""
-assert_neovim_path mcp ""
-assert_neovim_path config "~/.config/nvim/init.lua"
+assert_path neovim global ""
+assert_path neovim project ""
+assert_path neovim project-skills ""
+assert_path neovim rules ""
+assert_path neovim mcp ""
+assert_path neovim config "~/.config/nvim/init.lua"
 
 NEOVIM_CONFIG_FIXTURE="$TEST_HOME/.config/nvim/init.lua"
 mkdir -p "$(dirname "$NEOVIM_CONFIG_FIXTURE")"
@@ -789,54 +556,29 @@ grep -Fq 'automatic whole-IDE config migration is unsupported' <<< "$NEOVIM_OUTP
     exit 1
 }
 
-assert_trae_path() {
-    local object="$1"
-    local expected="$2"
-    local actual
-    actual="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --print-path trae "$object" 2>/dev/null || true)"
-    if [[ "$actual" != "$expected" ]]; then
-        echo "FAIL: trae/${object} expected '${expected}', got '${actual}'" >&2
-        exit 1
-    fi
-}
-
-assert_trae_path global "~/.trae/skills"
-assert_trae_path project ".trae"
-assert_trae_path project-skills ".trae/skills"
-assert_trae_path project-mcp ".trae/mcp.json"
-assert_trae_path mcp ""
-assert_trae_path config ""
-assert_trae_path rules ".trae/rules"
-assert_trae_path prompts ".trae/commands"
+assert_path trae global "~/.trae/skills"
+assert_path trae project ".trae"
+assert_path trae project-skills ".trae/skills"
+assert_path trae project-mcp ".trae/mcp.json"
+assert_path trae mcp ""
+assert_path trae config ""
+assert_path trae rules ".trae/rules"
+assert_path trae prompts ".trae/commands"
 TRAE_MCP_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source claude --target trae --objects mcp --dry-run 2>&1)"
 grep -Fq 'TRAE global MCP has an official settings/raw-JSON method' <<< "$TRAE_MCP_OUTPUT"
 
-assert_trae_cn_path() {
-    local object="$1"
-    local expected="$2"
-    local actual
-    actual="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --print-path trae-cn "$object" 2>/dev/null || true)"
-    if [[ "$actual" != "$expected" ]]; then
-        echo "FAIL: trae-cn/${object} expected '${expected}', got '${actual}'" >&2
-        exit 1
-    fi
-}
-
-assert_trae_cn_path global "~/.trae-cn/skills"
-assert_trae_cn_path project ".trae"
-assert_trae_cn_path project-skills ".trae/skills"
-assert_trae_cn_path project-mcp ".trae/mcp.json"
-assert_trae_cn_path rules ".trae/rules"
-assert_trae_cn_path mcp ""
-assert_trae_cn_path config ""
+assert_path trae-cn global "~/.trae-cn/skills"
+assert_path trae-cn project ".trae"
+assert_path trae-cn project-skills ".trae/skills"
+assert_path trae-cn project-mcp ".trae/mcp.json"
+assert_path trae-cn rules ".trae/rules"
+assert_path trae-cn mcp ""
+assert_path trae-cn config ""
 TRAE_CN_MCP_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source claude --target trae-cn --objects mcp --dry-run 2>&1)"
 grep -Fq 'TRAE global MCP has an official settings/raw-JSON method' <<< "$TRAE_CN_MCP_OUTPUT"
 
-# TRAE Skills must remain a real Skills migration. A previous regression put
-# the Commands manual guard inside migrate_skills(), causing this copy to
-# return early without touching the documented global Skills root.
 mkdir -p "$TEST_HOME/.trae/skills/trae-regression"
 printf '%s\n' '---' 'name: trae-regression' 'description: TRAE skill regression.' '---' > "$TEST_HOME/.trae/skills/trae-regression/SKILL.md"
 HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
@@ -847,22 +589,8 @@ HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     exit 1
 }
 
-# Cody is current only as an Enterprise extension/UI surface. Its old-looking
-# .cody, .codyrules, ~/.config/cody, and cody.json paths are not automatic
-# targets. Exercise a fixture containing those stale names and verify every
-# migration object fails closed without creating a target file.
-assert_cody_path() {
-    local object="$1"
-    local actual
-    actual="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --print-path cody "$object" 2>/dev/null || true)"
-    if [[ -n "$actual" ]]; then
-        echo "FAIL: cody/${object} must be unsupported/empty, got '${actual}'" >&2
-        exit 1
-    fi
-}
-
 for cody_object in global project project-skills rules mcp project-mcp project-config config; do
-    assert_cody_path "$cody_object"
+    assert_path cody "$cody_object" ""
 done
 
 CODY_PROJECT="$TMP_ROOT/cody-project"
@@ -916,25 +644,12 @@ assert set(data["mcp"]["servers"]) == {"fixture", "remote"}
 assert data["mcp"]["servers"]["remote"]["transport"] == "streamable-http"
 PY
 
-# Tabnine is file-backed for documented MCP, but has no documented Agent
-# Skills directory and its guidelines/project MCP are scoped directories/files.
-assert_tabnine_path() {
-    local object="$1"
-    local expected="$2"
-    local actual
-    actual="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --print-path tabnine "$object" 2>/dev/null || true)"
-    [[ "$actual" == "$expected" ]] || {
-        echo "FAIL: tabnine/${object} expected '${expected}', got '${actual}'" >&2
-        exit 1
-    }
-}
-
-assert_tabnine_path global ""
-assert_tabnine_path project-skills ""
-assert_tabnine_path rules ".tabnine/guidelines"
-assert_tabnine_path mcp "~/.tabnine/mcp_servers.json"
-assert_tabnine_path project-mcp ".tabnine/mcp_servers.json"
-assert_tabnine_path config ""
+assert_path tabnine global ""
+assert_path tabnine project-skills ""
+assert_path tabnine rules ".tabnine/guidelines"
+assert_path tabnine mcp "~/.tabnine/mcp_servers.json"
+assert_path tabnine project-mcp ".tabnine/mcp_servers.json"
+assert_path tabnine config ""
 
 mkdir -p "$TMP_ROOT/tabnine-project/.tabnine/guidelines"
 printf '%s\n' 'Follow the Tabnine guideline fixture.' > "$TMP_ROOT/tabnine-project/.tabnine/guidelines/style.md"

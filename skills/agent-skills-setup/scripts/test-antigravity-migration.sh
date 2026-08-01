@@ -26,9 +26,6 @@ assert_path project-skills ".agents/skills"
 assert_path rules ".agents/rules"
 assert_path mcp "~/.gemini/config/mcp_config.json"
 
-# The IDE-specific Skills page also documents a legacy-only global tree. The
-# resolver preserves it when it is the only existing tree, while a fresh home
-# uses the current shared config path asserted above.
 LEGACY_HOME="$TMP_ROOT/legacy-home"
 mkdir -p "$LEGACY_HOME/.gemini/antigravity/skills"
 LEGACY_SKILLS_PATH="$(HOME="$LEGACY_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --print-path antigravity global)"
@@ -42,9 +39,6 @@ if HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --print-path anti
     exit 1
 fi
 
-# Antigravity workspace rules are a directory, not an AGENTS.md-like single
-# file. The generic single-file migration handler must leave this documented
-# directory scope for manual migration rather than claiming it copied rules.
 mkdir -p "$WORKSPACE/.agents/rules"
 printf '%s\n' 'Use the documented workspace rules directory.' > "$WORKSPACE/.agents/rules/style.md"
 RULES_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
@@ -55,8 +49,6 @@ RULES_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --dry-run 2>&1)"
 grep -Fq "Antigravity IDE rules use a directory; manual migration required" <<< "$RULES_OUTPUT"
 
-# `.agents` is a mixed project namespace. Whole-project migration must stop
-# even though dedicated Skills/MCP mappings are available.
 PROJECT_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source antigravity \
     --target cursor \

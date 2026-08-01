@@ -1,8 +1,3 @@
 # openhands
-- **detect**: `~/.openhands/`
-- **mcp** (CLI 1.0+): `~/.openhands/mcp.json` · root_key `mcpServers` · JSON · `openhands mcp list`
-- **mcp** (GUI/legacy): `config.toml` [mcp] section · `sse_servers`/`shttp_servers`/`stdio_servers` arrays
-- **rules**: `AGENTS.md`
-- **skills**: project skills (via `load_project_skills()`, agentskills.io standard)
-- **agents**: `~/.openhands-cli/persist/agent_settings.json`
-- **memory**: Condenser system (config.toml [condenser]: type=amortized/llm_attention/llm_summarizing)
+
+OpenHands CLI MCP uses JSON `mcpServers`; GUI/legacy MCP uses TOML arrays. `AGENTS.md`, project Skills, agents, and condenser memory use different scopes, so review manually rather than converting whole config.

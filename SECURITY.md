@@ -1,22 +1,7 @@
 # Security Policy
 
-## Reporting A Vulnerability
+Do not open a public issue for a potential vulnerability. Report it privately to the maintainer with the affected file/workflow, impact, reproduction, and any known mitigation.
 
-Do not open public issues for potential security problems.
+Preferred channel: a private [GitHub Security Advisory](https://docs.github.com/en/code-security/security-advisories). Alternatively email `<security-contact@example.com>` (replace before publishing). Do not disclose details until a fix is released.
 
-If you find a vulnerability in a bundled script, release workflow, or published skill asset, report it privately to the repository maintainer first and include:
-
-- affected file or workflow
-- impact summary
-- reproduction steps
-- suggested mitigation, if known
-
-**Preferred channel**: open a private [GitHub Security Advisory](https://docs.github.com/en/code-security/security-advisories) for this repository. Alternatively, email the maintainer at `<security-contact@example.com>` (replace with the real contact before publishing). Do not disclose details publicly until a fix is released.
-
-## Scope
-
-Security reports are especially relevant for:
-
-- shell scripts under `scripts/`
-- install or sync workflows
-- files intended for public distribution
+Reports covering repository scripts, install/sync workflows, or published assets are in scope.

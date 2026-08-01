@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
 
-# Focused static/fixture guard for the canonical `copilot` migration target.
-# It is GitHub Copilot CLI, deliberately distinct from VS Code's `vscode`
-# target and its `.vscode/mcp.json` `servers` schema.
 
 set -euo pipefail
 
@@ -34,9 +31,6 @@ assert_path project-skills ".github/skills"
 assert_path project-mcp ".mcp.json"
 assert_path mcp "~/.copilot/mcp-config.json"
 
-# A JSON source must be converted to the CLI's `mcpServers` root only when the
-# transport is one documented by the CLI. VS Code's user MCP source is manual
-# and is covered by test-vscode-mapping.sh.
 cat > "$CURSOR_MCP" <<'JSON'
 {
   "mcpServers": {
@@ -71,8 +65,6 @@ if [[ -e "$TEST_HOME/.copilot/mcp-config.json" ]]; then
     exit 1
 fi
 
-# A documented stdio entry can be copied into the CLI's separate root-key
-# schema without losing its transport declaration.
 cat > "$CURSOR_MCP" <<'JSON'
 {
   "mcpServers": {

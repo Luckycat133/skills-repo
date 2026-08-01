@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# Regression guard for Claude Desktop's documented local-MCP and connector
-# boundaries. It only inspects mappings and never starts or configures Claude
-# Desktop.
 
 set -euo pipefail
 

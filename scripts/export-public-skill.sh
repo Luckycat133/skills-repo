@@ -1,14 +1,4 @@
 #!/usr/bin/env bash
-#
-# export-public-skill.sh — SINGLE RESPONSIBILITY: prepare the PUBLIC repository layout.
-# Copies a source skill into a standalone public-repo structure (via rsync) and
-# generates/updates the public README from `public-repo-readme-template.md`.
-# This script does NOT publish the skill. Publishing is the job of
-# prepare-clawhub-release.sh (see ./prepare-clawhub-release.sh), whose canonical
-# publish command is `clawhub publish`.
-# NOTE: the `npx skills add <owner/repo>` step printed at the end is for CONSUMERS to
-# install the already-published skill — it is an install/test command, NOT a publish command.
-#
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -24,14 +14,14 @@ usage() {
     cat <<'EOF'
 Usage: export-public-skill.sh --skill <skill-name> --output <directory> --repo <owner/repo>
 
-Exports a skill from Antigravity's global skill store into a standalone public repository layout.
+Export an Antigravity Skill as a standalone public repository.
 
 Options:
-  --skill <name>        Skill folder name under ~/.gemini/config/skills
-  --output <dir>        Destination repository directory to create or update
-  --repo <owner/repo>   Public repository name used in generated install docs
-  --dry-run             Preview rsync --delete changes without writing
-  --force               Allow rsync --delete into a non-empty existing target
+  --skill <name>        Source folder name
+  --output <dir>        Destination repository
+  --repo <owner/repo>   Repository name for generated install docs
+  --dry-run             Preview `rsync --delete`
+  --force               Allow a non-empty destination
   -h, --help            Show this help text
 EOF
 }
@@ -94,7 +84,6 @@ if [[ -e "$OUTPUT_DIR/$SKILL_NAME" && -n "$(ls -A "$OUTPUT_DIR/$SKILL_NAME" 2>/d
     echo "        Re-run with --force to confirm, or use --dry-run to preview what would be deleted/added." >&2
     exit 1
 fi
-# MED-P8: rsync is required for the --delete mirror semantics used here.
 if ! command -v rsync >/dev/null 2>&1; then
     echo "ERROR: rsync not found. Install rsync (e.g. macOS: xcode-select --install; Debian/Ubuntu: apt install rsync) and retry." >&2
     exit 1
@@ -105,8 +94,6 @@ else
     rsync -a --delete "$SOURCE_SKILL_DIR/" "$OUTPUT_DIR/$SKILL_NAME/"
 fi
 
-# MED-P6: escape sed replacement metacharacters (\, &, delimiter) so names
-# containing them cannot corrupt the generated README or inject expressions.
 sed_escape_replacement() {
     printf '%s' "$1" | sed -e 's/[\\&|]/\\&/g'
 }

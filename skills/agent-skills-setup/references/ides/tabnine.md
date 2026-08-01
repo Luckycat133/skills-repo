@@ -2,11 +2,6 @@
 
 <!-- GENERATED: ide-paths.json summary; do not edit this block -->
 
-## Generated path summary
-
-This table is generated from `references/ide-paths.json`. The notes below explain product-specific behavior and portability trade-offs.
-Treat those notes as current compatibility evidence and practical guidance; when a user chooses a different approach, explain the trade-off and distinguish it from a hard limit in the bundled script.
-
 | Object | Documented path |
 | --- | --- |
 | Global skills | Not mapped |
@@ -18,7 +13,4 @@ Treat those notes as current compatibility evidence and practical guidance; when
 | Config | Not mapped |
 
 <!-- END GENERATED: ide-paths.json summary -->
-- **detect**: `~/.tabnine/`
-- **mcp**: global `~/.tabnine/mcp_servers.json` · project `.tabnine/mcp_servers.json` · root_key `mcpServers` · JSON · stdio auto from command, HTTP from url
-- **rules**: `.tabnine/guidelines/`
-- **other**: Enterprise MCP Governance (Admin Console whitelist)
+MCP JSON uses `mcpServers`; rules are scoped guidelines. No Agent Skills or whole-config contract is documented. Enterprise governance and other Tabnine state remain manual.

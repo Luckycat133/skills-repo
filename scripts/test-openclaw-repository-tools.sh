@@ -52,7 +52,6 @@ description: Demo skill for OpenClaw support tests.
 metadata: {"openclaw":{"requires":{"bins":["demo-cli"]},"install":[{"kind":"node","package":"demo-cli@1.0.0","bins":["demo-cli"]}]}}
 ---
 
-# Demo
 
 Test skill.
 EOF
@@ -72,7 +71,6 @@ description: Demo checksum-verified download installer.
 metadata: {"openclaw":{"requires":{"bins":["download-cli"]},"install":[{"kind":"download","url":"file://$DOWNLOAD_ARCHIVE","archive":"tar.gz","targetDir":"$DOWNLOAD_TARGET","bins":["download-cli"],"sha256":"$DOWNLOAD_SHA256"}]}}
 ---
 
-# Download Demo
 
 Test skill.
 EOF
@@ -136,9 +134,6 @@ assert_contains "$OPENCLAW_LOG" 'doctor'
 assert_file_exists "$DOWNLOAD_TARGET/download-cli"
 assert_file_exists "$TEST_HOME/.openclaw/bin/download-cli"
 
-# A pre-existing permissive config must not produce a permissive backup when
-# the next confirmed update runs. Both the rewritten config and its recovery
-# copy can contain user-supplied environment values.
 chmod 644 "$CONFIG_PATH"
 OPENCLAW_STATE_DIR="$TEST_HOME/.openclaw" \
 OPENCLAW_CONFIG_PATH="$CONFIG_PATH" \
@@ -162,7 +157,6 @@ CONFIG_BACKUP="$(ls -t "$CONFIG_PATH".bak.* | head -1)"
     exit 1
 }
 
-# Refuse a group/world-readable --env-file before reading credentials from it.
 ENV_INPUT="$TMP_ROOT/openclaw.env"
 printf '%s\n' 'demo:DEMO_TOKEN=from-file' > "$ENV_INPUT"
 chmod 644 "$ENV_INPUT"

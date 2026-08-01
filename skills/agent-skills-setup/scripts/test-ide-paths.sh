@@ -1,19 +1,4 @@
 #!/usr/bin/env bash
-#
-# test-ide-paths.sh — Drift guard for per-IDE path mappings.
-#
-# SINGLE SOURCE OF TRUTH: skills/agent-skills-setup/references/ide-paths.json.
-# The human-readable details live in one matching references/ides/<ide>.md
-# file per IDE. For every ide/object pair in that JSON we
-# call smart-ide-migration.sh --print-path and assert the resolved path equals
-# the JSON value. This catches drift between the script's hardcoded case
-# tables and the canonical registry/JSON.
-#
-# Additionally, for key IDEs, every non-empty JSON value on every supported OS
-# must literally appear in that IDE's reference. Checking all platforms avoids a
-# macOS run silently accepting abbreviated Linux/Windows documentation.
-#
-# Exits non-zero on ANY mismatch; exits 0 if all checks pass.
 
 set -uo pipefail
 
@@ -34,12 +19,6 @@ fi
 failures=0
 checks=0
 
-# Map JSON object keys -> --print-path object names and emit rows as
-# TAB-separated: ide <TAB> json_key <TAB> script_object <TAB> expected
-#
-# When a JSON value is an object with a "paths_per_os" / "darwin"/"linux"/
-# "windows" key, the value for the current OS is selected so the test
-# matches the same platform-specific path the migration script returns.
 dump_rows() {
     python3 - "$JSON_FILE" "$@" <<'PYEOF'
 import json, sys, platform
@@ -89,7 +68,6 @@ while IFS=$'\t' read -r ide jsonkey scriptobj expected; do
     rc=$?
 
     if [[ -z "$expected" ]]; then
-        # Unsupported object -> script may exit non-zero with empty stdout.
         if [[ -n "$actual" ]]; then
             echo "FAIL: ${ide}/${jsonkey} - expected empty, got: ${actual}"
             failures=$((failures + 1))
@@ -111,10 +89,6 @@ while IFS=$'\t' read -r ide jsonkey scriptobj expected; do
     fi
 done <<< "$ALL_ROWS"
 
-# Pieces is an MCP server/provider, not a file-backed IDE target. Keep the
-# canonical entry explicit and require every object key to be present and
-# empty; this prevents a stale ~/.pieces or .pieces heuristic from returning
-# as a supported path later.
 PIECES_CANONICAL_RC=0
 python3 - "$JSON_FILE" <<'PYEOF' || PIECES_CANONICAL_RC=$?
 import json, sys
@@ -132,11 +106,6 @@ else
     failures=$((failures + 1))
 fi
 
-# --- GitHub Copilot CLI scope ---
-# The canonical `copilot` target represents GitHub Copilot CLI. Its project
-# skills are not custom instructions: the documented project skill directory
-# is .github/skills. Prompt files are IDE-only and must not be migrated to the
-# CLI target.
 COPILOT_PROJECT_SKILLS="$(bash "$MIGRATION_SCRIPT" --print-path copilot project-skills 2>/dev/null)"
 checks=$((checks + 1))
 if [[ "$COPILOT_PROJECT_SKILLS" == ".github/skills" ]]; then
@@ -148,9 +117,6 @@ else
     failures=$((failures + 1))
 fi
 
-# --- Windsurf/Devin Desktop canonical scopes ---
-# Current official docs retain the ~/.codeium/windsurf storage namespace for
-# the Devin Desktop/Windsurf app, while workspace skills remain .windsurf/skills.
 WINDSURF_GLOBAL_SKILLS="$(bash "$MIGRATION_SCRIPT" --print-path windsurf global 2>/dev/null)"
 checks=$((checks + 1))
 if [[ "$WINDSURF_GLOBAL_SKILLS" == "~/.codeium/windsurf/skills" ]]; then
@@ -191,9 +157,6 @@ else
     failures=$((failures + 1))
 fi
 
-# --- Sourcegraph Cody fail-closed boundary ---
-# Cody's current official surfaces are Enterprise extension settings/UI and
-# Prompt Library; no portable Skills/rules/MCP/config/project file is mapped.
 for cody_object in global project project-skills rules mcp project-mcp project-config config; do
     checks=$((checks + 1))
     if bash "$MIGRATION_SCRIPT" --print-path cody "$cody_object" >/dev/null 2>&1; then
@@ -204,10 +167,6 @@ for cody_object in global project project-skills rules mcp project-mcp project-c
     fi
 done
 
-# --- Supermaven fail-closed boundary ---
-# Supermaven's official host integrations do not publish portable Skills,
-# rules, MCP, prompt, project, or standalone config paths. In particular,
-# ~/.supermaven is runtime/binary storage and .supermavenignore is not rules.
 for supermaven_object in global project project-skills rules mcp project-mcp project-config config; do
     checks=$((checks + 1))
     if bash "$MIGRATION_SCRIPT" --print-path supermaven "$supermaven_object" >/dev/null 2>&1; then
@@ -218,10 +177,6 @@ for supermaven_object in global project project-skills rules mcp project-mcp pro
     fi
 done
 
-# --- Gemini CLI canonical scopes ---
-# ~/.gemini is a mixed settings/commands/agents namespace; only its Skills
-# subdirectory is a Skills target. Project settings and project MCP share the
-# documented .gemini/settings.json file and remain diagnostic/manual scopes.
 GEMINI_GLOBAL_SKILLS="$(bash "$MIGRATION_SCRIPT" --print-path gemini-cli global 2>/dev/null)"
 checks=$((checks + 1))
 if [[ "$GEMINI_GLOBAL_SKILLS" == "~/.gemini/skills" ]]; then
@@ -255,9 +210,6 @@ for gemini_object in mcp project-mcp project-config config; do
     fi
 done
 
-# --- Per-IDE reference cross-check for key IDEs ---
-# For antigravity/kimiai/copilot/codex/workbuddy/claude/claude-desktop, every non-empty JSON value must literally
-# appear in that IDE's canonical human-readable reference.
 if [[ -d "$IDE_REFERENCE_DIR" ]]; then
     echo ""
     echo "========================================"

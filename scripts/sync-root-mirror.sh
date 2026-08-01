@@ -1,28 +1,4 @@
 #!/usr/bin/env bash
-#
-# sync-root-mirror.sh — regenerate the repository-root SKILL.md from the
-# canonical skill copy.
-#
-# Why this exists:
-#   Some platforms (e.g. smithery.ai) only scan the repository ROOT for SKILL.md.
-#   The maintained copy lives at skills/agent-skills-setup/SKILL.md. The root
-#   file is a generated MIRROR of it. Keeping it as a hand-edited copy caused
-#   drift (stale version, broken relative links, inconsistent wording).
-#
-# What it does:
-#   1. Takes skills/agent-skills-setup/SKILL.md as the source of truth.
-#   2. Prepends a MIRROR comment.
-#   3. Rewrites repo-relative links so they resolve from the repository root:
-#        references/...   -> skills/agent-skills-setup/references/...
-#        scripts/...      -> skills/agent-skills-setup/scripts/...
-#      (Descriptive text such as "scripts/ + references/ + assets/" is left
-#       untouched — only the specific skill-file references are rewritten.)
-#
-# Usage:
-#   bash scripts/sync-root-mirror.sh            # write root SKILL.md
-#   bash scripts/sync-root-mirror.sh --check    # exit 1 if root is out of sync
-#   bash scripts/sync-root-mirror.sh --output <path>  # render elsewhere without touching root
-#
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -71,18 +47,13 @@ MIRROR_COMMENT='<!--
   skills/agent-skills-setup/... so they resolve correctly from the repository root.
 -->'
 
-# Build the mirror content: MIRROR comment + link-rewritten canonical.
 build_mirror() {
   printf '%s\n\n' "$MIRROR_COMMENT"
   python3 -c '
 import re, sys
 with open(sys.argv[1], "r", encoding="utf-8") as f:
     text = f.read()
-# Prefix-based rewrite: any references/, scripts/, assets/ followed by a filename with extension
 rewritten = re.sub(r"(?<!skills/agent-skills-setup/)\b(references|scripts|assets)/([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)", r"skills/agent-skills-setup/\1/\2", text)
-# Also rewrite Markdown links to nested reference directories. The main skill
-# routes selected IDEs to references/ides/<name>.md, whose link target is the
-# directory index rather than a single filename.
 rewritten = re.sub(r"(?<=\]\()(?<!skills/agent-skills-setup/)\b(references|scripts|assets)/", r"skills/agent-skills-setup/\1/", rewritten)
 sys.stdout.write(rewritten)
 ' "$CANONICAL"
@@ -102,8 +73,6 @@ if [[ "$CHECK_ONLY" == true ]]; then
   fi
 fi
 
-# Atomic write via temporary file. --output is useful for tests and previews
-# that must not mutate the checked-in root mirror.
 output_dir="$(cd "$(dirname "$OUTPUT_PATH")" && pwd)"
 tmp_write="$(mktemp "${output_dir}/.$(basename "$OUTPUT_PATH").tmp.XXXXXX")"
 trap 'rm -f "$tmp_write"' EXIT
