@@ -13,6 +13,9 @@ Reusable AI-assistant skills, authored locally and published from GitHub.
 ```bash
 # OpenClaw
 openclaw skills install @luckycat133/agent-skills-setup
+日本語: この GitHub リポジトリを唯一の編集元として、OpenClaw を含む複数のエージェント環境へ skill を同期・公開します。
+
+Español: Este repositorio de GitHub es la única fuente editable para sincronizar y publicar skills reutilizables en varios agentes。
 
 # skills.sh
 npx skills add Luckycat133/skills-repo
