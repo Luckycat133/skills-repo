@@ -794,7 +794,7 @@ migrate_global_skills() {
                     fi
 
                     if cp -r "$skill_dir" "$target_global/$skill_name"; then
-                        if redact_project_copy "$target_global/$skill_name" >/dev/null; then
+                        if redact_skill_copy "$target_global/$skill_name" >/dev/null; then
                             echo "  [OK] migrated skill: $skill_name"
                             ((migrated_count++)) || true
                         else
@@ -837,7 +837,7 @@ migrate_global_skills() {
                 fi
 
                 if cp -r "$skill_dir" "$target_global/$skill_name"; then
-                    if redact_project_copy "$target_global/$skill_name" >/dev/null; then
+                    if redact_skill_copy "$target_global/$skill_name" >/dev/null; then
                         echo "  [OK] migrated skill: $skill_name"
                         ((migrated_count++)) || true
                     else
@@ -981,7 +981,7 @@ migrate_project_skills() {
         fi
 
         if cp -R "$skill_dir" "$target_path/$skill_name" 2>/dev/null; then
-            if redact_project_copy "$target_path/$skill_name" >/dev/null; then
+            if redact_skill_copy "$target_path/$skill_name" >/dev/null; then
                 echo "  [OK] migrated project skill: $skill_name"
                 migrated_count=$((migrated_count + 1))
             else
@@ -2855,6 +2855,26 @@ remove_failed_redaction_artifact() {
     unlink "$candidate"
 }
 
+remove_files_within_copy_root() {
+    local copy_root="$1"
+    shift
+    local candidate failed=0
+
+    [[ -d "$copy_root" && ! -L "$copy_root" ]] || {
+        echo "  [GUARD] refused copy cleanup: invalid target copy root '$copy_root'" >&2
+        return 1
+    }
+    for candidate in "$@"; do
+        if [[ -d "$candidate" && ! -L "$candidate" ]]; then
+            echo "  [GUARD] refused copy cleanup of directory: $candidate" >&2
+            failed=1
+            continue
+        fi
+        safe_remove_path_within "$copy_root" "$candidate" || failed=1
+    done
+    return $failed
+}
+
 redact_secrets_in_file() {
     local file="$1"
     [[ -f "$file" ]] || { echo 0; return 0; }
@@ -2884,6 +2904,58 @@ redact_secrets_in_file() {
     fi
     echo "$n"
     return 0
+}
+
+redact_skill_copy() {
+    local root="$1"
+    local total=0 had_fail=0 f rc=0 pyout
+    local -a excluded_env_files=()
+    local -a files=()
+
+    while IFS= read -r -d '' f; do
+        excluded_env_files+=("$f")
+    done < <(find "$root" \( -type f -o -type l \) -name '.env*' -print0 2>/dev/null)
+    if [[ ${#excluded_env_files[@]} -gt 0 ]]; then
+        remove_files_within_copy_root "$root" "${excluded_env_files[@]}" || had_fail=1
+        echo "  [SECURITY] excluded ${#excluded_env_files[@]} .env file(s) from migrated copy" >&2
+    fi
+
+    while IFS= read -r -d '' f; do
+        files+=("$f")
+    done < <(find "$root" -name '*.bak.*' -prune -o -type f \( \
+        -name '*.json' -o -name '*.jsonc' -o -name '*.yaml' -o -name '*.yml' \
+        -o -name '*.toml' \
+        -o -name '*.sh' -o -name '*.bash' -o -name '*.zsh' \) -print0 2>/dev/null)
+
+    if [[ ${#files[@]} -eq 0 ]]; then
+        echo 0
+        return $had_fail
+    fi
+
+    if ! command -v python3 >/dev/null 2>&1; then
+        echo "  [SECURITY] python3 missing, cannot redact skill copy; candidate files deleted to prevent secret leak (source directory untouched)" >&2
+        remove_files_within_copy_root "$root" "${files[@]}" || true
+        echo 0
+        return 1
+    fi
+    if ! ensure_redactor_script; then
+        echo "  [SECURITY] cannot generate redaction engine; candidate files deleted to prevent secret leak (source directory untouched)" >&2
+        remove_files_within_copy_root "$root" "${files[@]}" || true
+        echo 0
+        return 1
+    fi
+
+    pyout=$(mktemp "${TMPDIR:-/tmp}/redact-out.XXXXXX")
+    python3 "$REDACTOR_PY" "${files[@]}" >"$pyout" || rc=$?
+    total=$(cat "$pyout" 2>/dev/null || echo "-1")
+    rm -f "$pyout"
+    if [[ $rc -ne 0 || -z "$total" || "$total" == "-1" ]]; then
+        had_fail=1
+        echo "  [SECURITY] skill copy redaction has failures; failed files were deleted by the redactor (source directory untouched)" >&2
+        [[ "$total" == "-1" || -z "$total" ]] && total=0
+    fi
+    echo "$total"
+    return $had_fail
 }
 
 migrate_mcp() {
