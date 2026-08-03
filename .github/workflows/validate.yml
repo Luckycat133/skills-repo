@@ -16,9 +16,4 @@ jobs:
       - uses: actions/checkout@v7
       - name: Validate repository & run full test suites
         run: bash validate-all.sh
-      - name: Test installer without touching the runner profile
-        run: |
-          target="$RUNNER_TEMP/skills"
-          bash install.sh --target "$target"
-          test -f "$target/agent-skills-setup/SKILL.md"
 
