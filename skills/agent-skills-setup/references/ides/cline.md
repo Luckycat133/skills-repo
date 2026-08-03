@@ -13,9 +13,10 @@
 | Config | Not mapped |
 
 <!-- END GENERATED: ide-paths.json summary -->
-- Global MCP is `cline_mcp_settings.json` in VS Code extension globalStorage, with JSON `mcpServers`; `CLINE_MCP_PATH` handles non-standard installs. A legacy `~/.cline/mcp.json` can exist—if both exist, stop for manual selection.
+- Extension MCP is `cline_mcp_settings.json` in VS Code globalStorage, with JSON `mcpServers`; `CLINE_MCP_PATH` handles non-standard installs. Cline CLI uses `~/.cline/mcp.json`; if both surfaces exist, stop for manual selection. Streamable HTTP requires explicit `type: streamableHttp`.
 - Project MCP is `.cline/mcp.json`; verify active-surface precedence.
-- `.cline/` mixes skills, rules, hooks, plugins, agents, workflows, and state, so whole-project migration is unsupported. The single-file rules mapper uses `.clinerules`; other rule stores are manual.
+- `.cline/` mixes skills, hooks, plugins, agents, workflows, and state, so whole-project migration is unsupported. Project rules primarily use the `.clinerules/` directory; OS Documents/Cline/Rules stores global rules. They are manual because scoped files must not be flattened.
+- Skills use `.cline/skills/` and `~/.cline/skills/`, with `.clinerules/skills/` and `.claude/skills/` compatibility locations kept separate.
 - Prompts/workflows, provider settings, sessions, config, and memory are manual. Never copy providers or secrets.
 
-Source: [Cline MCP](https://docs.cline.bot/mcp).
+Sources: [MCP](https://docs.cline.bot/mcp/mcp-overview), [rules](https://docs.cline.bot/customization/cline-rules), [Skills](https://docs.cline.bot/customization/skills).

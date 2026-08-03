@@ -15,6 +15,6 @@
 <!-- END GENERATED: ide-paths.json summary -->
 - Junie project Skills override same-named user Skills. `.junie/AGENTS.md` is preferred; root `AGENTS.md` is a fallback. Legacy guidelines and custom project settings are manual inputs.
 - MCP JSON uses `mcpServers`. Only local command/args/env conversion is automatic; remote, header, transport, and unknown fields are manual. Do not copy the mixed `.junie/` namespace.
-- Junie CLI config and trust files are not verified JetBrains IDE settings. IDE-level Project Settings, MCP Settings, and Action Allowlist are UI-managed. JetBrains AI Assistant is a separate UI-only product.
+- Junie CLI `/import`, extensions, config, and trust files are separate surfaces. Extension bundles may include skills, MCP, subagents, commands, and guidelines; keep the package intact and manual. IDE-level Project Settings, MCP Settings, and Action Allowlist are UI-managed. Use the separate `jetbrains-ai` ID for AI Assistant.
 
 Sources: [Junie Skills](https://junie.jetbrains.com/docs/agent-skills.html), [IDE plugin](https://junie.jetbrains.com/docs/junie-ide-plugin.html), [MCP settings](https://junie.jetbrains.com/docs/junie-plugin-mcp-settings.html), [CLI config](https://junie.jetbrains.com/docs/junie-cli-configuration.html).

@@ -13,6 +13,13 @@ amazon-q	mcp	*	~/.aws/amazonq/default.json
 amazon-q	project-mcp	*	.amazonq/default.json
 amazon-q	project-config	*
 amazon-q	config	*
+android-studio	global	*	~/.agents/skills
+android-studio	project-skills	*	.agents/skills
+android-studio	rules	*	AGENTS.md
+android-studio	mcp	*
+android-studio	project-mcp	*
+android-studio	project-config	*
+android-studio	config	*
 antigravity	global	*	~/.gemini/config/skills
 antigravity	project-skills	*	.agents/skills
 antigravity	rules	*	.agents/rules
@@ -115,6 +122,13 @@ emacs	mcp	*
 emacs	project-mcp	*
 emacs	project-config	*
 emacs	config	*
+firebase-studio	global	*
+firebase-studio	project-skills	*
+firebase-studio	rules	*	.idx/airules.md
+firebase-studio	mcp	*
+firebase-studio	project-mcp	*
+firebase-studio	project-config	*
+firebase-studio	config	*
 gemini-cli	global	*	~/.gemini/skills
 gemini-cli	project-skills	*	.gemini/skills
 gemini-cli	rules	*	GEMINI.md
@@ -136,6 +150,13 @@ jetbrains	mcp	*	~/.junie/mcp/mcp.json
 jetbrains	project-mcp	*	.junie/mcp/mcp.json
 jetbrains	project-config	*
 jetbrains	config	*
+jetbrains-ai	global	*
+jetbrains-ai	project-skills	*	.agents/skills
+jetbrains-ai	rules	*
+jetbrains-ai	mcp	*
+jetbrains-ai	project-mcp	*
+jetbrains-ai	project-config	*
+jetbrains-ai	config	*
 kilocode	global	*	~/.kilo/skills
 kilocode	project-skills	*	.kilo/skills
 kilocode	rules	*	AGENTS.md
@@ -152,7 +173,7 @@ kimiai	project-config	*
 kimiai	config	*	~/.kimi-code/config.toml
 kiro	global	*	~/.kiro/skills
 kiro	project-skills	*	.kiro/skills
-kiro	rules	*
+kiro	rules	*	.kiro/steering
 kiro	mcp	*	~/.kiro/settings/mcp.json
 kiro	project-mcp	*	.kiro/settings/mcp.json
 kiro	project-config	*
@@ -241,6 +262,15 @@ trae-cn	mcp	*
 trae-cn	project-mcp	*	.trae/mcp.json
 trae-cn	project-config	*
 trae-cn	config	*
+visual-studio	global	*	~/.copilot/skills
+visual-studio	project-skills	*	.github/skills
+visual-studio	rules	*	.github/copilot-instructions.md
+visual-studio	mcp	darwin
+visual-studio	mcp	linux
+visual-studio	mcp	windows	%USERPROFILE%\.mcp.json
+visual-studio	project-mcp	*	.mcp.json
+visual-studio	project-config	*
+visual-studio	config	*
 void-editor	global	*
 void-editor	project-skills	*
 void-editor	rules	*	.voidrules

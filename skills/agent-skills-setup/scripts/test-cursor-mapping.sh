@@ -45,7 +45,7 @@ for expected_text in \
     '.cursor/rules' \
     '.cursor/skills' \
     '.cursor/commands' \
-    'manual/unsupported'; do
+    'remain manual'; do
     grep -Fq "$expected_text" "$IDE_REFERENCE" || {
         echo "FAIL: Cursor reference lacks '${expected_text}'" >&2
         exit 1

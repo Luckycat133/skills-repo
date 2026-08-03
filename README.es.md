@@ -32,7 +32,7 @@ skills-repo/
 
 ## `agent-skills-setup`
 
-Migra, con consentimiento explícito, contexto seleccionado entre IDE y agentes compatibles: skills, reglas, prompts y objetos MCP documentados. La configuración completa del IDE y los árboles opacos del proyecto requieren revisión manual. Consulta los 40 identificadores en el [registro de IDE](skills/agent-skills-setup/references/ide-registry.md).
+Migra, con consentimiento explícito, contexto seleccionado entre IDE y agentes compatibles: skills, reglas, prompts y objetos MCP documentados. La configuración completa del IDE y los árboles opacos del proyecto requieren revisión manual. Consulta los 44 identificadores compatibles con el script y las superficies manuales en el [registro de IDE](skills/agent-skills-setup/references/ide-registry.md).
 
 ## Desarrollo
 

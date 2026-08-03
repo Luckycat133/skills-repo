@@ -15,6 +15,7 @@
 <!-- END GENERATED: ide-paths.json summary -->
 - MCP is JSONC `mcp` with distinct local/remote shapes; do not flatten it into another client schema.
 - Skills use documented locations, with compatibility directories kept separate.
-- Rules, agents, and config fields are mixed scopes and manual.
+- Portable `AGENTS.md` remains the mapper default. Native custom instructions are configured as arrays that can reference `.kilo/rules/*.md`; preserve those scopes manually.
+- Workflows/commands use `.kilo/commands/` and `~/.config/kilo/commands/`. Remote skill paths, agents, and config fields remain manual.
 
-Sources: [Skills](https://kilo.ai/docs/customize/skills), [MCP](https://kilo.ai/docs/automate/mcp/using-in-kilo-code).
+Sources: [Skills](https://kilo.ai/docs/customize/skills), [MCP](https://kilo.ai/docs/automate/mcp/using-in-kilo-code), [rules](https://kilo.ai/docs/customize/custom-rules), [instructions](https://kilo.ai/docs/customize/custom-instructions), [workflows](https://kilo.ai/docs/customize/workflows).

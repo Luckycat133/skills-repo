@@ -1,4 +1,4 @@
-# windsurf
+# windsurf (Devin Desktop legacy Cascade)
 
 <!-- GENERATED: ide-paths.json summary; do not edit this block -->
 
@@ -15,6 +15,6 @@
 <!-- END GENERATED: ide-paths.json summary -->
 - MCP JSON uses `mcpServers`; remote entries use exactly one documented `serverUrl` or `url`, never a guessed VS Code `type`/transport.
 - Prefer `.devin/rules/`; `.windsurf/rules/` and `.windsurfrules` are legacy. Compatibility Skills locations must not be merged blindly.
-- Workflows, generated memory, and mixed `.windsurf/` state are manual; no project MCP or whole-project mapping is claimed.
+- This ID maps legacy Cascade configuration. Devin Local Agent uses a different surface; do not migrate these files into it. Workflows, generated memory, and mixed `.windsurf/` state are manual; no project MCP or whole-project mapping is claimed.
 
 Sources: [Skills](https://docs.windsurf.com/windsurf/cascade/skills), [MCP](https://docs.windsurf.com/windsurf/cascade/mcp), [rules](https://docs.devin.ai/desktop/cascade/rules), [workflows](https://docs.devin.ai/desktop/cascade/workflows).

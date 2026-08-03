@@ -50,7 +50,7 @@ cp "$TEST_HOME/.claude.json" "$TMP_ROOT/workspace/.mcp.json"
 HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source claude --target vscode --objects mcp --scope project --yes --strategy backup \
     --workspace "$TMP_ROOT/workspace" > "$TMP_ROOT/ambiguous.txt" 2>&1
-grep -Fq 'VS Code MCP server schema/transport is ambiguous or unsupported' "$TMP_ROOT/ambiguous.txt"
+grep -Fq 'GitHub Copilot IDE MCP schema/transport is ambiguous or unsupported' "$TMP_ROOT/ambiguous.txt"
 
 python3 - "$TMP_ROOT/workspace/.vscode/mcp.json" <<'PYEOF'
 import json, sys

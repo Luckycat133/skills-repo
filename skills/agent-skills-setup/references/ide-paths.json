@@ -87,6 +87,42 @@
     "project_mcp": ".vscode/mcp.json",
     "config": ""
   },
+  "visual-studio": {
+    "global_skills": "~/.copilot/skills",
+    "project_skills": ".github/skills",
+    "rules": ".github/copilot-instructions.md",
+    "mcp": {
+      "darwin": "",
+      "linux": "",
+      "windows": "%USERPROFILE%\\.mcp.json"
+    },
+    "project_mcp": ".mcp.json",
+    "config": ""
+  },
+  "jetbrains-ai": {
+    "global_skills": "",
+    "project_skills": ".agents/skills",
+    "rules": "",
+    "mcp": "",
+    "project_mcp": "",
+    "config": ""
+  },
+  "firebase-studio": {
+    "global_skills": "",
+    "project_skills": "",
+    "rules": ".idx/airules.md",
+    "mcp": "",
+    "project_mcp": "",
+    "config": ""
+  },
+  "android-studio": {
+    "global_skills": "~/.agents/skills",
+    "project_skills": ".agents/skills",
+    "rules": "AGENTS.md",
+    "mcp": "",
+    "project_mcp": "",
+    "config": ""
+  },
   "zed": {
     "global_skills": "~/.agents/skills",
     "project_skills": ".agents/skills",
@@ -278,7 +314,7 @@
   "kiro": {
     "global_skills": "~/.kiro/skills",
     "project_skills": ".kiro/skills",
-    "rules": "",
+    "rules": ".kiro/steering",
     "mcp": "~/.kiro/settings/mcp.json",
     "project_mcp": ".kiro/settings/mcp.json",
     "config": ""

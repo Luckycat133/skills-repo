@@ -6,7 +6,7 @@
 | --- | --- |
 | Global skills | `~/.kiro/skills` |
 | Project skills | `.kiro/skills` |
-| Rules | Not mapped |
+| Rules | `.kiro/steering` |
 | MCP | `~/.kiro/settings/mcp.json` |
 | Project MCP | `.kiro/settings/mcp.json` |
 | Project config | Not mapped |
@@ -14,7 +14,7 @@
 
 <!-- END GENERATED: ide-paths.json summary -->
 - MCP JSON uses `mcpServers`; migrate only reviewed endpoint metadata and re-authorize OAuth in Kiro.
-- Steering rules have their own inclusion frontmatter. Skills use documented directories.
-- IDE agents, CLI agents, hooks, and specs have distinct schemas/scopes; reconstruct manually and never convert CLI JSON into IDE Markdown.
+- Project steering uses `.kiro/steering/`; global steering uses `~/.kiro/steering/`, and root `AGENTS.md` is also recognized. Preserve inclusion frontmatter instead of flattening files. Skills use documented directories.
+- IDE custom agents use project/user `.kiro/agents/*.md` and may embed MCP. CLI agents use a different JSON schema; reconstruct manually and never convert between them automatically.
 
 Sources: [Skills](https://kiro.dev/docs/skills/), [MCP](https://kiro.dev/docs/mcp/configuration/), [steering](https://kiro.dev/docs/steering/), [custom agents](https://kiro.dev/docs/custom-agents/), [hooks](https://kiro.dev/docs/hooks/).

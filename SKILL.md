@@ -10,7 +10,7 @@
 
 ---
 name: agent-skills-setup
-version: 0.6.12
+version: 0.7.0
 license: MIT
 description: >
   Use when a user explicitly asks to migrate, move, transfer, copy, convert, or
@@ -18,17 +18,6 @@ description: >
   rules, prompts, commands, or MCP configuration. Preview a scoped change;
   write only after approval. Do not use for explanation, installation,
   debugging, validation, or same-tool copies.
-triggers:
-  - migrate mcp config
-  - move skills from cursor to claude
-  - transfer mcp servers between ide
-  - migrate rules from windsurf to cursor
-  - copy mcp config to another ide
-  - migrate ai context from one ide to another
-capabilities:
-  - read: user-selected IDE/agent config paths
-  - write: file-backed migration objects, gated by dry-run, consent, and strategy
-  - exec: local migration and verification scripts
 ---
 
 # AI IDE Context Migration
@@ -40,12 +29,10 @@ credentials, and conflict rules are checked.
 
 1. Resolve source, target, objects, scope, and workspace. State a safe obvious
    assumption; otherwise ask one focused question.
-2. Read [references/ides/<source>.md](skills/agent-skills-setup/references/ides/) and
+2. Resolve both IDs in [ide-registry.md](skills/agent-skills-setup/references/ide-registry.md), then read
+   only [references/ides/<source>.md](skills/agent-skills-setup/references/ides/) and
    [references/ides/<target>.md](skills/agent-skills-setup/references/ides/). Use
-   [ide-paths.json](skills/agent-skills-setup/references/ide-paths.json) or
-   `bash skills/agent-skills-setup/scripts/smart-ide-migration.sh --print-path` for a path lookup.
-   `iflycode` and `raccoon-ai` share the reference linked from
-   [ide-registry.md](skills/agent-skills-setup/references/ide-registry.md).
+   [ide-paths.json](skills/agent-skills-setup/references/ide-paths.json) or `--print-path` for paths.
 3. Load only the needed reference:
 
 | Situation | Read |
@@ -58,9 +45,7 @@ credentials, and conflict rules are checked.
 The per-IDE reference describes product behavior; the script describes what is
 automated. Flag a mismatch before applying.
 
-## Recommendations
-
-Apply these recommendations to the approved scope and risk.
+## Safety and execution
 
 - Inspect only named paths; default to `skills,rules,prompts`.
 - Keep whole `config` files and opaque `project` trees manual. Rebuild a
@@ -69,15 +54,9 @@ Apply these recommendations to the approved scope and risk.
   chat history, databases, or generated memory. Use manual reconstruction when
   redaction or conversion is unclear.
 - Claude Desktop app MCP in **Settings → Extensions** and **Settings → Connectors** is UI-managed; do not infer or rewrite it from legacy JSON.
-- Offer value-free `--dry-run`; use `--yes` only after approval and normally
-  add `--json` for evidence.
-
-## Workflow
-
-1. Plan paths, objects, boundaries, and strategy.
-2. Run `--dry-run`; report credential handling without claiming completion.
-3. After approval, rerun the reviewed command with `--yes`.
-4. Report JSON evidence and native target discovery.
+- Run `--dry-run` and report credential handling without claiming completion.
+  After approval, rerun the reviewed command with `--yes --json`; report its
+  evidence and native target discovery.
 
 ## Commands
 

@@ -6,7 +6,7 @@
       "prompt": "Preview moving Cursor skills and project rules to Claude Code for /tmp/acme-app. No writes or unrelated discovery. Give the exact first command.",
       "expected_output": "A scoped Cursor-to-Claude dry run for the named workspace.",
       "files": [],
-      "expectations": [
+      "assertions": [
         "Starts with a read-only dry run and does not claim migration.",
         "Names cursor, claude, /tmp/acme-app, and --dry-run.",
         "Inspects only the named IDEs and workspace.",
@@ -18,7 +18,7 @@
       "prompt": "Preview Cursor project MCP from evals/files/cursor-project-mcp.json to OpenCode for /tmp/acme-mcp. Show target shape and separate preview/apply commands. Preserve behavior; never copy literal credentials.",
       "expected_output": "An explicit-source, zero-write Cursor-to-OpenCode MCP conversion plan.",
       "files": ["evals/files/cursor-project-mcp.json"],
-      "expectations": [
+      "assertions": [
         "Uses OpenCode mcp, not mcpServers.",
         "Uses local type, command array, and environment rather than env.",
         "Uses remote type and preserves URL without guessing transport.",
@@ -33,7 +33,7 @@
       "prompt": "Preview moving user Continue YAML mcpServers from ~/.continue/config.yaml into trusted Codex project config at /tmp/atlas. Do not read or write real files. Give only safe diagnostics and the next step.",
       "expected_output": "A preview that rejects generic YAML-to-Codex-TOML conversion and recommends reviewed reconstruction.",
       "files": [],
-      "expectations": [
+      "assertions": [
         "Identifies Continue user YAML and /tmp/atlas/.codex/config.toml mcp_servers.",
         "States automatic conversion is unsafe and fabricates no target config.",
         "Uses only --dry-run or --print-path diagnostics.",
@@ -46,7 +46,7 @@
       "prompt": "In an isolated workspace, run Cursor-to-OpenCode project MCP migration using evals/files/cursor-project-mcp.json. Prove dry-run reads it without a target, then apply with --yes. Keep source bytes unchanged and save opencode.json.",
       "expected_output": "Execution evidence for zero-write preview, valid converted target, redaction, and source immutability.",
       "files": ["evals/files/cursor-project-mcp.json"],
-      "expectations": [
+      "assertions": [
         "Shows dry-run exit 0, supplied fixture path, and validated source summary.",
         "Proves opencode.json is absent after dry-run and appears only after apply.",
         "Produces mcp.local-search with local type, command array, and environment.",
@@ -60,7 +60,7 @@
       "prompt": "Explain Cursor mcp.json and its root key only. Do not inspect files, migrate, or give changing commands.",
       "expected_output": "A concise informational answer outside the migration workflow.",
       "files": [],
-      "expectations": [
+      "assertions": [
         "Treats this as explanation, not migration authority.",
         "Identifies mcpServers as the root key.",
         "Claims no local read or script execution.",
@@ -72,7 +72,7 @@
       "prompt": "Explain --strategy skip, backup, and overwrite for Cursor project MCP into existing OpenCode config with unrelated theme, same-name, and other servers. Do not execute.",
       "expected_output": "Exact non-executing conflict semantics for a shared OpenCode JSON file.",
       "files": [],
-      "expectations": [
+      "assertions": [
         "Says skip preserves the existing target without renamed entries.",
         "Says backup snapshots the complete file, merges non-conflicts, and activates same-name source.",
         "Says overwrite replaces only selected MCP map and retains theme.",
@@ -85,7 +85,7 @@
       "prompt": "Preview Claude Code user MCP to VS Code with a named Profile whose directory I did not provide. Do not guess a path or write. Give the safe next step and project alternative.",
       "expected_output": "A fail-closed VS Code profile plan with a documented workspace alternative.",
       "files": [],
-      "expectations": [
+      "assertions": [
         "Does not guess a user VS Code MCP path.",
         "Uses MCP: Open User Configuration or asks for resolved target path.",
         "Identifies .vscode/mcp.json as project alternative.",
@@ -98,7 +98,7 @@
       "prompt": "Preview Cursor project MCP from evals/files/cursor-project-mcp.json into native OpenCode V2 for /tmp/opencode-v2. No writes or mixed V1/V2 layout. Show schema and command.",
       "expected_output": "An explicit-source OpenCode V2 dry run using native mcp.servers only.",
       "files": ["evals/files/cursor-project-mcp.json"],
-      "expectations": [
+      "assertions": [
         "Command includes --opencode-version v2, --dry-run, project-mcp, workspace, and source file.",
         "Uses mcp.servers without a V1 sibling map.",
         "Explains enabled/disabled, timeout, and OAuth field transforms when present.",

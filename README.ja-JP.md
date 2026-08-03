@@ -32,7 +32,7 @@ skills-repo/
 
 ## `agent-skills-setup`
 
-明示的な同意後、対応 IDE とエージェント間で、文書化された skills、rules、prompts、MCP オブジェクトを移行します。IDE 全体の設定と不透明なプロジェクトツリーは手動確認が必要です。40 の識別子は [IDE registry](skills/agent-skills-setup/references/ide-registry.md) を参照してください。
+明示的な同意後、対応 IDE とエージェント間で、文書化された skills、rules、prompts、MCP オブジェクトを移行します。IDE 全体の設定と不透明なプロジェクトツリーは手動確認が必要です。44 のスクリプト対応識別子と手動専用サーフェスは [IDE registry](skills/agent-skills-setup/references/ide-registry.md) を参照してください。
 
 ## 開発
 

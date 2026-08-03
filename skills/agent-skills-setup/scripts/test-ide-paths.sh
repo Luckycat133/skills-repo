@@ -137,7 +137,7 @@ fi
 
 COPILOT_HELP="$(bash "$MIGRATION_SCRIPT" --help 2>/dev/null)"
 checks=$((checks + 1))
-if grep -Fq "copilot      - GitHub Copilot CLI" <<< "$COPILOT_HELP" && ! grep -Fq "copilot      - VS Code Copilot" <<< "$COPILOT_HELP"; then
+if grep -Fq "copilot is GitHub Copilot CLI" <<< "$COPILOT_HELP" && ! grep -Fq "copilot is VS Code Copilot" <<< "$COPILOT_HELP"; then
     echo "PASS: copilot help identifies the CLI target"
 else
     echo "FAIL: copilot help must identify GitHub Copilot CLI, not VS Code Copilot"

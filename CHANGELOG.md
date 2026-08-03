@@ -4,6 +4,17 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ## [Unreleased]
 
+### Added
+
+- Added current guidance for Android Studio, Visual Studio, JetBrains AI Assistant, Xcode, and the Firebase Studio sunset path.
+
+### Changed
+
+- Updated Codex, Claude Desktop, Cursor, VS Code, Windsurf, Zed, Junie, Gemini CLI, OpenCode, Cline, Kilo Code, Kiro, and Antigravity configuration boundaries from current official documentation.
+- Removed redundant trigger/capability frontmatter, adopted the standard eval `assertions` field, and made trigger cases more realistic.
+- Made the migration entry point fully non-interactive: writes now require `--yes`, with documented output and exit-code contracts.
+- Enforced Firebase Studio as a source-only sunset path and added dry-run and failure-path coverage for the new IDE mappings.
+
 ## [0.6.12] - 2026-08-01
 
 ### Changed

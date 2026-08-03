@@ -26,9 +26,12 @@ for item in evals:
     assert isinstance(item.get("prompt"), str) and item["prompt"].strip(), (
         f"eval {item.get('id')} is missing a prompt"
     )
-    expectations = item.get("expectations")
-    assert isinstance(expectations, list) and expectations, (
-        f"eval {item.get('id')} must have non-empty expectations"
+    assertions = item.get("assertions")
+    assert isinstance(assertions, list) and assertions, (
+        f"eval {item.get('id')} must have non-empty assertions"
+    )
+    assert "expectations" not in item, (
+        f"eval {item.get('id')} uses legacy expectations instead of assertions"
     )
 
 assert trigger_evals_path.is_file(), "missing evals/trigger-evals.json"

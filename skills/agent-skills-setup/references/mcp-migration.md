@@ -6,6 +6,7 @@ Use for `mcp`, `project-mcp`, or `--source-mcp-file`. The converter accepts vali
 | --- | --- | --- |
 | Common clients | `mcpServers` | Validate command/URL. |
 | VS Code workspace | `servers` in `.vscode/mcp.json` | User MCP is active-Profile/UI managed. |
+| Visual Studio | `servers` in `.mcp.json` | Windows only; alternate discovery paths stay manual. |
 | OpenCode V1/V2 | `mcp` / `mcp.servers` | V2 requires `--opencode-version v2`. |
 | OpenClaw / ZCode | `mcp.servers` | Keep target transport rules. |
 | Codex, Continue, Goose | TOML/YAML | Reconstruct and validate manually. |

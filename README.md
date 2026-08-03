@@ -32,7 +32,7 @@ skills-repo/
 
 ## `agent-skills-setup`
 
-Consent-gated migration of selected assistant context between supported IDEs and agents. It handles documented skills, rules, prompts, and MCP objects; whole IDE configuration and opaque project trees stay manual. See the [IDE registry](skills/agent-skills-setup/references/ide-registry.md) for the 40 supported identifiers.
+Consent-gated migration of selected assistant context between supported IDEs and agents. It handles documented skills, rules, prompts, and MCP objects; whole IDE configuration and opaque project trees stay manual. See the [IDE registry](skills/agent-skills-setup/references/ide-registry.md) for the 44 script-supported identifiers and documented manual-only surfaces.
 
 ## Develop
 

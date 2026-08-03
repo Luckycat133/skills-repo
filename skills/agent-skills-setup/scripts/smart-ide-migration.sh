@@ -21,7 +21,14 @@ PRINT_PATH_OBJECT=""
 OPENCODE_VERSION="v1"
 OPENCODE_VERSION_EXPLICIT=0
 
-SUPPORTED_IDES="antigravity claude claude-desktop codex copilot cursor windsurf jetbrains openclaw trae trae-cn vscode zed neovim emacs continue aider roo-code cline amazon-q cody codeium tabnine replit pearai supermaven pieces blackbox gemini-cli goose-cli opencode kilocode kimiai workbuddy kiro augment-code void-editor baidu-comate tencent-codebuddy zcode"
+PATH_RESOLVER="${SCRIPT_DIR}/ide-paths.tsv"
+[[ -r "$PATH_RESOLVER" ]] || {
+    log_error "generated path resolver is missing: $PATH_RESOLVER"
+    exit 1
+}
+SUPPORTED_IDES="$(awk -F $'\t' '
+    NR > 1 && !seen[$1]++ { printf "%s%s", separator, $1; separator=" " }
+' "$PATH_RESOLVER")"
 
 MIGRATION_TOTAL=0
 MIGRATION_SUCCESS=0
@@ -32,7 +39,6 @@ MIGRATION_STATUS_FILE=""
 MIGRATION_MESSAGES_FILE=""
 MIGRATION_MANUAL_FILE=""
 MIGRATION_EVIDENCE_FILE=""
-PATH_RESOLVER="${SCRIPT_DIR}/ide-paths.tsv"
 
 registry_platform() {
     case "$(uname -s)" in
@@ -58,6 +64,10 @@ registry_path() {
     ' "$PATH_RESOLVER")"
     case "$path" in
         \~/*) printf '%s/%s\n' "$HOME" "${path#\~/}" ;;
+        %USERPROFILE%\\*)
+            path="${path#%USERPROFILE%\\}"
+            printf '%s/%s\n' "$HOME" "${path//\\//}"
+            ;;
         *) printf '%s\n' "$path" ;;
     esac
 }
@@ -65,6 +75,7 @@ registry_path() {
 get_ide_name() {
     local ide="$1"
     case "$ide" in
+        android-studio) echo "Android Studio" ;;
         antigravity) echo "Antigravity (Google)" ;;
         claude)      echo "Claude Code" ;;
         codex)       echo "OpenAI Codex CLI" ;;
@@ -72,10 +83,13 @@ get_ide_name() {
         cursor)      echo "Cursor" ;;
         windsurf)    echo "Windsurf" ;;
         jetbrains)   echo "JetBrains Junie" ;;
+        jetbrains-ai) echo "JetBrains AI Assistant" ;;
         openclaw)    echo "OpenClaw" ;;
         trae)        echo "Trae (International)" ;;
         trae-cn)     echo "Trae CN (China)" ;;
         vscode)      echo "VS Code" ;;
+        visual-studio) echo "Visual Studio" ;;
+        firebase-studio) echo "Firebase Studio" ;;
         zed)         echo "Zed Editor" ;;
         neovim)      echo "Neovim" ;;
         emacs)       echo "Emacs" ;;
@@ -127,6 +141,7 @@ get_global_path() {
 get_project_path() {
     local ide="$1"
     case "$ide" in
+        android-studio) echo ".agents" ;;
         antigravity) echo ".agents" ;;
         claude)      echo ".claude" ;;
         codex)       echo ".agents" ;;
@@ -134,10 +149,13 @@ get_project_path() {
         cursor)      echo ".cursor" ;;
         windsurf)    echo "" ;;
         jetbrains)   echo ".junie" ;;
+        jetbrains-ai) echo ".agents" ;;
         openclaw)    echo "" ;;
         trae)        echo ".trae" ;;
         trae-cn)     echo ".trae" ;;
         vscode)      echo ".vscode" ;;
+        visual-studio) echo ".github" ;;
+        firebase-studio) echo ".idx" ;;
         zed)         echo "" ;;
         neovim)      echo "" ;;
         emacs)       echo "" ;;
@@ -207,7 +225,7 @@ get_rules_file() {
 get_prompts_path() {
     local ide="$1"
     case "$ide" in
-        vscode)      echo ".github/prompts" ;;
+        vscode|visual-studio) echo ".github/prompts" ;;
         cursor)      echo ".cursor/commands" ;;
         windsurf)    echo ".windsurf/workflows" ;;
         openclaw)    echo "" ;;
@@ -291,7 +309,7 @@ get_mcp_root_key() {
             fi
             ;;
         kilocode)    echo "mcp" ;;
-        vscode)      echo "servers" ;;
+        vscode|visual-studio) echo "servers" ;;
         zcode)       echo "mcp.servers" ;;
         aider)       echo "" ;;
         blackbox)    echo "" ;;
@@ -321,12 +339,15 @@ Usage: smart-ide-migration.sh --source <ide> --target <ide> [options]
   --yes, -y                     Confirm writes
   -h, --help                    Show help
 
-IDs: antigravity claude claude-desktop codex copilot cursor windsurf jetbrains
-     openclaw trae trae-cn vscode zed neovim emacs continue aider roo-code cline
-     amazon-q cody codeium tabnine replit pearai supermaven pieces blackbox
-     gemini-cli goose-cli opencode kilocode kimiai workbuddy kiro augment-code
-     void-editor baidu-comate tencent-codebuddy zcode
-     copilot      - GitHub Copilot CLI
+Output: human-readable stdout by default; with --json, stdout is one JSON
+        document and diagnostics stay on stderr.
+Exit:   0 success/preview, 1 invalid input or failed migration,
+        2 write refused because --yes was omitted.
+
+EOF
+    printf '\nIDs: %s\n' "$SUPPORTED_IDES"
+    cat <<'EOF'
+Note: copilot is GitHub Copilot CLI; vscode and visual-studio are IDE targets.
 
 Examples:
   smart-ide-migration.sh --source cursor --target claude --objects skills,rules --dry-run
@@ -832,8 +853,8 @@ migrate_global_skills() {
         done
     fi
 
-    if [[ "$source_ide" == "vscode" || "$target_ide" == "vscode" ]]; then
-        set_manual_step "skills" "VS Code: this operation migrates only personal ~/.copilot/skills; review project .claude/skills and .agents/skills plus alternate personal skill locations manually"
+    if [[ "$source_ide" == "vscode" || "$target_ide" == "vscode" || "$source_ide" == "visual-studio" || "$target_ide" == "visual-studio" ]]; then
+        set_manual_step "skills" "GitHub Copilot IDEs: the mapper uses ~/.copilot/skills and .github/skills; review compatible .claude/skills and .agents/skills locations manually"
     fi
 
     if [[ "$source_ide" == "windsurf" || "$target_ide" == "windsurf" ]]; then
@@ -854,7 +875,7 @@ migrate_global_skills() {
 project_skills_manual_only() {
     local ide="$1"
     case "$ide" in
-        amazon-q|blackbox|claude-desktop|codeium|cody|continue|emacs|neovim|pearai|pieces|replit|supermaven|tabnine|void-editor|workbuddy|zcode)
+        amazon-q|blackbox|claude-desktop|codeium|cody|continue|emacs|firebase-studio|neovim|pearai|pieces|replit|supermaven|tabnine|void-editor|workbuddy|zcode)
             return 0
             ;;
         *)
@@ -1171,14 +1192,22 @@ migrate_rules() {
         return 0
     fi
 
-    if [[ "$source_ide" == "vscode" || "$target_ide" == "vscode" ]]; then
-        set_manual_step "rules" "VS Code: the single-file mapper handles .github/copilot-instructions.md only; review AGENTS.md and .github/instructions/**/*.instructions.md with their applyTo frontmatter manually"
+    if [[ "$source_ide" == "vscode" || "$target_ide" == "vscode" || "$source_ide" == "visual-studio" || "$target_ide" == "visual-studio" ]]; then
+        set_manual_step "rules" "GitHub Copilot IDEs: the single-file mapper handles .github/copilot-instructions.md only; review AGENTS.md, CLAUDE.md, and .github/instructions/**/*.instructions.md with their scope metadata manually"
     fi
 
     if [[ "$source_ide" == "cline" || "$target_ide" == "cline" ]]; then
         set_status "rules" "manual"
         set_message "rules" "Cline rules use directory-scoped files; manual migration required"
         set_manual_step "rules" "Review and merge .clinerules/*.md|*.txt for the VS Code extension, or .cline/rules/ for the CLI; preserve conditional frontmatter and do not flatten scopes"
+        MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
+        return 0
+    fi
+
+    if [[ "$source_ide" == "kiro" || "$target_ide" == "kiro" ]]; then
+        set_status "rules" "manual"
+        set_message "rules" "Kiro steering is a directory of scoped files; manual migration required"
+        set_manual_step "rules" "Review .kiro/steering/*.md and ~/.kiro/steering/*.md manually; preserve inclusion frontmatter and do not flatten scopes into one rules file"
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
     fi
@@ -1337,12 +1366,12 @@ migrate_prompts() {
         return 0
     fi
 
-    if [[ "$source_ide" == "vscode" || "$target_ide" == "vscode" ]]; then
-        set_manual_step "prompts" "VS Code: workspace .github/prompts/*.prompt.md is migrated; user prompts live in the active Profile's user-data and must be created/reviewed with Chat: New Prompt File, /prompts, or Chat: Run Prompt. Do not guess a cross-platform user path"
+    if [[ "$source_ide" == "vscode" || "$target_ide" == "vscode" || "$source_ide" == "visual-studio" || "$target_ide" == "visual-studio" ]]; then
+        set_manual_step "prompts" "GitHub Copilot IDEs: workspace .github/prompts/*.prompt.md is migrated; user prompts and IDE-managed locations require manual review"
     fi
 
     local prompt_pattern="*.md"
-    if [[ "$source_ide" == "vscode" || "$target_ide" == "vscode" ]]; then
+    if [[ "$source_ide" == "vscode" || "$target_ide" == "vscode" || "$source_ide" == "visual-studio" || "$target_ide" == "visual-studio" ]]; then
         prompt_pattern="*.prompt.md"
     fi
 
@@ -2045,7 +2074,7 @@ if target_ide == "opencode":
                         sys.exit(10)
                     if old_key in oauth:
                         oauth[new_key] = oauth.pop(old_key)
-if target_ide == "vscode":
+if target_ide in {"vscode", "visual-studio"}:
     if not isinstance(servers, dict):
         sys.exit(6)
     for server in servers.values():
@@ -2178,11 +2207,11 @@ if os.path.exists(dst):
     try:
         existing = _load_json_document(dst)
     except Exception:
-        if target_ide in {"gemini-cli", "opencode", "kilocode", "kimiai", "kiro", "workbuddy", "jetbrains", "vscode", "windsurf", "void-editor", "augment-code", "baidu-comate", "zcode"}:
+        if target_ide in {"gemini-cli", "opencode", "kilocode", "kimiai", "kiro", "workbuddy", "jetbrains", "vscode", "visual-studio", "windsurf", "void-editor", "augment-code", "baidu-comate", "zcode"}:
             sys.exit(9)
         existing = {}
 if not isinstance(existing, dict):
-    if target_ide in {"gemini-cli", "opencode", "kilocode", "kimiai", "kiro", "workbuddy", "jetbrains", "vscode", "windsurf", "void-editor", "augment-code", "baidu-comate", "zcode"}:
+    if target_ide in {"gemini-cli", "opencode", "kilocode", "kimiai", "kiro", "workbuddy", "jetbrains", "vscode", "visual-studio", "windsurf", "void-editor", "augment-code", "baidu-comate", "zcode"}:
         sys.exit(9)
     existing = {}
 if target_ide == "opencode" and isinstance(existing.get("mcp"), dict):
@@ -2229,14 +2258,14 @@ PYEOF
             CONV_DETAIL="GitHub Copilot CLI MCP transport/schema is unsupported; review manually (supported: local, stdio, http, sse)"
             return
         fi
-        if [[ "$target_ide" == "vscode" && "$json_conversion_rc" -eq 6 ]]; then
+        if [[ ( "$target_ide" == "vscode" || "$target_ide" == "visual-studio" ) && "$json_conversion_rc" -eq 6 ]]; then
             CONV_RESULT="failed"
-            CONV_DETAIL="VS Code MCP server schema/transport is ambiguous or unsupported; review manually (workspace .vscode/mcp.json uses servers with stdio/http/sse)"
+            CONV_DETAIL="GitHub Copilot IDE MCP schema/transport is ambiguous or unsupported; review manually (the target uses servers with stdio/http/sse)"
             return
         fi
-        if [[ "$target_ide" == "vscode" && "$json_conversion_rc" -eq 9 ]]; then
+        if [[ ( "$target_ide" == "vscode" || "$target_ide" == "visual-studio" ) && "$json_conversion_rc" -eq 9 ]]; then
             CONV_RESULT="failed"
-            CONV_DETAIL="VS Code target .vscode/mcp.json is not a valid JSON object; existing target was not overwritten"
+            CONV_DETAIL="GitHub Copilot IDE target MCP file is not a valid JSON object; existing target was not overwritten"
             return
         fi
         if [[ "$target_ide" == "windsurf" && "$json_conversion_rc" -eq 18 ]]; then
@@ -3695,6 +3724,11 @@ main() {
         exit 1
     fi
 
+    if [[ "$TARGET_IDE" == "firebase-studio" ]]; then
+        echo "Error: firebase-studio is a source-only migration ID because the product is shutting down; choose a maintained target" >&2
+        exit 1
+    fi
+
     if [[ -z "$OBJECTS" ]]; then
         OBJECTS=$(list_available_objects "$SOURCE_IDE" | tr ',' '\n' | grep -E '^(skills|rules|prompts)$' | paste -sd, -)
         if [[ -z "$OBJECTS" ]]; then
@@ -3761,22 +3795,9 @@ main() {
     echo ""
 
     if [[ $DRY_RUN -eq 0 && $ASSUME_YES -eq 0 ]]; then
-        if [[ -t 0 ]]; then
-        printf 'About to write target IDE config per above summary. Continue? [y/N] ' >&2
-            read -r _confirm_reply
-            case "$_confirm_reply" in
-                y|Y|yes|YES)
-                    ;;
-                *)
-        echo "Cancelled: no files modified. You can preview with --dry-run first." >&2
-                    exit 2
-                    ;;
-            esac
-        else
-        echo "Error: non-interactive environment and --yes not specified, refusing to write for safety." >&2
-        echo "Please preview changes with --dry-run first, then append --yes to execute. No files modified." >&2
-            exit 2
-        fi
+        echo "Error: --yes is required for writes; interactive confirmation is intentionally unsupported." >&2
+        echo "Preview with --dry-run, obtain approval, then rerun the reviewed command with --yes. No files modified." >&2
+        exit 2
     fi
 
     init_migration_files

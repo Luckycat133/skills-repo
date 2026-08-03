@@ -46,7 +46,7 @@ from pathlib import Path
 import sys
 
 text = Path(sys.argv[1]).read_text(encoding="utf-8")
-heading = text.find("## Workflow")
+heading = text.find("## Safety and execution")
 dry_run = text.find("--dry-run", heading)
 apply = text.find("--yes", heading)
 if heading < 0 or dry_run < 0 or apply < 0 or dry_run > apply:

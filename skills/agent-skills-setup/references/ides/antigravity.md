@@ -16,6 +16,6 @@
 - MCP uses JSON `mcpServers`; remote endpoints use `serverUrl`, not `url`. The global file is shared by Antigravity surfaces; workspace MCP remains manual.
 - Global Skills default to the generated path. `ANTIGRAVITY_SKILLS_DIR` overrides it; otherwise preserve a legacy-only tree and never merge legacy/current trees implicitly. `.agent/` remains legacy compatibility.
 - Workspace rules use `.agents/rules/`; do not invent `.agents/AGENTS.md`. No official installation-detection or stable workflow path exists.
-- Plugins, hooks, agents, workflows, and workspace MCP/rules are mixed or runtime-sensitive, so reconstruct manually. Antigravity CLI is separate; do not treat its paths as IDE paths.
+- Hooks use `.agents/hooks.json` and `~/.gemini/config/hooks.json`; plugins use `.agents/plugins/<name>` and `~/.gemini/config/plugins/<name>`. They are supported but schema/trust-sensitive, so reconstruct manually. Workflows remain UI-managed. Antigravity CLI is separate.
 
-Sources: [IDE Skills](https://antigravity.google/docs/ide/skills), [shared Skills](https://antigravity.google/docs/skills?app=antigravity-ide), [MCP](https://antigravity.google/docs/mcp), [plugins](https://antigravity.google/docs/ide/plugins).
+Sources: [IDE Skills](https://antigravity.google/docs/ide/skills), [shared Skills](https://antigravity.google/docs/skills?app=antigravity-ide), [MCP](https://antigravity.google/docs/mcp), [plugins](https://antigravity.google/docs/ide/plugins), [hooks](https://antigravity.google/docs/hooks).

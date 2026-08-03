@@ -32,7 +32,7 @@ skills-repo/
 
 ## `agent-skills-setup`
 
-在明确同意后，在受支持的 IDE 与智能体之间迁移选定上下文：已记录的 skills、规则、提示词与 MCP 对象。完整 IDE 配置和不透明项目树始终人工处理。40 个标识符见 [IDE 注册表](skills/agent-skills-setup/references/ide-registry.md)。
+在明确同意后，在受支持的 IDE 与智能体之间迁移选定上下文：已记录的 skills、规则、提示词与 MCP 对象。完整 IDE 配置和不透明项目树始终人工处理。44 个脚本支持标识符及仅人工处理的界面见 [IDE 注册表](skills/agent-skills-setup/references/ide-registry.md)。
 
 ## 开发
 

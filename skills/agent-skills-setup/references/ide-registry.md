@@ -13,6 +13,9 @@ structured path mapping consumed by scripts.
 - [`cline`](ides/cline.md) — cline
 - [`roo-code`](ides/roo-code.md) — roo-code (archived 2026-05)
 - [`vscode`](ides/vscode.md) — vscode (VS Code + GitHub Copilot IDE; not cloud agent or the `copilot` script target)
+- [`visual-studio`](ides/visual-studio.md) — visual-studio (Visual Studio 2026/2022 + GitHub Copilot; Windows only)
+- [`firebase-studio`](ides/firebase-studio.md) — firebase-studio (sunsetting 2027-03-22; existing-workspace rules source)
+- [`android-studio`](ides/android-studio.md) — android-studio (Gemini in Android Studio, Quail 1+)
 - [`copilot`](ides/copilot.md) — copilot-cli
 - [`windsurf`](ides/windsurf.md) — windsurf
 - [`codeium`](ides/codeium.md) — codeium (Codeium → Windsurf)
@@ -25,6 +28,7 @@ structured path mapping consumed by scripts.
 - [`trae-work`](ides/trae-work.md) — trae-work (separate product; not a supported mapper target)
 - [`trae-cn`](ides/trae-cn.md) — trae-cn
 - [`jetbrains`](ides/jetbrains.md) — jetbrains (Junie in JetBrains IDEs; not JetBrains AI Assistant)
+- [`jetbrains-ai`](ides/jetbrains-ai.md) — jetbrains-ai (JetBrains AI Assistant; distinct from Junie)
 - [`kiro`](ides/kiro.md) — kiro
 - [`codex`](ides/codex.md) — codex
 - [`gemini-cli`](ides/gemini-cli.md) — gemini-cli
@@ -69,4 +73,5 @@ structured path mapping consumed by scripts.
 - [`devin`](ides/devin.md) — devin (Cognition)
 - [`v0`](ides/v0.md) — v0 (Vercel)
 - [`lovable`](ides/lovable.md) — lovable
+- [`xcode`](ides/xcode.md) — xcode (Xcode 26.3+/27 coding agents; manual configuration boundary)
 - [`gptel-mcp-el`](ides/gptel-mcp-el.md) — gptel-mcp-el (third-party Emacs packages)

@@ -83,7 +83,7 @@ assert_path workbuddy config ""
 
 assert_path kiro global "~/.kiro/skills"
 assert_path kiro project-skills ".kiro/skills"
-assert_path kiro rules ""
+assert_path kiro rules ".kiro/steering"
 assert_path kiro mcp "~/.kiro/settings/mcp.json"
 assert_path kiro project-mcp ".kiro/settings/mcp.json"
 assert_path kiro config ""

@@ -243,6 +243,11 @@ if grep -Fq 'rm -rf "$target_path"' "$SCRIPT_DIR/smart-ide-migration.sh"; then
 else
     check_pass "D7: project tree deletion uses containment guard"
 fi
+if grep -Fq 'read -r _confirm_reply' "$SCRIPT_DIR/smart-ide-migration.sh"; then
+    check_fail "D8: agent entry point must not block on interactive confirmation"
+else
+    check_pass "D8: agent entry point is non-interactive and uses --yes as the write gate"
+fi
 
 echo ""
 if [[ $FAIL -eq 0 ]]; then
