@@ -679,6 +679,35 @@ else
 fi
 
 echo ""
+echo "== 24. MCP targets reject symlinks before conversion or cleanup =="
+S24="$S20_DIR/distinct-source.json"
+W24="$TMP_ROOT/symlink-target-workspace"
+D24_REAL="$TMP_ROOT/unrelated-config.json"
+mkdir -p "$W24"
+cat > "$S24" <<'EOF'
+{ "mcpServers": { "source-entry": { "command": "echo", "args": [] } } }
+EOF
+cat > "$D24_REAL" <<'EOF'
+{ "sentinel": "must remain unchanged" }
+EOF
+ln -s "$D24_REAL" "$W24/opencode.json"
+D24_ORIG="$(cat "$D24_REAL")"
+set +e
+run bash "$MIG" --source cursor --target opencode --workspace "$W24" \
+    --objects project-mcp --source-mcp-file "$S24" --strategy overwrite --yes
+set -e
+if [[ $LAST_RC -ne 0 ]] && grep -Fq "target is a symbolic link" "$OUT_FILE"; then
+    check_pass "24: symlinked MCP target is rejected"
+else
+    check_fail "24: symlinked MCP target was accepted"
+fi
+if [[ -L "$W24/opencode.json" && "$(cat "$D24_REAL")" == "$D24_ORIG" ]]; then
+    check_pass "24: rejected symlink target and referent remain unchanged"
+else
+    check_fail "24: symlink target rejection allowed mutation"
+fi
+
+echo ""
 if [[ $FAIL -eq 0 ]]; then
     echo "ALL $CHECKS MCP SECRET-REDACTION CHECKS PASSED"
     exit 0

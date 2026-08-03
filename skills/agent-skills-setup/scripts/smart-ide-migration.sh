@@ -2816,8 +2816,43 @@ sys.exit(4 if failed else 0)
 PYEOF
 }
 
-delete_copy_only() {
-    rm -f -- "$@" 2>/dev/null || true
+remove_failed_redaction_artifact() {
+    local expected_target="$1"
+    local candidate="$2"
+    local expected_parent candidate_parent
+
+    case "$expected_target" in
+        /*) ;;
+        *)
+            echo "  [GUARD] refused redaction cleanup: expected target is not absolute '$expected_target'" >&2
+            return 1
+            ;;
+    esac
+    case "$candidate" in
+        "$expected_target"|"${expected_target}.redact.tmp") ;;
+        *)
+            echo "  [GUARD] refused redaction cleanup outside the exact target artifacts: $candidate" >&2
+            return 1
+            ;;
+    esac
+    if [[ -L "$candidate" ]]; then
+        echo "  [GUARD] refused redaction cleanup of symbolic link: $candidate" >&2
+        return 1
+    fi
+    [[ -e "$candidate" ]] || return 0
+    [[ -f "$candidate" ]] || {
+        echo "  [GUARD] refused redaction cleanup of non-file target: $candidate" >&2
+        return 1
+    }
+
+    expected_parent="$(cd "$(dirname "$expected_target")" 2>/dev/null && pwd -P)" || return 1
+    candidate_parent="$(cd "$(dirname "$candidate")" 2>/dev/null && pwd -P)" || return 1
+    [[ "$candidate_parent" == "$expected_parent" ]] || {
+        echo "  [GUARD] refused redaction cleanup outside target parent: $candidate" >&2
+        return 1
+    }
+
+    unlink "$candidate"
 }
 
 redact_secrets_in_file() {
@@ -2825,13 +2860,13 @@ redact_secrets_in_file() {
     [[ -f "$file" ]] || { echo 0; return 0; }
     if ! command -v python3 >/dev/null 2>&1; then
         echo "  [SECURITY] python3 missing, cannot redact $file; target copy deleted to prevent secret leak (source file untouched)" >&2
-        delete_copy_only "$file"
+        remove_failed_redaction_artifact "$file" "$file" || true
         echo 0
         return 1
     fi
     if ! ensure_redactor_script; then
         echo "  [SECURITY] cannot generate redaction engine, target copy deleted to prevent secret leak (source file untouched): $file" >&2
-        delete_copy_only "$file"
+        remove_failed_redaction_artifact "$file" "$file" || true
         echo 0
         return 1
     fi
@@ -2841,7 +2876,8 @@ redact_secrets_in_file() {
     n=$(cat "$pyout" 2>/dev/null || echo "-1")
     rm -f "$pyout"
     if [[ $rc -ne 0 || -z "$n" || "$n" == "-1" ]]; then
-        delete_copy_only "$file" "${file}.redact.tmp"
+        remove_failed_redaction_artifact "$file" "$file" || true
+        remove_failed_redaction_artifact "$file" "${file}.redact.tmp" || true
         echo "  [SECURITY] secret redaction failed, target file deleted to prevent leak (source file untouched): $file" >&2
         echo "-1"
         return 1
@@ -3100,6 +3136,13 @@ migrate_mcp() {
         MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
         return 0
     fi
+    if [[ -L "$target_mcp" ]]; then
+        set_status "mcp" "failed"
+        set_message "mcp" "MCP target is a symbolic link; refusing conversion or cleanup through an indirect path"
+        set_manual_step "mcp" "MCP: replace the target symlink with a reviewed regular file at '$target_mcp', then preview again"
+        MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
+        return 0
+    fi
 
     if [[ "$scope" == "project" ]]; then
         set_manual_step "mcp" "project MCP: this run only processes explicit workspace file ${source_mcp} -> ${target_mcp}; review project priority, Workspace Trust, approval, OAuth/headers and same-name server conflicts" 
@@ -3239,58 +3282,6 @@ migrate_config() {
     set_message "config" "automatic whole-IDE config migration is unsupported"
     set_manual_step "config" "Review only documented, object-specific settings for $source_ide -> $target_ide. Rebuild target config manually; do not copy opaque IDE config files, credentials, permissions, hooks, or trust state."
     MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
-}
-
-redact_project_copy() {
-    local root="$1"
-    local total=0 had_fail=0 f rc=0 pyout
-    local -a excluded_env_files=()
-    local -a files=()
-
-    while IFS= read -r -d '' f; do
-        excluded_env_files+=("$f")
-    done < <(find "$root" \( -type f -o -type l \) -name '.env*' -print0 2>/dev/null)
-    if [[ ${#excluded_env_files[@]} -gt 0 ]]; then
-        delete_copy_only "${excluded_env_files[@]}"
-        echo "  [SECURITY] excluded ${#excluded_env_files[@]} .env file(s) from migrated copy" >&2
-    fi
-
-    while IFS= read -r -d '' f; do
-        files+=("$f")
-    done < <(find "$root" -name '*.bak.*' -prune -o -type f \( \
-        -name '*.json' -o -name '*.jsonc' -o -name '*.yaml' -o -name '*.yml' \
-        -o -name '*.toml' \
-        -o -name '*.sh' -o -name '*.bash' -o -name '*.zsh' \) -print0 2>/dev/null)
-
-    if [[ ${#files[@]} -eq 0 ]]; then
-        echo 0
-        return 0
-    fi
-
-    if ! command -v python3 >/dev/null 2>&1; then
-        echo "  [SECURITY] python3 missing, cannot redact project copy; candidate file deleted to prevent secret leak (source directory untouched)" >&2
-        delete_copy_only "${files[@]}"
-        echo 0
-        return 1
-    fi
-    if ! ensure_redactor_script; then
-        echo "  [SECURITY] cannot generate redaction engine, candidate file deleted to prevent secret leak (source directory untouched)" >&2
-        delete_copy_only "${files[@]}"
-        echo 0
-        return 1
-    fi
-
-    pyout=$(mktemp "${TMPDIR:-/tmp}/redact-out.XXXXXX")
-    python3 "$REDACTOR_PY" "${files[@]}" >"$pyout" || rc=$?
-    total=$(cat "$pyout" 2>/dev/null || echo "-1")
-    rm -f "$pyout"
-    if [[ $rc -ne 0 || -z "$total" || "$total" == "-1" ]]; then
-        had_fail=1
-        echo "  [SECURITY] project copy redaction has failures, failed files deleted to prevent leak (source directory untouched)" >&2
-        [[ "$total" == "-1" || -z "$total" ]] && total=0
-    fi
-    echo "$total"
-    return $had_fail
 }
 
 migrate_project() {
