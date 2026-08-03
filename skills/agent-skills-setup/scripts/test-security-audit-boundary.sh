@@ -43,19 +43,22 @@ fi
 
 python3 - "$SKILL_ROOT/SKILL.md" <<'PY'
 from pathlib import Path
-import re
 import sys
 
 text = Path(sys.argv[1]).read_text(encoding="utf-8")
 frontmatter = text.split("---", 2)[1]
-permissions_match = re.search(
-    r"(?ms)^permissions:\s*\n((?:[ \t]+-[ \t]+[a-z_]+\s*\n?)+)",
-    frontmatter,
-)
-if permissions_match is None:
+frontmatter_lines = frontmatter.splitlines()
+try:
+    permissions_index = frontmatter_lines.index("permissions:")
+except ValueError:
     raise SystemExit("FAIL: publishable Skill must declare permissions")
-permissions = set(re.findall(r"(?m)^\s*-\s+([a-z_]+)\s*$", permissions_match.group(1)))
-if permissions != {"file_read", "file_write", "shell"}:
+permissions = []
+for line in frontmatter_lines[permissions_index + 1 :]:
+    if line.startswith("  - "):
+        permissions.append(line.removeprefix("  - ").strip())
+    else:
+        break
+if set(permissions) != {"file_read", "file_write", "shell"} or len(permissions) != 3:
     raise SystemExit(
         "FAIL: permissions must be exactly file_read, file_write, and shell"
     )
