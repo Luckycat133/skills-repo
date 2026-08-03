@@ -34,6 +34,8 @@ skills-repo/
 
 明示的な同意後、対応 IDE とエージェント間で、文書化された skills、rules、prompts、MCP オブジェクトを移行します。IDE 全体の設定と不透明なプロジェクトツリーは手動確認が必要です。44 のスクリプト対応識別子と手動専用サーフェスは [IDE registry](skills/agent-skills-setup/references/ide-registry.md) を参照してください。
 
+バージョン 0.7.1 が宣言するのはローカルのファイル読み取り、ファイル書き込み、shell のみで、ネットワークは使用しません。書き込みには承認済みの `--yes` が必要です。シンボリックリンクの MCP ターゲットは拒否され、削除範囲は正確な移行先または検証済み Skill コピーのルート内に限定されます。
+
 ## 開発
 
 1. `skills/agent-skills-setup/` を編集し、生成物の root `SKILL.md` は編集しません。
@@ -45,7 +47,7 @@ skills-repo/
 
 ## 公開
 
-GitHub が正本で、ClawHub、`skills.sh`、Awesome Copilot は配布経路です。公開前に検証を実行し、`THIRD_PARTY_NOTICES.md` を確認し、秘密情報・私有パス・環境依存を除去します。
+GitHub が正本で、ClawHub、`skills.sh`、Awesome Copilot は配布経路です。公開前に全テストとセキュリティスキャンを通し、GitHub のコミットを push・確認してから、ClawHub の dry run で配布物を検証します。[公開チェックリスト](docs/agent-skills-setup/release-checklist.md)も参照してください。
 
 ## プロジェクト
 

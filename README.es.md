@@ -34,6 +34,8 @@ skills-repo/
 
 Migra, con consentimiento explícito, contexto seleccionado entre IDE y agentes compatibles: skills, reglas, prompts y objetos MCP documentados. La configuración completa del IDE y los árboles opacos del proyecto requieren revisión manual. Consulta los 44 identificadores compatibles con el script y las superficies manuales en el [registro de IDE](skills/agent-skills-setup/references/ide-registry.md).
 
+La versión 0.7.1 solo declara lectura y escritura de archivos locales y shell; no usa la red. Las escrituras aún requieren una ejecución `--yes` aprobada. Se rechazan los destinos MCP que sean enlaces simbólicos y la limpieza se limita al destino exacto o a la raíz verificada de una copia de Skill.
+
 ## Desarrollo
 
 1. Edita `skills/agent-skills-setup/`; no edites el `SKILL.md` raíz generado.
@@ -45,7 +47,7 @@ Los destinos existentes se conservan salvo que `--force` solicite explícitament
 
 ## Publicación
 
-GitHub es la fuente canónica; ClawHub, `skills.sh` y Awesome Copilot son canales de distribución. Antes de publicar, valida, revisa `THIRD_PARTY_NOTICES.md` y elimina rutas privadas, secretos y supuestos específicos de la máquina.
+GitHub es la fuente canónica; ClawHub, `skills.sh` y Awesome Copilot son canales de distribución. Antes de publicar, ejecuta todas las pruebas y el análisis de seguridad, sube y verifica el commit de GitHub y exige un dry run correcto de ClawHub. Consulta la [lista de publicación](docs/agent-skills-setup/release-checklist.md).
 
 ## Proyecto
 

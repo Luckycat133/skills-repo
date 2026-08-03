@@ -34,6 +34,8 @@ skills-repo/
 
 在明确同意后，在受支持的 IDE 与智能体之间迁移选定上下文：已记录的 skills、规则、提示词与 MCP 对象。完整 IDE 配置和不透明项目树始终人工处理。44 个脚本支持标识符及仅人工处理的界面见 [IDE 注册表](skills/agent-skills-setup/references/ide-registry.md)。
 
+0.7.1 仅声明本地文件读取、文件写入和 shell 权限，不使用网络。写入仍须通过已批准的 `--yes` 执行；MCP 目标若为符号链接会被拒绝，清理范围只限精确迁移目标或已验证的 Skill 副本根目录。
+
 ## 开发
 
 1. 编辑 `skills/agent-skills-setup/`，不要直接改生成的根 `SKILL.md`。
@@ -45,7 +47,7 @@ skills-repo/
 
 ## 发布
 
-GitHub 是规范来源；ClawHub、`skills.sh` 与 Awesome Copilot 是分发渠道。发布前运行验证、审阅 `THIRD_PARTY_NOTICES.md`，并清除私有路径、密钥和机器特定假设。
+GitHub 是规范来源；ClawHub、`skills.sh` 与 Awesome Copilot 是分发渠道。发布前必须通过全量测试和安全扫描，推送并核验 GitHub 提交，再以 ClawHub dry run 确认发行包。详见[发布检查清单](docs/agent-skills-setup/release-checklist.md)。
 
 ## 项目资料
 

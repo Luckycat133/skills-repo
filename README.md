@@ -13,9 +13,6 @@ Reusable AI-assistant skills, authored locally and published from GitHub.
 ```bash
 # OpenClaw
 openclaw skills install @luckycat133/agent-skills-setup
-日本語: この GitHub リポジトリを唯一の編集元として、OpenClaw を含む複数のエージェント環境へ skill を同期・公開します。
-
-Español: Este repositorio de GitHub es la única fuente editable para sincronizar y publicar skills reutilizables en varios agentes。
 
 # skills.sh
 npx skills add Luckycat133/skills-repo
@@ -37,6 +34,11 @@ skills-repo/
 
 Consent-gated migration of selected assistant context between supported IDEs and agents. It handles documented skills, rules, prompts, and MCP objects; whole IDE configuration and opaque project trees stay manual. See the [IDE registry](skills/agent-skills-setup/references/ide-registry.md) for the 44 script-supported identifiers and documented manual-only surfaces.
 
+Version 0.7.1 declares only local file-read, file-write, and shell capabilities;
+it uses no network access. Writes still require an approved `--yes` run. MCP
+targets that are symbolic links are rejected, and cleanup is restricted to the
+exact migration target or a verified copied-skill root.
+
 ## Develop
 
 1. Edit `skills/agent-skills-setup/`, never the generated root `SKILL.md`.
@@ -48,7 +50,7 @@ Existing targets are preserved unless `--force` explicitly requests a timestampe
 
 ## Release
 
-GitHub is canonical; ClawHub, `skills.sh`, and Awesome Copilot are distribution channels. Before release, run validation, review `THIRD_PARTY_NOTICES.md`, and remove private paths, secrets, and machine-specific assumptions.
+GitHub is canonical; ClawHub, `skills.sh`, and Awesome Copilot are distribution channels. Before release, run the full suite and security scan, push and verify the GitHub commit, then require a successful ClawHub dry run before publishing. See the [release checklist](docs/agent-skills-setup/release-checklist.md).
 
 ## Project
 

@@ -9,7 +9,7 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 ### Security
 
 - Declared the Skill's least-privilege filesystem and shell requirements without network authority.
-- Replaced the generic redaction deletion sink with exact-target cleanup guards, rejected symbolic-link MCP targets, and removed unused project-copy cleanup code.
+- Replaced the generic redaction deletion sink with exact-target and copy-root containment guards, rejected symbolic-link MCP targets, and narrowed project-copy redaction to skill-copy cleanup.
 - Added regression coverage for permission metadata, symlink target immutability, and fail-closed cleanup.
 
 ## [0.7.0] - 2026-08-03

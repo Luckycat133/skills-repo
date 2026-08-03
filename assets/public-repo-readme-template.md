@@ -11,7 +11,7 @@ One sentence: the specific workflow this skill provides and when to use it.
 
 ```bash
 npx skills add {{REPO_NAME}}
-clawhub publish ./{{SKILL_NAME}} --slug {{SKILL_NAME}} --name "{{SKILL_NAME}}" --version 1.0.0 --tags latest
+clawhub publish ./{{SKILL_NAME}} --slug {{SKILL_NAME}} --name "{{SKILL_NAME}}" --version 1.0.0 --tags latest --source-repo <owner/repo> --source-commit <sha> --source-ref main --source-path <path> --dry-run --json
 ```
 
 For manual installation, copy `{{SKILL_NAME}}/` to the selected agent's global or project skills directory.

@@ -9,6 +9,11 @@ to stderr; exit code 2 means the write gate refused an unconfirmed apply.
 Lifecycle-restricted IDs may be source-only; currently `firebase-studio` can
 only export existing workspace rules to a maintained target.
 
+The Skill declares local file-read, file-write, and shell capabilities only.
+MCP targets that are symbolic links fail before conversion. Redaction cleanup
+can remove only the exact target artifacts; copied-skill cleanup must remain
+inside its canonicalized target copy root.
+
 `ide-paths.tsv` is generated from `references/ide-paths.json`; regenerate it
 with `sync-ide-reference-summaries.py`, never edit it directly. `common.sh` is
 an internal helper.
