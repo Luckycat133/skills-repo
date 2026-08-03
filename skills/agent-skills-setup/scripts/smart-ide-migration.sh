@@ -674,6 +674,24 @@ apply_skill_strategy() {
     return 0
 }
 
+preflight_skill_source() {
+    local skill_dir="$1"
+    local findings rc=0
+    local scanner="${SCRIPT_DIR}/scan-skill-secrets.py"
+
+    if [[ ! -f "$scanner" ]] || ! command -v python3 >/dev/null 2>&1; then
+        echo "  [FAIL] source credential preflight unavailable: $(basename "$skill_dir")" >&2
+        return 1
+    fi
+    findings=$(python3 "$scanner" "$skill_dir" 2>&1) || rc=$?
+    if [[ $rc -ne 0 ]]; then
+        echo "  [FAIL] source credential preflight failed: $(basename "$skill_dir")" >&2
+        [[ -n "$findings" ]] && printf '%s\n' "$findings" | sed 's/^/    /' >&2
+        return 1
+    fi
+    return 0
+}
+
 migrate_global_skills() {
     local source_ide="$1"
     local target_ide="$2"
@@ -780,6 +798,11 @@ migrate_global_skills() {
             [[ -f "$skill_dir/SKILL.md" ]] || continue
             skill_name=$(basename "$skill_dir")
 
+            if ! preflight_skill_source "$skill_dir"; then
+                failed_count=$((failed_count + 1))
+                continue
+            fi
+
             if [[ -f "$skill_dir/SKILL.md" ]]; then
                 if [[ $DRY_RUN -eq 1 ]]; then
                     echo "  DRY-RUN: cp -r $skill_dir $target_global/$skill_name"
@@ -823,6 +846,11 @@ migrate_global_skills() {
             [[ -d "$skill_dir" ]] || continue
             [[ -f "$skill_dir/SKILL.md" ]] || continue
             skill_name=$(basename "$skill_dir")
+
+            if ! preflight_skill_source "$skill_dir"; then
+                failed_count=$((failed_count + 1))
+                continue
+            fi
 
             if [[ $DRY_RUN -eq 1 ]]; then
                 echo "  DRY-RUN: cp -r $skill_dir $target_global/$skill_name"
@@ -953,6 +981,11 @@ migrate_project_skills() {
         [[ -d "$skill_dir" ]] || continue
         [[ -f "$skill_dir/SKILL.md" ]] || continue
         skill_name=$(basename "$skill_dir")
+
+        if ! preflight_skill_source "$skill_dir"; then
+            failed_count=$((failed_count + 1))
+            continue
+        fi
 
         if [[ $DRY_RUN -eq 1 ]]; then
             echo "  DRY-RUN: cp -r $skill_dir $target_path/$skill_name"

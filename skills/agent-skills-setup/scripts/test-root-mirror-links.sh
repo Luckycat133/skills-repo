@@ -16,7 +16,7 @@ bash "$REPO_ROOT/scripts/sync-root-mirror.sh" --output "$TEMP_MIRROR"
     exit 1
 }
 
-if ! rg -F '](skills/agent-skills-setup/references/ides/)' "$TEMP_MIRROR" >/dev/null; then
+if ! grep -F '](skills/agent-skills-setup/references/ides/)' "$TEMP_MIRROR" >/dev/null; then
     echo "FAIL: generated mirror does not rewrite nested IDE-reference links" >&2
     exit 1
 fi

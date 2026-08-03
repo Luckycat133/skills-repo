@@ -1,7 +1,8 @@
 # Scripts
 
 `smart-ide-migration.sh` resolves documented paths, previews or applies a
-scoped migration, redacts supported credentials, and emits JSON evidence.
+scoped migration, preflights Skill source trees, redacts supported MCP
+credentials, and emits JSON evidence.
 Start with `--help` or `--print-path` when a mapping is unfamiliar. It never
 prompts: use `--dry-run` for zero-write review and add `--yes` only after
 approval. `--json` reserves stdout for one JSON document and sends diagnostics
@@ -14,6 +15,8 @@ MCP targets that are symbolic links fail before conversion. Redaction cleanup
 can remove only the exact target artifacts; copied-skill cleanup must remain
 inside its canonicalized target copy root.
 
+`scan-skill-secrets.py` checks every regular source file before a Skill copy and
+reports only relative paths and reason categories, never credential values.
 `ide-paths.tsv` is generated from `references/ide-paths.json`; regenerate it
 with `sync-ide-reference-summaries.py`, never edit it directly. `common.sh` is
 an internal helper.

@@ -10,7 +10,7 @@ python3 "$SCRIPT_DIR/sync-ide-reference-summaries.py" --check \
     --references "$SKILL_ROOT/references/ides" \
     --resolver "$SCRIPT_DIR/ide-paths.tsv"
 
-if rg -n '[[:blank:]]$' "$SCRIPT_DIR/ide-paths.tsv" >/dev/null; then
+if grep -n '[[:blank:]]$' "$SCRIPT_DIR/ide-paths.tsv" >/dev/null; then
     echo "FAIL: generated resolver contains trailing whitespace" >&2
     exit 1
 fi

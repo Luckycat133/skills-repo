@@ -23,17 +23,17 @@ for reference in \
     references/verification.md; do
     [[ -f "$SKILL_ROOT/$reference" ]] || \
         fail "missing progressively loaded reference: $reference"
-    rg -F "$reference" "$SKILL_FILE" >/dev/null || \
+    grep -F "$reference" "$SKILL_FILE" >/dev/null || \
         fail "SKILL.md does not state when to load $reference"
 done
 
-rg -F 'references/ides/<source>.md' "$SKILL_FILE" >/dev/null || \
+grep -F 'references/ides/<source>.md' "$SKILL_FILE" >/dev/null || \
     fail "SKILL.md must route source reads to one IDE reference"
-rg -F 'references/ides/<target>.md' "$SKILL_FILE" >/dev/null || \
+grep -F 'references/ides/<target>.md' "$SKILL_FILE" >/dev/null || \
     fail "SKILL.md must route target reads to one IDE reference"
-rg -F -- '--dry-run' "$SKILL_FILE" >/dev/null || \
+grep -F -- '--dry-run' "$SKILL_FILE" >/dev/null || \
     fail "SKILL.md must retain the preview gate"
-rg -F -- '--yes' "$SKILL_FILE" >/dev/null || \
+grep -F -- '--yes' "$SKILL_FILE" >/dev/null || \
     fail "SKILL.md must retain the explicit approval gate"
 
 echo "Progressive disclosure test passed"

@@ -50,7 +50,7 @@ PY
     echo "FAIL: missing conditional MCP transport reference" >&2
     exit 1
 }
-rg -F 'mcp-transport.md' "$SKILL_ROOT/references/mcp-migration.md" >/dev/null || {
+grep -F 'mcp-transport.md' "$SKILL_ROOT/references/mcp-migration.md" >/dev/null || {
     echo "FAIL: MCP migration reference does not route transport-specific work" >&2
     exit 1
 }

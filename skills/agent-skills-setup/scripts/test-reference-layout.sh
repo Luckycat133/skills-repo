@@ -29,8 +29,8 @@ if missing:
     raise SystemExit("missing IDE references: " + ", ".join(missing))
 PY
 
-rg -F 'references/ides/<source>.md' "$SKILL_FILE" >/dev/null || \
+grep -F 'references/ides/<source>.md' "$SKILL_FILE" >/dev/null || \
     fail "SKILL.md does not route source IDE reads to a single reference"
-rg -F 'references/ides/<target>.md' "$SKILL_FILE" >/dev/null || \
+grep -F 'references/ides/<target>.md' "$SKILL_FILE" >/dev/null || \
     fail "SKILL.md does not route target IDE reads to a single reference"
 echo "Per-IDE reference layout test passed"
