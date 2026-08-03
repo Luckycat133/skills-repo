@@ -10,8 +10,13 @@
 
 ---
 name: agent-skills-setup
-version: 0.7.0
+version: 0.7.1
 license: MIT
+compatibility: Requires local Bash and filesystem read access. Writes are limited to resolved migration targets after explicit approval. Python 3 is required for automatic MCP conversion and redaction. No network access.
+permissions:
+  - file_read
+  - file_write
+  - shell
 description: >
   Use when a user explicitly asks to migrate, move, transfer, copy, convert, or
   sync AI-assistant context between different IDEs or agents, including skills,
@@ -47,6 +52,9 @@ automated. Flag a mismatch before applying.
 
 ## Safety and execution
 
+- Use filesystem read and shell only for the selected references, path lookup,
+  preview, and verification. Use filesystem write only for the approved target
+  paths; this Skill needs no network access.
 - Inspect only named paths; default to `skills,rules,prompts`.
 - Keep whole `config` files and opaque `project` trees manual. Rebuild a
   documented setting or migrate a dedicated supported object.
