@@ -1,6 +1,6 @@
 # Migration safety and conflicts
 
-Use before a migration can write. Inspect only the named source, target, and workspace; stop for source/target identity (including symlinks), unsupported formats, or unclear intent. `config` and opaque `project` trees are manual-only. Exclude `.env` and `.env.*`; preserve the source.
+Use before a migration can write. Inspect only the named source, target, and workspace; reject source/target identity (including symlinks) and unsupported formats. `config` and opaque `project` trees are manual-only. Exclude `.env` and `.env.*`; preserve the source.
 
 Use [mcp-transport.md](mcp-transport.md) for remote transport, OAuth, or protocol state. The script blanks literal credentials and may translate an exact documented environment reference; mixed or complex expressions need manual reconstruction. MCP target symlinks fail before conversion. Redaction cleanup accepts only the exact target artifacts, while copied-skill cleanup is contained within the canonical target copy root.
 

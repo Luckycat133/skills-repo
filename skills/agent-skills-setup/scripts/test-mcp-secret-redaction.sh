@@ -147,7 +147,7 @@ if [[ -e "$HOME/.cursor/mcp.json" ]]; then
 else
     check_pass "4: secret mcp NOT migrated by default (file absent)"
 fi
-if grep -Fq "only low-risk types are migrated" "$OUT_FILE"; then check_pass "4: default-scope security notice printed"; else check_fail "4: default-scope notice missing"; fi
+if grep -Fq "global migrations default to skills" "$OUT_FILE"; then check_pass "4: global default is reported"; else check_fail "4: global default notice missing"; fi
 
 echo ""
 echo "== 5. Array secrets: secret-named key with LIST value (JSON path) =="

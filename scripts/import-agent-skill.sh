@@ -17,6 +17,14 @@ if [[ ! -d "$SOURCE_SKILL_DIR" ]]; then
     echo "ERROR: source skill directory not found: $SOURCE_SKILL_DIR" >&2
     exit 1
 fi
+if [[ ! "$SKILL_NAME" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]]; then
+    echo "ERROR: skill name must be lowercase kebab-case: $SKILL_NAME" >&2
+    exit 1
+fi
+if [[ ! -f "$SOURCE_SKILL_DIR/SKILL.md" ]]; then
+    echo "ERROR: source directory does not contain SKILL.md: $SOURCE_SKILL_DIR" >&2
+    exit 1
+fi
 
 mkdir -p "$REPO_ROOT/skills"
 rsync -a --delete "$SOURCE_SKILL_DIR/" "$TARGET_DIR/"

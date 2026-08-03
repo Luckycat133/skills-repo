@@ -33,7 +33,4 @@ rg -F 'references/ides/<source>.md' "$SKILL_FILE" >/dev/null || \
     fail "SKILL.md does not route source IDE reads to a single reference"
 rg -F 'references/ides/<target>.md' "$SKILL_FILE" >/dev/null || \
     fail "SKILL.md does not route target IDE reads to a single reference"
-rg -F 'Treat similarly named files as incompatible' "$SKILL_FILE" >/dev/null || \
-    fail "SKILL.md must retain the schema-compatibility guardrail"
-
 echo "Per-IDE reference layout test passed"

@@ -4,6 +4,15 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-08-03
+
+### Fixed
+
+- Removed repository installers, cross-agent sync, automatic OpenClaw setup, combined runtime/registry update, and legacy full-directory export scripts.
+- Limited ClawHub packages to an explicit runtime allowlist, omitting evals, tests, maintainers' scripts, symlinks, and lock files.
+- Made global migration default to Skills only and require an explicit workspace for project-backed objects without adding interactive confirmation steps.
+- Validated imported Skill names and sources, and moved the root-mirror notice after YAML frontmatter for scanner compatibility.
+
 ## [0.7.1] - 2026-08-03
 
 ### Security

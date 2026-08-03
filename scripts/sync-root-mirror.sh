@@ -48,15 +48,20 @@ MIRROR_COMMENT='<!--
 -->'
 
 build_mirror() {
-  printf '%s\n\n' "$MIRROR_COMMENT"
   python3 -c '
 import re, sys
 with open(sys.argv[1], "r", encoding="utf-8") as f:
     text = f.read()
 rewritten = re.sub(r"(?<!skills/agent-skills-setup/)\b(references|scripts|assets)/([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)", r"skills/agent-skills-setup/\1/\2", text)
 rewritten = re.sub(r"(?<=\]\()(?<!skills/agent-skills-setup/)\b(references|scripts|assets)/", r"skills/agent-skills-setup/\1/", rewritten)
-sys.stdout.write(rewritten)
-' "$CANONICAL"
+frontmatter_end = rewritten.find("\n---\n", 4)
+if not rewritten.startswith("---\n") or frontmatter_end < 0:
+    raise SystemExit("canonical SKILL.md has invalid frontmatter")
+frontmatter_end += len("\n---\n")
+sys.stdout.write(rewritten[:frontmatter_end])
+sys.stdout.write("\n" + sys.argv[2] + "\n\n")
+sys.stdout.write(rewritten[frontmatter_end:].lstrip("\n"))
+' "$CANONICAL" "$MIRROR_COMMENT"
 }
 
 if [[ "$CHECK_ONLY" == true ]]; then

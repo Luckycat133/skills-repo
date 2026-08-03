@@ -1,3 +1,15 @@
+---
+name: agent-skills-setup
+version: 0.7.2
+license: MIT
+compatibility: Requires local Bash and filesystem access. Python 3 is required for automatic MCP conversion and redaction. No network access.
+description: >
+  Migrate, move, transfer, copy, convert, or sync AI-assistant context between
+  different IDEs or agents, including skills, rules, prompts, commands, and MCP
+  configuration. Resolve product-specific formats and execute a scoped,
+  verifiable migration.
+---
+
 <!--
   MIRROR FILE — not the source of truth.
   Some platforms (e.g. smithery.ai) only scan the repository ROOT for SKILL.md.
@@ -8,32 +20,12 @@
   skills/agent-skills-setup/... so they resolve correctly from the repository root.
 -->
 
----
-name: agent-skills-setup
-version: 0.7.1
-license: MIT
-compatibility: Requires local Bash and filesystem read access. Writes are limited to resolved migration targets after explicit approval. Python 3 is required for automatic MCP conversion and redaction. No network access.
-permissions:
-  - file_read
-  - file_write
-  - shell
-description: >
-  Use when a user explicitly asks to migrate, move, transfer, copy, convert, or
-  sync AI-assistant context between different IDEs or agents, including skills,
-  rules, prompts, commands, or MCP configuration. Preview a scoped change;
-  write only after approval. Do not use for explanation, installation,
-  debugging, validation, or same-tool copies.
----
-
 # AI IDE Context Migration
-
-Treat similarly named files as incompatible until their paths, schema,
-credentials, and conflict rules are checked.
 
 ## Route
 
-1. Resolve source, target, objects, scope, and workspace. State a safe obvious
-   assumption; otherwise ask one focused question.
+1. Resolve source, target, objects, scope, and workspace from the request and
+   environment. Ask only when a missing choice would change the destination.
 2. Resolve both IDs in [ide-registry.md](skills/agent-skills-setup/references/ide-registry.md), then read
    only [references/ides/<source>.md](skills/agent-skills-setup/references/ides/) and
    [references/ides/<target>.md](skills/agent-skills-setup/references/ides/). Use
@@ -50,21 +42,20 @@ credentials, and conflict rules are checked.
 The per-IDE reference describes product behavior; the script describes what is
 automated. Flag a mismatch before applying.
 
-## Safety and execution
+## Execution
 
-- Use filesystem read and shell only for the selected references, path lookup,
-  preview, and verification. Use filesystem write only for the approved target
-  paths; this Skill needs no network access.
-- Inspect only named paths; default to `skills,rules,prompts`.
+- Global scope defaults to `skills`. Project-backed objects require an explicit
+  workspace in the command.
 - Keep whole `config` files and opaque `project` trees manual. Rebuild a
   documented setting or migrate a dedicated supported object.
 - Never move secrets, OAuth/session state, runtime metadata, approval grants,
   chat history, databases, or generated memory. Use manual reconstruction when
   redaction or conversion is unclear.
 - Claude Desktop app MCP in **Settings → Extensions** and **Settings → Connectors** is UI-managed; do not infer or rewrite it from legacy JSON.
-- Run `--dry-run` and report credential handling without claiming completion.
-  After approval, rerun the reviewed command with `--yes --json`; report its
-  evidence and native target discovery.
+- Use `--dry-run` to resolve the plan. If the user already requested the
+  migration and the target is unambiguous, apply the same command with
+  `--yes --json` in the same task; do not ask for redundant confirmation.
+  Report evidence and native target discovery.
 
 ## Commands
 

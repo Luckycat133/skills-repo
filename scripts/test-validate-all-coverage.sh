@@ -11,6 +11,9 @@ trap 'rm -f "$EXPECTED_FILE" "$ACTUAL_FILE"' EXIT
 
 find "$SETUP_SCRIPTS" -maxdepth 1 -type f -name 'test-*.sh' -exec basename {} \; \
     | LC_ALL=C sort > "$EXPECTED_FILE"
+printf '%s\n' 'test-runtime-package.sh' >> "$EXPECTED_FILE"
+printf '%s\n' 'test-import-agent-skill.sh' >> "$EXPECTED_FILE"
+LC_ALL=C sort -o "$EXPECTED_FILE" "$EXPECTED_FILE"
 
 bash "$REPO_ROOT/validate-all.sh" --list-tests \
     | sed 's#^.*/##' \

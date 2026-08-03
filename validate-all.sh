@@ -6,6 +6,8 @@ SETUP_SCRIPTS="$SCRIPT_DIR/skills/agent-skills-setup/scripts"
 
 list_focused_tests() {
     local test_script
+    printf '%s\n' "$SCRIPT_DIR/scripts/test-import-agent-skill.sh"
+    printf '%s\n' "$SCRIPT_DIR/scripts/test-runtime-package.sh"
     for test_script in "$SETUP_SCRIPTS"/test-*.sh; do
         [[ -f "$test_script" ]] || continue
         printf '%s\n' "$test_script"

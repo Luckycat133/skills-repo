@@ -8,15 +8,10 @@
 
 Skills reutilizables de asistentes de IA, creadas localmente y publicadas desde GitHub.
 
-## Instalación
+## Uso
 
-```bash
-# OpenClaw
-openclaw skills install @luckycat133/agent-skills-setup
-
-# skills.sh
-npx skills add Luckycat133/skills-repo
-```
+Instala `agent-skills-setup` mediante el gestor de Skills del agente actual o ClawHub. El repositorio no proporciona un instalador entre agentes; la instalación solo pone las referencias y el script de migración a disposición de ese agente.
+La instalación no selecciona un IDE. `--source`, `--target`, `--objects` y `--workspace` pertenecen al comando de migración que el agente ejecuta después.
 
 ## Estructura
 
@@ -32,22 +27,22 @@ skills-repo/
 
 ## `agent-skills-setup`
 
-Migra, con consentimiento explícito, contexto seleccionado entre IDE y agentes compatibles: skills, reglas, prompts y objetos MCP documentados. La configuración completa del IDE y los árboles opacos del proyecto requieren revisión manual. Consulta los 44 identificadores compatibles con el script y las superficies manuales en el [registro de IDE](skills/agent-skills-setup/references/ide-registry.md).
+Migra contexto con alcance definido entre IDE y agentes compatibles: skills, reglas, prompts y objetos MCP documentados. La configuración completa del IDE y los árboles opacos del proyecto requieren revisión manual. Consulta los 44 identificadores compatibles con el script y las superficies manuales en el [registro de IDE](skills/agent-skills-setup/references/ide-registry.md).
 
-La versión 0.7.1 solo declara lectura y escritura de archivos locales y shell; no usa la red. Las escrituras aún requieren una ejecución `--yes` aprobada. Se rechazan los destinos MCP que sean enlaces simbólicos y la limpieza se limita al destino exacto o a la raíz verificada de una copia de Skill.
+El paquete de ejecución contiene referencias y un único comando de migración. No instala IDE ni runtimes, no crea enlaces simbólicos o bloqueos de registro y no se copia en los directorios de otros agentes. Las migraciones globales seleccionan Skills por defecto; los objetos de proyecto usan un workspace explícito.
 
 ## Desarrollo
 
 1. Edita `skills/agent-skills-setup/`; no edites el `SKILL.md` raíz generado.
 2. Ejecuta `bash validate-all.sh`.
 3. Tras cambiar el Skill canónico, ejecuta `bash scripts/sync-root-mirror.sh`.
-4. Fusiona después de validar e instala con `bash install.sh` o el script de sync correspondiente.
+4. Fusiona después de validar.
 
-Los destinos existentes se conservan salvo que `--force` solicite explícitamente una copia de seguridad con marca de tiempo y el reemplazo. Revisa skills externas en una rama con `bash scripts/import-agent-skill.sh <source-dir> <skill-name>`.
+Revisa skills externas en una rama con `bash scripts/import-agent-skill.sh <source-dir> <skill-name>`.
 
 ## Publicación
 
-GitHub es la fuente canónica; ClawHub, `skills.sh` y Awesome Copilot son canales de distribución. Antes de publicar, ejecuta todas las pruebas y el análisis de seguridad, sube y verifica el commit de GitHub y exige un dry run correcto de ClawHub. Consulta la [lista de publicación](docs/agent-skills-setup/release-checklist.md).
+GitHub es la fuente canónica; ClawHub y Awesome Copilot son canales de distribución. Antes de publicar, ejecuta todas las pruebas y el análisis de seguridad, sube y verifica el commit de GitHub y exige un dry run correcto de ClawHub. Consulta la [lista de publicación](docs/agent-skills-setup/release-checklist.md).
 
 ## Proyecto
 

@@ -9,6 +9,7 @@ source "${SCRIPT_DIR}/common.sh"
 SOURCE_IDE=""
 TARGET_IDE=""
 WORKSPACE_ROOT="$(pwd)"
+WORKSPACE_EXPLICIT=0
 OBJECTS=""
 SOURCE_MCP_FILE=""
 SCOPE="global"
@@ -321,13 +322,13 @@ get_mcp_root_key() {
 
 usage() {
     cat <<'EOF'
-Scoped IDE-context migration. Preview first; add --yes only after approval.
+Scoped IDE-context migration.
 
 Usage: smart-ide-migration.sh --source <ide> --target <ide> [options]
 
-  --workspace <dir>       Workspace (default: current directory)
+  --workspace <dir>       Workspace for project-backed objects
   --objects <csv>         skills,rules,prompts,mcp,project-mcp,config,project,
-                          agents,hooks,memory (default: skills,rules,prompts)
+                          agents,hooks,memory (global default: skills)
   --scope global|project|both   Skills/MCP scope (default: global)
   --strategy skip|backup|overwrite   Existing-object handling (default: backup)
   --source-mcp-file <file>      Reviewed JSON/JSONC MCP input
@@ -336,7 +337,7 @@ Usage: smart-ide-migration.sh --source <ide> --target <ide> [options]
   --json                        Emit JSON evidence
   --print-path <ide> <object>   Read-only path lookup
   --dry-run                     Parse and preview without writes
-  --yes, -y                     Confirm writes
+  --yes, -y                     Apply writes
   -h, --help                    Show help
 
 Output: human-readable stdout by default; with --json, stdout is one JSON
@@ -3609,6 +3610,7 @@ main() {
                 ;;
             --workspace)
                 WORKSPACE_ROOT="$2"
+                WORKSPACE_EXPLICIT=1
                 shift 2
                 ;;
             --objects)
@@ -3793,12 +3795,35 @@ main() {
     fi
 
     if [[ -z "$OBJECTS" ]]; then
-        OBJECTS=$(list_available_objects "$SOURCE_IDE" | tr ',' '\n' | grep -E '^(skills|rules|prompts)$' | paste -sd, -)
-        if [[ -z "$OBJECTS" ]]; then
-            OBJECTS="skills,rules,prompts"
+        if [[ "$SCOPE" == "global" ]]; then
+            OBJECTS="skills"
+            echo "No --objects specified: global migrations default to skills." >&2
+        else
+            if [[ $WORKSPACE_EXPLICIT -eq 0 ]]; then
+                echo "Error: project scope requires an explicit --workspace path" >&2
+                exit 1
+            fi
+            OBJECTS=$(list_available_objects "$SOURCE_IDE" | tr ',' '\n' | grep -E '^(skills|rules|prompts)$' | paste -sd, -)
+            [[ -n "$OBJECTS" ]] || OBJECTS="skills,rules,prompts"
+            echo "No --objects specified: project migrations default to skills,rules,prompts." >&2
         fi
-        echo "No --objects specified: by default only low-risk types are migrated (skills,rules,prompts)." >&2
-        echo "To migrate mcp/config/project (which may contain secrets), please specify --objects explicitly and confirm reviewed." >&2
+    fi
+
+    local requires_workspace=0
+    case ",$OBJECTS," in
+        *,rules,*|*,prompts,*|*,project,*|*,project-mcp,*)
+            requires_workspace=1
+            ;;
+    esac
+    if [[ "$SCOPE" != "global" && ",$OBJECTS," == *,skills,* ]]; then
+        requires_workspace=1
+    fi
+    if [[ "$SCOPE" != "global" && ",$OBJECTS," == *,mcp,* ]]; then
+        requires_workspace=1
+    fi
+    if [[ $requires_workspace -eq 1 && $WORKSPACE_EXPLICIT -eq 0 ]]; then
+        echo "Error: the selected project-backed objects require an explicit --workspace path" >&2
+        exit 1
     fi
 
     if [[ -n "$SOURCE_MCP_FILE" ]]; then
@@ -3826,14 +3851,6 @@ main() {
             exit 1
         fi
         SOURCE_MCP_FILE="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$SOURCE_MCP_FILE")"
-    fi
-
-    if [[ "$OBJECTS" == *mcp* || "$OBJECTS" == *config* || "$OBJECTS" == *project* ]]; then
-        echo "" >&2
-        log_warn "SECURITY: This migration includes mcp/config/project, which may contain API keys, tokens," >&2
-        log_warn "bearer credentials or embedded URL credentials. Literal credentials are cleared; exact supported environment references may be converted to target syntax."
-        log_warn "Review target environment/secret-manager bindings before enabling. Run only between sources and targets you trust."
-        echo "" >&2
     fi
 
     echo "========================================"

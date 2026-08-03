@@ -8,11 +8,12 @@ skillspector scan skills/agent-skills-setup --no-llm
 clawhub whoami
 ```
 
-若未安装 SkillSpector，先用项目规定的隔离方式运行同源扫描，不要跳过安全复核。确认 `SKILL.md` 的版本、权限声明、Changelog 和根镜像一致后，生成发布命令：
+若未安装 SkillSpector，先用项目规定的隔离方式运行同源扫描，不要跳过安全复核。确认 `SKILL.md` 的版本、Changelog 和根镜像一致后，生成发布命令：
 
 ```bash
 bash scripts/prepare-clawhub-release.sh \
   --skill-dir skills/agent-skills-setup \
+  --package-dir dist/clawhub/agent-skills-setup-<version> \
   --slug agent-skills-setup \
   --name "Agent Skills Setup" \
   --version <version> \
@@ -20,7 +21,7 @@ bash scripts/prepare-clawhub-release.sh \
   --changelog "<concise release note>"
 ```
 
-复制脚本输出的 `clawhub publish ...` 命令，为它补充 `--source-repo`、`--source-commit`、`--source-ref`、`--source-path` 和 `--dry-run --json`；不要把这些参数传给辅助脚本。记录 dry run 返回的 `would-publish`、版本、文件数和 fingerprint。确认预览与已核验提交一致后，移除 `--dry-run`，以其余参数不变的同一条底层命令正式发布。
+辅助脚本按白名单只放入 `SKILL.md`、references、assets、`common.sh`、`ide-paths.tsv` 和 `smart-ide-migration.sh`；新增仓库脚本不会自动进入发行包。复制脚本输出的 `clawhub publish ...` 命令，为它补充 `--source-repo`、`--source-commit`、`--source-ref`、`--source-path` 和 `--dry-run --json`；不要把这些参数传给辅助脚本。记录 dry run 返回的 `would-publish`、版本、文件数和 fingerprint。确认预览与已核验提交一致后，移除 `--dry-run`，以其余参数不变的同一条底层命令正式发布。
 
 发布后分别运行：
 

@@ -11,6 +11,11 @@ MIRROR_HASH_BEFORE="$(shasum -a 256 "$MIRROR" | awk '{print $1}')"
 
 bash "$REPO_ROOT/scripts/sync-root-mirror.sh" --output "$TEMP_MIRROR"
 
+[[ "$(head -n 1 "$TEMP_MIRROR")" == "---" ]] || {
+    echo "FAIL: generated root mirror must begin with YAML frontmatter" >&2
+    exit 1
+}
+
 if ! rg -F '](skills/agent-skills-setup/references/ides/)' "$TEMP_MIRROR" >/dev/null; then
     echo "FAIL: generated mirror does not rewrite nested IDE-reference links" >&2
     exit 1

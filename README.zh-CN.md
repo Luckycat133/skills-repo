@@ -8,15 +8,10 @@
 
 可在本地编写、从 GitHub 发布的可复用 AI 助手技能。
 
-## 安装
+## 使用方式
 
-```bash
-# OpenClaw
-openclaw skills install @luckycat133/agent-skills-setup
-
-# skills.sh
-npx skills add Luckycat133/skills-repo
-```
+通过当前 Agent 自己的 Skill 管理功能或 ClawHub 安装 `agent-skills-setup`。仓库不再提供跨 Agent 安装器；安装只会让当前 Agent 获得参考资料和迁移脚本。
+安装时不选择 IDE；`--source`、`--target`、`--objects` 和 `--workspace` 只属于 Agent 之后执行的迁移命令。
 
 ## 结构
 
@@ -32,22 +27,22 @@ skills-repo/
 
 ## `agent-skills-setup`
 
-在明确同意后，在受支持的 IDE 与智能体之间迁移选定上下文：已记录的 skills、规则、提示词与 MCP 对象。完整 IDE 配置和不透明项目树始终人工处理。44 个脚本支持标识符及仅人工处理的界面见 [IDE 注册表](skills/agent-skills-setup/references/ide-registry.md)。
+在受支持的 IDE 与智能体之间按明确范围迁移选定上下文：已记录的 Skills、规则、提示词与 MCP 对象。完整 IDE 配置和不透明项目树始终人工处理。44 个脚本支持标识符及仅人工处理的界面见 [IDE 注册表](skills/agent-skills-setup/references/ide-registry.md)。
 
-0.7.1 仅声明本地文件读取、文件写入和 shell 权限，不使用网络。写入仍须通过已批准的 `--yes` 执行；MCP 目标若为符号链接会被拒绝，清理范围只限精确迁移目标或已验证的 Skill 副本根目录。
+运行时包只包含参考资料和一个迁移命令；不会安装 IDE 或运行时、创建符号链接、维护注册表锁文件，也不会把自己复制进各个 Agent 目录。全局迁移默认只处理 Skills；项目对象使用命令中明确给出的 workspace。
 
 ## 开发
 
 1. 编辑 `skills/agent-skills-setup/`，不要直接改生成的根 `SKILL.md`。
 2. 运行 `bash validate-all.sh`。
 3. 修改规范 Skill 后运行 `bash scripts/sync-root-mirror.sh`。
-4. 验证通过后合并，再用 `bash install.sh` 或对应同步脚本安装。
+4. 验证通过后再合并。
 
-除非明确传入 `--force`，现有目标不会被覆盖；该选项会先做带时间戳的备份。外部技能请在分支中用 `bash scripts/import-agent-skill.sh <source-dir> <skill-name>` 导入审查。
+外部技能请在分支中用 `bash scripts/import-agent-skill.sh <source-dir> <skill-name>` 导入审查。
 
 ## 发布
 
-GitHub 是规范来源；ClawHub、`skills.sh` 与 Awesome Copilot 是分发渠道。发布前必须通过全量测试和安全扫描，推送并核验 GitHub 提交，再以 ClawHub dry run 确认发行包。详见[发布检查清单](docs/agent-skills-setup/release-checklist.md)。
+GitHub 是规范来源；ClawHub 与 Awesome Copilot 是分发渠道。发布前必须通过全量测试和安全扫描，推送并核验 GitHub 提交，再以 ClawHub dry run 确认发行包。详见[发布检查清单](docs/agent-skills-setup/release-checklist.md)。
 
 ## 项目资料
 

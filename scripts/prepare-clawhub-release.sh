@@ -2,10 +2,21 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/openclaw-common.sh"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+die() {
+    echo "ERROR: $*" >&2
+    exit 1
+}
+
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
 
 SKILL_DIR=""
 SKILL_DIR_ABS=""
+PACKAGE_DIR=""
+PACKAGE_DIR_ABS=""
 SLUG=""
 DISPLAY_NAME=""
 VERSION=""
@@ -22,6 +33,7 @@ Validate a Skill and print or run its ClawHub publish command.
 
 Options:
   --skill-dir <dir>         Path to the skill folder to publish.
+  --package-dir <dir>       Empty destination for the runtime-only package.
   --slug <slug>             Public ClawHub slug.
   --name <name>             Display name.
   --version <semver>        Release version, e.g. 1.0.0.
@@ -38,6 +50,11 @@ while [[ $# -gt 0 ]]; do
         --skill-dir)
             [[ $# -ge 2 ]] || die "--skill-dir requires a value"
             SKILL_DIR="$2"
+            shift 2
+            ;;
+        --package-dir)
+            [[ $# -ge 2 ]] || die "--package-dir requires a value"
+            PACKAGE_DIR="$2"
             shift 2
             ;;
         --slug)
@@ -85,6 +102,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -n "$SKILL_DIR" ]] || die "--skill-dir is required"
+[[ -n "$PACKAGE_DIR" ]] || die "--package-dir is required"
 [[ -n "$SLUG" ]] || die "--slug is required"
 [[ -n "$DISPLAY_NAME" ]] || die "--name is required"
 [[ -n "$VERSION" ]] || die "--version is required"
@@ -114,13 +132,21 @@ if ! clawhub whoami >/dev/null 2>&1; then
     echo "WARN: Not logged in to ClawHub. Run 'clawhub login' before using --publish." >&2
 fi
 
-PUBLISH_CMD=(clawhub publish "$SKILL_DIR_ABS" --slug "$SLUG" --name "$DISPLAY_NAME" --version "$VERSION" --tags "$TAGS")
+case "$PACKAGE_DIR" in
+    /*) PACKAGE_DIR_ABS="$PACKAGE_DIR" ;;
+    *) PACKAGE_DIR_ABS="$(pwd)/$PACKAGE_DIR" ;;
+esac
+[[ ! -e "$PACKAGE_DIR_ABS" ]] || die "Package directory already exists: $PACKAGE_DIR_ABS"
+bash "$REPO_ROOT/scripts/stage-runtime-skill.sh" "$SKILL_DIR_ABS" "$PACKAGE_DIR_ABS"
+
+PUBLISH_CMD=(clawhub publish "$PACKAGE_DIR_ABS" --slug "$SLUG" --name "$DISPLAY_NAME" --version "$VERSION" --tags "$TAGS")
 
 if [[ -n "$CHANGELOG_TEXT" ]]; then
     PUBLISH_CMD+=(--changelog "$CHANGELOG_TEXT")
 fi
 
-echo "Validated skill folder: $SKILL_DIR_ABS"
+echo "Validated source skill: $SKILL_DIR_ABS"
+echo "Staged runtime package: $PACKAGE_DIR_ABS"
 echo "Suggested publish command:"
 printf '%q ' "${PUBLISH_CMD[@]}"
 printf '\n'

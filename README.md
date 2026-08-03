@@ -8,15 +8,13 @@
 
 Reusable AI-assistant skills, authored locally and published from GitHub.
 
-## Install
+## Use
 
-```bash
-# OpenClaw
-openclaw skills install @luckycat133/agent-skills-setup
-
-# skills.sh
-npx skills add Luckycat133/skills-repo
-```
+Install `agent-skills-setup` through the current agent's own Skill manager or
+ClawHub. The repository does not provide a cross-agent installer. Installation
+only makes the references and migration script available to that agent.
+Installation has no IDE target: `--source`, `--target`, `--objects`, and
+`--workspace` belong to a later migration command run by the agent.
 
 ## Layout
 
@@ -32,25 +30,25 @@ skills-repo/
 
 ## `agent-skills-setup`
 
-Consent-gated migration of selected assistant context between supported IDEs and agents. It handles documented skills, rules, prompts, and MCP objects; whole IDE configuration and opaque project trees stay manual. See the [IDE registry](skills/agent-skills-setup/references/ide-registry.md) for the 44 script-supported identifiers and documented manual-only surfaces.
+Scoped migration of selected assistant context between supported IDEs and agents. It handles documented skills, rules, prompts, and MCP objects; whole IDE configuration and opaque project trees stay manual. See the [IDE registry](skills/agent-skills-setup/references/ide-registry.md) for the 44 script-supported identifiers and documented manual-only surfaces.
 
-Version 0.7.1 declares only local file-read, file-write, and shell capabilities;
-it uses no network access. Writes still require an approved `--yes` run. MCP
-targets that are symbolic links are rejected, and cleanup is restricted to the
-exact migration target or a verified copied-skill root.
+The runtime package contains references plus one migration command. It does not
+install IDEs or runtimes, create symlinks, maintain registry locks, or copy
+itself into agent directories. Global migrations default to Skills only;
+project-backed objects use an explicit workspace.
 
 ## Develop
 
 1. Edit `skills/agent-skills-setup/`, never the generated root `SKILL.md`.
 2. Run `bash validate-all.sh`.
 3. Regenerate the root mirror after canonical-skill edits: `bash scripts/sync-root-mirror.sh`.
-4. Merge only after validation, then install with `bash install.sh` or a target-specific sync script.
+4. Merge only after validation.
 
-Existing targets are preserved unless `--force` explicitly requests a timestamped backup and replacement. To review an external skill, use `bash scripts/import-agent-skill.sh <source-dir> <skill-name>` in a branch.
+To review an external skill, use `bash scripts/import-agent-skill.sh <source-dir> <skill-name>` in a branch.
 
 ## Release
 
-GitHub is canonical; ClawHub, `skills.sh`, and Awesome Copilot are distribution channels. Before release, run the full suite and security scan, push and verify the GitHub commit, then require a successful ClawHub dry run before publishing. See the [release checklist](docs/agent-skills-setup/release-checklist.md).
+GitHub is canonical; ClawHub and Awesome Copilot are distribution channels. Before release, run the full suite and security scan, push and verify the GitHub commit, then require a successful ClawHub dry run before publishing. See the [release checklist](docs/agent-skills-setup/release-checklist.md).
 
 ## Project
 
