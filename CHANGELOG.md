@@ -4,6 +4,12 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ## [Unreleased]
 
+## [0.7.4] - 2026-08-04
+
+### Fixed
+
+- Applied the documented `backup`/`skip`/`overwrite` strategy to project rules and prompt targets, and rejected symlinked or mismatched target types before writing.
+
 ## [0.7.3] - 2026-08-04
 
 ### Added

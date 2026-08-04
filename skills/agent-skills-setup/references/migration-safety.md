@@ -1,6 +1,6 @@
 # Migration safety and conflicts
 
-Use before a migration can write. Inspect only the named source, target, and workspace; reject source/target identity and unsupported formats. Before copying a Skill directory, scan every regular text file and reject the whole Skill if likely literal credentials or a link outside its source root is found. Exclude `.env` and `.env.*`; preserve the source.
+Use before a migration can write. Inspect only the named source, target, and workspace; reject source/target identity and unsupported formats. Before copying a Skill directory, scan every regular text file and reject the whole Skill if likely literal credentials or a link outside its source root is found. Existing rules and prompt targets use `backup` by default; `skip` preserves them and `overwrite` is explicit. Exclude `.env` and `.env.*`; preserve the source.
 
 Use [mcp-transport.md](mcp-transport.md) for remote transport, OAuth, or protocol state. The script blanks literal credentials and may translate an exact documented environment reference; mixed or complex expressions need manual reconstruction. MCP target symlinks fail before conversion. Redaction cleanup accepts only the exact target artifacts, while copied-skill cleanup is contained within the canonical target copy root.
 

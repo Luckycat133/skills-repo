@@ -50,6 +50,46 @@ fi
 
 echo "PASS: unknown strategy fails before modifying an existing target"
 
+WORKSPACE="$TMP_ROOT/workspace"
+mkdir -p "$WORKSPACE/.claude/commands" "$WORKSPACE/.opencode/commands"
+printf '%s\n' 'source rule' > "$WORKSPACE/CLAUDE.md"
+printf '%s\n' 'existing target rule' > "$WORKSPACE/AGENTS.md"
+printf '%s\n' 'source prompt' > "$WORKSPACE/.claude/commands/demo.md"
+printf '%s\n' 'existing target prompt' > "$WORKSPACE/.opencode/commands/demo.md"
+
+HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+    --source claude --target opencode --workspace "$WORKSPACE" \
+    --objects rules,prompts --strategy backup --yes >"$TMP_ROOT/rules-prompts-backup.log" 2>&1
+
+grep -Fxq 'source rule' "$WORKSPACE/AGENTS.md" || {
+    echo "FAIL: backup strategy did not migrate the rule" >&2
+    exit 1
+}
+RULE_BACKUP="$(find "$WORKSPACE" -maxdepth 1 -name 'AGENTS.md.bak.*' -print -quit)"
+[[ -n "$RULE_BACKUP" ]] || {
+    echo "FAIL: backup strategy did not preserve the existing rule" >&2
+    exit 1
+}
+grep -Fxq 'existing target rule' "$RULE_BACKUP" || {
+    echo "FAIL: rule backup did not preserve existing content" >&2
+    exit 1
+}
+grep -Fxq 'source prompt' "$WORKSPACE/.opencode/commands/demo.md" || {
+    echo "FAIL: backup strategy did not migrate the prompt" >&2
+    exit 1
+}
+PROMPT_BACKUP="$(find "$WORKSPACE/.opencode" -maxdepth 1 -type d -name 'commands.bak.*' -print -quit)"
+[[ -n "$PROMPT_BACKUP" ]] || {
+    echo "FAIL: backup strategy did not preserve the existing prompt directory" >&2
+    exit 1
+}
+grep -Fxq 'existing target prompt' "$PROMPT_BACKUP/demo.md" || {
+    echo "FAIL: prompt backup did not preserve existing content" >&2
+    exit 1
+}
+
+echo "PASS: rules and prompts honor the backup conflict strategy"
+
 write_existing_target() {
     printf '%s\n' '{"theme":"dark","mcp":{"keep":{"type":"local","command":["keep-server"]},"same":{"type":"local","command":["old-server"]}}}' \
         > "$TEST_HOME/.config/opencode/opencode.json"

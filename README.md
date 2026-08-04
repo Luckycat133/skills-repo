@@ -42,6 +42,8 @@ changing its source or existing target.
 The Skill metadata declares only local file-read, file-write, and shell
 capabilities, and its trigger describes migration between two named supported
 products.
+Project rules and prompt targets use the selected conflict strategy, defaulting
+to a backup before copy.
 
 ## Develop
 

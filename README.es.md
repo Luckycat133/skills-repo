@@ -32,6 +32,7 @@ Migra contexto con alcance definido entre IDE y agentes compatibles: skills, reg
 El paquete de ejecución contiene referencias y un único comando de migración. No instala IDE ni runtimes, no crea enlaces simbólicos o bloqueos de registro y no se copia en los directorios de otros agentes. Las migraciones globales seleccionan Skills por defecto; los objetos de proyecto usan un workspace explícito.
 Antes de copiar un directorio de Skill se analiza todo el texto de origen. Una credencial literal probable o un enlace fuera del Skill hace que se omita sin modificar el origen ni el destino existente.
 Los metadatos del Skill solo declaran lectura/escritura de archivos locales y shell; el activador se limita a migraciones entre dos productos compatibles nombrados.
+Las reglas y prompts del proyecto siguen la estrategia de conflicto elegida y, por defecto, hacen una copia de respaldo antes de copiar.
 
 ## Desarrollo
 

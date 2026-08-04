@@ -1,6 +1,6 @@
 ---
 name: agent-skills-setup
-version: 0.7.3
+version: 0.7.4
 license: MIT
 compatibility: Requires local Bash and filesystem read/write access for resolved migration targets. Python 3 is required for automatic MCP conversion and redaction. No network access.
 permissions:
@@ -51,6 +51,8 @@ automated. Flag a mismatch before applying.
   workspace in the command.
 - Before copying a Skill, scan every source text file and reject literal
   credentials or links outside that Skill; leave both source and target intact.
+- Existing rules and prompt targets follow `--strategy`: `backup` is the
+  default, `skip` preserves them, and `overwrite` replaces or merges them.
 - Keep whole `config` files and opaque `project` trees manual. Rebuild a
   documented setting or migrate a dedicated supported object.
 - Never move secrets, OAuth/session state, runtime metadata, approval grants,

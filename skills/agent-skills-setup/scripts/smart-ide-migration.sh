@@ -448,6 +448,52 @@ safe_remove_path_within() {
     remove_verified_tree "$target"
 }
 
+backup_existing_path() {
+    local target="$1"
+    local workspace_real target_parent_real target_name timestamp backup_path
+
+    [[ -n "${WORKSPACE_ROOT:-}" && -d "$WORKSPACE_ROOT" ]] || {
+        echo "  [GUARD] refused backup: workspace is unavailable" >&2
+        return 1
+    }
+    [[ -e "$target" || -L "$target" ]] || return 0
+    if [[ -L "$target" ]]; then
+        echo "  [GUARD] refused backup through symbolic link: $target" >&2
+        return 1
+    fi
+
+    workspace_real="$(cd "$WORKSPACE_ROOT" 2>/dev/null && pwd -P)" || return 1
+    target_parent_real="$(cd "$(dirname "$target")" 2>/dev/null && pwd -P)" || {
+        echo "  [GUARD] refused backup: target parent cannot be resolved '$target'" >&2
+        return 1
+    }
+    case "$target_parent_real" in
+        "$workspace_real"|"$workspace_real"/*) ;;
+        *)
+            echo "  [GUARD] refused backup outside workspace: $target" >&2
+            return 1
+            ;;
+    esac
+
+    target_name="$(basename "$target")"
+    [[ -n "$target_name" && "$target_name" != "." && "$target_name" != ".." ]] || {
+        echo "  [GUARD] refused backup: invalid target name '$target_name'" >&2
+        return 1
+    }
+
+    timestamp="$(date +%Y%m%d%H%M%S).$$"
+    backup_path="$target.bak.$timestamp"
+    while [[ -e "$backup_path" || -L "$backup_path" ]]; do
+        timestamp="${timestamp}.1"
+        backup_path="$target.bak.$timestamp"
+    done
+    if ! mv "$target" "$backup_path"; then
+        echo "  [FAIL] could not back up existing target: $target" >&2
+        return 1
+    fi
+    printf '%s\n' "$backup_path"
+}
+
 validate_ide() {
     local ide="$1"
     local supported
@@ -1275,20 +1321,68 @@ migrate_rules() {
         return 0
     fi
 
+    if [[ -L "$target_path" ]]; then
+        set_status "rules" "failed"
+        set_message "rules" "target rules file is a symbolic link; refusing indirect overwrite"
+        MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
+        return 0
+    fi
+    if [[ -e "$target_path" && ! -f "$target_path" ]]; then
+        set_status "rules" "failed"
+        set_message "rules" "target rules path is not a regular file"
+        MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
+        return 0
+    fi
+
     if [[ $DRY_RUN -eq 1 ]]; then
+        if [[ -e "$target_path" ]]; then
+            case "$STRATEGY" in
+                skip)
+                    echo "  DRY-RUN: skip existing rules file $target_path"
+                    set_status "rules" "skipped"
+                    set_message "rules" "existing rules file would be preserved"
+                    MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
+                    return 0
+                    ;;
+                backup)
+                    echo "  DRY-RUN: backup $target_path before copying"
+                    ;;
+            esac
+        fi
         echo "  DRY-RUN: cp $source_path $target_path"
         set_status "rules" "success"
-        set_message "rules" "rules file ready to migrate" 
+        set_message "rules" "rules file ready to migrate"
     else
+        local rules_backup=""
+        if [[ -e "$target_path" ]]; then
+            case "$STRATEGY" in
+                skip)
+                    echo "  [SKIP] existing rules file: $target_path"
+                    set_status "rules" "skipped"
+                    set_message "rules" "existing rules file preserved"
+                    MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
+                    return 0
+                    ;;
+                backup)
+                    rules_backup="$(backup_existing_path "$target_path")" || {
+                        set_status "rules" "failed"
+                        set_message "rules" "could not back up existing rules file"
+                        MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
+                        return 0
+                    }
+                    echo "  [BACKUP] $target_path -> $rules_backup"
+                    ;;
+            esac
+        fi
         mkdir -p "$(dirname "$target_path")"
         if cp "$source_path" "$target_path"; then
-            echo "  [OK] migrated rule: $source_rules -> $target_rules" 
+            echo "  [OK] migrated rule: $source_rules -> $target_rules"
             set_status "rules" "success"
-        set_message "rules" "rules file migration succeeded" 
+            set_message "rules" "rules file migration succeeded"
             MIGRATION_SUCCESS=$((MIGRATION_SUCCESS + 1))
         else
             set_status "rules" "failed"
-        set_message "rules" "rules file migration failed" 
+            set_message "rules" "rules file migration failed"
             MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
         fi
     fi
@@ -1431,11 +1525,59 @@ migrate_prompts() {
         return 0
     fi
 
+    if [[ -L "$target_path" ]]; then
+        set_status "prompts" "failed"
+        set_message "prompts" "target prompt directory is a symbolic link; refusing indirect overwrite"
+        MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
+        return 0
+    fi
+    if [[ -e "$target_path" && ! -d "$target_path" ]]; then
+        set_status "prompts" "failed"
+        set_message "prompts" "target prompt path is not a directory"
+        MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
+        return 0
+    fi
+
     if [[ $DRY_RUN -eq 1 ]]; then
+        if [[ -e "$target_path" ]]; then
+            case "$STRATEGY" in
+                skip)
+                    echo "  DRY-RUN: skip existing prompt directory $target_path"
+                    set_status "prompts" "skipped"
+                    set_message "prompts" "existing prompt directory would be preserved"
+                    MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
+                    return 0
+                    ;;
+                backup)
+                    echo "  DRY-RUN: backup $target_path before copying"
+                    ;;
+            esac
+        fi
         echo "  DRY-RUN: copy $prompt_pattern files from $source_path to $target_path/"
         set_status "prompts" "success"
         set_message "prompts" "$prompt_count prompt templates ready to migrate" 
     else
+        local prompts_backup=""
+        if [[ -e "$target_path" ]]; then
+            case "$STRATEGY" in
+                skip)
+                    echo "  [SKIP] existing prompt directory: $target_path"
+                    set_status "prompts" "skipped"
+                    set_message "prompts" "existing prompt directory preserved"
+                    MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
+                    return 0
+                    ;;
+                backup)
+                    prompts_backup="$(backup_existing_path "$target_path")" || {
+                        set_status "prompts" "failed"
+                        set_message "prompts" "could not back up existing prompt directory"
+                        MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
+                        return 0
+                    }
+                    echo "  [BACKUP] $target_path -> $prompts_backup"
+                    ;;
+            esac
+        fi
         mkdir -p "$target_path"
         local prompt_file relative_prompt target_prompt
         local prompt_copy_failed=0
@@ -1449,13 +1591,13 @@ migrate_prompts() {
             fi
         done < <(find "$source_path" -name "$prompt_pattern" -type f -print0 2>/dev/null)
         if [[ "$prompt_copy_failed" -eq 0 ]]; then
-            echo "  [OK] migrated prompts: $prompt_count files" 
+            echo "  [OK] migrated prompts: $prompt_count files"
             set_status "prompts" "success"
-        set_message "prompts" "successfully migrated $prompt_count prompt templates" 
+            set_message "prompts" "successfully migrated $prompt_count prompt templates"
             MIGRATION_SUCCESS=$((MIGRATION_SUCCESS + 1))
         else
             set_status "prompts" "failed"
-        set_message "prompts" "prompt template migration failed" 
+            set_message "prompts" "prompt template migration failed"
             MIGRATION_FAILED=$((MIGRATION_FAILED + 1))
         fi
     fi
