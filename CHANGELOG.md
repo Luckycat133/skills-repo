@@ -8,7 +8,7 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ### Fixed
 
-- Applied the documented `backup`/`skip`/`overwrite` strategy to project rules and prompt targets, and rejected symlinked or mismatched target types before writing.
+- Corrected a post-release 0.7.3 defect so project rules and prompt targets honor the documented `backup`/`skip`/`overwrite` strategy, preserving existing content by default and rejecting symlinked or mismatched target types before writing.
 
 ## [0.7.3] - 2026-08-04
 
@@ -25,6 +25,10 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 - Rejected external Skill symlinks and unreadable source subtrees before copying, while preserving existing source and target content.
 - Made focused test scripts portable on systems without `rg` and removed an obsolete installer check from CI.
+
+### Security
+
+- A post-release audit found that project rule and prompt writes could bypass the documented conflict strategy. Upgrade to 0.7.4 or later for the corrected behavior.
 
 ## [0.7.2] - 2026-08-03
 
