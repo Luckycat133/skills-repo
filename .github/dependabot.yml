@@ -1,14 +1,7 @@
+# There is no package.json in this repository, so the npm ecosystem had no
+# manifest to resolve and failed on every scheduled run.
 version: 2
 updates:
-  - package-ecosystem: "npm"
-    directory: "/"
-    schedule:
-      interval: "monthly"
-    open-pull-requests-limit: 5
-    groups:
-      all-npm:
-        patterns:
-          - "*"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
