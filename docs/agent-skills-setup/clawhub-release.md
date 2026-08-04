@@ -21,7 +21,7 @@ bash scripts/prepare-clawhub-release.sh \
   --changelog "<concise release note>"
 ```
 
-辅助脚本按白名单只放入 `SKILL.md`、references、assets、`common.sh`、`ide-paths.tsv` 和 `smart-ide-migration.sh`；新增仓库脚本不会自动进入发行包。复制脚本输出的 `clawhub publish ...` 命令，为它补充 `--source-repo`、`--source-commit`、`--source-ref`、`--source-path` 和 `--dry-run --json`；不要把这些参数传给辅助脚本。记录 dry run 返回的 `would-publish`、版本、文件数和 fingerprint。确认预览与已核验提交一致后，移除 `--dry-run`，以其余参数不变的同一条底层命令正式发布。
+辅助脚本按白名单只放入 `SKILL.md`、references、assets、`common.sh`、`ide-paths.tsv`、`scan-skill-secrets.py` 和 `smart-ide-migration.sh`；新增仓库脚本不会自动进入发行包。复制脚本输出的 `clawhub publish ...` 命令，为它补充 `--source-repo`、`--source-commit`、`--source-ref`、`--source-path` 和 `--dry-run --json`；不要把这些参数传给辅助脚本。记录 dry run 返回的 `would-publish`、版本、文件数和 fingerprint。确认预览与已核验提交一致后，移除 `--dry-run`，以其余参数不变的同一条底层命令正式发布。
 
 发布后分别运行：
 

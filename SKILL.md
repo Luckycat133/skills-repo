@@ -1,13 +1,16 @@
 ---
 name: agent-skills-setup
-version: 0.7.2
+version: 0.7.3
 license: MIT
-compatibility: Requires local Bash and filesystem access. Python 3 is required for automatic MCP conversion and redaction. No network access.
+compatibility: Requires local Bash and filesystem read/write access for resolved migration targets. Python 3 is required for automatic MCP conversion and redaction. No network access.
+permissions:
+  - file_read
+  - file_write
+  - shell
 description: >
-  Migrate, move, transfer, copy, convert, or sync AI-assistant context between
-  different IDEs or agents, including skills, rules, prompts, commands, and MCP
-  configuration. Resolve product-specific formats and execute a scoped,
-  verifiable migration.
+  Use when a user asks to migrate or transfer AI-assistant context between two
+  named supported IDEs or agent products. Handle selected skills, rules,
+  prompts, commands, or MCP configuration with a scoped, verifiable plan.
 ---
 
 <!--
@@ -46,6 +49,8 @@ automated. Flag a mismatch before applying.
 
 - Global scope defaults to `skills`. Project-backed objects require an explicit
   workspace in the command.
+- Before copying a Skill, scan every source text file and reject literal
+  credentials or links outside that Skill; leave both source and target intact.
 - Keep whole `config` files and opaque `project` trees manual. Rebuild a
   documented setting or migrate a dedicated supported object.
 - Never move secrets, OAuth/session state, runtime metadata, approval grants,

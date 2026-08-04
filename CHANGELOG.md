@@ -4,6 +4,22 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-08-04
+
+### Added
+
+- Added a pre-copy scan across every regular Skill source file. Skills containing likely literal credentials or links outside their source root are skipped before any target backup, overwrite, or copy.
+
+### Changed
+
+- Limited the runtime package to the migration script, its path data, shared helper, and source scanner; maintainer tests and repository-only tools remain excluded.
+- Narrowed Skill activation to migration between two named supported IDE or agent products and declared only local file-read, file-write, and shell capabilities.
+
+### Fixed
+
+- Rejected external Skill symlinks and unreadable source subtrees before copying, while preserving existing source and target content.
+- Made focused test scripts portable on systems without `rg` and removed an obsolete installer check from CI.
+
 ## [0.7.2] - 2026-08-03
 
 ### Fixed

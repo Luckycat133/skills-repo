@@ -37,7 +37,7 @@ for directory in assets references; do
 done
 
 mkdir -p "$PACKAGE_DIR/scripts"
-for runtime_script in common.sh ide-paths.tsv smart-ide-migration.sh; do
+for runtime_script in common.sh ide-paths.tsv scan-skill-secrets.py smart-ide-migration.sh; do
     [[ -f "$SOURCE_SKILL_DIR/scripts/$runtime_script" ]] || {
         echo "ERROR: missing runtime dependency: scripts/$runtime_script" >&2
         exit 1

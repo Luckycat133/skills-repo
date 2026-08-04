@@ -38,6 +38,10 @@ PATH="$FAKE_BIN:$PATH" bash "$REPO_ROOT/scripts/prepare-clawhub-release.sh" \
     echo "FAIL: runtime package omitted the agent-facing migration script" >&2
     exit 1
 }
+[[ -f "$PACKAGE_ROOT/scripts/scan-skill-secrets.py" ]] || {
+    echo "FAIL: runtime package omitted the source credential scanner" >&2
+    exit 1
+}
 [[ ! -e "$PACKAGE_ROOT/evals" ]] || {
     echo "FAIL: release helper staged maintainer evals" >&2
     exit 1
@@ -49,7 +53,7 @@ fi
 
 find "$PACKAGE_ROOT/scripts" -maxdepth 1 -type f -exec basename {} \; \
     | LC_ALL=C sort >"$TMP_ROOT/runtime-scripts.actual"
-printf '%s\n' common.sh ide-paths.tsv smart-ide-migration.sh \
+printf '%s\n' common.sh ide-paths.tsv scan-skill-secrets.py smart-ide-migration.sh \
     | LC_ALL=C sort >"$TMP_ROOT/runtime-scripts.expected"
 if ! diff -u "$TMP_ROOT/runtime-scripts.expected" "$TMP_ROOT/runtime-scripts.actual"; then
     echo "FAIL: package contains scripts that are not agent runtime dependencies" >&2

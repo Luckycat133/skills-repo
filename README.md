@@ -36,6 +36,12 @@ The runtime package contains references plus one migration command. It does not
 install IDEs or runtimes, create symlinks, maintain registry locks, or copy
 itself into agent directories. Global migrations default to Skills only;
 project-backed objects use an explicit workspace.
+Before a Skill directory is copied, all source text is scanned; a likely
+literal credential or link outside the Skill rejects that Skill without
+changing its source or existing target.
+The Skill metadata declares only local file-read, file-write, and shell
+capabilities, and its trigger describes migration between two named supported
+products.
 
 ## Develop
 
