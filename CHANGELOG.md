@@ -4,6 +4,12 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ## [Unreleased]
 
+## [0.7.5] - 2026-08-10
+
+### Added
+
+- Added `codely` (Tuanjie Codely / Tuanjie Cowork, the Unity China AI agent for Unity and Tuanjie Engine development) as a supported migration source and target. Skills resolve through `~/.codely-cli/skills` and `.codely-cli/skills`, rules through `CODELY.md`, and MCP through the `mcpServers` sub-key embedded in `~/.codely-cli/settings.json` (the rest of `settings.json` stays manual-only — see `references/ides/codely.md`). Added `references/ides/codely.md`, registered it in `ide-registry.md`, and wired it into `ide-paths.json`, `ide-paths.tsv`, and `smart-ide-migration.sh`.
+
 ## [0.7.4] - 2026-08-04
 
 ### Fixed

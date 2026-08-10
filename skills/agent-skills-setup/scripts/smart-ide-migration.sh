@@ -79,6 +79,7 @@ get_ide_name() {
         android-studio) echo "Android Studio" ;;
         antigravity) echo "Antigravity (Google)" ;;
         claude)      echo "Claude Code" ;;
+        codely)      echo "Tuanjie Codely" ;;
         codex)       echo "OpenAI Codex CLI" ;;
         copilot)     echo "GitHub Copilot CLI" ;;
         cursor)      echo "Cursor" ;;
@@ -179,6 +180,7 @@ get_project_path() {
         kilocode)    echo ".kilo" ;;
         kimiai)      echo ".kimi-code" ;;
         workbuddy)   echo ".workbuddy" ;;
+        codely)      echo ".codely-cli" ;;
         claude-desktop)    echo "" ;;  # desktop app: no project-level config
         kiro)              echo ".kiro" ;;
         augment-code)      echo ".augment" ;;
@@ -296,7 +298,7 @@ get_mcp_root_key() {
         return 0
     fi
     case "$ide" in
-        claude|claude-desktop|cursor|windsurf|gemini-cli|trae|trae-cn|continue|cline|roo-code|antigravity|amazon-q|kimiai|workbuddy|copilot|kiro|augment-code|void-editor|baidu-comate|tencent-codebuddy|cody|tabnine|jetbrains)
+        claude|claude-desktop|cursor|windsurf|gemini-cli|trae|trae-cn|continue|cline|roo-code|antigravity|amazon-q|kimiai|codely|workbuddy|copilot|kiro|augment-code|void-editor|baidu-comate|tencent-codebuddy|cody|tabnine|jetbrains)
             echo "mcpServers" ;;
         codex)       echo "mcp_servers" ;;
         goose-cli)   echo "extensions" ;;

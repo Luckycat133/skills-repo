@@ -8,6 +8,7 @@ structured path mapping consumed by scripts.
 ## IDE references
 
 - [`claude-desktop`](ides/claude-desktop.md) — claude-desktop (Claude Desktop app)
+- [`codely`](ides/codely.md) — codely (Tuanjie Codely / Tuanjie Cowork; Unity 中国 AI Agent)
 - [`claude`](ides/claude.md) — claude (Claude Code)
 - [`cursor`](ides/cursor.md) — cursor
 - [`cline`](ides/cline.md) — cline

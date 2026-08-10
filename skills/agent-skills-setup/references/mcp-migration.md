@@ -13,6 +13,8 @@ Use for `mcp`, `project-mcp`, or `--source-mcp-file`. The converter accepts vali
 
 Validate command/args/env or URL/headers, apply [migration-safety.md](migration-safety.md), convert only target-supported fields, preserve unrelated settings, parse the target, and emit JSON evidence. Exact Cursor `${env:NAME}` may become OpenCode `{env:NAME}`; ambiguous transport, OAuth state, bad schema, YAML, and TOML are manual.
 
+**Embedded-config sources (e.g. Codely).** Some IDEs keep `mcpServers` *inside* a larger config file (Codely: `~/.codely-cli/settings.json`). The converter handles this without copying the whole file: on the source it extracts only the `mcpServers` sub-key (`read_path`), and on a Codely target it merges incoming servers into the existing `mcpServers` sub-key while preserving all other keys. Treat the surrounding config as manual-only (see [ides/codely.md](ides/codely.md)); the MCP sub-key is the safe auto-convertible subset.
+
 `--source-mcp-file <file>` accepts one readable JSON/JSONC file and one scope; `--scope both` and copy-as-is fallback are rejected. It changes only input location: `--source` still selects the schema and target/workspace still select output.
 
 ~~~bash

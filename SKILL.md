@@ -1,6 +1,6 @@
 ---
 name: agent-skills-setup
-version: 0.7.4
+version: 0.7.5
 license: MIT
 compatibility: Requires local Bash and filesystem read/write access for resolved migration targets. Python 3 is required for automatic MCP conversion and redaction. No network access.
 permissions:

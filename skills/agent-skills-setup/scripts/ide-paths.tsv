@@ -80,6 +80,13 @@ codeium	mcp	*
 codeium	project-mcp	*
 codeium	project-config	*
 codeium	config	*
+codely	global	*	~/.codely-cli/skills
+codely	project-skills	*	.codely-cli/skills
+codely	rules	*	CODELY.md
+codely	mcp	*	~/.codely-cli/settings.json
+codely	project-mcp	*	.codely-cli/settings.json
+codely	project-config	*	.codely-cli/settings.json
+codely	config	*	~/.codely-cli/settings.json
 codex	global	*	~/.agents/skills
 codex	project-skills	*	.agents/skills
 codex	rules	*	AGENTS.md

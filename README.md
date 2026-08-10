@@ -30,7 +30,7 @@ skills-repo/
 
 ## `agent-skills-setup`
 
-Scoped migration of selected assistant context between supported IDEs and agents. It handles documented skills, rules, prompts, and MCP objects; whole IDE configuration and opaque project trees stay manual. See the [IDE registry](skills/agent-skills-setup/references/ide-registry.md) for the 44 script-supported identifiers and documented manual-only surfaces.
+Scoped migration of selected assistant context between supported IDEs and agents. It handles documented skills, rules, prompts, and MCP objects; whole IDE configuration and opaque project trees stay manual. See the [IDE registry](skills/agent-skills-setup/references/ide-registry.md) for the 45 script-supported identifiers and documented manual-only surfaces.
 
 The runtime package contains references plus one migration command. It does not
 install IDEs or runtimes, create symlinks, maintain registry locks, or copy

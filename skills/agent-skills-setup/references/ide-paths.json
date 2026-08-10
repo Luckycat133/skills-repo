@@ -16,6 +16,15 @@
     "project_config": ".claude/settings.json",
     "config": "~/.claude/settings.json"
   },
+  "codely": {
+    "global_skills": "~/.codely-cli/skills",
+    "project_skills": ".codely-cli/skills",
+    "rules": "CODELY.md",
+    "mcp": "~/.codely-cli/settings.json",
+    "project_mcp": ".codely-cli/settings.json",
+    "project_config": ".codely-cli/settings.json",
+    "config": "~/.codely-cli/settings.json"
+  },
   "codex": {
     "global_skills": "~/.agents/skills",
     "project_skills": ".agents/skills",
