@@ -4,6 +4,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MIG="$SCRIPT_DIR/smart-ide-migration.sh"
+LEGACY_MIG="$SCRIPT_DIR/legacy-smart-ide-migration.sh"
 
 TMP_ROOT="$(mktemp -d /tmp/agent-skills-redact-test.XXXXXX)"
 export HOME="$TMP_ROOT/home"
@@ -374,7 +375,7 @@ D16_OUT=$(bash -c '
     eval "$(sed -n "/^REDACTOR_PY=/,/^}/p" "$1")"
     eval "$(sed -n "/^redact_secrets_in_file()/,/^}/p" "$1")"
     redact_secrets_in_file "$2"
-' _ "$MIG" "$D16" 2>/dev/null)
+' _ "$LEGACY_MIG" "$D16" 2>/dev/null)
 D16_RC=$?
 set -e
 if [[ $D16_RC -ne 0 ]]; then check_pass "16: fail-closed returns non-zero rc"; else check_fail "16: fail-closed returned rc=0"; fi

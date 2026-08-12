@@ -8,7 +8,7 @@ skillspector scan skills/agent-skills-setup --no-llm
 clawhub whoami
 ```
 
-若未安装 SkillSpector，先用项目规定的隔离方式运行同源扫描，不要跳过安全复核。确认 `SKILL.md` 的版本、Changelog 和根镜像一致后，生成发布命令：
+若未安装 SkillSpector，先用项目规定的隔离方式运行同源扫描，不要跳过安全复核。确认 canonical `SKILL.md` 的 `metadata.version`、Changelog 和根仓库指针一致后，生成发布命令：
 
 ```bash
 bash scripts/prepare-clawhub-release.sh \
@@ -21,7 +21,9 @@ bash scripts/prepare-clawhub-release.sh \
   --changelog "<concise release note>"
 ```
 
-辅助脚本按白名单只放入 `SKILL.md`、references、assets、`common.sh`、`ide-paths.tsv`、`scan-skill-secrets.py` 和 `smart-ide-migration.sh`；新增仓库脚本不会自动进入发行包。复制脚本输出的 `clawhub publish ...` 命令，为它补充 `--source-repo`、`--source-commit`、`--source-ref`、`--source-path` 和 `--dry-run --json`；不要把这些参数传给辅助脚本。记录 dry run 返回的 `would-publish`、版本、文件数和 fingerprint。确认预览与已核验提交一致后，移除 `--dry-run`，以其余参数不变的同一条底层命令正式发布。
+辅助脚本将仓库 MIT canonical Skill 转换成独立 MIT-0 bundle：删除冲突的逐 Skill `license`，写入 ClawHub 版本和 `metadata.openclaw.requires.bins: [bash, python3]`，并按白名单加入薄包装、Python core、legacy 兼容引擎、路径表和源凭据扫描器；eval、测试和维护脚本不会进入发行包。
+
+复制脚本输出的 `clawhub publish ...` 命令，为它补充 `--source-repo`、`--source-commit`、`--source-ref`、`--source-path` 和 `--dry-run --json`；不要把这些参数传给辅助脚本。记录 dry run 返回的 `would-publish`、版本、文件数和 fingerprint。只有维护者已确认历史贡献者允许 MIT-0 再许可时，才可重新运行辅助脚本并同时加入 `--publish --acknowledge-mit0`。该确认是正式发布阻断条件，不能由测试成功替代。
 
 发布后分别运行：
 

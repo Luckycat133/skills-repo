@@ -1,0 +1,10 @@
+---
+activation: model
+globs: [src/**/*.ts, tests/**/*.ts]
+priority: 7
+hierarchy: nearest-first
+imports: [SECURITY.md]
+---
+# TypeScript guardrails
+
+Validate external input before it reaches business logic.

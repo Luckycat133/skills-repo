@@ -1,0 +1,630 @@
+{
+  "$schema": "./registry-v2.schema.json",
+  "schema_version": 2,
+  "verified_at": "2026-08-12",
+  "object_policies": {
+    "skill": "validate-then-atomic-copy",
+    "instructions": "semantic-ir-with-loss-report",
+    "prompt": "manual-rebuild",
+    "command": "manual-rebuild",
+    "workflow": "manual-rebuild",
+    "plugin": "manual-rebuild",
+    "agent": "manual-template",
+    "mode": "manual-template",
+    "persona": "manual-template",
+    "hook": "disabled-draft-only",
+    "cron": "disabled-draft-only",
+    "automation": "disabled-draft-only",
+    "mcp": "profile-version-adapter",
+    "user_memory": "review-then-instructions-ir",
+    "generated_memory": "forbidden-regenerate",
+    "chat": "forbidden-regenerate",
+    "database": "forbidden-regenerate",
+    "rag_index": "forbidden-regenerate",
+    "cloud_knowledge": "official-api-or-rebuild-checklist",
+    "config": "explicit-subobject-only",
+    "policy": "explicit-subobject-only",
+    "trust": "never-migrate"
+  },
+  "profile_templates": {
+    "manual-reference": {
+      "profile": "reference",
+      "kind": "documented-reference",
+      "migration_policy": "manual-rebuild",
+      "surfaces": {}
+    },
+    "legacy-source-only": {
+      "profile": "legacy",
+      "kind": "retired-product",
+      "migration_policy": "source-only",
+      "surfaces": {}
+    },
+    "host-editor": {
+      "profile": "host",
+      "kind": "editor-host",
+      "migration_policy": "manual-rebuild",
+      "surfaces": {}
+    },
+    "cloud-ui": {
+      "profile": "cloud",
+      "kind": "cloud-ui",
+      "migration_policy": "official-api-or-rebuild-checklist",
+      "surfaces": {}
+    },
+    "provider": {
+      "profile": "provider",
+      "kind": "mcp-or-memory-provider",
+      "migration_policy": "configure-consuming-client",
+      "surfaces": {}
+    },
+    "legacy-alias": {
+      "profile": "alias",
+      "kind": "brand-alias",
+      "migration_policy": "alias-only",
+      "surfaces": {}
+    }
+  },
+  "products": {
+    "cline": {
+      "display_name": "Cline",
+      "category": "agent-client",
+      "lifecycle": "active",
+      "default_profile": "ide",
+      "profiles": {
+        "ide": {
+          "kind": "ide-extension",
+          "version_range": "current as of 2026-08-12",
+          "migration_policy": "bidirectional-reviewed",
+          "verified_at": "2026-08-12",
+          "sources": [
+            "https://docs.cline.bot/getting-started/config"
+          ],
+          "precedence": ["project", "user", "compatibility"],
+          "surfaces": {
+            "skills": [
+              {"scope": "user", "storage": "directory", "path": "~/.cline/skills", "format": "agent-skill", "policy": "validate-then-atomic-copy"},
+              {"scope": "project", "storage": "directory", "path": ".cline/skills", "format": "agent-skill", "policy": "validate-then-atomic-copy"}
+            ],
+            "instructions": [
+              {"scope": "user", "storage": "directory", "path": "~/.cline/rules", "format": "cline-rule", "policy": "semantic-ir-with-loss-report"},
+              {"scope": "project", "storage": "directory", "path": ".cline/rules", "format": "cline-rule", "policy": "semantic-ir-with-loss-report"}
+            ],
+            "mcp": [
+              {"scope": "user", "storage": "file", "path": "~/.cline/data/settings/cline_mcp_settings.json", "override_env": "CLINE_DATA_DIR", "override_relative_path": "settings/cline_mcp_settings.json", "format": "json:mcpServers", "policy": "profile-version-adapter"},
+              {"scope": "project", "storage": "file", "path": ".cline/mcp.json", "format": "json:mcpServers", "policy": "profile-version-adapter"}
+            ],
+            "hooks": [
+              {"scope": "user", "storage": "directory", "path": "~/.cline/hooks", "format": "cline-hook", "policy": "disabled-draft-only"},
+              {"scope": "project", "storage": "directory", "path": ".cline/hooks", "format": "cline-hook", "policy": "disabled-draft-only"}
+            ],
+            "agents": [
+              {"scope": "user", "storage": "directory", "path": "~/.cline/agents", "format": "cline-agent", "policy": "manual-template"},
+              {"scope": "project", "storage": "directory", "path": ".cline/agents", "format": "cline-agent", "policy": "manual-template"}
+            ],
+            "plugins": [
+              {"scope": "user", "storage": "directory", "path": "~/.cline/plugins", "format": "cline-plugin", "policy": "manual-rebuild"},
+              {"scope": "project", "storage": "directory", "path": ".cline/plugins", "format": "cline-plugin", "policy": "manual-rebuild"}
+            ],
+            "cron": [
+              {"scope": "user", "storage": "directory", "path": "~/.cline/cron", "format": "cline-cron", "policy": "disabled-draft-only"},
+              {"scope": "project", "storage": "directory", "path": ".cline/cron", "format": "cline-cron", "policy": "disabled-draft-only"}
+            ],
+            "workflows": [
+              {"scope": "user", "storage": "directory", "path": "~/.cline/data/workflows", "format": "cline-workflow", "policy": "manual-rebuild"},
+              {"scope": "project", "storage": "directory", "path": ".cline/workflows", "format": "cline-workflow", "policy": "manual-rebuild"}
+            ],
+            "generated_memory": [{"scope": "runtime", "storage": "database", "path": "~/.cline/data", "policy": "forbidden-regenerate"}]
+          }
+        },
+        "cli": {"inherits": "ide", "kind": "cli", "migration_policy": "bidirectional-reviewed"},
+        "sdk": {"inherits": "ide", "kind": "sdk", "migration_policy": "manual-rebuild"}
+      }
+    },
+    "amazon-q": {
+      "display_name": "Amazon Q Developer",
+      "category": "agent-client",
+      "lifecycle": "active",
+      "default_profile": "ide",
+      "profiles": {
+        "ide": {
+          "kind": "ide-extension",
+          "version_range": "current as of 2026-08-12",
+          "migration_policy": "bidirectional-reviewed",
+          "verified_at": "2026-08-12",
+          "sources": [
+            "https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/mcp-ide.html",
+            "https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/qdev-mcp.html"
+          ],
+          "precedence": ["project-default", "user-default", "legacy-mcp"],
+          "surfaces": {
+            "instructions": [{"scope": "project", "storage": "directory", "path": ".amazonq/rules", "format": "amazon-q-rule", "policy": "semantic-ir-with-loss-report"}],
+            "mcp": [
+              {"scope": "user", "storage": "file", "path": "~/.aws/amazonq/default.json", "compatibility_paths": ["~/.aws/amazonq/agents/default.json", "~/.aws/amazonq/mcp.json"], "format": "json:mcpServers", "policy": "profile-version-adapter"},
+              {"scope": "project", "storage": "file", "path": ".amazonq/default.json", "compatibility_paths": [".amazonq/mcp.json"], "format": "json:mcpServers", "policy": "profile-version-adapter"}
+            ]
+          }
+        },
+        "cli": {
+          "kind": "cli",
+          "version_range": "current as of 2026-08-12",
+          "migration_policy": "manual-template",
+          "verified_at": "2026-08-12",
+          "sources": ["https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/qdev-mcp.html"],
+          "surfaces": {"agents": [{"scope": "user", "storage": "directory", "path": "~/.aws/amazonq/cli-agents", "format": "amazon-q-agent", "policy": "manual-template"}]}
+        },
+        "custom-agent": {
+          "kind": "custom-agent",
+          "version_range": "current as of 2026-08-12",
+          "migration_policy": "manual-template",
+          "verified_at": "2026-08-12",
+          "sources": ["https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/qdev-mcp.html"],
+          "surfaces": {"agents": [{"scope": "user", "storage": "directory", "path": "~/.aws/amazonq/agents", "format": "amazon-q-agent", "policy": "manual-template"}]}
+        }
+      }
+    },
+    "firebase-studio": {
+      "display_name": "Firebase Studio",
+      "category": "cloud-ide",
+      "lifecycle": "sunsetting-2027-03-22",
+      "default_profile": "legacy-workspace",
+      "profiles": {
+        "legacy-workspace": {
+          "kind": "cloud-ide",
+          "version_range": "existing workspaces until 2027-03-22",
+          "migration_policy": "source-only",
+          "verified_at": "2026-08-12",
+          "sources": [
+            "https://firebase.google.com/docs/studio/get-started",
+            "https://firebase.google.com/docs/studio/mcp-servers"
+          ],
+          "surfaces": {
+            "instructions": [{"scope": "project", "storage": "file", "path": ".idx/airules.md", "format": "plain-markdown", "policy": "source-only"}],
+            "mcp": [{"scope": "project", "storage": "file", "path": ".idx/mcp.json", "format": "json:mcpServers", "policy": "source-only"}]
+          }
+        }
+      }
+    },
+    "forge": {
+      "display_name": "ForgeCode",
+      "category": "coding-agent",
+      "lifecycle": "active",
+      "default_profile": "cli",
+      "profiles": {
+        "cli": {
+          "kind": "cli",
+          "version_range": "current as of 2026-08-12",
+          "migration_policy": "bidirectional-reviewed",
+          "verified_at": "2026-08-12",
+          "sources": [
+            "https://forgecode.dev/docs/skills/",
+            "https://forgecode.dev/docs/mcp-integration/",
+            "https://forgecode.dev/docs/forgecode-config/"
+          ],
+          "precedence": ["project", "agents", "user", "built-in"],
+          "surfaces": {
+            "skills": [
+              {"scope": "project", "storage": "directory", "path": ".forge/skills", "format": "agent-skill", "policy": "validate-then-atomic-copy"},
+              {"scope": "shared-user", "storage": "directory", "path": "~/.agents/skills", "format": "agent-skill", "policy": "validate-then-atomic-copy"},
+              {"scope": "user", "storage": "directory", "path": "~/forge/skills", "format": "agent-skill", "policy": "validate-then-atomic-copy"}
+            ],
+            "instructions": [{"scope": "project", "storage": "hierarchy", "path": "AGENTS.md", "format": "agents-md", "policy": "semantic-ir-with-loss-report"}],
+            "mcp": [{"scope": "project", "storage": "file", "path": ".mcp.json", "format": "json:mcpServers", "policy": "profile-version-adapter"}],
+            "config": [
+              {"scope": "project", "storage": "file", "path": ".forge.toml", "format": "toml", "policy": "explicit-subobject-only"},
+              {"scope": "user", "storage": "file", "path": "~/.forge/.forge.toml", "format": "toml", "policy": "explicit-subobject-only"}
+            ]
+          }
+        }
+      }
+    },
+    "codex": {
+      "display_name": "OpenAI Codex",
+      "category": "coding-agent",
+      "lifecycle": "active",
+      "default_profile": "cli",
+      "profiles": {
+        "cli": {
+          "kind": "cli-and-desktop-runtime",
+          "version_range": "current as of 2026-08-12",
+          "migration_policy": "bidirectional-reviewed",
+          "verified_at": "2026-08-12",
+          "sources": [
+            "https://developers.openai.com/codex/skills",
+            "https://developers.openai.com/codex/guides/agents-md",
+            "https://developers.openai.com/codex/config-reference"
+          ],
+          "precedence": ["nearest-project-override", "project", "user-override", "user"],
+          "surfaces": {
+            "skills": [
+              {"scope": "user", "storage": "directory", "path": "~/.agents/skills", "format": "agent-skill", "policy": "validate-then-atomic-copy"},
+              {"scope": "project", "storage": "hierarchy", "path": ".agents/skills", "format": "agent-skill", "policy": "validate-then-atomic-copy"}
+            ],
+            "instructions": [
+              {"scope": "user", "storage": "precedence-files", "path": "~/.codex/AGENTS.override.md", "compatibility_paths": ["~/.codex/AGENTS.md"], "format": "agents-md", "policy": "semantic-ir-with-loss-report"},
+              {"scope": "project", "storage": "hierarchy", "path": "AGENTS.override.md", "compatibility_paths": ["AGENTS.md"], "format": "agents-md", "policy": "semantic-ir-with-loss-report"}
+            ],
+            "rules": [{"scope": "project", "storage": "directory", "path": ".codex/rules", "format": "codex-rule", "policy": "manual-template"}],
+            "agents": [{"scope": "project", "storage": "directory", "path": ".codex/agents", "format": "toml", "policy": "manual-template"}],
+            "hooks": [{"scope": "user+project", "storage": "config-subobject", "path": "~/.codex/config.toml", "format": "toml:hooks", "policy": "disabled-draft-only"}],
+            "mcp": [{"scope": "user+project", "storage": "config-subobject", "path": "~/.codex/config.toml", "format": "toml:mcp_servers", "policy": "profile-version-adapter"}],
+            "generated_memory": [{"scope": "user", "storage": "generated-state", "path": "~/.codex/memories", "format": "codex-memory", "policy": "forbidden-regenerate"}],
+            "trust": [{"scope": "user+managed", "storage": "config", "path": "~/.codex/config.toml", "policy": "never-migrate"}]
+          }
+        }
+      }
+    },
+    "augment-code": {
+      "display_name": "Augment Code",
+      "category": "agent-client",
+      "lifecycle": "active",
+      "default_profile": "cli-ide",
+      "profiles": {
+        "cli-ide": {
+          "kind": "cli-and-ide",
+          "version_range": "current as of 2026-08-12",
+          "migration_policy": "bidirectional-reviewed",
+          "verified_at": "2026-08-12",
+          "sources": [
+            "https://docs.augmentcode.com/cli/rules",
+            "https://docs.augmentcode.com/cli/reference",
+            "https://docs.augmentcode.com/cli/config"
+          ],
+          "surfaces": {
+            "skills": [
+              {"scope": "user", "storage": "directory", "path": "~/.augment/skills", "format": "agent-skill", "policy": "validate-then-atomic-copy"},
+              {"scope": "project", "storage": "directory", "path": ".augment/skills", "format": "agent-skill", "policy": "validate-then-atomic-copy"}
+            ],
+            "instructions": [
+              {"scope": "user", "storage": "directory", "path": "~/.augment/rules", "format": "augment-rule", "policy": "semantic-ir-with-loss-report"},
+              {"scope": "project", "storage": "directory", "path": ".augment/rules", "format": "augment-rule", "policy": "semantic-ir-with-loss-report"},
+              {"scope": "user", "storage": "file", "path": "~/.augment/user-guidelines.md", "format": "plain-markdown", "policy": "semantic-ir-with-loss-report"}
+            ],
+            "mcp": [
+              {"scope": "user", "storage": "config-subobject", "path": "~/.augment/settings.json", "format": "json:mcpServers", "policy": "profile-version-adapter"},
+              {"scope": "project", "storage": "config-subobject", "path": ".augment/settings.json", "compatibility_paths": [".augment/settings.local.json"], "format": "json:mcpServers", "policy": "profile-version-adapter"}
+            ]
+          }
+        }
+      }
+    },
+    "windsurf": {
+      "display_name": "Windsurf",
+      "category": "agent-ide",
+      "lifecycle": "active",
+      "default_profile": "ide",
+      "profiles": {
+        "ide": {
+          "kind": "ide",
+          "version_range": "current as of 2026-08-12",
+          "migration_policy": "bidirectional-reviewed",
+          "verified_at": "2026-08-12",
+          "sources": [
+            "https://docs.windsurf.com/windsurf/cascade/skills",
+            "https://docs.windsurf.com/windsurf/cascade/agents-md",
+            "https://docs.windsurf.com/windsurf/cascade/mcp"
+          ],
+          "surfaces": {
+            "skills": [
+              {"scope": "user", "storage": "directory", "path": "~/.codeium/windsurf/skills", "format": "agent-skill", "policy": "validate-then-atomic-copy"},
+              {"scope": "project", "storage": "directory", "path": ".windsurf/skills", "format": "agent-skill", "policy": "validate-then-atomic-copy"}
+            ],
+            "instructions": [
+              {"scope": "user", "storage": "file", "path": "~/.codeium/windsurf/memories/global_rules.md", "format": "plain-markdown", "policy": "semantic-ir-with-loss-report"},
+              {"scope": "project", "storage": "directory", "path": ".windsurf/rules", "format": "windsurf-rule", "policy": "semantic-ir-with-loss-report"},
+              {"scope": "project", "storage": "hierarchy", "path": "AGENTS.md", "format": "agents-md", "policy": "semantic-ir-with-loss-report"}
+            ],
+            "mcp": [{"scope": "user", "storage": "file", "path": "~/.codeium/windsurf/mcp_config.json", "format": "json:mcpServers", "policy": "profile-version-adapter"}],
+            "generated_memory": [{"scope": "user", "storage": "generated-state", "path": "~/.codeium/windsurf/memories", "policy": "forbidden-regenerate"}]
+          }
+        }
+      }
+    },
+    "qoder": {
+      "display_name": "Qoder International",
+      "category": "coding-agent",
+      "lifecycle": "active",
+      "default_profile": "cli",
+      "profiles": {
+        "cli": {
+          "kind": "cli",
+          "version_range": "current as of 2026-08-12",
+          "migration_policy": "bidirectional-reviewed",
+          "verified_at": "2026-08-12",
+          "sources": [
+            "https://docs.qoder.com/en/cli/Skills",
+            "https://docs.qoder.com/en/cli/mcp-servers",
+            "https://docs.qoder.com/cli/hooks"
+          ],
+          "surfaces": {
+            "skills": [
+              {"scope": "user", "storage": "directory", "path": "~/.qoder/skills", "format": "agent-skill", "policy": "validate-then-atomic-copy"},
+              {"scope": "project", "storage": "directory", "path": ".qoder/skills", "format": "agent-skill", "policy": "validate-then-atomic-copy"}
+            ],
+            "mcp": [
+              {"scope": "user", "storage": "config-subobject", "path": "~/.qoder/settings.json", "format": "json:mcpServers", "policy": "profile-version-adapter"},
+              {"scope": "local", "storage": "config-subobject", "path": ".qoder/settings.local.json", "format": "json:mcpServers", "policy": "profile-version-adapter"},
+              {"scope": "project", "storage": "file", "path": ".mcp.json", "format": "json:mcpServers", "policy": "profile-version-adapter"}
+            ],
+            "hooks": [{"scope": "user+project+local", "storage": "config-subobject", "path": "~/.qoder/settings.json", "format": "json:hooks", "policy": "disabled-draft-only"}]
+          }
+        },
+        "ide": {"inherits": "cli", "kind": "ide", "migration_policy": "bidirectional-reviewed"},
+        "cn-ide": {"kind": "ide", "version_range": "profile boundary only as of 2026-08-12", "verified_at": "2026-08-12", "sources": ["https://docs.qoder.com/"], "migration_policy": "manual-rebuild", "surfaces": {}},
+        "cn-cli": {"kind": "cli", "version_range": "profile boundary only as of 2026-08-12", "verified_at": "2026-08-12", "sources": ["https://docs.qoder.com/"], "migration_policy": "manual-rebuild", "surfaces": {}},
+        "work": {"kind": "cloud-ui", "version_range": "profile boundary only as of 2026-08-12", "verified_at": "2026-08-12", "sources": ["https://docs.qoder.com/"], "migration_policy": "official-api-or-rebuild-checklist", "surfaces": {}},
+        "cloud": {"kind": "cloud-agent", "version_range": "profile boundary only as of 2026-08-12", "verified_at": "2026-08-12", "sources": ["https://docs.qoder.com/"], "migration_policy": "official-api-or-rebuild-checklist", "surfaces": {}}
+      }
+    },
+    "qwen-code": {
+      "display_name": "Qwen Code",
+      "category": "coding-agent",
+      "lifecycle": "active",
+      "default_profile": "cli",
+      "profiles": {
+        "cli": {
+          "kind": "cli",
+          "version_range": "current as of 2026-08-12",
+          "migration_policy": "bidirectional-reviewed",
+          "verified_at": "2026-08-12",
+          "sources": [
+            "https://github.com/QwenLM/qwen-code/blob/main/docs/users/features/skills.md",
+            "https://github.com/QwenLM/qwen-code/blob/main/docs/users/features/mcp.md"
+          ],
+          "surfaces": {
+            "skills": [
+              {"scope": "user", "storage": "directory", "path": "~/.qwen/skills", "format": "qwen-skill", "policy": "validate-then-atomic-copy"},
+              {"scope": "project", "storage": "directory", "path": ".qwen/skills", "format": "qwen-skill", "policy": "validate-then-atomic-copy"}
+            ],
+            "mcp": [
+              {"scope": "user", "storage": "config-subobject", "path": "~/.qwen/settings.json", "format": "json:mcpServers", "policy": "profile-version-adapter"},
+              {"scope": "project", "storage": "config-subobject", "path": ".qwen/settings.json", "format": "json:mcpServers", "policy": "profile-version-adapter"}
+            ],
+            "generated_memory": [{"scope": "project", "storage": "generated-state", "path": ".qwen/archived-skills", "policy": "forbidden-regenerate"}]
+          }
+        }
+      }
+    },
+    "mistral-vibe": {
+      "display_name": "Mistral Vibe Code",
+      "category": "coding-agent",
+      "lifecycle": "active",
+      "default_profile": "cli",
+      "profiles": {
+        "cli": {
+          "kind": "cli",
+          "version_range": "current as of 2026-08-12",
+          "migration_policy": "bidirectional-reviewed",
+          "verified_at": "2026-08-12",
+          "sources": ["https://github.com/mistralai/mistral-vibe"],
+          "precedence": ["custom", "project-agents", "project-vibe", "user-vibe", "user-agents"],
+          "surfaces": {
+            "skills": [
+              {"scope": "user", "storage": "directory", "path": "~/.vibe/skills", "compatibility_paths": ["~/.agents/skills"], "format": "agent-skill", "policy": "validate-then-atomic-copy"},
+              {"scope": "project", "storage": "directory", "path": ".vibe/skills", "compatibility_paths": [".agents/skills"], "format": "agent-skill", "policy": "validate-then-atomic-copy"}
+            ],
+            "instructions": [
+              {"scope": "user", "storage": "file", "path": "~/.vibe/AGENTS.md", "format": "agents-md", "policy": "semantic-ir-with-loss-report"},
+              {"scope": "project", "storage": "hierarchy", "path": "AGENTS.md", "format": "agents-md", "policy": "semantic-ir-with-loss-report"}
+            ],
+            "agents": [{"scope": "user", "storage": "directory", "path": "~/.vibe/agents", "format": "toml", "policy": "manual-template"}],
+            "mcp": [{"scope": "user+project", "storage": "config-subobject", "path": "~/.vibe/config.toml", "compatibility_paths": [".vibe/config.toml"], "format": "toml:mcp_servers", "policy": "profile-version-adapter"}]
+          }
+        }
+      }
+    },
+    "factory-droid": {
+      "display_name": "Factory Droid",
+      "category": "coding-agent",
+      "lifecycle": "active",
+      "default_profile": "cli",
+      "profiles": {
+        "cli": {
+          "kind": "cli-and-desktop",
+          "version_range": "current as of 2026-08-12",
+          "migration_policy": "bidirectional-reviewed",
+          "verified_at": "2026-08-12",
+          "sources": [
+            "https://factory.mintlify.app/cli/configuration/mcp",
+            "https://factory.mintlify.app/cli/configuration/hooks-guide",
+            "https://factory.mintlify.app/cli/configuration/custom-droids"
+          ],
+          "surfaces": {
+            "skills": [
+              {"scope": "user", "storage": "directory", "path": "~/.factory/skills", "format": "agent-skill", "policy": "validate-then-atomic-copy"},
+              {"scope": "project", "storage": "directory", "path": ".factory/skills", "format": "agent-skill", "policy": "validate-then-atomic-copy"}
+            ],
+            "instructions": [{"scope": "user+project", "storage": "hierarchy", "path": "AGENTS.md", "format": "agents-md", "policy": "semantic-ir-with-loss-report"}],
+            "agents": [{"scope": "user+project", "storage": "directory", "path": ".factory/droids", "format": "factory-droid", "policy": "manual-template"}],
+            "hooks": [{"scope": "user+project", "storage": "config-subobject", "path": "~/.factory/settings.json", "format": "json:hooks", "policy": "disabled-draft-only"}],
+            "mcp": [
+              {"scope": "user", "storage": "file", "path": "~/.factory/mcp.json", "format": "json:mcpServers", "policy": "profile-version-adapter"},
+              {"scope": "project", "storage": "file", "path": ".factory/mcp.json", "format": "json:mcpServers", "policy": "profile-version-adapter"}
+            ]
+          }
+        }
+      }
+    },
+    "warp-oz": {
+      "display_name": "Warp Oz",
+      "category": "cloud-agent-cli",
+      "lifecycle": "active",
+      "default_profile": "cli",
+      "profiles": {
+        "cli": {
+          "kind": "local-and-cloud-cli",
+          "version_range": "oz; warp-cli deprecated",
+          "migration_policy": "manual-rebuild",
+          "verified_at": "2026-08-12",
+          "sources": ["https://docs.warp.dev/reference/cli"],
+          "surfaces": {
+            "skills": [{"scope": "run", "storage": "cli-argument", "path": "--skill", "format": "repository-skill", "policy": "manual-rebuild"}],
+            "mcp": [{"scope": "run", "storage": "cli-argument", "path": "--mcp", "format": "uuid-or-json", "policy": "manual-rebuild"}],
+            "agents": [{"scope": "local", "storage": "profile", "path": "--profile", "format": "warp-agent-profile", "policy": "manual-template"}]
+          }
+        }
+      }
+    },
+    "pi": {
+      "display_name": "Pi coding agent",
+      "category": "coding-agent",
+      "lifecycle": "active",
+      "default_profile": "cli",
+      "profiles": {
+        "cli": {
+          "kind": "cli",
+          "version_range": "current as of 2026-08-12",
+          "migration_policy": "bidirectional-reviewed",
+          "verified_at": "2026-08-12",
+          "sources": ["https://pi.dev/docs/latest/skills", "https://pi.dev/docs/latest/settings"],
+          "surfaces": {
+            "skills": [
+              {"scope": "user", "storage": "directory", "path": "~/.pi/agent/skills", "compatibility_paths": ["~/.agents/skills"], "format": "agent-skill", "policy": "validate-then-atomic-copy"},
+              {"scope": "project", "storage": "directory", "path": ".pi/skills", "compatibility_paths": [".agents/skills"], "format": "agent-skill", "policy": "validate-then-atomic-copy"}
+            ],
+            "config": [{"scope": "user+project", "storage": "config-subobject", "path": "~/.pi/agent/settings.json", "compatibility_paths": [".pi/settings.json"], "format": "json:skills", "policy": "explicit-subobject-only"}]
+          }
+        }
+      }
+    },
+    "crush": {
+      "display_name": "Crush",
+      "category": "coding-agent",
+      "lifecycle": "active",
+      "default_profile": "cli",
+      "profiles": {
+        "cli": {
+          "kind": "cli",
+          "version_range": "current as of 2026-08-12",
+          "migration_policy": "bidirectional-reviewed",
+          "verified_at": "2026-08-12",
+          "sources": ["https://github.com/charmbracelet/crush"],
+          "precedence": ["project-dot", "project", "user"],
+          "surfaces": {
+            "skills": [
+              {"scope": "user", "storage": "directory", "path": "~/.config/crush/skills", "compatibility_paths": ["~/.agents/skills", "~/.claude/skills"], "override_env": "CRUSH_SKILLS_DIR", "format": "agent-skill", "policy": "validate-then-atomic-copy"},
+              {"scope": "project", "storage": "directory", "path": ".crush/skills", "compatibility_paths": [".agents/skills", ".claude/skills", ".cursor/skills"], "format": "agent-skill", "policy": "validate-then-atomic-copy"}
+            ],
+            "mcp": [{"scope": "user+project", "storage": "config-subobject", "path": "~/.config/crush/crush.json", "compatibility_paths": [".crush.json", "crush.json"], "override_env": "CRUSH_GLOBAL_CONFIG", "format": "json:mcp", "policy": "profile-version-adapter"}],
+            "generated_memory": [{"scope": "user", "storage": "generated-state", "path": "~/.local/share/crush/crush.json", "override_env": "CRUSH_GLOBAL_DATA", "policy": "forbidden-regenerate"}]
+          }
+        }
+      }
+    },
+    "copilot": {
+      "display_name": "GitHub Copilot",
+      "category": "agent-suite",
+      "lifecycle": "active",
+      "default_profile": "cli",
+      "profiles": {
+        "cli": {"kind": "cli", "version_range": "current as of 2026-08-12", "verified_at": "2026-08-12", "sources": ["https://docs.github.com/en/copilot/how-tos/copilot-cli"], "migration_policy": "manual-rebuild", "surfaces": {}},
+        "vscode": {"kind": "ide-extension", "version_range": "current as of 2026-08-12", "verified_at": "2026-08-12", "sources": ["https://code.visualstudio.com/docs/agent-customization/agent-skills"], "migration_policy": "manual-rebuild", "surfaces": {}},
+        "visual-studio": {"kind": "ide-extension", "version_range": "current as of 2026-08-12", "verified_at": "2026-08-12", "sources": ["https://learn.microsoft.com/en-us/visualstudio/ide/copilot-agent-skills?view=visualstudio"], "migration_policy": "manual-rebuild", "surfaces": {}},
+        "github-com": {"kind": "cloud-ui", "version_range": "current as of 2026-08-12", "verified_at": "2026-08-12", "sources": ["https://docs.github.com/en/copilot/customizing-copilot/adding-repository-custom-instructions-for-github-copilot"], "migration_policy": "official-api-or-rebuild-checklist", "surfaces": {}}
+      }
+    },
+    "claude": {
+      "display_name": "Claude",
+      "category": "agent-suite",
+      "lifecycle": "active",
+      "default_profile": "code-cli",
+      "profiles": {
+        "code-cli": {"kind": "cli", "version_range": "current as of 2026-08-12", "verified_at": "2026-08-12", "sources": ["https://code.claude.com/docs/en/settings"], "migration_policy": "manual-rebuild", "surfaces": {}},
+        "desktop-code": {"kind": "desktop-coding", "version_range": "current as of 2026-08-12", "verified_at": "2026-08-12", "sources": ["https://code.claude.com/docs/en/desktop"], "migration_policy": "manual-rebuild", "surfaces": {}},
+        "desktop-chat": {"kind": "desktop-chat", "version_range": "current as of 2026-08-12", "verified_at": "2026-08-12", "sources": ["https://support.claude.com/en/articles/12512180-use-skills-in-claude"], "migration_policy": "official-api-or-rebuild-checklist", "surfaces": {}}
+      }
+    },
+    "kiro": {
+      "display_name": "Kiro",
+      "category": "agent-suite",
+      "lifecycle": "active",
+      "default_profile": "ide",
+      "profiles": {
+        "ide": {"kind": "ide", "version_range": "current as of 2026-08-12", "verified_at": "2026-08-12", "sources": ["https://kiro.dev/docs/skills/"], "migration_policy": "manual-rebuild", "surfaces": {}},
+        "cli": {"kind": "cli", "version_range": "current as of 2026-08-12", "verified_at": "2026-08-12", "sources": ["https://kiro.dev/docs/skills/"], "migration_policy": "manual-rebuild", "surfaces": {}}
+      }
+    },
+    "trae": {
+      "display_name": "TRAE",
+      "category": "agent-suite",
+      "lifecycle": "active",
+      "default_profile": "international-ide",
+      "profiles": {
+        "international-ide": {"kind": "ide", "version_range": "current as of 2026-08-12", "verified_at": "2026-08-12", "sources": ["https://docs.trae.ai/ide/skills?_lang=en"], "migration_policy": "manual-rebuild", "surfaces": {}},
+        "cn-ide": {"kind": "ide", "version_range": "current as of 2026-08-12", "verified_at": "2026-08-12", "sources": ["https://docs.trae.cn/ide/skills"], "migration_policy": "manual-rebuild", "surfaces": {}},
+        "agent-cli": {"kind": "cli", "version_range": "current as of 2026-08-12", "verified_at": "2026-08-12", "sources": ["https://github.com/bytedance/trae-agent"], "migration_policy": "manual-rebuild", "surfaces": {}},
+        "work": {"kind": "cloud-ui", "version_range": "reference-only as of 2026-08-12", "verified_at": "2026-08-12", "sources": ["https://docs.trae.ai/ide/skills?_lang=en"], "migration_policy": "official-api-or-rebuild-checklist", "surfaces": {}},
+        "cloud": {"kind": "cloud-agent", "version_range": "reference-only as of 2026-08-12", "verified_at": "2026-08-12", "sources": ["https://docs.trae.ai/ide/skills?_lang=en"], "migration_policy": "official-api-or-rebuild-checklist", "surfaces": {}}
+      }
+    },
+    "jetbrains": {
+      "display_name": "JetBrains AI",
+      "category": "agent-suite",
+      "lifecycle": "active",
+      "default_profile": "junie",
+      "profiles": {
+        "junie": {"kind": "ide-agent", "version_range": "current as of 2026-08-12", "verified_at": "2026-08-12", "sources": ["https://junie.jetbrains.com/docs/agent-skills.html"], "migration_policy": "manual-rebuild", "surfaces": {}},
+        "ai-assistant": {"kind": "ide-assistant", "version_range": "current as of 2026-08-12", "verified_at": "2026-08-12", "sources": ["https://www.jetbrains.com/help/ai-assistant/agent-skills.html"], "migration_policy": "manual-rebuild", "surfaces": {}},
+        "acp-agent": {"kind": "acp-agent", "version_range": "reference-only as of 2026-08-12", "verified_at": "2026-08-12", "sources": ["https://www.jetbrains.com/help/ai-assistant/agent-skills.html"], "migration_policy": "manual-rebuild", "surfaces": {}}
+      }
+    },
+
+    "roo-code": {"template": "legacy-source-only", "reference": "ides/roo-code.md"},
+    "void-editor": {"template": "legacy-source-only", "reference": "ides/void-editor.md"},
+    "supermaven": {"template": "legacy-source-only", "reference": "ides/supermaven.md"},
+    "codeium": {"template": "legacy-alias", "alias_of": {"product": "windsurf", "profile": "ide"}, "reference": "ides/codeium.md"},
+    "tongyi-lingma": {"template": "legacy-alias", "alias_of": {"product": "qoder", "profile": "cn-ide"}, "reference": "ides/tongyi-lingma.md"},
+    "qoder-cn": {"template": "legacy-alias", "alias_of": {"product": "qoder", "profile": "cn-ide"}, "reference": "ides/qoder-cn.md"},
+    "pieces": {"template": "provider", "reference": "ides/pieces.md"},
+    "emacs": {"template": "host-editor", "reference": "ides/emacs.md"},
+    "neovim": {"template": "host-editor", "reference": "ides/neovim.md"},
+    "helix": {"template": "host-editor", "reference": "ides/helix.md"},
+    "devin": {"template": "cloud-ui", "reference": "ides/devin.md"},
+    "v0": {"template": "cloud-ui", "reference": "ides/v0.md"},
+    "lovable": {"template": "cloud-ui", "reference": "ides/lovable.md"},
+    "bolt-new": {"template": "cloud-ui", "reference": "ides/bolt-new.md"},
+    "trae-work": {"template": "cloud-ui", "alias_of": {"product": "trae", "profile": "work"}, "reference": "ides/trae-work.md"},
+    "cody": {"template": "cloud-ui", "reference": "ides/cody.md"},
+    "claude-desktop": {"template": "legacy-alias", "alias_of": {"product": "claude", "profile": "desktop-chat"}, "reference": "ides/claude-desktop.md"},
+    "vscode": {"template": "legacy-alias", "alias_of": {"product": "copilot", "profile": "vscode"}, "reference": "ides/vscode.md"},
+    "visual-studio": {"template": "legacy-alias", "alias_of": {"product": "copilot", "profile": "visual-studio"}, "reference": "ides/visual-studio.md"},
+    "trae-cn": {"template": "legacy-alias", "alias_of": {"product": "trae", "profile": "cn-ide"}, "reference": "ides/trae-cn.md"},
+    "jetbrains-ai": {"template": "legacy-alias", "alias_of": {"product": "jetbrains", "profile": "ai-assistant"}, "reference": "ides/jetbrains-ai.md"},
+
+    "codely": {"template": "manual-reference", "reference": "ides/codely.md"},
+    "cursor": {"template": "manual-reference", "reference": "ides/cursor.md"},
+    "android-studio": {"template": "manual-reference", "reference": "ides/android-studio.md"},
+    "continue": {"template": "manual-reference", "reference": "ides/continue.md"},
+    "kilocode": {"template": "manual-reference", "reference": "ides/kilocode.md"},
+    "zed": {"template": "manual-reference", "reference": "ides/zed.md"},
+    "gemini-cli": {"template": "manual-reference", "reference": "ides/gemini-cli.md"},
+    "antigravity": {"template": "manual-reference", "reference": "ides/antigravity.md"},
+    "opencode": {"template": "manual-reference", "reference": "ides/opencode.md"},
+    "goose-cli": {"template": "manual-reference", "reference": "ides/goose-cli.md"},
+    "openclaw": {"template": "manual-reference", "reference": "ides/openclaw.md"},
+    "aider": {"template": "manual-reference", "reference": "ides/aider.md"},
+    "openhands": {"template": "manual-reference", "reference": "ides/openhands.md"},
+    "replit": {"template": "manual-reference", "reference": "ides/replit.md"},
+    "sourcegraph-amp": {"template": "manual-reference", "reference": "ides/sourcegraph-amp.md"},
+    "pearai": {"template": "manual-reference", "reference": "ides/pearai.md"},
+    "tabnine": {"template": "manual-reference", "reference": "ides/tabnine.md"},
+    "blackbox": {"template": "manual-reference", "reference": "ides/blackbox.md"},
+    "mcphub-nvim": {"template": "manual-reference", "reference": "ides/mcphub-nvim.md"},
+    "codecompanion-nvim": {"template": "manual-reference", "reference": "ides/codecompanion-nvim.md"},
+    "baidu-comate": {"template": "manual-reference", "reference": "ides/baidu-comate.md"},
+    "tencent-codebuddy": {"template": "manual-reference", "reference": "ides/tencent-codebuddy.md"},
+    "kimiai": {"template": "manual-reference", "reference": "ides/kimiai.md"},
+    "workbuddy": {"template": "manual-reference", "reference": "ides/workbuddy.md"},
+    "zcode": {"template": "manual-reference", "reference": "ides/zcode.md"},
+    "minimax-code": {"template": "manual-reference", "reference": "ides/minimax-code.md"},
+    "mmx-cli": {"template": "manual-reference", "reference": "ides/mmx-cli.md"},
+    "baidu-comate-ide": {"template": "manual-reference", "reference": "ides/baidu-comate-ide.md"},
+    "tencent-codebuddy-ide": {"template": "manual-reference", "reference": "ides/tencent-codebuddy-ide.md"},
+    "iflycode": {"template": "manual-reference", "reference": "ides/ui-only-mcp.md"},
+    "raccoon-ai": {"template": "manual-reference", "reference": "ides/ui-only-mcp.md"},
+    "monkeycode": {"template": "manual-reference", "reference": "ides/monkeycode.md"},
+    "vecli": {"template": "manual-reference", "reference": "ides/vecli.md"},
+    "qodo": {"template": "manual-reference", "reference": "ides/qodo.md"},
+    "xcode": {"template": "manual-reference", "reference": "ides/xcode.md"},
+    "gptel-mcp-el": {"template": "manual-reference", "reference": "ides/gptel-mcp-el.md"}
+  }
+}

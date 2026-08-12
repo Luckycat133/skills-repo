@@ -18,17 +18,22 @@ if end < 0:
     raise SystemExit("FAIL: Skill metadata has no closing frontmatter marker")
 frontmatter = skill[4:end]
 
-permissions = re.search(
-    r"(?m)^permissions:[ \t]*\n((?:[ \t]+-[ \t]+[a-z_]+[ \t]*\n?)+)",
-    frontmatter,
-)
-if permissions is None:
-    raise SystemExit("FAIL: Skill must declare local runtime capabilities")
-declared = set(re.findall(r"(?m)^\s*-\s+([a-z_]+)\s*$", permissions.group(1)))
-if declared != {"file_read", "file_write", "shell"}:
-    raise SystemExit(
-        "FAIL: permissions must be exactly file_read, file_write, and shell"
-    )
+top_level = {
+    match.group(1)
+    for match in re.finditer(r"(?m)^([A-Za-z0-9-]+):", frontmatter)
+}
+allowed = {
+    "name", "description", "license", "compatibility", "metadata", "allowed-tools"
+}
+unknown = top_level - allowed
+if unknown:
+    raise SystemExit(f"FAIL: unknown Agent Skills fields: {sorted(unknown)}")
+if "permissions" in frontmatter:
+    raise SystemExit("FAIL: non-standard permissions metadata must not be declared")
+
+version = re.search(r'(?m)^  version:\s*"([^"]+)"\s*$', frontmatter)
+if version is None or version.group(1) != "0.8.1":
+    raise SystemExit("FAIL: metadata.version must be the quoted release version")
 
 compatibility = re.search(r"(?m)^compatibility:\s*(.*)$", frontmatter)
 if compatibility is None:

@@ -132,6 +132,69 @@ vs.validate_skill(pathlib.Path(tmp) / "demo-skill")
 check("validate_skill passes a clean skill", len(vs.errors) == 0)
 vs.errors.clear()
 
+write_skill(
+    "---\n"
+    "name: demo-skill\n"
+    "description: invalid generic field\n"
+    "permissions: [file_read]\n"
+    "---\n"
+    "body\n"
+)
+vs.validate_skill(pathlib.Path(tmp) / "demo-skill")
+check(
+    "validate_skill rejects unknown frontmatter fields",
+    any("unknown Agent Skills frontmatter field: permissions" in e for e in vs.errors),
+)
+vs.errors.clear()
+
+write_skill(
+    "---\n"
+    "name: demo-skill\n"
+    "description: invalid nested metadata\n"
+    "metadata:\n"
+    "  release:\n"
+    "    version: 1\n"
+    "---\n"
+    "body\n"
+)
+vs.validate_skill(pathlib.Path(tmp) / "demo-skill")
+check(
+    "validate_skill rejects nested metadata",
+    any("metadata must map string keys to string values" in e for e in vs.errors),
+)
+vs.errors.clear()
+
+write_skill(
+    "---\n"
+    "name: demo-skill\n"
+    "description: invalid metadata scalar\n"
+    "metadata:\n"
+    "  version: 8\n"
+    "---\n"
+    "body\n"
+)
+vs.validate_skill(pathlib.Path(tmp) / "demo-skill")
+check(
+    "validate_skill requires quoted string metadata values",
+    any("metadata values must be quoted strings" in e for e in vs.errors),
+)
+vs.errors.clear()
+
+write_skill(
+    "---\n"
+    "name: demo-skill\n"
+    "description: invalid allowed tools\n"
+    "allowed-tools: [Bash, Read]\n"
+    "---\n"
+    "body\n"
+)
+vs.validate_skill(pathlib.Path(tmp) / "demo-skill")
+check(
+    "validate_skill rejects list-valued allowed-tools",
+    any("allowed-tools must be a space-separated string" in e for e in vs.errors),
+)
+vs.errors.clear()
+
 
 if FAIL == 0:
     print(f"ALL {CHECKS} validate_skills CHECKS PASSED")

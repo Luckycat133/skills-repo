@@ -31,8 +31,8 @@ grep -F 'references/ides/<source>.md' "$SKILL_FILE" >/dev/null || \
     fail "SKILL.md must route source reads to one IDE reference"
 grep -F 'references/ides/<target>.md' "$SKILL_FILE" >/dev/null || \
     fail "SKILL.md must route target reads to one IDE reference"
-grep -F -- '--dry-run' "$SKILL_FILE" >/dev/null || \
-    fail "SKILL.md must retain the preview gate"
+grep -F 'Use `plan`' "$SKILL_FILE" >/dev/null || \
+    fail "SKILL.md must retain the zero-write plan gate"
 grep -F -- '--yes' "$SKILL_FILE" >/dev/null || \
     fail "SKILL.md must retain the explicit approval gate"
 

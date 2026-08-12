@@ -4,6 +4,28 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-08-12
+
+### Added
+
+- Added Registry v2 with product/profile/version/surface/scope/policy modeling, official sources, freshness metadata, profile inheritance, and conservative lifecycle classifications.
+- Added Qoder International, Qwen Code, Mistral Vibe Code, Factory Droid, Warp/Oz, Pi, and Crush profiles.
+- Added a typed Python migration core with instruction and MCP intermediate representations, per-object loss reports, and `detect`, `inventory`, `plan`, `apply`, `verify`, and `rollback` commands.
+- Added Registry v2 validation and instruction-conversion golden fixtures.
+
+### Changed
+
+- Replaced the root publishable mirror with a generated, frontmatter-free repository pointer; the canonical Skill remains under `skills/agent-skills-setup/`.
+- Kept the previous Bash migration engine behind the thin command wrapper for legacy flag compatibility while new commands resolve Registry v2 directly.
+- Corrected and split current profiles for Cline, Amazon Q, Firebase Studio, ForgeCode, Codex, Augment, Windsurf, Qoder/Tongyi, Copilot, Claude, Kiro, TRAE, and JetBrains.
+- Moved the canonical version to string-valued `metadata.version` and limited frontmatter to Agent Skills standard fields.
+
+### Security
+
+- Made legacy/source-only, cloud/UI, provider, editor-host, and brand-alias products ineligible for ordinary automatic target writes.
+- Added exact apply manifests, pre-write backups, post-write hash verification, guarded rollback, symlink rejection, and literal MCP secret replacement.
+- Split the MIT repository artifact from the generated MIT-0 ClawHub bundle; formal publish now requires an explicit contributor-authorization acknowledgement and declares Bash/Python runtime gates.
+
 ## [0.7.5] - 2026-08-10
 
 ### Added

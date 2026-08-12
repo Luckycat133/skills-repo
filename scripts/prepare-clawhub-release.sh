@@ -24,6 +24,7 @@ TAGS="latest"
 CHANGELOG_TEXT=""
 CHANGELOG_FILE=""
 RUN_PUBLISH=0
+MIT0_ACKNOWLEDGED=0
 
 usage() {
     cat <<'EOF'
@@ -41,6 +42,7 @@ Options:
   --changelog <text>        Inline changelog text.
   --changelog-file <file>   Read changelog text from a file.
   --publish                 Execute `clawhub publish` after validation.
+  --acknowledge-mit0        Confirm contributor authorization for ClawHub MIT-0.
   -h, --help                Show this help text.
 EOF
 }
@@ -91,6 +93,10 @@ while [[ $# -gt 0 ]]; do
             RUN_PUBLISH=1
             shift
             ;;
+        --acknowledge-mit0)
+            MIT0_ACKNOWLEDGED=1
+            shift
+            ;;
         -h|--help)
             usage
             exit 0
@@ -137,7 +143,12 @@ case "$PACKAGE_DIR" in
     *) PACKAGE_DIR_ABS="$(pwd)/$PACKAGE_DIR" ;;
 esac
 [[ ! -e "$PACKAGE_DIR_ABS" ]] || die "Package directory already exists: $PACKAGE_DIR_ABS"
-bash "$REPO_ROOT/scripts/stage-runtime-skill.sh" "$SKILL_DIR_ABS" "$PACKAGE_DIR_ABS"
+bash "$REPO_ROOT/scripts/stage-runtime-skill.sh" \
+    "$SKILL_DIR_ABS" "$PACKAGE_DIR_ABS" "$VERSION"
+
+if [[ $RUN_PUBLISH -eq 1 && $MIT0_ACKNOWLEDGED -ne 1 ]]; then
+    die "ClawHub publishes under MIT-0; rerun with --acknowledge-mit0 only after contributor authorization is confirmed"
+fi
 
 PUBLISH_CMD=(clawhub publish "$PACKAGE_DIR_ABS" --slug "$SLUG" --name "$DISPLAY_NAME" --version "$VERSION" --tags "$TAGS")
 

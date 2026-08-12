@@ -443,22 +443,23 @@ grep -Fq 'automatic whole-IDE config migration is unsupported' <<< "$AIDER_CONFI
     exit 1
 }
 
-case "$(uname -s)" in
-    Darwin) CLINE_MCP_EXPECTED="~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"
-            CLINE_MCP_TARGET="$TEST_HOME/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json" ;;
-    Linux)  CLINE_MCP_EXPECTED="~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"
-            CLINE_MCP_TARGET="$TEST_HOME/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json" ;;
-    *)      CLINE_MCP_EXPECTED="~/AppData/Roaming/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"
-            CLINE_MCP_TARGET="$TEST_HOME/AppData/Roaming/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json" ;;
-esac
+CLINE_MCP_EXPECTED="~/.cline/data/settings/cline_mcp_settings.json"
+CLINE_MCP_TARGET="$TEST_HOME/.cline/data/settings/cline_mcp_settings.json"
 
 assert_path cline global "~/.cline/skills"
 assert_path cline project ""
 assert_path cline project-skills ".cline/skills"
-assert_path cline rules ".clinerules"
+assert_path cline rules ".cline/rules"
 assert_path cline project-mcp ".cline/mcp.json"
 assert_path cline config ""
 assert_path cline mcp "$CLINE_MCP_EXPECTED"
+CLINE_CUSTOM_DATA="$TMP_ROOT/custom-cline-data"
+CLINE_CUSTOM_MCP="$(HOME="$TEST_HOME" CLINE_DATA_DIR="$CLINE_CUSTOM_DATA" \
+    bash "$SCRIPT_DIR/smart-ide-migration.sh" --print-path cline mcp)"
+[[ "$CLINE_CUSTOM_MCP" == "$CLINE_CUSTOM_DATA/settings/cline_mcp_settings.json" ]] || {
+    echo "FAIL: CLINE_DATA_DIR did not replace ~/.cline/data" >&2
+    exit 1
+}
 
 printf '%s\n' '{"mcpServers":{"local":{"command":"node","args":["server.js"],"env":{"API_KEY":"do-not-copy"}},"remote":{"url":"https://example.invalid/mcp","transportType":"sse"}}}' > "$TEST_HOME/.claude.json"
 HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
@@ -494,8 +495,8 @@ printf '%s\n' '{"mcpServers":{}}' > "$CLINE_MCP_TARGET"
 printf '%s\n' '{"mcpServers":{}}' > "$CLINE_ALT_TARGET"
 AMBIGUOUS_CLINE_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source claude --target cline --objects mcp --yes --strategy overwrite 2>&1)"
-grep -Fq 'Cline has both the globalStorage MCP settings' <<< "$AMBIGUOUS_CLINE_OUTPUT" || {
-    echo "FAIL: Cline globalStorage+alternative ambiguity was not reported" >&2
+grep -Fq 'Cline has both the current data/settings MCP file' <<< "$AMBIGUOUS_CLINE_OUTPUT" || {
+    echo "FAIL: Cline current+legacy ambiguity was not reported" >&2
     exit 1
 }
 rm -f "$CLINE_MCP_TARGET" "$CLINE_ALT_TARGET"

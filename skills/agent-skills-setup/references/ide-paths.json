@@ -53,7 +53,7 @@
   "windsurf": {
     "global_skills": "~/.codeium/windsurf/skills",
     "project_skills": ".windsurf/skills",
-    "rules": ".devin/rules",
+    "rules": ".windsurf/rules",
     "mcp": "~/.codeium/windsurf/mcp_config.json",
     "config": ""
   },
@@ -121,7 +121,7 @@
     "project_skills": "",
     "rules": ".idx/airules.md",
     "mcp": "",
-    "project_mcp": "",
+    "project_mcp": ".idx/mcp.json",
     "config": ""
   },
   "android-studio": {
@@ -181,12 +181,8 @@
     "project": "",
     "global_skills": "~/.cline/skills",
     "project_skills": ".cline/skills",
-    "rules": ".clinerules",
-    "mcp": {
-      "darwin": "~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
-      "linux": "~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
-      "windows": "${APPDATA}/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"
-    },
+    "rules": ".cline/rules",
+    "mcp": "~/.cline/data/settings/cline_mcp_settings.json",
     "project_mcp": ".cline/mcp.json",
     "config": ""
   },
@@ -331,7 +327,7 @@
   "augment-code": {
     "global_skills": "~/.augment/skills",
     "project_skills": ".augment/skills",
-    "rules": "",
+    "rules": ".augment/rules",
     "mcp": "~/.augment/settings.json",
     "project_mcp": ".augment/settings.json",
     "project_config": ".augment/settings.json",

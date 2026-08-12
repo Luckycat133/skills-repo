@@ -27,25 +27,24 @@ skills-repo/
 
 ## `agent-skills-setup`
 
-Migra contexto con alcance definido entre IDE y agentes compatibles: skills, reglas, prompts y objetos MCP documentados. La configuración completa del IDE y los árboles opacos del proyecto requieren revisión manual. Consulta los 44 identificadores compatibles con el script y las superficies manuales en el [registro de IDE](skills/agent-skills-setup/references/ide-registry.md).
+Migra contexto con alcance definido entre perfiles de producto. Registry v2 registra ciclo de vida, versión, fuente, alcance, almacenamiento y política por superficie; las entradas legacy, cloud, provider, host-editor y alias no son destinos de escritura ordinarios. Consulta el [registro de IDE](skills/agent-skills-setup/references/ide-registry.md).
 
 El paquete de ejecución contiene referencias y un único comando de migración. No instala IDE ni runtimes, no crea enlaces simbólicos o bloqueos de registro y no se copia en los directorios de otros agentes. Las migraciones globales seleccionan Skills por defecto; los objetos de proyecto usan un workspace explícito.
 Antes de copiar un directorio de Skill se analiza todo el texto de origen. Una credencial literal probable o un enlace fuera del Skill hace que se omita sin modificar el origen ni el destino existente.
-Los metadatos del Skill solo declaran lectura/escritura de archivos locales y shell; el activador se limita a migraciones entre dos productos compatibles nombrados.
-Las reglas y prompts del proyecto siguen la estrategia de conflicto elegida y, por defecto, hacen una copia de respaldo antes de copiar.
+El frontmatter canónico usa solo campos estándar de Agent Skills. La CLI por perfiles ofrece `detect`, `inventory`, `plan`, `apply`, `verify` y `rollback`; las instrucciones pasan por un IR tipado con informe de pérdida, y la aplicación crea respaldos exactos y un manifiesto verificable.
 
 ## Desarrollo
 
-1. Edita `skills/agent-skills-setup/`; no edites el `SKILL.md` raíz generado.
+1. Edita `skills/agent-skills-setup/`; no edites el puntero generado del repositorio raíz.
 2. Ejecuta `bash validate-all.sh`.
-3. Tras cambiar el Skill canónico, ejecuta `bash scripts/sync-root-mirror.sh`.
+3. Tras cambiar el Skill canónico, ejecuta `bash scripts/sync-root-mirror.sh` para actualizar el puntero raíz.
 4. Fusiona después de validar.
 
 Revisa skills externas en una rama con `bash scripts/import-agent-skill.sh <source-dir> <skill-name>`.
 
 ## Publicación
 
-GitHub es la fuente canónica; ClawHub y Awesome Copilot son canales de distribución. Antes de publicar, ejecuta todas las pruebas y el análisis de seguridad, sube y verifica el commit de GitHub y exige un dry run correcto de ClawHub. Consulta la [lista de publicación](docs/agent-skills-setup/release-checklist.md).
+GitHub es la fuente canónica; ClawHub y Awesome Copilot son canales de distribución. El repositorio sigue bajo MIT; el bundle generado para ClawHub usa MIT-0 por separado, elimina licencias incompatibles y declara Bash/Python. La publicación exige reconocer explícitamente la autorización de los contribuidores. Consulta la [lista de publicación](docs/agent-skills-setup/release-checklist.md).
 
 ## Proyecto
 

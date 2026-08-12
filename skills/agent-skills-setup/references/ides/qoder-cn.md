@@ -1,3 +1,3 @@
 # qoder-cn (formerly Tongyi Lingma)
 
-Qoder CN uses UI-managed MCP (`mcpServers`), `AGENTS.md`, Quest/Experts, and `qodercli`; no portable generic migration is claimed. It was renamed from Tongyi Lingma in 2026-05 and is distinct from qoder.com.
+Qoder CN is the China product profile formerly branded Tongyi Lingma. It is distinct from the international `qoder.com` product, whose CLI uses `~/.qoder/skills`, `.qoder/skills`, layered settings, hooks, agents, and file-backed MCP. Keep Qoder CN in the conservative manual profile until its own official file contracts are verified; never reuse international paths by brand similarity.

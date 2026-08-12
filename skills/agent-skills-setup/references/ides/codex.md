@@ -15,6 +15,8 @@
 <!-- END GENERATED: ide-paths.json summary -->
 - MCP/config is TOML `mcp_servers`; project config requires trust. JSON `mcpServers` is never converted automatically—rebuild and validate `[mcp_servers.<name>]` manually.
 - Codex supports stdio and Streamable HTTP; do not map legacy SSE or add protocol/session headers. Recheck authorization with `codex mcp list`.
-- `AGENTS.md` and documented Skills paths are portable; admin skills may also live under `/etc/codex/skills`. `[[skills.config]]`, plugin bundles, hooks, and `agents/openai.yaml` are separate supported surfaces but remain manual because they include policy, UI metadata, or executable lifecycle behavior.
+- Instructions are a hierarchy, not one `rules` file. User scope chooses `~/.codex/AGENTS.override.md` before `~/.codex/AGENTS.md`; project discovery walks from repository root toward the working directory and chooses `AGENTS.override.md` before `AGENTS.md` at each level.
+- `.codex/rules/*.rules`, `.codex/agents/*.toml`, hooks, generated memories, layered config, and trust/managed policy are different objects. Rules/agents need native templates, hooks may only be emitted disabled, generated memory must be regenerated, and trust is never migrated.
+- `AGENTS.md` and documented `.agents/skills` paths are portable after validation; admin skills may also live under `/etc/codex/skills`. `[[skills.config]]`, plugin bundles, and `agents/openai.yaml` remain separate policy/UI surfaces.
 
-Sources: [config](https://developers.openai.com/codex/config-reference/), [MCP](https://developers.openai.com/codex/mcp/), [Skills](https://developers.openai.com/codex/skills), [customization](https://developers.openai.com/codex/concepts/customization/).
+Sources: [config](https://developers.openai.com/codex/config-reference), [AGENTS hierarchy](https://developers.openai.com/codex/guides/agents-md), [Skills](https://developers.openai.com/codex/skills).

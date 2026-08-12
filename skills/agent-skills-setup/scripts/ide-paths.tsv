@@ -29,7 +29,7 @@ antigravity	project-config	*
 antigravity	config	*
 augment-code	global	*	~/.augment/skills
 augment-code	project-skills	*	.augment/skills
-augment-code	rules	*
+augment-code	rules	*	.augment/rules
 augment-code	mcp	*	~/.augment/settings.json
 augment-code	project-mcp	*	.augment/settings.json
 augment-code	project-config	*	.augment/settings.json
@@ -66,10 +66,8 @@ claude-desktop	project-config	*
 claude-desktop	config	*
 cline	global	*	~/.cline/skills
 cline	project-skills	*	.cline/skills
-cline	rules	*	.clinerules
-cline	mcp	darwin	~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json
-cline	mcp	linux	~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json
-cline	mcp	windows	${APPDATA}/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json
+cline	rules	*	.cline/rules
+cline	mcp	*	~/.cline/data/settings/cline_mcp_settings.json
 cline	project-mcp	*	.cline/mcp.json
 cline	project-config	*
 cline	config	*
@@ -133,7 +131,7 @@ firebase-studio	global	*
 firebase-studio	project-skills	*
 firebase-studio	rules	*	.idx/airules.md
 firebase-studio	mcp	*
-firebase-studio	project-mcp	*
+firebase-studio	project-mcp	*	.idx/mcp.json
 firebase-studio	project-config	*
 firebase-studio	config	*
 gemini-cli	global	*	~/.gemini/skills
@@ -294,7 +292,7 @@ vscode	project-config	*
 vscode	config	*
 windsurf	global	*	~/.codeium/windsurf/skills
 windsurf	project-skills	*	.windsurf/skills
-windsurf	rules	*	.devin/rules
+windsurf	rules	*	.windsurf/rules
 windsurf	mcp	*	~/.codeium/windsurf/mcp_config.json
 windsurf	project-mcp	*
 windsurf	project-config	*

@@ -90,7 +90,7 @@ assert_path kiro config ""
 
 assert_path augment-code global "~/.augment/skills"
 assert_path augment-code project-skills ".augment/skills"
-assert_path augment-code rules ""
+assert_path augment-code rules ".augment/rules"
 assert_path augment-code mcp "~/.augment/settings.json"
 assert_path augment-code project-mcp ".augment/settings.json"
 assert_path augment-code project-config ".augment/settings.json"

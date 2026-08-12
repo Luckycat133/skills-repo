@@ -70,7 +70,7 @@ assert not (root / "references/ides/raccoon-ai.md").exists()
 
 skill = (root / "SKILL.md").read_text(encoding="utf-8")
 assert "ide-registry.md" in skill
-assert "Resolve both IDs" in skill
+assert "Resolve both product profiles" in skill
 PY
 
 echo "Reference composition test passed"

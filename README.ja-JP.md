@@ -27,25 +27,24 @@ skills-repo/
 
 ## `agent-skills-setup`
 
-対応 IDE とエージェント間で、範囲を明確にした skills、rules、prompts、MCP オブジェクトを移行します。IDE 全体の設定と不透明なプロジェクトツリーは手動確認が必要です。44 のスクリプト対応識別子と手動専用サーフェスは [IDE registry](skills/agent-skills-setup/references/ide-registry.md) を参照してください。
+製品 profile 間で対象範囲を明確にしてコンテキストを移行します。Registry v2 は lifecycle、version、source、scope、storage、surface ごとの policy を保持し、legacy、cloud、provider、host-editor、alias を通常の書き込み先として扱いません。[IDE registry](skills/agent-skills-setup/references/ide-registry.md) を参照してください。
 
 実行パッケージに含まれるのは参照資料と 1 つの移行コマンドだけです。IDE やランタイムの導入、シンボリックリンクやレジストリロックの作成、各エージェントディレクトリへの自己コピーは行いません。global 移行の既定対象は Skills のみで、project オブジェクトにはコマンドで明示した workspace を使います。
 Skill ディレクトリをコピーする前にすべてのソーステキストを検査し、リテラル資格情報の疑いまたは Skill 外へのリンクがあれば、ソースと既存ターゲットを変更せずにその Skill をスキップします。
-Skill のメタデータはローカルのファイル読み書きと shell だけを宣言し、トリガーは名前付きの対応製品 2 つの間の移行に限定しています。
-プロジェクトの rules と prompts は選択した競合戦略に従い、既定ではコピー前にターゲットをバックアップします。
+正本 frontmatter は Agent Skills の標準フィールドだけを使います。profile-aware CLI は `detect`、`inventory`、`plan`、`apply`、`verify`、`rollback` を提供し、instructions は loss report 付きの型付き IR を通り、apply は正確なバックアップと検証 manifest を作成します。
 
 ## 開発
 
-1. `skills/agent-skills-setup/` を編集し、生成物の root `SKILL.md` は編集しません。
+1. `skills/agent-skills-setup/` を編集し、生成されたルートのリポジトリポインターは編集しません。
 2. `bash validate-all.sh` を実行します。
-3. 正本の Skill を変えたら `bash scripts/sync-root-mirror.sh` を実行します。
+3. 正本の Skill を変えたら `bash scripts/sync-root-mirror.sh` でルートポインターを更新します。
 4. 検証後にマージします。
 
 外部 Skill はブランチで `bash scripts/import-agent-skill.sh <source-dir> <skill-name>` を使って確認します。
 
 ## 公開
 
-GitHub が正本で、ClawHub と Awesome Copilot は配布経路です。公開前に全テストとセキュリティスキャンを通し、GitHub のコミットを push・確認してから、ClawHub の dry run で配布物を検証します。[公開チェックリスト](docs/agent-skills-setup/release-checklist.md)も参照してください。
+GitHub が正本で、ClawHub と Awesome Copilot は配布経路です。リポジトリは MIT を維持し、生成する ClawHub bundle だけを MIT-0 として競合ライセンスを除去し、Bash/Python 要件を宣言します。公開には contributor authorization の明示確認が必要です。[公開チェックリスト](docs/agent-skills-setup/release-checklist.md)も参照してください。
 
 ## プロジェクト
 

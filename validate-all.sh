@@ -34,6 +34,7 @@ for script in "$SCRIPT_DIR"/*.sh "$SCRIPT_DIR"/scripts/*.sh "$SCRIPT_DIR"/skills
 done
 shopt -u nullglob
 
+bash "$SCRIPT_DIR/scripts/run-official-skill-validator.sh"
 python3 "$SCRIPT_DIR/scripts/validate_skills.py"
 
 if [[ -f "$SCRIPT_DIR/scripts/test-validate-skills.py" ]]; then

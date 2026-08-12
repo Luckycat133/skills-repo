@@ -3,7 +3,20 @@
 Read only the selected source and target entries. Each link records documented
 paths, supported migration surfaces, and manual boundaries; a few UI-only
 clients intentionally share one reference. `ide-paths.json` remains the
-structured path mapping consumed by scripts.
+legacy compatibility mapping. [Registry v2](registry-v2.json) is authoritative
+for product profiles, lifecycle, storage type, scope, migration policy, source,
+version range, and freshness.
+
+## Lifecycle and target eligibility
+
+| Classification | Products | Default behavior |
+| --- | --- | --- |
+| Legacy/source-only | Roo Code, Void, Supermaven, Firebase Studio | Inventory and export only; never target. |
+| Brand alias | Codeium, Tongyi Lingma | Resolve to the named current profile; do not invent paths. |
+| Provider | Pieces | Configure the consuming MCP client. |
+| Editor host | Emacs, Neovim, Helix | Select a concrete plugin profile first. |
+| Cloud/UI | Devin, v0, Lovable, Bolt, TRAE Work, Cody | Use official API/UI or a rebuild checklist. |
+| Profiled local client | Cline, Amazon Q, Codex, ForgeCode, Augment, Windsurf, Qoder and the new CLI entries | Enforce per-surface policy and loss reporting. |
 
 ## IDE references
 
@@ -76,3 +89,10 @@ structured path mapping consumed by scripts.
 - [`lovable`](ides/lovable.md) — lovable
 - [`xcode`](ides/xcode.md) — xcode (Xcode 26.3+/27 coding agents; manual configuration boundary)
 - [`gptel-mcp-el`](ides/gptel-mcp-el.md) — gptel-mcp-el (third-party Emacs packages)
+- [`qoder`](ides/qoder.md) — Qoder International CLI / IDE profiles
+- [`qwen-code`](ides/qwen-code.md) — Qwen Code
+- [`mistral-vibe`](ides/mistral-vibe.md) — Mistral Vibe Code
+- [`factory-droid`](ides/factory-droid.md) — Factory Droid
+- [`warp-oz`](ides/warp-oz.md) — Warp Oz local/cloud agent CLI
+- [`pi`](ides/pi.md) — Pi coding agent
+- [`crush`](ides/crush.md) — Crush terminal coding agent

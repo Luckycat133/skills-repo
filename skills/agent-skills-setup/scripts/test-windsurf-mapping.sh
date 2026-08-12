@@ -25,7 +25,7 @@ assert_path() {
 assert_path global '~/.codeium/windsurf/skills'
 assert_path project-skills '.windsurf/skills'
 assert_path mcp '~/.codeium/windsurf/mcp_config.json'
-assert_path rules '.devin/rules'
+assert_path rules '.windsurf/rules'
 if HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" --print-path windsurf project >/dev/null 2>&1; then
     echo "FAIL: windsurf/project must remain unsupported for mixed .windsurf namespace" >&2
     exit 1
@@ -66,7 +66,7 @@ JSON
 HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source cursor --target windsurf --workspace "$WORKSPACE" \
     --objects mcp --yes --strategy overwrite > "$TMP_ROOT/foreign.txt" 2>&1 || true
-grep -Fq 'Windsurf/Devin MCP schema is invalid or ambiguous' "$TMP_ROOT/foreign.txt"
+grep -Fq 'Windsurf MCP schema is invalid or ambiguous' "$TMP_ROOT/foreign.txt"
 cmp -s "$WINDSURF_TARGET_BEFORE" "$TEST_HOME/.codeium/windsurf/mcp_config.json" || {
     echo "FAIL: foreign VS Code transport mutated the existing Windsurf target" >&2
     exit 1
@@ -76,7 +76,7 @@ printf '%s\n' 'rule fixture' > "$WORKSPACE/.windsurf/rules/example.md"
 RULE_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source windsurf --target cursor --workspace "$WORKSPACE" \
     --objects rules --dry-run 2>&1)"
-grep -Fq 'Windsurf/Devin rules use scoped files; automatic migration is unsupported' <<< "$RULE_OUTPUT"
+grep -Fq 'Windsurf rules use scoped files; automatic migration is unsupported' <<< "$RULE_OUTPUT"
 
 PROJECT_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source windsurf --target cursor --workspace "$WORKSPACE" \
@@ -86,6 +86,6 @@ grep -Fq 'automatic whole-project configuration migration is unsupported' <<< "$
 PROMPT_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source windsurf --target cursor --workspace "$WORKSPACE" \
     --objects prompts --dry-run 2>&1)"
-grep -Fq 'Windsurf/Devin workflows use a product-specific directory and invocation model' <<< "$PROMPT_OUTPUT"
+grep -Fq 'Windsurf workflows use a product-specific directory and invocation model' <<< "$PROMPT_OUTPUT"
 
-echo 'Windsurf/Devin mapping fixture passed'
+echo 'Windsurf mapping fixture passed'

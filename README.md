@@ -30,7 +30,7 @@ skills-repo/
 
 ## `agent-skills-setup`
 
-Scoped migration of selected assistant context between supported IDEs and agents. It handles documented skills, rules, prompts, and MCP objects; whole IDE configuration and opaque project trees stay manual. See the [IDE registry](skills/agent-skills-setup/references/ide-registry.md) for the 45 script-supported identifiers and documented manual-only surfaces.
+Scoped migration of selected assistant context between product profiles. Registry v2 records lifecycle, version, source, scope, storage, and per-surface policy; legacy, cloud, provider, host-editor, and alias entries are deliberately not ordinary write targets. See the [IDE registry](skills/agent-skills-setup/references/ide-registry.md).
 
 The runtime package contains references plus one migration command. It does not
 install IDEs or runtimes, create symlinks, maintain registry locks, or copy
@@ -39,24 +39,23 @@ project-backed objects use an explicit workspace.
 Before a Skill directory is copied, all source text is scanned; a likely
 literal credential or link outside the Skill rejects that Skill without
 changing its source or existing target.
-The Skill metadata declares only local file-read, file-write, and shell
-capabilities, and its trigger describes migration between two named supported
-products.
-Project rules and prompt targets use the selected conflict strategy, defaulting
-to a backup before copy.
+The canonical frontmatter uses only standard Agent Skills fields. The
+profile-aware CLI provides `detect`, `inventory`, `plan`, `apply`, `verify`, and
+`rollback`; instructions pass through a typed IR with a loss report, and apply
+creates exact backups plus a verification manifest.
 
 ## Develop
 
-1. Edit `skills/agent-skills-setup/`, never the generated root `SKILL.md`.
+1. Edit `skills/agent-skills-setup/`, never the generated root repository pointer.
 2. Run `bash validate-all.sh`.
-3. Regenerate the root mirror after canonical-skill edits: `bash scripts/sync-root-mirror.sh`.
+3. Regenerate the root pointer after canonical-skill edits: `bash scripts/sync-root-mirror.sh`.
 4. Merge only after validation.
 
 To review an external skill, use `bash scripts/import-agent-skill.sh <source-dir> <skill-name>` in a branch.
 
 ## Release
 
-GitHub is canonical; ClawHub and Awesome Copilot are distribution channels. Before release, run the full suite and security scan, push and verify the GitHub commit, then require a successful ClawHub dry run before publishing. See the [release checklist](docs/agent-skills-setup/release-checklist.md).
+GitHub is canonical; ClawHub and Awesome Copilot are distribution channels. The repository remains MIT; the generated ClawHub bundle is separately MIT-0, omits a conflicting per-Skill license, declares Bash/Python requirements, and cannot be published until contributor authorization is explicitly acknowledged. See the [release checklist](docs/agent-skills-setup/release-checklist.md).
 
 ## Project
 

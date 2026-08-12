@@ -25,6 +25,15 @@ SECRET = re.compile(
 )
 PRIVATE_PATH = re.compile(r"(?:/Users/[^/\s]+|/home/[^/\s]+|[A-Za-z]:\\Users\\[^\\\s]+)")
 LINK = re.compile(r"!?(?:\[[^\]]*\])\(([^)]+)\)")
+NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+ALLOWED_FRONTMATTER_FIELDS = {
+    "name",
+    "description",
+    "license",
+    "compatibility",
+    "metadata",
+    "allowed-tools",
+}
 
 
 def get_files_to_scan() -> list[Path]:
@@ -76,6 +85,55 @@ def frontmatter(text: str, path: Path) -> dict[str, str]:
     return values
 
 
+def frontmatter_body(text: str, path: Path) -> str:
+    if not text.startswith("---\n"):
+        return ""
+    end = text.find("\n---\n", 4)
+    if end < 0:
+        return ""
+    return text[4:end]
+
+
+def validate_frontmatter_schema(body: str, path: Path) -> None:
+    top_level = re.findall(r"(?m)^([A-Za-z0-9_-]+):", body)
+    for duplicate in sorted({key for key in top_level if top_level.count(key) > 1}):
+        errors.append(f"{path}: duplicate frontmatter field: {duplicate}")
+    for field in sorted(set(top_level) - ALLOWED_FRONTMATTER_FIELDS):
+        errors.append(f"{path}: unknown Agent Skills frontmatter field: {field}")
+
+    metadata_field = re.search(r"(?m)^metadata:[ \t]*(.*)$", body)
+    metadata_match = re.search(
+        r"(?m)^metadata:[ \t]*\n(?P<body>(?:[ \t]+[^\n]*(?:\n|$))*)",
+        body,
+    )
+    if metadata_field and metadata_field.group(1).strip():
+        errors.append(f"{path}: metadata must be a string mapping")
+    if metadata_match:
+        metadata_lines = [
+            line for line in metadata_match.group("body").splitlines() if line.strip()
+        ]
+        if not metadata_lines:
+            errors.append(f"{path}: metadata must be a non-empty string mapping")
+        for line in metadata_lines:
+            match = re.fullmatch(r"  ([A-Za-z0-9_.-]+):\s*(.+)", line)
+            if not match:
+                errors.append(f"{path}: metadata must map string keys to string values")
+                continue
+            value = match.group(2).strip()
+            if value.startswith(("{", "[", "|", ">")):
+                errors.append(f"{path}: metadata values must be strings")
+            if value[0] not in {"'", '"'} and re.fullmatch(
+                r"(?i:true|false|null|~|[-+]?[0-9]+(?:\.[0-9]+)?)", value
+            ):
+                errors.append(f"{path}: metadata values must be quoted strings")
+
+    allowed_tools = re.search(r"(?m)^allowed-tools:[ \t]*(.*)$", body)
+    if allowed_tools:
+        allowed_tools_value = allowed_tools.group(1).strip()
+        if not allowed_tools_value or allowed_tools_value.startswith(("[", "{", "|", ">")):
+            errors.append(f"{path}: allowed-tools must be a space-separated string")
+
+
 def validate_skill(skill_dir: Path) -> None:
     path = skill_dir / "SKILL.md"
     if not path.is_file():
@@ -84,15 +142,32 @@ def validate_skill(skill_dir: Path) -> None:
 
     text = path.read_text(encoding="utf-8")
     metadata = frontmatter(text, path.relative_to(ROOT))
+    fm_body = frontmatter_body(text, path.relative_to(ROOT))
+    validate_frontmatter_schema(fm_body, path.relative_to(ROOT))
     name = metadata.get("name", "")
     description = metadata.get("description", "")
 
     if name != skill_dir.name:
         errors.append(f"{path.relative_to(ROOT)}: name must match directory ({skill_dir.name})")
-    fm_parts = text.split("---", 2)
-    fm_body = fm_parts[1] if len(fm_parts) > 1 else ""
+    if not NAME.fullmatch(name) or len(name) > 64:
+        errors.append(f"{path.relative_to(ROOT)}: name violates Agent Skills naming rules")
     if not description and "description:" not in fm_body:
         errors.append(f"{path.relative_to(ROOT)}: description is required")
+    if description and len(description) > 1024:
+        errors.append(f"{path.relative_to(ROOT)}: description must be 1-1024 characters")
+    description_match = re.search(
+        r"(?m)^description:\s*>?\s*\n(?P<body>(?:[ \t]+[^\n]*(?:\n|$))*)",
+        fm_body,
+    )
+    if description_match:
+        description_text = " ".join(
+            line.strip() for line in description_match.group("body").splitlines()
+        ).strip()
+        if not 1 <= len(description_text) <= 1024:
+            errors.append(f"{path.relative_to(ROOT)}: description must be 1-1024 characters")
+    compatibility = metadata.get("compatibility", "")
+    if compatibility and len(compatibility) > 500:
+        errors.append(f"{path.relative_to(ROOT)}: compatibility exceeds 500 characters")
     if SECRET.search(text):
         errors.append(f"{path.relative_to(ROOT)}: possible secret detected")
     if PRIVATE_PATH.search(text):
