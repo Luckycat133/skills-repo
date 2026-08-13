@@ -3,7 +3,7 @@ name: agent-skills-setup
 license: MIT
 compatibility: Requires local Bash and filesystem read/write access for resolved migration targets. Python 3 is required for automatic MCP conversion and redaction. No network access.
 metadata:
-  version: "0.8.1"
+  version: "0.8.0"
 description: >
   Use when a user asks to migrate or transfer AI-assistant context between two
   named supported IDEs or agent products. Handle selected skills, rules,
