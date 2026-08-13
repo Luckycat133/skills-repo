@@ -10,6 +10,10 @@ FIXTURE_SKILL="$TMP_ROOT/fixture-skill"
 FIXTURE_PACKAGE="$TMP_ROOT/fixture-package"
 FAKE_BIN="$TMP_ROOT/bin"
 FAKE_CLAWHUB_LOG="$TMP_ROOT/clawhub-publish.log"
+SOURCE_REPO="https://github.com/example/skills-repo"
+SOURCE_COMMIT="0123456789abcdef0123456789abcdef01234567"
+SOURCE_REF="main"
+SOURCE_PATH="skills/agent-skills-setup"
 
 cleanup() {
     rm -rf "$TMP_ROOT"
@@ -34,7 +38,11 @@ PATH="$FAKE_BIN:$PATH" bash "$REPO_ROOT/scripts/prepare-clawhub-release.sh" \
     --package-dir "$PACKAGE_ROOT" \
     --slug agent-skills-setup \
     --name "Agent Skills Setup" \
-    --version 0.0.0 >"$TMP_ROOT/release.log"
+    --version 0.0.0 \
+    --source-repo "$SOURCE_REPO" \
+    --source-commit "$SOURCE_COMMIT" \
+    --source-ref "$SOURCE_REF" \
+    --source-path "$SOURCE_PATH" >"$TMP_ROOT/release.log"
 
 [[ -f "$PACKAGE_ROOT/SKILL.md" ]] || {
     echo "FAIL: release helper did not stage the runtime Skill" >&2
@@ -110,6 +118,16 @@ grep -F "$PACKAGE_ROOT" "$TMP_ROOT/release.log" >/dev/null || {
     echo "FAIL: release command does not publish the staged runtime package" >&2
     exit 1
 }
+for expected in \
+    "--source-repo $SOURCE_REPO" \
+    "--source-commit $SOURCE_COMMIT" \
+    "--source-ref $SOURCE_REF" \
+    "--source-path $SOURCE_PATH"; do
+    grep -F -- "$expected" "$TMP_ROOT/release.log" >/dev/null || {
+        echo "FAIL: release command omitted source provenance: $expected" >&2
+        exit 1
+    }
+done
 
 if PATH="$FAKE_BIN:$PATH" bash "$REPO_ROOT/scripts/prepare-clawhub-release.sh" \
     --skill-dir "$REPO_ROOT/skills/agent-skills-setup" \
@@ -130,18 +148,52 @@ grep -Fq 'contributor authorization' "$TMP_ROOT/no-consent.log" || {
     exit 1
 }
 
+if PATH="$FAKE_BIN:$PATH" bash "$REPO_ROOT/scripts/prepare-clawhub-release.sh" \
+    --skill-dir "$REPO_ROOT/skills/agent-skills-setup" \
+    --package-dir "$TMP_ROOT/no-provenance-package" \
+    --slug agent-skills-setup \
+    --name "Agent Skills Setup" \
+    --version 0.0.0 \
+    --publish \
+    --acknowledge-mit0 >"$TMP_ROOT/no-provenance.log" 2>&1; then
+    echo "FAIL: ClawHub publish proceeded without source provenance" >&2
+    exit 1
+fi
+grep -Fq 'complete source provenance' "$TMP_ROOT/no-provenance.log" || {
+    echo "FAIL: source provenance blocker was not explained" >&2
+    exit 1
+}
+[[ ! -e "$FAKE_CLAWHUB_LOG" ]] || {
+    echo "FAIL: ClawHub executable was called for publish without source provenance" >&2
+    exit 1
+}
+
 PATH="$FAKE_BIN:$PATH" bash "$REPO_ROOT/scripts/prepare-clawhub-release.sh" \
     --skill-dir "$REPO_ROOT/skills/agent-skills-setup" \
     --package-dir "$TMP_ROOT/consented-package" \
     --slug agent-skills-setup \
     --name "Agent Skills Setup" \
     --version 0.0.0 \
+    --source-repo "$SOURCE_REPO" \
+    --source-commit "$SOURCE_COMMIT" \
+    --source-ref "$SOURCE_REF" \
+    --source-path "$SOURCE_PATH" \
     --publish \
     --acknowledge-mit0 >"$TMP_ROOT/consented.log"
 grep -Fq "publish $TMP_ROOT/consented-package" "$FAKE_CLAWHUB_LOG" || {
     echo "FAIL: authorized ClawHub publish did not use the staged package" >&2
     exit 1
 }
+for expected in \
+    "--source-repo $SOURCE_REPO" \
+    "--source-commit $SOURCE_COMMIT" \
+    "--source-ref $SOURCE_REF" \
+    "--source-path $SOURCE_PATH"; do
+    grep -F -- "$expected" "$FAKE_CLAWHUB_LOG" >/dev/null || {
+        echo "FAIL: authorized ClawHub publish omitted source provenance: $expected" >&2
+        exit 1
+    }
+done
 
 cp -R "$REPO_ROOT/skills/agent-skills-setup" "$FIXTURE_SKILL"
 printf '%s\n' '#!/usr/bin/env bash' 'exit 0' > "$FIXTURE_SKILL/scripts/maintenance-only.sh"

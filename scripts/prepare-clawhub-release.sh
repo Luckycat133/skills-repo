@@ -23,6 +23,10 @@ VERSION=""
 TAGS="latest"
 CHANGELOG_TEXT=""
 CHANGELOG_FILE=""
+SOURCE_REPO=""
+SOURCE_COMMIT=""
+SOURCE_REF=""
+SOURCE_PATH=""
 RUN_PUBLISH=0
 MIT0_ACKNOWLEDGED=0
 
@@ -41,6 +45,10 @@ Options:
   --tags <csv>              Comma-separated tags. Default: latest.
   --changelog <text>        Inline changelog text.
   --changelog-file <file>   Read changelog text from a file.
+  --source-repo <url>       Public source repository URL.
+  --source-commit <sha>     Full source commit SHA.
+  --source-ref <ref>        Source branch or tag.
+  --source-path <path>      Skill path within the source repository.
   --publish                 Execute `clawhub publish` after validation.
   --acknowledge-mit0        Confirm contributor authorization for ClawHub MIT-0.
   -h, --help                Show this help text.
@@ -89,6 +97,26 @@ while [[ $# -gt 0 ]]; do
             CHANGELOG_FILE="$2"
             shift 2
             ;;
+        --source-repo)
+            [[ $# -ge 2 ]] || die "--source-repo requires a value"
+            SOURCE_REPO="$2"
+            shift 2
+            ;;
+        --source-commit)
+            [[ $# -ge 2 ]] || die "--source-commit requires a value"
+            SOURCE_COMMIT="$2"
+            shift 2
+            ;;
+        --source-ref)
+            [[ $# -ge 2 ]] || die "--source-ref requires a value"
+            SOURCE_REF="$2"
+            shift 2
+            ;;
+        --source-path)
+            [[ $# -ge 2 ]] || die "--source-path requires a value"
+            SOURCE_PATH="$2"
+            shift 2
+            ;;
         --publish)
             RUN_PUBLISH=1
             shift
@@ -129,6 +157,17 @@ fi
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9]+)?$ ]] || die "Version must look like semver: $VERSION"
 [[ "$SLUG" =~ ^[a-z0-9-]+$ ]] || die "Slug must contain only lowercase letters, numbers, and hyphens"
 
+SOURCE_PROVENANCE_COUNT=0
+for value in "$SOURCE_REPO" "$SOURCE_COMMIT" "$SOURCE_REF" "$SOURCE_PATH"; do
+    [[ -z "$value" ]] || SOURCE_PROVENANCE_COUNT=$((SOURCE_PROVENANCE_COUNT + 1))
+done
+if [[ $SOURCE_PROVENANCE_COUNT -ne 0 && $SOURCE_PROVENANCE_COUNT -ne 4 ]]; then
+    die "Source provenance requires --source-repo, --source-commit, --source-ref, and --source-path together"
+fi
+if [[ -n "$SOURCE_COMMIT" && ! "$SOURCE_COMMIT" =~ ^[0-9a-fA-F]{40}$ ]]; then
+    die "--source-commit must be a full 40-character Git commit SHA"
+fi
+
 command_exists clawhub || die "clawhub is not installed"
 
 if ! clawhub whoami >/dev/null 2>&1; then
@@ -149,11 +188,22 @@ bash "$REPO_ROOT/scripts/stage-runtime-skill.sh" \
 if [[ $RUN_PUBLISH -eq 1 && $MIT0_ACKNOWLEDGED -ne 1 ]]; then
     die "ClawHub publishes under MIT-0; rerun with --acknowledge-mit0 only after contributor authorization is confirmed"
 fi
+if [[ $RUN_PUBLISH -eq 1 && $SOURCE_PROVENANCE_COUNT -ne 4 ]]; then
+    die "ClawHub publish requires complete source provenance; pass --source-repo, --source-commit, --source-ref, and --source-path"
+fi
 
 PUBLISH_CMD=(clawhub publish "$PACKAGE_DIR_ABS" --slug "$SLUG" --name "$DISPLAY_NAME" --version "$VERSION" --tags "$TAGS")
 
 if [[ -n "$CHANGELOG_TEXT" ]]; then
     PUBLISH_CMD+=(--changelog "$CHANGELOG_TEXT")
+fi
+if [[ $SOURCE_PROVENANCE_COUNT -eq 4 ]]; then
+    PUBLISH_CMD+=(
+        --source-repo "$SOURCE_REPO"
+        --source-commit "$SOURCE_COMMIT"
+        --source-ref "$SOURCE_REF"
+        --source-path "$SOURCE_PATH"
+    )
 fi
 
 echo "Validated source skill: $SKILL_DIR_ABS"
