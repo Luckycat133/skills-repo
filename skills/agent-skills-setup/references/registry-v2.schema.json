@@ -3,11 +3,23 @@
   "$id": "registry-v2.schema.json",
   "title": "Agent context product profile registry v2",
   "type": "object",
-  "required": ["schema_version", "verified_at", "object_policies", "profile_templates", "products"],
+  "required": ["schema_version", "verified_at", "object_policies", "support_contract", "profile_templates", "products"],
   "properties": {
     "schema_version": {"const": 2},
     "verified_at": {"type": "string", "format": "date"},
     "object_policies": {"type": "object", "additionalProperties": {"type": "string"}},
+    "support_contract": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["support_level", "confidence"],
+        "properties": {
+          "support_level": {"enum": ["partial", "manual", "source-only", "provider", "host", "alias", "unverified"]},
+          "confidence": {"enum": ["high", "medium", "low"]}
+        },
+        "additionalProperties": false
+      }
+    },
     "profile_templates": {"type": "object", "additionalProperties": {"$ref": "#/$defs/profile"}},
     "products": {
       "type": "object",
@@ -31,7 +43,8 @@
         "compatibility_paths": {
           "type": "array",
           "items": {"type": "string"}
-        }
+        },
+        "compatibility_behavior": {"enum": ["alternative", "precedence"]}
       },
       "additionalProperties": true
     },
@@ -49,6 +62,8 @@
           "items": {"type": "string", "format": "uri"}
         },
         "migration_policy": {"type": "string"},
+        "support_level": {"enum": ["partial", "manual", "source-only", "provider", "host", "alias", "unverified"]},
+        "confidence": {"enum": ["high", "medium", "low"]},
         "surfaces": {
           "type": "object",
           "additionalProperties": {

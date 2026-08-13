@@ -65,12 +65,29 @@ printf '%s\n' \
     '  }' \
     '}' > "$CURSOR_MCP"
 
-HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+if HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source cursor \
     --target antigravity \
     --objects mcp \
     --strategy overwrite \
-    --yes >/dev/null
+    --yes >"$TMP_ROOT/canonical.out" 2>"$TMP_ROOT/canonical.err"; then
+    echo "FAIL: canonical entry point wrote to the unverified Antigravity profile" >&2
+    exit 1
+fi
+grep -Fq "legacy writes are disabled" "$TMP_ROOT/canonical.err"
+[[ ! -e "$ANTIGRAVITY_MCP" ]] || {
+    echo "FAIL: blocked canonical migration still created an Antigravity MCP file" >&2
+    exit 1
+}
+
+# Exercise the retained converter only as an explicitly internal compatibility test.
+AGENT_SKILLS_SETUP_INTERNAL_LEGACY=1 HOME="$TEST_HOME" \
+    bash "$SCRIPT_DIR/legacy-smart-ide-migration.sh" \
+        --source cursor \
+        --target antigravity \
+        --objects mcp \
+        --strategy overwrite \
+        --yes >/dev/null
 
 python3 - "$ANTIGRAVITY_MCP" <<'PYEOF'
 import json

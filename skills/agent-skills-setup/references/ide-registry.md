@@ -7,6 +7,13 @@ legacy compatibility mapping. [Registry v2](registry-v2.json) is authoritative
 for product profiles, lifecycle, storage type, scope, migration policy, source,
 version range, and freshness.
 
+Registry support levels are evidence contracts, not marketing labels. No
+profile is currently `full`: reviewed automatic subsets are `partial`; disputed
+or undocumented products remain `manual`, `source-only`, `provider`, `legacy`,
+or `unverified`. Product templates cannot authorize a legacy write. Promotion
+requires current official sources, a versioned surface contract, an adapter,
+fixtures, secret/rollback coverage, and a fresh documentation check.
+
 ## Lifecycle and target eligibility
 
 | Classification | Products | Default behavior |

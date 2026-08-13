@@ -40,6 +40,21 @@ EXPECTED_TEMPLATES: dict[str, str | None] = {
     "bolt-new": "cloud-ui",
     "trae-work": "cloud-ui",
     "cody": "cloud-ui",
+    "codely": "manual-reference",
+    "antigravity": "manual-reference",
+    "openclaw": "manual-reference",
+    "openhands": "manual-reference",
+    "sourcegraph-amp": "manual-reference",
+    "tabnine": "manual-reference",
+    "baidu-comate": "manual-reference",
+    "zcode": "manual-reference",
+    "baidu-comate-ide": "manual-reference",
+    "tencent-codebuddy-ide": "manual-reference",
+    "raccoon-ai": "manual-reference",
+    "monkeycode": "cloud-ui",
+    "vecli": "manual-reference",
+    "qodo": "manual-reference",
+    "xcode": "manual-reference",
 }
 
 
@@ -102,6 +117,22 @@ def validate_surface(
         source_format = entry.get("format")
         if source_format is not None and not isinstance(source_format, str):
             errors.append(f"{item}.format: expected a string")
+        compatibility_paths = entry.get("compatibility_paths")
+        if compatibility_paths is not None and (
+            not isinstance(compatibility_paths, list)
+            or not compatibility_paths
+            or not all(isinstance(path, str) and path for path in compatibility_paths)
+        ):
+            errors.append(f"{item}.compatibility_paths: expected non-empty strings")
+        compatibility_behavior = entry.get("compatibility_behavior")
+        if compatibility_behavior not in {None, "alternative", "precedence"}:
+            errors.append(
+                f"{item}.compatibility_behavior: expected alternative or precedence"
+            )
+        if compatibility_behavior is not None and compatibility_paths is None:
+            errors.append(
+                f"{item}.compatibility_behavior: requires compatibility_paths"
+            )
 
 
 def validate_registry(
@@ -147,6 +178,30 @@ def validate_registry(
         }
         known_policies.add("source-only")
 
+    support_contract = registry.get("support_contract")
+    if not isinstance(support_contract, dict) or not support_contract:
+        errors.append("support_contract: expected a non-empty object")
+        support_contract = {}
+    else:
+        allowed_levels = {
+            "partial",
+            "manual",
+            "source-only",
+            "provider",
+            "host",
+            "alias",
+            "unverified",
+        }
+        for policy, contract in support_contract.items():
+            location = f"support_contract.{policy}"
+            if not isinstance(contract, dict):
+                errors.append(f"{location}: expected an object")
+                continue
+            if contract.get("support_level") not in allowed_levels:
+                errors.append(f"{location}.support_level: invalid")
+            if contract.get("confidence") not in {"high", "medium", "low"}:
+                errors.append(f"{location}.confidence: invalid")
+
     templates = registry.get("profile_templates")
     if not isinstance(templates, dict) or not templates:
         errors.append("profile_templates: expected a non-empty object")
@@ -157,7 +212,13 @@ def validate_registry(
             if not isinstance(template, dict):
                 errors.append(f"{location}: expected an object")
                 continue
-            for field in ("kind", "migration_policy", "surfaces"):
+            for field in (
+                "kind",
+                "migration_policy",
+                "support_level",
+                "confidence",
+                "surfaces",
+            ):
                 if field not in template:
                     errors.append(f"{location}.{field}: missing")
 
@@ -194,6 +255,31 @@ def validate_registry(
                 errors.append(f"{location}.template: unknown template {template_id!r}")
             if product.get("profiles"):
                 errors.append(f"{location}: template products cannot define profiles")
+            if not isinstance(product.get("reference"), str) or not product["reference"]:
+                errors.append(f"{location}.reference: expected a non-empty string")
+            template = templates.get(template_id, {})
+            if template_id == "manual-reference" and template.get(
+                "support_level"
+            ) != "unverified":
+                errors.append(
+                    f"{location}: manual references must remain unverified"
+                )
+            if "verified_at" in product:
+                try:
+                    verified = date.fromisoformat(str(product["verified_at"]))
+                    age = (today - verified).days
+                    if age < 0 or age > max_age_days:
+                        errors.append(
+                            f"{location}.verified_at: outside freshness window"
+                        )
+                except ValueError:
+                    errors.append(f"{location}.verified_at: expected an ISO date")
+                sources = product.get("sources")
+                if not isinstance(sources, list) or not sources or not all(
+                    isinstance(source, str) and source.startswith("https://")
+                    for source in sources
+                ):
+                    errors.append(f"{location}.sources: expected HTTPS sources")
             continue
 
         for field in ("display_name", "category", "lifecycle"):
@@ -218,6 +304,24 @@ def validate_registry(
             for field in ("kind", "migration_policy"):
                 if not isinstance(resolved.get(field), str) or not resolved[field]:
                     errors.append(f"{profile_location}.{field}: expected a string")
+            policy = resolved.get("migration_policy")
+            contract = support_contract.get(policy, {})
+            support_level = resolved.get(
+                "support_level", contract.get("support_level")
+            )
+            confidence = resolved.get("confidence", contract.get("confidence"))
+            if support_level not in {
+                "partial",
+                "manual",
+                "source-only",
+                "provider",
+                "host",
+                "alias",
+                "unverified",
+            }:
+                errors.append(f"{profile_location}.support_level: invalid or missing")
+            if confidence not in {"high", "medium", "low"}:
+                errors.append(f"{profile_location}.confidence: invalid or missing")
             surfaces = resolved.get("surfaces", {})
             if not isinstance(surfaces, dict):
                 errors.append(f"{profile_location}.surfaces: expected an object")

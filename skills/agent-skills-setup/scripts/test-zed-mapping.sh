@@ -3,7 +3,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-SCRIPT="$SCRIPT_DIR/smart-ide-migration.sh"
+SCRIPT="$SCRIPT_DIR/legacy-smart-ide-migration.sh"
+export AGENT_SKILLS_SETUP_INTERNAL_LEGACY=1
 TMP_ROOT="$(mktemp -d /tmp/zed-mapping-test.XXXXXX)"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 TEST_HOME="$TMP_ROOT/home"

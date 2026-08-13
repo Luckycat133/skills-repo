@@ -1,3 +1,7 @@
 # qodo (formerly CodiumAI)
 
-Qodo uses IDE UI for MCP, TOML agent definitions, and Enterprise allowlists. It is not Codeium/Windsurf; paths and schema need product-specific manual review.
+**Registry status:** `unverified/manual-reference`; the Qodo IDE, CLI, and Merge
+product surfaces are not interchangeable and none is an automatic source or
+target. MCP UI, TOML agents/modes, custom instructions, and enterprise
+allowlists require product- and version-specific manual review. It is not
+Codeium/Windsurf.

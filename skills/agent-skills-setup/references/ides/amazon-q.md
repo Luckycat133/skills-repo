@@ -13,7 +13,7 @@
 | Config | Not mapped |
 
 <!-- END GENERATED: ide-paths.json summary -->
-- Resolve a profile before acting. Q in the IDE documents user `.aws/amazonq/default.json`, project `.amazonq/default.json`, and legacy `mcp.json` compatibility; current Q documentation also exposes `~/.aws/amazonq/agents/default.json`. Inventory all documented candidates and report precedence instead of calling `agents/default.json` another product.
+- Resolve a profile before acting. Q in the IDE documents user `~/.aws/amazonq/default.json`, project `.amazonq/default.json`, and legacy `mcp.json` compatibility. `~/.aws/amazonq/agents/` belongs to custom-agent definitions and is not an alternative IDE MCP destination.
 - Q CLI and custom agents have their own agent/profile directories. Their prompts, tools, permissions, hooks, and MCP state are not interchangeable with the narrow IDE `mcpServers` subobject.
 - `.amazonq/` and `~/.aws/amazonq/` are mixed namespaces. Only the selected profile's explicit surface may be read or written; never flatten the whole tree.
 - The v2 profiles are `amazon-q/ide`, `amazon-q/cli`, and `amazon-q/custom-agent`.

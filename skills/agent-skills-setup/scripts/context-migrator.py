@@ -15,8 +15,12 @@ from migration_core import (
     KNOWN_COMMANDS,
     Registry,
     apply_plan,
-    build_plan,
+    atomic_write,
+    build_plan_document,
+    load_plan_document,
+    paths_overlap,
     rollback_manifest,
+    validate_plan_document,
     verify_manifest,
 )
 
@@ -61,20 +65,24 @@ def create_parser() -> argparse.ArgumentParser:
     inventory.add_argument("--product")
     inventory.add_argument("--profile")
 
-    for command in ("plan", "apply"):
-        subparser = subparsers.add_parser(command)
-        common_workspace(subparser)
-        subparser.add_argument("--source", required=True)
-        subparser.add_argument("--target", required=True)
-        subparser.add_argument(
-            "--objects", default="skills,instructions,mcp", help="comma-separated surfaces"
-        )
-        subparser.add_argument(
-            "--scope", choices=("user", "project", "all"), default="project"
-        )
-        if command == "apply":
-            subparser.add_argument("--yes", action="store_true")
-            subparser.add_argument("--manifest", type=Path)
+    plan = subparsers.add_parser("plan")
+    common_workspace(plan)
+    plan.add_argument("--source", required=True)
+    plan.add_argument("--target", required=True)
+    plan.add_argument(
+        "--objects", default="skills,instructions,mcp", help="comma-separated surfaces"
+    )
+    plan.add_argument(
+        "--scope", choices=("user", "project", "local", "all"), default="project"
+    )
+    plan.add_argument("--output", type=Path)
+
+    apply = subparsers.add_parser("apply")
+    apply.add_argument("plan", type=Path)
+    apply.add_argument("--registry", type=Path, default=REGISTRY_PATH)
+    apply.add_argument("--manifest", type=Path)
+    apply.add_argument("--yes", action="store_true")
+    apply.add_argument("--json", action="store_true")
 
     verify = subparsers.add_parser("verify")
     verify.add_argument("--manifest", type=Path, required=True)
@@ -95,6 +103,17 @@ def selector(product: str | None, profile: str | None) -> str | None:
     return f"{product}/{profile}" if profile else product
 
 
+def reject_legacy_write(argv: list[str]) -> None:
+    if "--yes" not in argv and "-y" not in argv:
+        return
+    if "--dry-run" in argv:
+        return
+    raise ValueError(
+        "legacy writes are disabled; create a saved plan with 'plan --output', "
+        "then apply that exact plan file"
+    )
+
+
 def run_new_cli(argv: list[str]) -> int:
     args = create_parser().parse_args(argv)
     if args.command == "verify":
@@ -107,6 +126,40 @@ def run_new_cli(argv: list[str]) -> int:
             raise ValueError("rollback requires --yes")
         restored = rollback_manifest(args.manifest)
         emit({"ok": True, "restored": restored}, args.json)
+        return 0
+
+    if args.command == "apply":
+        if not args.yes:
+            raise ValueError("apply requires --yes after reviewing the saved plan")
+        document = load_plan_document(args.plan)
+        workspace_value = document.get("workspace")
+        if not isinstance(workspace_value, str) or not Path(workspace_value).is_absolute():
+            raise ValueError("plan workspace must be an absolute path")
+        registry = Registry(args.registry, Path(workspace_value))
+        plan_items, _ = validate_plan_document(document, registry)
+        manifest, manifest_path = apply_plan(
+            plan_items,
+            registry.workspace,
+            args.manifest,
+            provenance={
+                "plan_path": str(args.plan.resolve()),
+                "plan_sha256": document["plan_sha256"],
+                "registry_sha256": document["registry_sha256"],
+                "adapter_versions": document["adapter_versions"],
+                "git_provenance": document.get("git_provenance"),
+            },
+        )
+        emit(
+            {
+                "ok": True,
+                "plan": str(args.plan),
+                "plan_sha256": document["plan_sha256"],
+                "manifest": str(manifest_path),
+                "changes": manifest["changes"],
+                "loss_report": manifest["loss_report"],
+            },
+            args.json,
+        )
         return 0
 
     registry = Registry(args.registry, args.workspace)
@@ -122,30 +175,33 @@ def run_new_cli(argv: list[str]) -> int:
     unsupported = sorted(set(object_types) - {"skills", "instructions", "mcp"})
     if unsupported:
         raise ValueError(f"unsupported automatic objects: {', '.join(unsupported)}")
-    plan, projected_loss = build_plan(
+    document = build_plan_document(
         registry,
         args.source,
         args.target,
         object_types,
         args.scope,
     )
-    result = {
-        "source": args.source,
-        "target": args.target,
-        "scope": args.scope,
-        "items": [item.to_dict() for item in plan],
-        "loss_report": projected_loss.to_dict(),
-    }
-    if args.command == "plan":
-        emit(result, args.json)
-        return 0
-    if not args.yes:
-        raise ValueError("apply requires --yes after reviewing plan output")
-    manifest, manifest_path = apply_plan(plan, registry.workspace, args.manifest)
-    result["manifest"] = str(manifest_path)
-    result["changes"] = manifest["changes"]
-    result["loss_report"] = manifest["loss_report"]
-    emit(result, args.json)
+    if args.output:
+        output_path = args.output.resolve(strict=False)
+        protected_paths = [args.registry.resolve(strict=False)]
+        for item in document["items"]:
+            for side in ("source", "target"):
+                surface = item.get(side)
+                if isinstance(surface, dict) and isinstance(
+                    surface.get("resolved_path"), str
+                ):
+                    protected_paths.append(Path(surface["resolved_path"]))
+        if any(paths_overlap(output_path, path) for path in protected_paths):
+            raise ValueError(
+                "plan output overlaps the Registry or a planned source/target "
+                f"surface: {output_path}"
+            )
+        atomic_write(
+            output_path,
+            json.dumps(document, indent=2, sort_keys=True) + "\n",
+        )
+    emit(document, args.json)
     return 0
 
 
@@ -155,7 +211,18 @@ def main() -> int:
         create_parser().print_help()
         return 0
     if argv[0] not in KNOWN_COMMANDS and argv[0].startswith("-"):
-        completed = subprocess.run(["bash", str(LEGACY_SCRIPT), *argv], check=False)
+        try:
+            reject_legacy_write(argv)
+        except (OSError, ValueError, json.JSONDecodeError) as error:
+            print(f"ERROR: {error}", file=sys.stderr)
+            return 1
+        environment = dict(os.environ)
+        environment["AGENT_SKILLS_SETUP_INTERNAL_LEGACY"] = "1"
+        completed = subprocess.run(
+            ["bash", str(LEGACY_SCRIPT), *argv],
+            check=False,
+            env=environment,
+        )
         return completed.returncode
     if argv[0] not in KNOWN_COMMANDS:
         print(f"ERROR: unknown command: {argv[0]}", file=sys.stderr)

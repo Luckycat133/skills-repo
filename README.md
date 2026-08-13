@@ -41,8 +41,14 @@ literal credential or link outside the Skill rejects that Skill without
 changing its source or existing target.
 The canonical frontmatter uses only standard Agent Skills fields. The
 profile-aware CLI provides `detect`, `inventory`, `plan`, `apply`, `verify`, and
-`rollback`; instructions pass through a typed IR with a loss report, and apply
-creates exact backups plus a verification manifest.
+`rollback`; instructions pass through native-format adapters and a typed IR
+with a loss report, and apply accepts only a saved, checksummed plan. It stages
+the full operation, creates exact backups, rolls back all earlier writes on
+failure, and emits a checksummed verification manifest only after success.
+Reviewed subsets are labeled `partial`, not
+`full`; remote MCP without a target transport adapter, unsupported
+JSON5/TOML/YAML/XML/Lua formats, and cloud/UI products produce explicit manual
+reconstruction actions instead of generic conversion.
 
 ## Develop
 

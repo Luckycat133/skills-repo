@@ -1,14 +1,17 @@
 # Scripts
 
-`smart-ide-migration.sh` resolves documented paths, previews or applies a
-scoped migration, preflights Skill source trees, redacts supported MCP
-credentials, and emits JSON evidence.
-Start with `--help` or `--print-path` when a mapping is unfamiliar. It never
-prompts: use `--dry-run` for zero-write review and add `--yes` only after
-approval. `--json` reserves stdout for one JSON document and sends diagnostics
-to stderr; exit code 2 means the write gate refused an unconfirmed apply.
-Lifecycle-restricted IDs may be source-only; currently `firebase-studio` can
-only export existing workspace rules to a maintained target.
+`smart-ide-migration.sh` is the public wrapper. Its profile-aware commands are
+`detect`, `inventory`, `plan`, `apply`, `verify`, and `rollback`. Always save a
+plan with `plan --output plan.json`; `apply plan.json --yes` verifies the plan
+checksum, Registry digest, adapter versions, resolved source/target state, and
+Git HEAD before any write. Apply emits a checksummed manifest with exact
+backups. `--json` reserves stdout for one JSON document and sends diagnostics
+to stderr.
+
+Calls beginning with legacy flags remain available for discovery and dry-run
+compatibility. Every legacy `--yes` write fails before the retained
+compatibility engine runs; use a saved profile-aware plan. The legacy engine is
+internal and rejects ordinary direct execution.
 
 The Skill declares local file-read, file-write, and shell capabilities only.
 MCP targets that are symbolic links fail before conversion. Redaction cleanup
@@ -21,5 +24,10 @@ reports only relative paths and reason categories, never credential values.
 with `sync-ide-reference-summaries.py`, never edit it directly. `common.sh` is
 an internal helper.
 
+`check-doc-freshness.py` validates source/freshness metadata offline and can
+fetch a curated set of official documents with `--online --report`. The weekly
+workflow stores that report as an artifact.
+
 `test-*.sh` files are maintainer regression suites run by `bash validate-all.sh`,
-not local-IDE migration commands.
+not local-IDE migration commands. Legacy converter suites opt into the private
+guard explicitly; `test-legacy-registry-gate.sh` covers the public boundary.

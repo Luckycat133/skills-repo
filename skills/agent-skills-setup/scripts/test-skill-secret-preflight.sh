@@ -3,6 +3,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+MIGRATION_SCRIPT="$SCRIPT_DIR/legacy-smart-ide-migration.sh"
+export AGENT_SKILLS_SETUP_INTERNAL_LEGACY=1
 TMP_ROOT="$(mktemp -d /tmp/agent-skills-secret-preflight.XXXXXX)"
 TEST_HOME="$TMP_ROOT/home"
 SOURCE_ROOT="$TEST_HOME/.claude/skills"
@@ -66,7 +68,7 @@ mkdir -p "$TARGET_ROOT/unreadable-skill"
 printf '%s\n' 'preserve unreadable target' \
     > "$TARGET_ROOT/unreadable-skill/sentinel.txt"
 
-HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source claude --target codex --objects skills \
     --strategy overwrite --yes > "$TMP_ROOT/migration.log" 2>&1
 

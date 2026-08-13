@@ -1,0 +1,28 @@
+name: Check documentation freshness
+
+on:
+  schedule:
+    - cron: "23 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  freshness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Probe curated official documentation contracts
+        run: >-
+          python3 skills/agent-skills-setup/scripts/check-doc-freshness.py
+          --registry skills/agent-skills-setup/references/registry-v2.json
+          --checks skills/agent-skills-setup/references/doc-freshness-checks.json
+          --online
+          --report doc-freshness-report.json
+      - name: Upload drift report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: doc-freshness-report
+          path: doc-freshness-report.json

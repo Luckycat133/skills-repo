@@ -3,6 +3,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+MIGRATION_SCRIPT="$SCRIPT_DIR/legacy-smart-ide-migration.sh"
+export AGENT_SKILLS_SETUP_INTERNAL_LEGACY=1
 TMP_ROOT="$(mktemp -d /tmp/agent-skills-migration-test.XXXXXX)"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 
@@ -18,7 +20,7 @@ assert_path() {
     local expected="$3"
     local actual
 
-    actual="$(HOME="${4:-$TEST_HOME}" bash "$SCRIPT_DIR/smart-ide-migration.sh" --print-path "$ide" "$object" 2>/dev/null || true)"
+    actual="$(HOME="${4:-$TEST_HOME}" bash "$MIGRATION_SCRIPT" --print-path "$ide" "$object" 2>/dev/null || true)"
     if [[ "$actual" != "$expected" ]]; then
         echo "FAIL: ${ide}/${object} expected '${expected}', got '${actual}'" >&2
         exit 1
@@ -31,11 +33,11 @@ done
 
 mkdir -p "$TMP_ROOT/codeium-project/.codeium/skills/legacy-skill"
 printf '%s\n' '---' 'name: legacy-skill' 'description: legacy fixture' '---' > "$TMP_ROOT/codeium-project/.codeium/skills/legacy-skill/SKILL.md"
-CODEIUM_SKILLS_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+CODEIUM_SKILLS_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source codeium --target cursor --workspace "$TMP_ROOT/codeium-project" --objects skills --dry-run 2>&1)"
 grep -Fq 'source directory does not exist:' <<< "$CODEIUM_SKILLS_OUTPUT"
 
-CODEIUM_PROJECT_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+CODEIUM_PROJECT_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source codeium --target cursor --workspace "$TMP_ROOT/codeium-project" --objects project --dry-run 2>&1)"
 grep -Fq 'automatic whole-project configuration migration is unsupported' <<< "$CODEIUM_PROJECT_OUTPUT"
 
@@ -48,7 +50,7 @@ mkdir -p "$TEST_HOME/.pieces/skills/legacy-skill" "$PIECES_PROJECT/.pieces/rules
 printf '%s\n' '---' 'name: legacy-pieces-skill' 'description: stale fixture' '---' > "$TEST_HOME/.pieces/skills/legacy-skill/SKILL.md"
 printf '%s\n' 'Use this stale Pieces rule.' > "$PIECES_PROJECT/.pieces/rules/legacy.md"
 printf '%s\n' '{"mcpServers":{"legacy":{"command":"node","env":{"API_KEY":"__pieces_do_not_copy_fixture__"}}}}' > "$PIECES_PROJECT/.pieces/mcp.json"
-PIECES_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+PIECES_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source pieces --target cursor --workspace "$PIECES_PROJECT" \
     --objects skills,rules,prompts,mcp,config,project --yes --strategy overwrite 2>&1)"
 for pieces_object in skills rules prompts mcp config project; do
@@ -67,7 +69,7 @@ grep -Fq '__pieces_do_not_copy_fixture__' "$PIECES_PROJECT/.pieces/mcp.json"
 PIECES_TARGET_HOME="$TMP_ROOT/pieces-target-home"
 PIECES_TARGET_PROJECT="$TMP_ROOT/pieces-target-project"
 mkdir -p "$PIECES_TARGET_PROJECT/.codex" "$PIECES_TARGET_HOME"
-PIECES_TARGET_OUTPUT="$(HOME="$PIECES_TARGET_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+PIECES_TARGET_OUTPUT="$(HOME="$PIECES_TARGET_HOME" bash "$MIGRATION_SCRIPT" \
     --source codex --target pieces --workspace "$PIECES_TARGET_PROJECT" \
     --objects skills,rules,prompts,mcp,config,project --yes --strategy overwrite 2>&1)"
 grep -Fq 'Pieces' <<< "$PIECES_TARGET_OUTPUT"
@@ -102,17 +104,17 @@ printf '%s\n' '# Replit fixture instructions' > "$REPLIT_PROJECT/replit.md"
 printf '%s\n' 'run = "npm start"' > "$REPLIT_PROJECT/.replit"
 printf '%s\n' '{ pkgs }: { deps = []; }' > "$REPLIT_PROJECT/replit.nix"
 
-REPLIT_PROJECT_OUTPUT="$(bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+REPLIT_PROJECT_OUTPUT="$(bash "$MIGRATION_SCRIPT" \
     --source replit --target claude --workspace "$REPLIT_PROJECT" --objects project --dry-run 2>&1)"
 grep -Fq 'automatic whole-project configuration migration is unsupported' <<< "$REPLIT_PROJECT_OUTPUT"
-REPLIT_CONFIG_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+REPLIT_CONFIG_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source replit --target claude --workspace "$REPLIT_PROJECT" --objects config --dry-run 2>&1)"
 grep -Fq 'automatic whole-IDE config migration is unsupported' <<< "$REPLIT_CONFIG_OUTPUT"
-REPLIT_MCP_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+REPLIT_MCP_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source replit --target claude --workspace "$REPLIT_PROJECT" --objects mcp --dry-run 2>&1)"
 grep -Fq 'Replit MCP connections are cloud/UI-managed through Integrations; no local MCP file is migrated' <<< "$REPLIT_MCP_OUTPUT"
 printf '%s' '# source instructions' > "$REPLIT_PROJECT/CLAUDE.md"
-REPLIT_RULE_OUTPUT="$(bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+REPLIT_RULE_OUTPUT="$(bash "$MIGRATION_SCRIPT" \
     --source claude --target replit --workspace "$REPLIT_PROJECT" \
     --objects rules --yes --strategy overwrite 2>&1)"
 grep -Fq 'Replit replit.md is a project-root living document maintained by Agent; automatic overwrite is disabled' <<< "$REPLIT_RULE_OUTPUT"
@@ -126,7 +128,7 @@ assert_path continue rules ".continue/rules"
 assert_path continue project-mcp ".continue/mcpServers"
 assert_path continue config "~/.continue/config.yaml"
 
-CONTINUE_OUTPUT="$(bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+CONTINUE_OUTPUT="$(bash "$MIGRATION_SCRIPT" \
     --source claude --target continue --objects mcp,config --dry-run 2>&1)"
 grep -Fq 'Continue uses YAML/array configuration; automatic MCP/config migration is unsupported' <<< "$CONTINUE_OUTPUT"
 
@@ -138,7 +140,7 @@ PEARAI_SOURCE="$TMP_ROOT/pearai-source"
 mkdir -p "$PEARAI_SOURCE/.agents/skills/demo-skill"
 printf '%s\n' '{"mcpServers":{"fixture":{"command":"node","args":["server.js"]}}}' > "$TEST_HOME/.claude.json"
 printf '%s\n' '{"provider":"fixture"}' > "$TEST_HOME/.codex/config.toml"
-PEARAI_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+PEARAI_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source codex --target pearai --workspace "$PEARAI_SOURCE" \
     --objects skills,rules,prompts,mcp,config,project --yes --strategy overwrite 2>&1)"
 grep -Fq 'mcp:' <<< "$PEARAI_OUTPUT"
@@ -163,7 +165,7 @@ printf '%s\n' 'runtime binary fixture' > "$SUPERMAVEN_HOME/.supermaven/binary/fi
 printf '%s\n' '*.secret' > "$SUPERMAVEN_PROJECT/.supermavenignore"
 printf '%s\n' 'legacy project state' > "$SUPERMAVEN_PROJECT/.supermaven/state.json"
 
-SUPERMAVEN_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+SUPERMAVEN_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source codex --target supermaven --workspace "$SUPERMAVEN_PROJECT" \
     --objects skills,rules,prompts,mcp,config,project --yes --strategy overwrite 2>&1)"
 for supermaven_message in \
@@ -192,7 +194,7 @@ done
 }
 
 printf '%s\n' '{"mcpServers":{"sensitive":{"command":"node","args":[],"env":{"API_KEY":"__supermaven_inert_fixture__"}}}}' > "$TEST_HOME/.claude.json"
-SUPERMAVEN_MCP_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+SUPERMAVEN_MCP_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source claude --target supermaven --objects mcp --yes --strategy overwrite 2>&1)"
 grep -Fq 'Supermaven has no documented portable MCP file or server schema' <<< "$SUPERMAVEN_MCP_OUTPUT"
 grep -Fq '__supermaven_inert_fixture__' "$TEST_HOME/.claude.json" || {
@@ -204,7 +206,7 @@ grep -Fq '__supermaven_inert_fixture__' "$TEST_HOME/.claude.json" || {
     exit 1
 }
 
-SUPERMAVEN_SOURCE_OUTPUT="$(HOME="$SUPERMAVEN_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+SUPERMAVEN_SOURCE_OUTPUT="$(HOME="$SUPERMAVEN_HOME" bash "$MIGRATION_SCRIPT" \
     --source supermaven --target cursor --workspace "$SUPERMAVEN_PROJECT" \
     --objects skills,rules,prompts,mcp,config,project --yes --strategy overwrite 2>&1)"
 grep -Fq 'Supermaven has no documented portable Agent Skills directory' <<< "$SUPERMAVEN_SOURCE_OUTPUT"
@@ -231,7 +233,7 @@ printf '%s\n' '---' 'name: from-blackbox' 'description: Blackbox project fixture
 printf '%s\n' '{"apiKey":"__test_placeholder_value__"}' > "$BLACKBOX_PROJECT/.blackbox/private-state.json"
 printf '%s\n' 'provider = "codex-fixture"' 'apiKey = "__test_placeholder_value__"' > "$BLACKBOX_HOME/.codex/config.toml"
 
-BLACKBOX_TARGET_OUTPUT="$(HOME="$BLACKBOX_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+BLACKBOX_TARGET_OUTPUT="$(HOME="$BLACKBOX_HOME" bash "$MIGRATION_SCRIPT" \
     --source codex --target blackbox --workspace "$BLACKBOX_TARGET" \
     --objects skills,rules,prompts,mcp,config,project --yes --strategy overwrite 2>&1)"
 grep -Fq 'Blackbox' <<< "$BLACKBOX_TARGET_OUTPUT"
@@ -241,7 +243,7 @@ grep -Fq 'project .blackbox/skills' <<< "$BLACKBOX_TARGET_OUTPUT"
     exit 1
 }
 
-BLACKBOX_SOURCE_OUTPUT="$(HOME="$BLACKBOX_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+BLACKBOX_SOURCE_OUTPUT="$(HOME="$BLACKBOX_HOME" bash "$MIGRATION_SCRIPT" \
     --source blackbox --target codex --workspace "$BLACKBOX_PROJECT" \
     --objects skills,project --yes --strategy overwrite 2>&1)"
 grep -Fq 'Blackbox' <<< "$BLACKBOX_SOURCE_OUTPUT"
@@ -272,28 +274,28 @@ printf '%s\n' 'description = "fixture command"' 'prompt = "Review {{args}}"' > "
 printf '%s\n' '---' 'name: fixture-agent' 'description: fixture subagent' '---' 'Review the fixture.' > "$GEMINI_PROJECT/.gemini/agents/fixture-agent.md"
 printf '%s\n' '---' 'name: demo-skill' 'description: project fixture skill.' '---' > "$GEMINI_PROJECT/.gemini/skills/demo-skill/SKILL.md"
 
-GEMINI_SKILLS_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+GEMINI_SKILLS_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source gemini-cli --target cursor --workspace "$GEMINI_PROJECT" --objects skills --dry-run 2>&1)"
 grep -Fq 'successfully migrated 1 skills' <<< "$GEMINI_SKILLS_OUTPUT"
 grep -Fq "$TEST_HOME/.gemini/skills/demo-skill" <<< "$GEMINI_SKILLS_OUTPUT"
 
-GEMINI_RULE_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+GEMINI_RULE_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source gemini-cli --target openclaw --workspace "$GEMINI_PROJECT" --objects rules --dry-run 2>&1)"
 grep -Fq 'GEMINI.md' <<< "$GEMINI_RULE_OUTPUT"
 grep -Fq 'AGENTS.md' <<< "$GEMINI_RULE_OUTPUT"
 
 for gemini_manual_object in prompts config project; do
-    GEMINI_MANUAL_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+    GEMINI_MANUAL_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
         --source gemini-cli --target cursor --workspace "$GEMINI_PROJECT" --objects "$gemini_manual_object" --dry-run 2>&1)"
     grep -Fq '[WARN]' <<< "$GEMINI_MANUAL_OUTPUT"
 done
-GEMINI_TARGET_MANUAL_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+GEMINI_TARGET_MANUAL_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source claude --target gemini-cli --workspace "$GEMINI_PROJECT" --objects prompts --dry-run 2>&1)"
 grep -Fq 'Gemini CLI commands use TOML' <<< "$GEMINI_TARGET_MANUAL_OUTPUT"
 
 mkdir -p "$TEST_HOME/.gemini"
 printf '%s\n' '{"mcpServers":{"local-server":{"command":"node","args":["server.js","--token","do-not-copy"],"env":{"GEMINI_API_KEY":"do-not-copy"}},"http-server":{"httpUrl":"https://example.invalid/mcp","headers":{"Authorization":"Bearer do-not-copy"},"includeTools":["safe"],"timeout":5000}}}' > "$TEST_HOME/.claude.json"
-HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source claude --target gemini-cli --workspace "$GEMINI_PROJECT" --objects mcp --yes --strategy overwrite >/dev/null
 python3 - "$TEST_HOME/.gemini/settings.json" <<'PY'
 import json, sys
@@ -308,7 +310,7 @@ PY
 GEMINI_TARGET_BEFORE="$TMP_ROOT/gemini-settings-before.json"
 cp "$TEST_HOME/.gemini/settings.json" "$GEMINI_TARGET_BEFORE"
 printf '%s\n' '{"mcpServers":{"bad_server":{"command":"node","args":[]}}}' > "$TEST_HOME/.claude.json"
-GEMINI_INVALID_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+GEMINI_INVALID_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source claude --target gemini-cli --workspace "$GEMINI_PROJECT" --objects mcp --yes --strategy overwrite 2>&1)"
 grep -Fq 'Gemini CLI MCP schema is invalid or ambiguous' <<< "$GEMINI_INVALID_OUTPUT"
 cmp -s "$GEMINI_TARGET_BEFORE" "$TEST_HOME/.gemini/settings.json" || {
@@ -317,7 +319,7 @@ cmp -s "$GEMINI_TARGET_BEFORE" "$TEST_HOME/.gemini/settings.json" || {
 }
 
 printf '%s\n' '{"mcpServers":{"fixture-server":{"command":"node","args":[]}}}' > "$TEST_HOME/.gemini/settings.json"
-HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source gemini-cli --target cursor --workspace "$GEMINI_PROJECT" --objects mcp --yes --strategy overwrite >/dev/null
 python3 - "$TEST_HOME/.cursor/mcp.json" <<'PY'
 import json, sys
@@ -329,7 +331,7 @@ mkdir -p "$TEST_HOME/.config/goose"
 printf '%s\n' 'extensions:' '- fixture:' '-   name: fixture' > "$TEST_HOME/.config/goose/config.yaml"
 NON_JSON_GEMINI_PROJECT="$TMP_ROOT/non-json-gemini"
 mkdir -p "$NON_JSON_GEMINI_PROJECT"
-NON_JSON_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+NON_JSON_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source goose-cli --target gemini-cli --workspace "$NON_JSON_GEMINI_PROJECT" --objects mcp --yes --strategy overwrite 2>&1 || true)"
 grep -Fq 'Goose config.yaml uses YAML extensions; automatic MCP migration is unsupported' <<< "$NON_JSON_OUTPUT"
 [[ ! -e "$NON_JSON_GEMINI_PROJECT/.gemini/settings.json" ]] || {
@@ -358,7 +360,7 @@ printf '%s\n' '# Source rules fixture' > "$GOOSE_PROJECT/CLAUDE.md"
 GOOSE_SKILL_HOME="$TMP_ROOT/goose-skill-home"
 mkdir -p "$GOOSE_SKILL_HOME/.cursor/skills/goose-global-skill"
 printf '%s\n' '---' 'name: goose-global-skill' 'description: Goose global skill fixture.' '---' > "$GOOSE_SKILL_HOME/.cursor/skills/goose-global-skill/SKILL.md"
-HOME="$GOOSE_SKILL_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+HOME="$GOOSE_SKILL_HOME" bash "$MIGRATION_SCRIPT" \
     --source cursor --target goose-cli --objects skills --yes --strategy overwrite >/dev/null
 [[ -f "$GOOSE_SKILL_HOME/.agents/skills/goose-global-skill/SKILL.md" ]] || {
     echo "FAIL: Goose global Agent Skill was not written to ~/.agents/skills" >&2
@@ -369,15 +371,15 @@ HOME="$GOOSE_SKILL_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     exit 1
 }
 
-GOOSE_PROJECT_OUTPUT="$(bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+GOOSE_PROJECT_OUTPUT="$(bash "$MIGRATION_SCRIPT" \
     --source goose-cli --target cursor --workspace "$GOOSE_PROJECT" --objects project --dry-run 2>&1)"
 grep -Fq 'automatic whole-project configuration migration is unsupported' <<< "$GOOSE_PROJECT_OUTPUT"
 
-GOOSE_RULE_OUTPUT="$(bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+GOOSE_RULE_OUTPUT="$(bash "$MIGRATION_SCRIPT" \
     --source claude --target goose-cli --workspace "$GOOSE_PROJECT" --objects rules --dry-run 2>&1)"
 grep -Fq '.goosehints' <<< "$GOOSE_RULE_OUTPUT"
 
-GOOSE_PROMPT_OUTPUT="$(bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+GOOSE_PROMPT_OUTPUT="$(bash "$MIGRATION_SCRIPT" \
     --source claude --target goose-cli --workspace "$GOOSE_PROJECT" --objects prompts --dry-run 2>&1)"
 grep -Fq 'Goose prompt templates are global files and slash commands are config.yaml entries' <<< "$GOOSE_PROMPT_OUTPUT"
 [[ ! -e "$GOOSE_PROJECT/.goose/prompts" ]] || {
@@ -389,7 +391,7 @@ mkdir -p "$TEST_HOME/.config/goose"
 printf '%s\n' 'extensions:' '  fixture:' '    type: stdio' '    cmd: node' '    args: [server.js]' '    envs:' '      API_KEY: __goose_inert_fixture__' '    enabled: true' > "$TEST_HOME/.config/goose/config.yaml"
 printf '%s\n' 'OPENAI_API_KEY: __goose_file_inert_fixture__' > "$TEST_HOME/.config/goose/secrets.yaml"
 printf '%s\n' '{"mcpServers":{"fixture":{"command":"node","args":["server.js"],"env":{"API_KEY":"__json_inert_fixture__"}}}}' > "$TEST_HOME/.claude.json"
-GOOSE_MCP_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+GOOSE_MCP_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source claude --target goose-cli --objects mcp --yes --strategy overwrite 2>&1)"
 grep -Fq 'Goose config.yaml uses YAML extensions; automatic MCP migration is unsupported' <<< "$GOOSE_MCP_OUTPUT"
 [[ "$(cat "$TEST_HOME/.config/goose/config.yaml")" == *'__goose_inert_fixture__'* ]] || {
@@ -400,7 +402,7 @@ grep -Fq 'Goose config.yaml uses YAML extensions; automatic MCP migration is uns
     echo "FAIL: Goose MCP boundary unexpectedly created a config backup" >&2
     exit 1
 }
-GOOSE_CONFIG_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+GOOSE_CONFIG_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source claude --target goose-cli --objects config --yes --strategy overwrite 2>&1)"
 grep -Fq 'automatic whole-IDE config migration is unsupported' <<< "$GOOSE_CONFIG_OUTPUT"
 [[ "$(cat "$TEST_HOME/.config/goose/secrets.yaml")" == *'__goose_file_inert_fixture__'* ]] || {
@@ -415,7 +417,7 @@ assert_path roo-code project-mcp ".roo/mcp.json"
 assert_path roo-code mcp ""
 assert_path roo-code rules ".roorules"
 
-ROO_MCP_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+ROO_MCP_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source claude --target roo-code --objects mcp --yes --strategy overwrite 2>&1)"
 grep -Fq 'Roo Code global MCP is extension-storage/UI managed' <<< "$ROO_MCP_OUTPUT"
 
@@ -430,12 +432,12 @@ assert_path aider config "~/.aider.conf.yml"
 
 mkdir -p "$TMP_ROOT/aider-project"
 printf '%s\n' 'Follow the fixture conventions.' > "$TMP_ROOT/aider-project/CLAUDE.md"
-AIDER_RULE_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+AIDER_RULE_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source claude --target aider --workspace "$TMP_ROOT/aider-project" --objects rules --dry-run 2>&1)"
 grep -Fq 'CONVENTIONS.md' <<< "$AIDER_RULE_OUTPUT"
 grep -Fq 'read:' <<< "$AIDER_RULE_OUTPUT"
 
-AIDER_CONFIG_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+AIDER_CONFIG_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source claude --target aider --workspace "$TMP_ROOT/aider-project" --objects config --dry-run 2>&1)"
 grep -Fq 'automatic whole-IDE config migration is unsupported' <<< "$AIDER_CONFIG_OUTPUT"
 [[ ! -e "$TMP_ROOT/aider-project/.aider.conf.yml" ]] || {
@@ -455,14 +457,14 @@ assert_path cline config ""
 assert_path cline mcp "$CLINE_MCP_EXPECTED"
 CLINE_CUSTOM_DATA="$TMP_ROOT/custom-cline-data"
 CLINE_CUSTOM_MCP="$(HOME="$TEST_HOME" CLINE_DATA_DIR="$CLINE_CUSTOM_DATA" \
-    bash "$SCRIPT_DIR/smart-ide-migration.sh" --print-path cline mcp)"
+    bash "$MIGRATION_SCRIPT" --print-path cline mcp)"
 [[ "$CLINE_CUSTOM_MCP" == "$CLINE_CUSTOM_DATA/settings/cline_mcp_settings.json" ]] || {
     echo "FAIL: CLINE_DATA_DIR did not replace ~/.cline/data" >&2
     exit 1
 }
 
 printf '%s\n' '{"mcpServers":{"local":{"command":"node","args":["server.js"],"env":{"API_KEY":"do-not-copy"}},"remote":{"url":"https://example.invalid/mcp","transportType":"sse"}}}' > "$TEST_HOME/.claude.json"
-HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source claude --target cline --objects mcp --yes --strategy overwrite >/dev/null
 python3 - "$CLINE_MCP_TARGET" <<'PY'
 import json, sys
@@ -476,7 +478,7 @@ PY
 CLINE_TARGET_BEFORE="$TMP_ROOT/cline-mcp-before.json"
 cp "$CLINE_MCP_TARGET" "$CLINE_TARGET_BEFORE"
 printf '%s\n' '{"mcpServers":{"ambiguous":{"args":["server.js"]}}}' > "$TEST_HOME/.claude.json"
-INVALID_CLINE_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+INVALID_CLINE_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source claude --target cline --objects mcp --yes --strategy overwrite 2>&1)"
 grep -Fq 'Cline MCP mcpServers schema is invalid or ambiguous' <<< "$INVALID_CLINE_OUTPUT" || {
     echo "FAIL: invalid Cline mcpServers entry was not rejected" >&2
@@ -493,7 +495,7 @@ CLINE_ALT_TARGET="$TEST_HOME/.cline/mcp.json"
 mkdir -p "$TEST_HOME/.cline"
 printf '%s\n' '{"mcpServers":{}}' > "$CLINE_MCP_TARGET"
 printf '%s\n' '{"mcpServers":{}}' > "$CLINE_ALT_TARGET"
-AMBIGUOUS_CLINE_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+AMBIGUOUS_CLINE_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source claude --target cline --objects mcp --yes --strategy overwrite 2>&1)"
 grep -Fq 'Cline has both the current data/settings MCP file' <<< "$AMBIGUOUS_CLINE_OUTPUT" || {
     echo "FAIL: Cline current+legacy ambiguity was not reported" >&2
@@ -504,7 +506,7 @@ rm -f "$CLINE_MCP_TARGET" "$CLINE_ALT_TARGET"
 CLINE_PROJECT="$TMP_ROOT/cline-project"
 mkdir -p "$CLINE_PROJECT"
 printf '%s\n' '{"mcpServers":{"project-server":{"command":"node","args":["server.js"],"env":{"PROJECT_TOKEN":"do-not-copy"}}}}' > "$CLINE_PROJECT/.mcp.json"
-HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source claude --target cline --workspace "$CLINE_PROJECT" \
     --scope project --objects mcp --yes --strategy overwrite >/dev/null
 python3 - "$CLINE_PROJECT/.cline/mcp.json" <<'PY'
@@ -523,11 +525,11 @@ assert_path amazon-q config ""
 
 mkdir -p "$TMP_ROOT/project/.amazonq/rules" "$TEST_HOME/.aws/amazonq"
 printf '%s\n' 'Use the fixture rule.' > "$TMP_ROOT/project/.amazonq/rules/style.md"
-Q_RULE_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --source amazon-q --target cursor --workspace "$TMP_ROOT/project" --objects rules --dry-run 2>&1)"
+Q_RULE_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" --source amazon-q --target cursor --workspace "$TMP_ROOT/project" --objects rules --dry-run 2>&1)"
 grep -Fq 'Amazon Q rules use .amazonq/rules/*.md; manual migration required' <<< "$Q_RULE_OUTPUT"
-Q_PROJECT_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --source amazon-q --target cursor --workspace "$TMP_ROOT/project" --objects project --dry-run 2>&1)"
+Q_PROJECT_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" --source amazon-q --target cursor --workspace "$TMP_ROOT/project" --objects project --dry-run 2>&1)"
 grep -Fq 'automatic whole-project configuration migration is unsupported' <<< "$Q_PROJECT_OUTPUT"
-Q_MCP_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --source amazon-q --target cursor --workspace "$TMP_ROOT/project" --objects mcp --dry-run 2>&1)"
+Q_MCP_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" --source amazon-q --target cursor --workspace "$TMP_ROOT/project" --objects mcp --dry-run 2>&1)"
 grep -Fq 'Amazon Q: standard IDE MCP uses' <<< "$Q_MCP_OUTPUT"
 
 printf '%s\n' '{"mcpServers":{}}' > "$TEST_HOME/.aws/amazonq/mcp.json"
@@ -535,8 +537,9 @@ assert_path amazon-q mcp "~/.aws/amazonq/mcp.json"
 rm -f "$TEST_HOME/.aws/amazonq/mcp.json"
 mkdir -p "$TEST_HOME/.aws/amazonq/agents"
 printf '%s\n' '{"mcpServers":{}}' > "$TEST_HOME/.aws/amazonq/agents/default.json"
-Q_AGENT_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --source amazon-q --target cursor --workspace "$TMP_ROOT/project" --objects mcp --dry-run 2>&1)"
-grep -Fq 'agents/default.json exists but its IDE/CLI surface is ambiguous' <<< "$Q_AGENT_OUTPUT"
+assert_path amazon-q mcp "~/.aws/amazonq/default.json"
+Q_AGENT_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" --source amazon-q --target cursor --workspace "$TMP_ROOT/project" --objects mcp --dry-run 2>&1)"
+grep -Fq 'agents/default.json is a custom-agent definition, not IDE MCP configuration' <<< "$Q_AGENT_OUTPUT"
 rm -f "$TEST_HOME/.aws/amazonq/agents/default.json"
 
 assert_path neovim global ""
@@ -549,7 +552,7 @@ assert_path neovim config "~/.config/nvim/init.lua"
 NEOVIM_CONFIG_FIXTURE="$TEST_HOME/.config/nvim/init.lua"
 mkdir -p "$(dirname "$NEOVIM_CONFIG_FIXTURE")"
 printf '%s\n' 'return {}' > "$NEOVIM_CONFIG_FIXTURE"
-NEOVIM_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+NEOVIM_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source codex --target neovim --objects config --yes --strategy overwrite 2>&1)"
 grep -Fq 'automatic whole-IDE config migration is unsupported' <<< "$NEOVIM_OUTPUT"
 [[ "$(cat "$NEOVIM_CONFIG_FIXTURE")" == 'return {}' ]] || {
@@ -565,7 +568,7 @@ assert_path trae mcp ""
 assert_path trae config ""
 assert_path trae rules ".trae/rules"
 assert_path trae prompts ".trae/commands"
-TRAE_MCP_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+TRAE_MCP_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source claude --target trae --objects mcp --dry-run 2>&1)"
 grep -Fq 'TRAE global MCP has an official settings/raw-JSON method' <<< "$TRAE_MCP_OUTPUT"
 
@@ -576,13 +579,13 @@ assert_path trae-cn project-mcp ".trae/mcp.json"
 assert_path trae-cn rules ".trae/rules"
 assert_path trae-cn mcp ""
 assert_path trae-cn config ""
-TRAE_CN_MCP_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+TRAE_CN_MCP_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source claude --target trae-cn --objects mcp --dry-run 2>&1)"
 grep -Fq 'TRAE global MCP has an official settings/raw-JSON method' <<< "$TRAE_CN_MCP_OUTPUT"
 
 mkdir -p "$TEST_HOME/.trae/skills/trae-regression"
 printf '%s\n' '---' 'name: trae-regression' 'description: TRAE skill regression.' '---' > "$TEST_HOME/.trae/skills/trae-regression/SKILL.md"
-HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source trae --target cursor --workspace "$TMP_ROOT/project" \
     --objects skills --yes --strategy overwrite >/dev/null 2>&1
 [[ -f "$TEST_HOME/.cursor/skills/trae-regression/SKILL.md" ]] || {
@@ -599,7 +602,7 @@ mkdir -p "$CODY_PROJECT/.cody" "$CODY_PROJECT/.vscode"
 printf '%s\n' 'legacy cody project state' > "$CODY_PROJECT/.cody/state.json"
 printf '%s\n' 'legacy cody rules' > "$CODY_PROJECT/.codyrules"
 printf '%s\n' '{"commands":{"legacy":{"prompt":"stale"}}}' > "$CODY_PROJECT/.vscode/cody.json"
-CODY_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+CODY_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source cody --target cursor --workspace "$CODY_PROJECT" \
     --objects skills,rules,prompts,mcp,config,project --yes --strategy overwrite 2>&1)"
 grep -Fq 'Cody' <<< "$CODY_OUTPUT"
@@ -612,11 +615,11 @@ grep -Fq 'manual' <<< "$CODY_OUTPUT"
 mkdir -p "$TMP_ROOT/project/.trae/commands" "$TMP_ROOT/project/.trae/rules"
 printf '%s\n' '---' 'description: fixture command' '---' 'Summarize the fixture.' > "$TMP_ROOT/project/.trae/commands/summary.md"
 printf '%s\n' '---' 'alwaysApply: true' '---' 'Use the fixture rule.' > "$TMP_ROOT/project/.trae/rules/fixture.md"
-CN_PROMPT_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --source trae-cn --target cursor --workspace "$TMP_ROOT/project" --objects prompts,rules --dry-run 2>&1)"
+CN_PROMPT_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" --source trae-cn --target cursor --workspace "$TMP_ROOT/project" --objects prompts,rules --dry-run 2>&1)"
 grep -Fq '.trae/commands/*' <<< "$CN_PROMPT_OUTPUT"
 grep -Eq '(Cursor rules|Trae CN rules)' <<< "$CN_PROMPT_OUTPUT"
 
-CN_CONFIG_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --source trae-cn --target cursor --workspace "$TMP_ROOT/project" --objects config --dry-run 2>&1)"
+CN_CONFIG_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" --source trae-cn --target cursor --workspace "$TMP_ROOT/project" --objects config --dry-run 2>&1)"
 grep -Fq 'automatic whole-IDE config migration is unsupported' <<< "$CN_CONFIG_OUTPUT"
 
 if ! grep -Fq '**config/argv**: empty/unsupported' "$SCRIPT_DIR/../references/ides/trae-cn.md"; then
@@ -624,19 +627,19 @@ if ! grep -Fq '**config/argv**: empty/unsupported' "$SCRIPT_DIR/../references/id
     exit 1
 fi
 
-OPENCLAW_HOME_PATH="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --print-path openclaw global)"
+OPENCLAW_HOME_PATH="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" --print-path openclaw global)"
 [[ "$OPENCLAW_HOME_PATH" == "~/.openclaw/skills" ]] || { echo "FAIL: OpenClaw global skills path" >&2; exit 1; }
-OPENCLAW_PROJECT_SKILLS="$(bash "$SCRIPT_DIR/smart-ide-migration.sh" --print-path openclaw project-skills)"
+OPENCLAW_PROJECT_SKILLS="$(bash "$MIGRATION_SCRIPT" --print-path openclaw project-skills)"
 [[ "$OPENCLAW_PROJECT_SKILLS" == "skills" ]] || { echo "FAIL: OpenClaw project skills path" >&2; exit 1; }
-OPENCLAW_RULES="$(bash "$SCRIPT_DIR/smart-ide-migration.sh" --print-path openclaw rules)"
+OPENCLAW_RULES="$(bash "$MIGRATION_SCRIPT" --print-path openclaw rules)"
 [[ "$OPENCLAW_RULES" == "AGENTS.md" ]] || { echo "FAIL: OpenClaw AGENTS.md path" >&2; exit 1; }
-if bash "$SCRIPT_DIR/smart-ide-migration.sh" --print-path openclaw project >/dev/null 2>&1; then
+if bash "$MIGRATION_SCRIPT" --print-path openclaw project >/dev/null 2>&1; then
     echo "FAIL: OpenClaw fixed project config root must be unsupported" >&2
     exit 1
 fi
 
 printf '%s\n' '{"mcpServers":{"fixture":{"command":"node","args":["server.js"]},"remote":{"url":"https://example.invalid/mcp","transport":"streamable-http"}}}' > "$TEST_HOME/.claude.json"
-HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source claude --target openclaw --objects mcp --yes --strategy overwrite >/dev/null
 python3 - "$TEST_HOME/.openclaw/openclaw.json" <<'PY'
 import json, sys
@@ -654,11 +657,11 @@ assert_path tabnine config ""
 
 mkdir -p "$TMP_ROOT/tabnine-project/.tabnine/guidelines"
 printf '%s\n' 'Follow the Tabnine guideline fixture.' > "$TMP_ROOT/tabnine-project/.tabnine/guidelines/style.md"
-TABNINE_RULE_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --source tabnine --target cursor --workspace "$TMP_ROOT/tabnine-project" --objects rules --dry-run 2>&1)"
+TABNINE_RULE_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" --source tabnine --target cursor --workspace "$TMP_ROOT/tabnine-project" --objects rules --dry-run 2>&1)"
 grep -Fq 'Tabnine guidelines use scoped .tabnine/guidelines/*.md files; automatic migration is unsupported' <<< "$TABNINE_RULE_OUTPUT"
 
 printf '%s\n' '{"mcpServers":{"local":{"command":"node","args":["server.js"],"env":{"TABNINE_TOKEN":"do-not-copy"}},"remote":{"url":"https://example.invalid/mcp"}}}' > "$TEST_HOME/.claude.json"
-HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --source claude --target tabnine --objects mcp --yes --strategy overwrite >/dev/null
+HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" --source claude --target tabnine --objects mcp --yes --strategy overwrite >/dev/null
 python3 - "$TEST_HOME/.tabnine/mcp_servers.json" <<'PY'
 import json, sys
 data = json.load(open(sys.argv[1]))
@@ -667,10 +670,10 @@ assert data["mcpServers"]["local"]["env"]["TABNINE_TOKEN"] == ""
 assert data["mcpServers"]["remote"]["url"] == "https://example.invalid/mcp"
 PY
 
-TABNINE_PROJECT_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --source tabnine --target cursor --workspace "$TMP_ROOT/tabnine-project" --objects project --dry-run 2>&1)"
+TABNINE_PROJECT_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" --source tabnine --target cursor --workspace "$TMP_ROOT/tabnine-project" --objects project --dry-run 2>&1)"
 grep -Fq 'automatic whole-project configuration migration is unsupported' <<< "$TABNINE_PROJECT_OUTPUT"
 
-HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
     --source codex \
     --target openclaw \
     --objects skills \

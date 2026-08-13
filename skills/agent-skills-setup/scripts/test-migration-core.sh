@@ -18,7 +18,7 @@ mkdir -p \
 bash "$CLI" > "$TMP_ROOT/help.txt"
 grep -F '{detect,inventory,plan,apply,verify,rollback}' "$TMP_ROOT/help.txt" >/dev/null
 
-cp "$SKILL_DIR/evals/files/instruction-ir-source.mdc" \
+cp "$SKILL_DIR/evals/files/instruction-cline-source.md" \
     "$WORKSPACE/.cline/rules/source.mdc"
 printf '%s\n' '---' 'name: demo' 'description: Test fixture.' '---' '# Demo' \
     > "$WORKSPACE/.cline/skills/demo/SKILL.md"
@@ -31,10 +31,24 @@ printf '%s\n' \
     '      "command": "example-server",' \
     '      "args": ["--token", "literal-arg-secret"],' \
     '      "env": {"API_TOKEN": "literal-secret", "MY_VALUE": "sk-ant-abcdefghijklmnopqrstuvw", "REDIRECT_URL": "https://nested:password@example.test/callback", "MODE": "safe"}' \
-    '    },' \
-    '    "remote": {"url": "https://user:pass@example.test/mcp?api_key=literal-query-secret", "headers": {"Authorization": "Bearer ${env:MCP_TOKEN}"}}' \
+    '    }' \
     '  }' \
     '}' > "$WORKSPACE/.cline/mcp.json"
+
+cp "$WORKSPACE/.cline/mcp.json" "$TMP_ROOT/mcp-before-plan-overlap.json"
+if HOME="$TEST_HOME" bash "$CLI" plan \
+    --workspace "$WORKSPACE" \
+    --source cline/ide \
+    --target forge/cli \
+    --objects mcp \
+    --scope project \
+    --output "$WORKSPACE/.cline/mcp.json" \
+    --json > "$TMP_ROOT/plan-overlap.log" 2>&1; then
+    echo "FAIL: plan output overwrote a migration surface" >&2
+    exit 1
+fi
+grep -Fq 'plan output overlaps' "$TMP_ROOT/plan-overlap.log"
+cmp "$TMP_ROOT/mcp-before-plan-overlap.json" "$WORKSPACE/.cline/mcp.json"
 
 HOME="$TEST_HOME" bash "$CLI" inventory \
     --workspace "$WORKSPACE" --product cline --json > "$TMP_ROOT/inventory.json"
@@ -59,47 +73,55 @@ rows = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 assert rows and all(row["exists"] for row in rows)
 PY
 
+PLAN_FILE="$TMP_ROOT/plan.json"
 HOME="$TEST_HOME" bash "$CLI" plan \
     --workspace "$WORKSPACE" \
     --source cline/ide \
     --target forge/cli \
     --objects skills,instructions,mcp \
     --scope project \
-    --json > "$TMP_ROOT/plan.json"
-python3 - "$TMP_ROOT/plan.json" <<'PY'
+    --output "$PLAN_FILE" \
+    --json > "$TMP_ROOT/plan-output.json"
+python3 - "$PLAN_FILE" <<'PY'
 import json
 import sys
 from pathlib import Path
 
 plan = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+assert plan["schema_version"] == 1
+assert len(plan["plan_sha256"]) == 64
 assert [item["status"] for item in plan["items"]] == ["ready", "ready", "ready"]
+assert all(item["review_preview"] for item in plan["items"])
 assert {item["field"] for item in plan["loss_report"]["items"]} >= {
-    "activation",
-    "globs",
-    "priority",
     "example.env.API_TOKEN",
     "example.args[1]",
-    "remote.url",
 }
 PY
+if grep -E 'literal-(secret|arg-secret)|sk-ant-abcdefghijklmnopqrstuvw|nested:password@' "$PLAN_FILE" >/dev/null; then
+    echo "FAIL: a literal MCP credential reached the saved plan" >&2
+    exit 1
+fi
 
-if HOME="$TEST_HOME" bash "$CLI" apply \
-    --workspace "$WORKSPACE" \
-    --source cline/ide \
-    --target forge/cli \
-    --objects skills \
-    --scope project > "$TMP_ROOT/no-confirm.log" 2>&1; then
+if HOME="$TEST_HOME" bash "$CLI" apply "$PLAN_FILE" \
+    > "$TMP_ROOT/no-confirm.log" 2>&1; then
     echo "FAIL: apply succeeded without --yes" >&2
     exit 1
 fi
 
+if HOME="$TEST_HOME" bash "$CLI" apply "$PLAN_FILE" \
+    --manifest "$WORKSPACE/AGENTS.md" \
+    --yes > "$TMP_ROOT/manifest-overlap.log" 2>&1; then
+    echo "FAIL: manifest path overlapped a migration surface" >&2
+    exit 1
+fi
+grep -Fq 'manifest path overlaps' "$TMP_ROOT/manifest-overlap.log"
+[[ ! -e "$WORKSPACE/.forge/skills/demo" ]]
+[[ ! -e "$WORKSPACE/AGENTS.md" ]]
+[[ ! -e "$WORKSPACE/.mcp.json" ]]
+
 MANIFEST="$TMP_ROOT/manifest.json"
 HOME="$TEST_HOME" bash "$CLI" apply \
-    --workspace "$WORKSPACE" \
-    --source cline/ide \
-    --target forge/cli \
-    --objects skills,instructions,mcp \
-    --scope project \
+    "$PLAN_FILE" \
     --manifest "$MANIFEST" \
     --yes \
     --json > "$TMP_ROOT/apply.json"
@@ -111,19 +133,22 @@ HOME="$TEST_HOME" bash "$CLI" apply \
 grep -F '"API_TOKEN": "${API_TOKEN}"' "$WORKSPACE/.mcp.json" >/dev/null
 grep -F '"--token",' "$WORKSPACE/.mcp.json" >/dev/null
 grep -F '"${TOKEN}"' "$WORKSPACE/.mcp.json" >/dev/null
-grep -F '"Authorization": "Bearer ${env:MCP_TOKEN}"' "$WORKSPACE/.mcp.json" >/dev/null
 if grep -E 'literal-(secret|arg-secret|query-secret)|sk-ant-abcdefghijklmnopqrstuvw|user:pass@|nested:password@' "$WORKSPACE/.mcp.json" >/dev/null; then
     echo "FAIL: literal MCP secret reached the target" >&2
     exit 1
 fi
 
 bash "$CLI" verify --manifest "$MANIFEST" --json > "$TMP_ROOT/verify.json"
-python3 - "$TMP_ROOT/verify.json" <<'PY'
+python3 - "$TMP_ROOT/verify.json" "$MANIFEST" <<'PY'
 import json
 import sys
 from pathlib import Path
 
 assert json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))["ok"] is True
+manifest = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+assert manifest["schema_version"] == 2
+assert len(manifest["manifest_sha256"]) == 64
+assert len(manifest["provenance"]["plan_sha256"]) == 64
 PY
 
 cp "$WORKSPACE/AGENTS.md" "$TMP_ROOT/agents-before-tamper.md"
@@ -204,12 +229,15 @@ else:
     raise AssertionError("apply did not rescan a changed Skill source")
 PY
 
-if HOME="$TEST_HOME" bash "$CLI" apply \
+HOME="$TEST_HOME" bash "$CLI" plan \
     --workspace "$WORKSPACE" \
     --source cline/ide \
     --target forge/cli \
     --objects skills \
     --scope project \
+    --output "$TMP_ROOT/blocked-plan.json" \
+    --json >/dev/null
+if HOME="$TEST_HOME" bash "$CLI" apply "$TMP_ROOT/blocked-plan.json" \
     --yes > "$TMP_ROOT/secret-preflight-apply.log" 2>&1; then
     echo "FAIL: profile-aware apply copied a Skill with a literal credential" >&2
     exit 1
@@ -219,6 +247,55 @@ grep -Fq 'preserve-existing-target' \
 [[ ! -e "$WORKSPACE/.forge/skills/leaky/payload.sh" ]]
 mv "$WORKSPACE/.cline/skills/leaky" "$TMP_ROOT/leaky-source"
 mv "$WORKSPACE/.forge/skills/leaky" "$TMP_ROOT/leaky-target"
+
+mkdir -p "$WORKSPACE/.cline/skills/drift"
+printf '%s\n' '---' 'name: drift' 'description: Drift fixture.' '---' '# Before' \
+    > "$WORKSPACE/.cline/skills/drift/SKILL.md"
+HOME="$TEST_HOME" bash "$CLI" plan \
+    --workspace "$WORKSPACE" \
+    --source cline/ide \
+    --target forge/cli \
+    --objects skills \
+    --scope project \
+    --output "$TMP_ROOT/drift-plan.json" \
+    --json >/dev/null
+printf '%s\n' '# Changed after review' >> "$WORKSPACE/.cline/skills/drift/SKILL.md"
+if HOME="$TEST_HOME" bash "$CLI" apply "$TMP_ROOT/drift-plan.json" --yes \
+    > "$TMP_ROOT/drift-apply.log" 2>&1; then
+    echo "FAIL: apply accepted a source changed after plan review" >&2
+    exit 1
+fi
+grep -Fq 'source changed after plan review' "$TMP_ROOT/drift-apply.log"
+[[ ! -e "$WORKSPACE/.forge/skills/drift" ]]
+mv "$WORKSPACE/.cline/skills/drift" "$TMP_ROOT/drift-source"
+
+GIT_WORKSPACE="$TMP_ROOT/git-workspace"
+mkdir -p "$GIT_WORKSPACE/.cline/skills/git-drift"
+printf '%s\n' '---' 'name: git-drift' 'description: Git drift fixture.' '---' '# Before' \
+    > "$GIT_WORKSPACE/.cline/skills/git-drift/SKILL.md"
+git -C "$GIT_WORKSPACE" init -q
+git -C "$GIT_WORKSPACE" config user.name 'Migration Test'
+git -C "$GIT_WORKSPACE" config user.email 'migration-test@example.invalid'
+git -C "$GIT_WORKSPACE" add .
+git -C "$GIT_WORKSPACE" commit -qm 'fixture: initial state'
+HOME="$TEST_HOME" bash "$CLI" plan \
+    --workspace "$GIT_WORKSPACE" \
+    --source cline/ide \
+    --target forge/cli \
+    --objects skills \
+    --scope project \
+    --output "$TMP_ROOT/git-drift-plan.json" \
+    --json >/dev/null
+printf '%s\n' '# unrelated reviewed-context change' > "$GIT_WORKSPACE/README.md"
+git -C "$GIT_WORKSPACE" add README.md
+git -C "$GIT_WORKSPACE" commit -qm 'fixture: advance head'
+if HOME="$TEST_HOME" bash "$CLI" apply "$TMP_ROOT/git-drift-plan.json" --yes \
+    > "$TMP_ROOT/git-drift-apply.log" 2>&1; then
+    echo "FAIL: apply accepted a changed Git HEAD after plan review" >&2
+    exit 1
+fi
+grep -Fq 'Git head changed after plan review' "$TMP_ROOT/git-drift-apply.log"
+[[ ! -e "$GIT_WORKSPACE/.forge/skills/git-drift" ]]
 
 mkdir -p \
     "$WORKSPACE/.cline/skills/symlink-race" \
@@ -335,7 +412,138 @@ golden = (fixtures / "instruction-ir-cursor.golden.mdc").read_text(encoding="utf
 instruction = parse_instruction(source, "cursor-mdc")
 rendered, loss = emit_instruction(instruction, "cursor-mdc")
 assert rendered == golden
-assert {item.field for item in loss.items} == {"hierarchy", "imports"}
+assert loss.lossy is False
+assert instruction.activation == "glob"
+assert instruction.globs == ["src/**/*.ts", "tests/**/*.ts"]
+try:
+    emit_instruction(instruction, "agents-md")
+except ValueError as error:
+    assert "cannot safely represent glob activation" in str(error)
+else:
+    raise AssertionError("conditional Cursor rule was flattened into AGENTS.md")
+
+plain = parse_instruction("# Always\n", "agents-md")
+rendered, loss = emit_instruction(plain, "agents-md")
+assert rendered == "# Always\n"
+assert not rendered.startswith("---")
+assert loss.lossy is False
+PY
+
+INSTRUCTION_SECRET_WORKSPACE="$TMP_ROOT/instruction-secret-workspace"
+mkdir -p "$INSTRUCTION_SECRET_WORKSPACE/.cline/rules"
+printf '%s%s\n' 'token=fixtureliteral' 'value12345' \
+    > "$INSTRUCTION_SECRET_WORKSPACE/.cline/rules/leak.md"
+HOME="$TEST_HOME" bash "$CLI" plan \
+    --workspace "$INSTRUCTION_SECRET_WORKSPACE" \
+    --source cline/ide \
+    --target forge/cli \
+    --objects instructions \
+    --scope project \
+    --json > "$TMP_ROOT/instruction-secret-plan.json"
+python3 - "$TMP_ROOT/instruction-secret-plan.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+plan = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+assert plan["items"][0]["status"] == "blocked"
+assert "instruction credential preflight failed" in plan["items"][0]["reason"]
+assert "fixtureliteralvalue12345" not in json.dumps(plan)
+PY
+
+ALIAS_WORKSPACE="$TMP_ROOT/alias-workspace"
+mkdir -p "$ALIAS_WORKSPACE/.cline/rules"
+printf '%s\n' '# Canonical' > "$ALIAS_WORKSPACE/.cline/rules/rule.md"
+printf '%s\n' '# Compatibility' > "$ALIAS_WORKSPACE/.clinerules"
+HOME="$TEST_HOME" bash "$CLI" inventory \
+    --workspace "$ALIAS_WORKSPACE" \
+    --product cline/ide \
+    --json > "$TMP_ROOT/alias-inventory.json"
+HOME="$TEST_HOME" bash "$CLI" plan \
+    --workspace "$ALIAS_WORKSPACE" \
+    --source cline/ide \
+    --target forge/cli \
+    --objects instructions \
+    --scope project \
+    --json > "$TMP_ROOT/alias-plan.json"
+python3 - "$TMP_ROOT/alias-inventory.json" "$TMP_ROOT/alias-plan.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+inventory = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+instruction_rows = [
+    row
+    for row in inventory
+    if row.get("object_type") == "instructions" and row.get("scope") == "project"
+]
+assert sum(bool(row["exists"]) for row in instruction_rows) == 2
+assert all(row["alias_conflict"] for row in instruction_rows)
+plan = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+assert plan["items"][0]["status"] == "manual"
+assert "alias conflict" in plan["items"][0]["reason"]
+PY
+
+TRANSACTION_WORKSPACE="$TMP_ROOT/transaction-workspace"
+mkdir -p \
+    "$TRANSACTION_WORKSPACE/.cline/skills/one" \
+    "$TRANSACTION_WORKSPACE/.cline/skills/two" \
+    "$TRANSACTION_WORKSPACE/.forge/skills/one" \
+    "$TRANSACTION_WORKSPACE/.forge/skills/two"
+for skill_name in one two; do
+    printf '%s\n' '---' "name: $skill_name" 'description: Transaction fixture.' '---' \
+        > "$TRANSACTION_WORKSPACE/.cline/skills/$skill_name/SKILL.md"
+    printf '%s\n' "original-$skill_name" \
+        > "$TRANSACTION_WORKSPACE/.forge/skills/$skill_name/sentinel.txt"
+done
+python3 - \
+    "$SCRIPT_DIR" \
+    "$SKILL_DIR/references/registry-v2.json" \
+    "$TRANSACTION_WORKSPACE" \
+    "$TEST_HOME" <<'PY'
+import sys
+from pathlib import Path
+
+sys.path.insert(0, sys.argv[1])
+import migration_core
+
+workspace = Path(sys.argv[3]).resolve()
+registry = migration_core.Registry(Path(sys.argv[2]), workspace, Path(sys.argv[4]))
+plan, _ = migration_core.build_plan(
+    registry,
+    "cline/ide",
+    "forge/cli",
+    ["skills"],
+    "project",
+)
+assert plan[0].status == "ready"
+original_finish = migration_core.finish_change
+calls = 0
+
+
+def fail_after_second_write(change, target):
+    global calls
+    calls += 1
+    original_finish(change, target)
+    if calls == 2:
+        raise RuntimeError("injected second-write failure")
+
+
+migration_core.finish_change = fail_after_second_write
+try:
+    migration_core.apply_plan(plan, workspace)
+except RuntimeError as error:
+    assert "injected second-write failure" in str(error)
+else:
+    raise AssertionError("injected transaction failure was not raised")
+for skill_name in ("one", "two"):
+    target = workspace / ".forge/skills" / skill_name
+    assert (target / "sentinel.txt").read_text(encoding="utf-8").strip() == (
+        f"original-{skill_name}"
+    )
+    assert not (target / "SKILL.md").exists()
+manifest_dir = workspace / ".agent-context-migration/manifests"
+assert not manifest_dir.exists() or not list(manifest_dir.glob("*.json"))
 PY
 
 echo "Migration core test passed"

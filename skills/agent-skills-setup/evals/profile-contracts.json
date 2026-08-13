@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "profiles": {
+    "amazon-q/ide": {"instructions": ["amazon-q-rule"], "mcp": ["json:mcpServers"]},
+    "augment-code/cli-ide": {"instructions": ["augment-rule", "plain-markdown"], "mcp": ["json:mcpServers"], "skills": ["agent-skill"]},
+    "cline/cli": {"instructions": ["cline-rule"], "mcp": ["json:mcpServers"], "skills": ["agent-skill"]},
+    "cline/ide": {"instructions": ["cline-rule"], "mcp": ["json:mcpServers"], "skills": ["agent-skill"]},
+    "codex/cli": {"instructions": ["agents-md"], "skills": ["agent-skill"]},
+    "crush/cli": {"skills": ["agent-skill"]},
+    "factory-droid/cli": {"instructions": ["agents-md"], "mcp": ["json:mcpServers"], "skills": ["agent-skill"]},
+    "forge/cli": {"instructions": ["agents-md"], "mcp": ["json:mcpServers"], "skills": ["agent-skill"]},
+    "mistral-vibe/cli": {"instructions": ["agents-md"], "skills": ["agent-skill"]},
+    "pi/cli": {"skills": ["agent-skill"]},
+    "qoder/cli": {"mcp": ["json:mcpServers"], "skills": ["agent-skill"]},
+    "qoder/ide": {"mcp": ["json:mcpServers"], "skills": ["agent-skill"]},
+    "qwen-code/cli": {"mcp": ["json:mcpServers"], "skills": ["qwen-skill"]},
+    "windsurf/ide": {"instructions": ["agents-md", "plain-markdown", "windsurf-rule"], "mcp": ["json:mcpServers"], "skills": ["agent-skill"]}
+  },
+  "fixture_classes": [
+    "minimal-valid",
+    "complete-valid",
+    "legacy-version",
+    "invalid",
+    "literal-secret",
+    "alias-conflict"
+  ]
+}

@@ -31,7 +31,7 @@ skills-repo/
 
 実行パッケージに含まれるのは参照資料と 1 つの移行コマンドだけです。IDE やランタイムの導入、シンボリックリンクやレジストリロックの作成、各エージェントディレクトリへの自己コピーは行いません。global 移行の既定対象は Skills のみで、project オブジェクトにはコマンドで明示した workspace を使います。
 Skill ディレクトリをコピーする前にすべてのソーステキストを検査し、リテラル資格情報の疑いまたは Skill 外へのリンクがあれば、ソースと既存ターゲットを変更せずにその Skill をスキップします。
-正本 frontmatter は Agent Skills の標準フィールドだけを使います。profile-aware CLI は `detect`、`inventory`、`plan`、`apply`、`verify`、`rollback` を提供し、instructions は loss report 付きの型付き IR を通り、apply は正確なバックアップと検証 manifest を作成します。
+正本 frontmatter は Agent Skills の標準フィールドだけを使います。profile-aware CLI は `detect`、`inventory`、`plan`、`apply`、`verify`、`rollback` を提供し、instructions は製品ネイティブの adapter と loss report 付きの型付き IR を通ります。`apply` は保存済みでチェックサム付きの plan だけを受け付け、操作全体を先にステージし、正確なバックアップを作成します。途中で失敗すれば先行する書き込みもすべて復元し、成功後にだけチェックサム付き検証 manifest を作成します。レビュー済みの自動サブセットは `full` ではなく `partial` とし、対象 transport adapter のないリモート MCP、専用 adapter のない形式、cloud/UI 製品には明示的な手動再構築手順を返します。
 
 ## 開発
 

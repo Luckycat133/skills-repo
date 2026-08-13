@@ -4,6 +4,30 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-08-13
+
+### Added
+
+- Added replayable migration plans with Registry/adapter/source/target state digests, credential-free diffs, Git provenance, cloud/UI rebuild manifests, and checksummed apply manifests.
+- Added explicit MCP adapter contracts for JSONC and fail-closed manual boundaries for JSON5, TOML, YAML, XML, Lua, and ambiguous UUID/JSON storage.
+- Added support-level contracts, profile fixture coverage, offline documentation freshness validation, and a scheduled official-source report.
+
+### Changed
+
+- Reclassified disputed/manual products with explicit support level and confidence; no profile is advertised as `full`. Corrected MonkeyCode to a cloud/self-hosted development platform and kept Codely unverified/manual.
+- Changed profile-aware apply to accept only a previously saved plan. Legacy converter regressions now opt into the internal engine explicitly.
+- Expanded instruction adapters and made whole-scope planning resolve both user and project surfaces instead of silently selecting one.
+- Made instruction adapters emit native Augment, Cline/Claude, Cursor, Continue, Kiro, Copilot, and Windsurf activation fields; unsafe conditional-to-unconditional conversions now stop for manual reconstruction.
+- Split combined user/project/local registry entries into concrete paths and made canonical/compatibility conflicts visible in inventory and fail closed in planning.
+- Limited automatic MCP conversion to reviewed stdio JSON/JSONC subsets; remote transports and Crush's executable shell-expansion schema now require dedicated manual reconstruction.
+
+### Security
+
+- Disabled public legacy writes while retaining lookup and zero-write dry-run compatibility; every public write now requires a saved Registry v2 plan.
+- Reject apply after plan checksum, Registry, adapter, source, target, resolved-plan, or Git HEAD drift; reject alias-conflicting MCP roots and invalid Skill metadata before staging.
+- Stage the complete operation before mutation and restore every earlier target if any later write or manifest creation fails; instruction sources now receive the same literal-credential preflight.
+- Reject plan or manifest artifact paths that overlap the Registry or any selected source/target surface.
+
 ## [0.8.0] - 2026-08-13
 
 ### Added

@@ -13,4 +13,7 @@
 | Config | Not mapped |
 
 <!-- END GENERATED: ide-paths.json summary -->
+**Registry status:** `unverified/manual-reference`; the generated paths are
+read-only discovery hints and do not authorize writes.
+
 MCP JSON uses `mcpServers`; rules are scoped guidelines. No Agent Skills or whole-config contract is documented. Enterprise governance and other Tabnine state remain manual.
