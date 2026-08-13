@@ -20,7 +20,7 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 - Made instruction adapters emit native Augment, Cline/Claude, Cursor, Continue, Kiro, Copilot, and Windsurf activation fields; unsafe conditional-to-unconditional conversions now stop for manual reconstruction.
 - Split combined user/project/local registry entries into concrete paths and made canonical/compatibility conflicts visible in inventory and fail closed in planning.
 - Limited automatic MCP conversion to reviewed stdio JSON/JSONC subsets; remote transports and Crush's executable shell-expansion schema now require dedicated manual reconstruction.
-- Preserved GitHub repository, commit, ref, and path provenance through the formal ClawHub publish helper, which now rejects incomplete release provenance.
+- Forwarded caller-supplied GitHub repository, commit, ref, and path attribution through the formal ClawHub publish helper, which now rejects incomplete source attribution without claiming server-verified provenance.
 
 ### Security
 

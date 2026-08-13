@@ -27,7 +27,9 @@ bash scripts/prepare-clawhub-release.sh \
 
 辅助脚本将仓库 MIT canonical Skill 转换成独立 MIT-0 bundle：删除冲突的逐 Skill `license`，写入 ClawHub 版本和 `metadata.openclaw.requires.bins: [bash, python3]`，并按白名单加入薄包装、Python core、legacy 兼容引擎、路径表和源凭据扫描器；eval、测试和维护脚本不会进入发行包。
 
-复制脚本输出的 `clawhub publish ...` 命令，为它补充 `--dry-run --json`，记录返回的 `would-publish`、版本、文件数和 fingerprint。正式发布必须再次向辅助脚本传入同一组来源参数；脚本会拒绝缺少仓库、完整提交 SHA、ref 或仓库内路径的发布。只有维护者已确认历史贡献者允许 MIT-0 再许可时，才可同时加入 `--publish --acknowledge-mit0`。该确认是正式发布阻断条件，不能由测试成功替代。
+复制脚本输出的 `clawhub publish ...` 命令，为它补充 `--dry-run --json`，记录返回的 `would-publish`、版本、文件数和 fingerprint。正式发布必须再次向辅助脚本传入同一组调用方来源归属参数；脚本会拒绝缺少仓库、完整提交 SHA、ref 或仓库内路径的发布。只有维护者已确认历史贡献者允许 MIT-0 再许可时，才可同时加入 `--publish --acknowledge-mit0`。该确认是正式发布阻断条件，不能由测试成功替代。
+
+这些来源字段会随本地 bundle 发布请求提交，但不等同于 ClawHub 的服务器端 GitHub 导入证明。`clawhub skill verify` 只会把经服务器解析的 GitHub 导入标为 `server-resolved-github-import`；白名单 runtime bundle 由仓库脚本本地生成，因此验证结果可能显示 `provenance.source: unavailable`。应以完整发布命令、不可变提交 SHA、dry-run fingerprint 和上传后 artifact fingerprint 的一致性作为该 bundle 的可追溯证据，不得报告为 ClawHub 已验证的 GitHub 来源。
 
 发布后分别运行：
 
