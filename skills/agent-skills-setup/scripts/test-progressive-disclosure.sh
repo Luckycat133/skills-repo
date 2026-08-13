@@ -31,8 +31,12 @@ grep -F 'references/ides/<source>.md' "$SKILL_FILE" >/dev/null || \
     fail "SKILL.md must route source reads to one IDE reference"
 grep -F 'references/ides/<target>.md' "$SKILL_FILE" >/dev/null || \
     fail "SKILL.md must route target reads to one IDE reference"
-grep -F 'Use `plan`' "$SKILL_FILE" >/dev/null || \
-    fail "SKILL.md must retain the zero-write plan gate"
+grep -F 'Save the plan, review its diff/rebuild manifest' "$SKILL_FILE" >/dev/null || \
+    fail "SKILL.md must retain saved-plan review before apply"
+grep -F 'legacy writes are disabled' "$SKILL_FILE" >/dev/null || \
+    fail "SKILL.md must retain the legacy-write boundary"
+grep -F 'apply that exact file' "$SKILL_FILE" >/dev/null || \
+    fail "SKILL.md must require replay of the reviewed plan"
 grep -F -- '--yes' "$SKILL_FILE" >/dev/null || \
     fail "SKILL.md must retain the explicit approval gate"
 

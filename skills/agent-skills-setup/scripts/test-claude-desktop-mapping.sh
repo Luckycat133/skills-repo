@@ -94,9 +94,20 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
     DESKTOP_CONFIG="$TMP_ROOT/home/Library/Application Support/Claude/claude_desktop_config.json"
     mkdir -p "$(dirname "$DESKTOP_CONFIG")"
     printf '%s\n' '{"mcpServers":{"desktop-local":{"command":"node","args":["server.js"],"env":{"API_KEY":"__desktop_inert_fixture__"}}}}' > "$DESKTOP_CONFIG"
-    HOME="$TMP_ROOT/home" bash "$MIGRATION_SCRIPT" \
+    if HOME="$TMP_ROOT/home" bash "$MIGRATION_SCRIPT" \
         --source claude-desktop --target cursor --workspace "$TMP_ROOT/workspace" \
-        --objects mcp --yes --strategy overwrite >/dev/null 2>&1
+        --objects mcp --yes --strategy overwrite \
+        >"$TMP_ROOT/canonical.out" 2>"$TMP_ROOT/canonical.err"; then
+        echo "FAIL: canonical entry point wrote from the legacy Claude Desktop alias" >&2
+        exit 1
+    fi
+    grep -Fq 'legacy writes are disabled' "$TMP_ROOT/canonical.err"
+    [[ ! -e "$TMP_ROOT/home/.cursor/mcp.json" ]]
+
+    AGENT_SKILLS_SETUP_INTERNAL_LEGACY=1 HOME="$TMP_ROOT/home" \
+        bash "${SCRIPT_DIR}/legacy-smart-ide-migration.sh" \
+            --source claude-desktop --target cursor --workspace "$TMP_ROOT/workspace" \
+            --objects mcp --yes --strategy overwrite >/dev/null 2>&1
     python3 - "$TMP_ROOT/home/.cursor/mcp.json" <<'PYEOF'
 import json, sys
 data = json.load(open(sys.argv[1], encoding="utf-8"))

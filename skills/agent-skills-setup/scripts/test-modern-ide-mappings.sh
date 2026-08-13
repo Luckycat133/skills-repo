@@ -3,7 +3,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-MIGRATION_SCRIPT="$SCRIPT_DIR/smart-ide-migration.sh"
+MIGRATION_SCRIPT="$SCRIPT_DIR/legacy-smart-ide-migration.sh"
+export AGENT_SKILLS_SETUP_INTERNAL_LEGACY=1
 TMP_ROOT="$(mktemp -d /tmp/modern-ide-mappings.XXXXXX)"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 

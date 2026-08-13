@@ -16,6 +16,11 @@
 - [ ] ClawHub 运行时白名单包含薄包装、Python core、legacy 兼容引擎及源凭据扫描器，不包含 eval、`test-*`、引用生成器或新增维护脚本。
 - [ ] 公开文件不含私有路径、凭据或机器特定假设；`.env` 不复制。
 - [ ] Registry v2 的 profile/source/verified_at/freshness 校验通过；README、变更记录和发行文档不使用误导性的“支持 IDE 数量”。
+- [ ] support contract 没有无证据的 `full` profile；`partial` 自动 surface 与 `evals/profile-contracts.json` 完全一致。
+- [ ] `plan --output` → `apply <plan> --yes` 回归覆盖 plan/Registry/adapter/source/target/Git 漂移，manifest 校验和、verify 和 guarded rollback。
+- [ ] JSON/JSONC 自动 adapter 及 JSON5/TOML/YAML/XML/Lua/ambiguous storage 的 manual/fail-closed 契约通过；cloud/UI 只生成无秘密 rebuild manifest。
+- [ ] legacy flag 只保留查询和零写入 dry-run；任何 `--yes` 都在运行旧引擎前拒绝，公开写入只能使用已保存的 profile-aware plan。
+- [ ] 文档新鲜度离线检查通过；定时 online workflow 的官方来源报告无未处置失败。
 - [ ] GitHub 提交已推送并核验；ClawHub dry run 返回预期版本、文件数和 fingerprint。
 - [ ] ClawHub 的 slug、版本、标签、来源提交和简短 changelog 已准备；发布后已按版本及 `latest` 分别 inspect。
 

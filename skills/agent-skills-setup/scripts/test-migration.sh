@@ -3,6 +3,8 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LEGACY_SCRIPT="$SCRIPT_DIR/legacy-smart-ide-migration.sh"
+export AGENT_SKILLS_SETUP_INTERNAL_LEGACY=1
 
 TMP_ROOT="$(mktemp -d /tmp/agent-skills-migration-test.XXXXXX)"
 export HOME="$TMP_ROOT/home"
@@ -105,7 +107,7 @@ EOF
 echo ""
 echo "== A. smart-ide-migration.sh =="
 
-run bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+run bash "$LEGACY_SCRIPT" \
     --source claude --target kimiai \
     --workspace "$WS" \
     --objects skills,rules,mcp,config \
@@ -125,7 +127,7 @@ assert_contains "$OUT_FILE" "automatic whole-IDE config migration is unsupported
 assert_not_contains "$OUT_FILE" "config file copied"       "A1: config NOT marked success in dry-run (C2)"
 
 for target in kimiai copilot codex; do
-    run bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+    run bash "$LEGACY_SCRIPT" \
         --source claude --target "$target" \
         --workspace "$WS" \
         --objects skills --yes
@@ -139,7 +141,7 @@ assert_file "$HOME/.agents/skills/demo-skill/SKILL.md"      "A2: codex   -> ~/.a
 assert_dir "$HOME/.copilot/skills/demo-skill/scripts"    "A3: copilot preserves scripts/ subdir (H4)"
 assert_dir "$HOME/.copilot/skills/demo-skill/references" "A3: copilot preserves references/ subdir (H4)"
 
-run bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+run bash "$LEGACY_SCRIPT" \
     --source claude --target kimiai \
     --workspace "$WS" \
     --objects mcp --yes
@@ -155,7 +157,7 @@ assert_not_contains "$HOME/.kimi-code/mcp.json" "enabledTools" "A4: MCP strips e
 assert_not_contains "$HOME/.kimi-code/mcp.json" "disabledTools" "A4: MCP strips disabledTools grants"
 
 CONFIG_TGT="$HOME/.cursor/settings.json"
-run bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+run bash "$LEGACY_SCRIPT" \
     --source claude --target cursor \
     --workspace "$WS" \
     --objects config --yes
@@ -169,14 +171,14 @@ echo "== C. confirmation gate (--yes) =="
 
 GATE_TGT="$HOME/.codeium/windsurf"
 safe_remove_fixture_path "$GATE_TGT"
-run bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+run bash "$LEGACY_SCRIPT" \
     --source claude --target windsurf \
     --workspace "$WS" \
     --objects skills </dev/null
 assert_eq "$LAST_RC" "2" "C1: non-interactive without --yes aborts with rc=2"
 assert_not_exists "$GATE_TGT" "C1: gate abort leaves zero writes (no target dir created)"
 
-run bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+run bash "$LEGACY_SCRIPT" \
     --source claude --target windsurf \
     --workspace "$WS" \
     --objects skills --yes </dev/null
@@ -184,7 +186,7 @@ assert_eq "$LAST_RC" "0" "C2: --yes proceeds (rc=0)"
 assert_file "$GATE_TGT/skills/demo-skill/SKILL.md" "C2: --yes migration wrote target skill"
 
 safe_remove_fixture_path "$GATE_TGT"
-run bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+run bash "$LEGACY_SCRIPT" \
     --source claude --target windsurf \
     --workspace "$WS" \
     --objects skills --dry-run </dev/null
@@ -209,7 +211,7 @@ for backup_path in "$WS"/.agents.bak.*; do
     safe_remove_fixture_path "$backup_path"
 done
 
-run bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+run bash "$LEGACY_SCRIPT" \
     --source claude --target codex \
     --workspace "$WS" \
     --objects project --dry-run
@@ -217,7 +219,7 @@ assert_eq "$LAST_RC" "0" "D1: project dry-run exits 0"
 assert_not_exists "$D_TGT" "D1: project dry-run performs ZERO writes"
 assert_contains "$OUT_FILE" "automatic whole-project configuration migration is unsupported" "D1: project dry-run explains manual boundary"
 
-run bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+run bash "$LEGACY_SCRIPT" \
     --source claude --target codex \
     --workspace "$WS" \
     --objects project --yes

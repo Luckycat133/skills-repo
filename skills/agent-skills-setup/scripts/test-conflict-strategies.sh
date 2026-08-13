@@ -3,7 +3,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MIGRATION_SCRIPT="$SCRIPT_DIR/smart-ide-migration.sh"
+# Conflict-strategy mechanics belong to the retained compatibility engine. The
+# public entry point is covered separately by test-legacy-registry-gate.sh.
+MIGRATION_SCRIPT="$SCRIPT_DIR/legacy-smart-ide-migration.sh"
+export AGENT_SKILLS_SETUP_INTERNAL_LEGACY=1
 TMP_ROOT="$(mktemp -d /tmp/conflict-strategies-test.XXXXXX)"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 

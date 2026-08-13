@@ -31,7 +31,7 @@ skills-repo/
 
 运行时包只包含参考资料和一个迁移命令；不会安装 IDE 或运行时、创建符号链接、维护注册表锁文件，也不会把自己复制进各个 Agent 目录。全局迁移默认只处理 Skills；项目对象使用命令中明确给出的 workspace。
 复制 Skill 目录前会扫描全部源文本；发现疑似字面凭据或指向 Skill 外部的链接时，会在不修改源和已有目标的情况下跳过该 Skill。
-规范 frontmatter 只使用 Agent Skills 标准字段。profile-aware CLI 提供 `detect`、`inventory`、`plan`、`apply`、`verify` 和 `rollback`；instructions 经类型化 IR 转换并输出 loss report，写入前生成精确备份和验证清单。
+规范 frontmatter 只使用 Agent Skills 标准字段。profile-aware CLI 提供 `detect`、`inventory`、`plan`、`apply`、`verify` 和 `rollback`；instructions 经产品原生格式 adapter 与类型化 IR 转换并输出 loss report。`apply` 只接受已保存且带校验和的 plan，会先暂存完整操作、创建精确备份，并在任一步失败时回滚此前全部写入；仅成功后生成带校验和的验证清单。当前经审查的自动子集标为 `partial` 而非 `full`；缺少目标 transport adapter 的远程 MCP、未实现专用 adapter 的格式与 cloud/UI 产品会输出明确的手动重建操作。
 
 ## 开发
 

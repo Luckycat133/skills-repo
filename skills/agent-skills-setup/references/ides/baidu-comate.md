@@ -13,6 +13,10 @@
 | Config | Not mapped |
 
 <!-- END GENERATED: ide-paths.json summary -->
+**Registry status:** `unverified/manual-reference`; the generated paths are
+read-only discovery hints until plugin/IDE versions, all context surfaces, and
+adapters have profile fixtures.
+
 - MCP JSON uses `mcpServers` with explicit `stdio`, legacy `sse`, or `streamableHttp`; never infer transport from a URL.
 - Rules use Comate-specific `.mdr`; Skills may use `.comate/skills/` or `.agents/skills/`.
 - Agents and local three-tier configuration require manual review.

@@ -41,19 +41,22 @@ printf '%s\n' \
     '  }' \
     '}' > "$SOURCE_MCP"
 
-HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+if HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source claude \
     --target codex \
     --objects mcp \
     --strategy overwrite \
-    --yes > "$OUTPUT"
+    --yes > "$OUTPUT" 2>"$TMP_ROOT/mcp.err"; then
+    echo "FAIL: canonical entry point authorized the manual Codex TOML adapter" >&2
+    exit 1
+fi
 
 if [[ -e "$TARGET_MCP" ]]; then
     echo "FAIL: JSON MCP configuration was written to Codex TOML config" >&2
     exit 1
 fi
 
-grep -Fq 'manual migration required' "$OUTPUT"
+grep -Fq 'legacy writes are disabled' "$TMP_ROOT/mcp.err"
 
 mkdir -p "$(dirname "$SOURCE_CONFIG")"
 printf '%s\n' \
@@ -63,17 +66,20 @@ printf '%s\n' \
     '[hooks]' \
     'enabled = true' > "$SOURCE_CONFIG"
 
-HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+if HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
     --source codex \
     --target openclaw \
     --objects config \
     --strategy overwrite \
-    --yes > "$CONFIG_OUTPUT"
+    --yes > "$CONFIG_OUTPUT" 2>"$TMP_ROOT/config.err"; then
+    echo "FAIL: canonical entry point authorized whole-IDE config migration" >&2
+    exit 1
+fi
 
 if [[ -e "$TARGET_CONFIG" ]]; then
     echo "FAIL: Codex config.toml was copied to a non-Codex configuration target" >&2
     exit 1
 fi
 
-grep -Fq 'automatic whole-IDE config migration is unsupported' "$CONFIG_OUTPUT"
+grep -Fq 'legacy writes are disabled' "$TMP_ROOT/config.err"
 echo "Codex migration mapping test passed"

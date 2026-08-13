@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "verified_at": "2026-08-13",
+  "checks": [
+    {
+      "id": "agent-skills-spec",
+      "url": "https://raw.githubusercontent.com/agentskills/agentskills/main/docs/specification.mdx",
+      "required_terms": ["name", "description", "metadata"]
+    },
+    {
+      "id": "cline-config",
+      "url": "https://docs.cline.bot/getting-started/config",
+      "required_terms": ["cline", "configuration"]
+    },
+    {
+      "id": "forgecode-docs",
+      "url": "https://forgecode.dev/docs/",
+      "required_terms": ["forge", "agent"]
+    },
+    {
+      "id": "qoder-docs",
+      "url": "https://docs.qoder.com/",
+      "required_terms": ["qoder"]
+    },
+    {
+      "id": "codex-docs",
+      "url": "https://learn.chatgpt.com/docs/llms.txt",
+      "required_terms": ["codex"]
+    },
+    {
+      "id": "openhands-docs",
+      "url": "https://docs.openhands.dev/overview/introduction",
+      "required_terms": ["openhands"]
+    },
+    {
+      "id": "amp-manual",
+      "url": "https://ampcode.com/manual",
+      "required_terms": ["agent skills", "mcp"]
+    },
+    {
+      "id": "monkeycode-readme",
+      "url": "https://raw.githubusercontent.com/chaitin/MonkeyCode/main/README.md",
+      "required_terms": ["monkeycode", "development platform"]
+    }
+  ]
+}

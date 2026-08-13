@@ -2,6 +2,12 @@
 
 set -euo pipefail
 
+if [[ "${BASH_SOURCE[0]}" == "$0" && \
+      "${AGENT_SKILLS_SETUP_INTERNAL_LEGACY:-}" != "1" ]]; then
+    echo "ERROR: legacy-smart-ide-migration.sh is internal; use smart-ide-migration.sh." >&2
+    exit 1
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 source "${SCRIPT_DIR}/common.sh"
@@ -258,12 +264,9 @@ get_mcp_path() {
             fi ;;
         amazon-q)
             local q_default="${HOME}/.aws/amazonq/default.json"
-            local q_agent_default="${HOME}/.aws/amazonq/agents/default.json"
             local q_legacy="${HOME}/.aws/amazonq/mcp.json"
             if [[ -f "$q_default" ]]; then
                 echo "$q_default"
-            elif [[ -f "$q_agent_default" ]]; then
-                echo "$q_agent_default"
             elif [[ -f "$q_legacy" ]]; then
                 echo "$q_legacy"
             else
@@ -3220,15 +3223,15 @@ migrate_mcp() {
         if [[ "$scope" == "project" ]]; then
             if [[ -f "$q_project_agent" && ! -f "$q_project_default" && ! -f "$q_project_legacy" ]]; then
                 set_status "mcp" "manual"
-                set_message "mcp" "Amazon Q project agents/default.json exists but its IDE/CLI surface is ambiguous"
-                set_manual_step "mcp" "Amazon Q: .amazonq/agents/default.json is documented by another Q surface but is not version-mapped to the IDE .amazonq/default.json file. Choose the active Q product manually, then use the Q panel tools icon or edit the selected mcpServers file; do not overwrite it automatically"
+                set_message "mcp" "Amazon Q project agents/default.json is a custom-agent definition, not IDE MCP configuration"
+                set_manual_step "mcp" "Amazon Q: .amazonq/agents/default.json belongs to the custom-agent profile and must not be treated as the IDE .amazonq/default.json MCP file. Choose the active Q profile, then configure its documented MCP surface without overwriting the agent definition"
                 MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
                 return 0
             fi
         elif [[ -f "$q_global_agent" && ! -f "$q_global_default" && ! -f "$q_global_legacy" ]]; then
             set_status "mcp" "manual"
-            set_message "mcp" "Amazon Q agents/default.json exists but its IDE/CLI surface is ambiguous"
-            set_manual_step "mcp" "Amazon Q: ~/.aws/amazonq/agents/default.json is documented by another Q surface but is not version-mapped to the IDE ~/.aws/amazonq/default.json file. Choose the active Q product manually, then use the Q panel tools icon or edit the selected mcpServers file; do not overwrite it automatically"
+            set_message "mcp" "Amazon Q agents/default.json is a custom-agent definition, not IDE MCP configuration"
+            set_manual_step "mcp" "Amazon Q: ~/.aws/amazonq/agents/default.json belongs to the custom-agent profile and must not be treated as the IDE ~/.aws/amazonq/default.json MCP file. Choose the active Q profile, then configure its documented MCP surface without overwriting the agent definition"
             MIGRATION_SKIPPED=$((MIGRATION_SKIPPED + 1))
             return 0
         fi

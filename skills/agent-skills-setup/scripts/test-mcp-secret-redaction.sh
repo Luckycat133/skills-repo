@@ -3,8 +3,9 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-MIG="$SCRIPT_DIR/smart-ide-migration.sh"
+MIG="$SCRIPT_DIR/legacy-smart-ide-migration.sh"
 LEGACY_MIG="$SCRIPT_DIR/legacy-smart-ide-migration.sh"
+export AGENT_SKILLS_SETUP_INTERNAL_LEGACY=1
 
 TMP_ROOT="$(mktemp -d /tmp/agent-skills-redact-test.XXXXXX)"
 export HOME="$TMP_ROOT/home"

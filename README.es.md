@@ -31,7 +31,7 @@ Migra contexto con alcance definido entre perfiles de producto. Registry v2 regi
 
 El paquete de ejecución contiene referencias y un único comando de migración. No instala IDE ni runtimes, no crea enlaces simbólicos o bloqueos de registro y no se copia en los directorios de otros agentes. Las migraciones globales seleccionan Skills por defecto; los objetos de proyecto usan un workspace explícito.
 Antes de copiar un directorio de Skill se analiza todo el texto de origen. Una credencial literal probable o un enlace fuera del Skill hace que se omita sin modificar el origen ni el destino existente.
-El frontmatter canónico usa solo campos estándar de Agent Skills. La CLI por perfiles ofrece `detect`, `inventory`, `plan`, `apply`, `verify` y `rollback`; las instrucciones pasan por un IR tipado con informe de pérdida, y la aplicación crea respaldos exactos y un manifiesto verificable.
+El frontmatter canónico usa solo campos estándar de Agent Skills. La CLI por perfiles ofrece `detect`, `inventory`, `plan`, `apply`, `verify` y `rollback`; las instrucciones pasan por adaptadores nativos y un IR tipado con informe de pérdida. `apply` solo acepta un plan guardado con checksum, prepara toda la operación antes de escribir y crea respaldos exactos. Si un paso falla, restaura todas las escrituras anteriores; solo tras el éxito crea el manifiesto verificable con checksum. Los subconjuntos automáticos revisados se marcan `partial`, no `full`; MCP remoto sin adaptador de transporte de destino, formatos sin adaptador dedicado y productos cloud/UI generan acciones explícitas de reconstrucción manual.
 
 ## Desarrollo
 

@@ -13,6 +13,11 @@
 | Config | Not mapped |
 
 <!-- END GENERATED: ide-paths.json summary -->
+
+**Registry status:** `unverified/manual-reference`. These paths are discovery
+evidence only; Antigravity is not an automatic source or target until its
+IDE/CLI and version-specific schemas have independent adapters and fixtures.
+
 - MCP uses JSON `mcpServers`; remote endpoints use `serverUrl`, not `url`. The global file is shared by Antigravity surfaces; workspace MCP remains manual.
 - Global Skills default to the generated path. `ANTIGRAVITY_SKILLS_DIR` overrides it; otherwise preserve a legacy-only tree and never merge legacy/current trees implicitly. `.agent/` remains legacy compatibility.
 - Workspace rules use `.agents/rules/`; do not invent `.agents/AGENTS.md`. No official installation-detection or stable workflow path exists.
