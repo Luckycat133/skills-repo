@@ -24,6 +24,7 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 - Made legacy/source-only, cloud/UI, provider, editor-host, and brand-alias products ineligible for ordinary automatic target writes.
 - Added exact apply manifests, pre-write backups, post-write hash verification, guarded rollback, symlink rejection, and literal MCP secret replacement.
+- Made the profile-aware plan/apply path fail closed on Skill source credential findings, rescan staged copies, and exclude `.env*` files before target replacement.
 - Split the MIT repository artifact from the generated MIT-0 ClawHub bundle; formal publish now requires an explicit contributor-authorization acknowledgement and declares Bash/Python runtime gates.
 
 ## [0.7.5] - 2026-08-10

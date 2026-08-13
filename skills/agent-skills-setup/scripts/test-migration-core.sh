@@ -22,6 +22,8 @@ cp "$SKILL_DIR/evals/files/instruction-ir-source.mdc" \
     "$WORKSPACE/.cline/rules/source.mdc"
 printf '%s\n' '---' 'name: demo' 'description: Test fixture.' '---' '# Demo' \
     > "$WORKSPACE/.cline/skills/demo/SKILL.md"
+printf '%s\n' 'NON_SECRET_FIXTURE=kept-out-of-target' \
+    > "$WORKSPACE/.cline/skills/demo/.env.local"
 printf '%s\n' \
     '{' \
     '  "mcpServers": {' \
@@ -103,6 +105,7 @@ HOME="$TEST_HOME" bash "$CLI" apply \
     --json > "$TMP_ROOT/apply.json"
 
 [[ -f "$WORKSPACE/.forge/skills/demo/SKILL.md" ]]
+[[ ! -e "$WORKSPACE/.forge/skills/demo/.env.local" ]]
 [[ -f "$WORKSPACE/AGENTS.md" ]]
 [[ -f "$WORKSPACE/.mcp.json" ]]
 grep -F '"API_TOKEN": "${API_TOKEN}"' "$WORKSPACE/.mcp.json" >/dev/null
@@ -137,6 +140,148 @@ bash "$CLI" rollback --manifest "$MANIFEST" --yes --json > "$TMP_ROOT/rollback.j
 [[ ! -e "$WORKSPACE/.forge/skills/demo" ]]
 [[ ! -e "$WORKSPACE/AGENTS.md" ]]
 [[ ! -e "$WORKSPACE/.mcp.json" ]]
+
+mkdir -p \
+    "$WORKSPACE/.cline/skills/leaky" \
+    "$WORKSPACE/.forge/skills/leaky"
+cp "$SKILL_DIR/SKILL.md" "$WORKSPACE/.cline/skills/leaky/SKILL.md"
+cp "$SCRIPT_DIR/test-migration-core.sh" \
+    "$WORKSPACE/.cline/skills/leaky/payload.sh"
+printf '%s\n' 'preserve-existing-target' \
+    > "$WORKSPACE/.forge/skills/leaky/sentinel.txt"
+
+HOME="$TEST_HOME" bash "$CLI" plan \
+    --workspace "$WORKSPACE" \
+    --source cline/ide \
+    --target forge/cli \
+    --objects skills \
+    --scope project \
+    --json > "$TMP_ROOT/secret-preflight-plan.json"
+python3 - "$TMP_ROOT/secret-preflight-plan.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+plan = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+assert plan["items"][0]["status"] == "blocked"
+assert "source credential preflight failed" in plan["items"][0]["reason"]
+assert "payload.sh: provider credential pattern" in plan["items"][0]["reason"]
+PY
+
+mv "$WORKSPACE/.cline/skills/leaky/payload.sh" \
+    "$TMP_ROOT/leaky-payload.sh"
+python3 - \
+    "$SCRIPT_DIR" \
+    "$SKILL_DIR/references/registry-v2.json" \
+    "$WORKSPACE" \
+    "$TEST_HOME" \
+    "$TMP_ROOT/leaky-payload.sh" <<'PY'
+import shutil
+import sys
+from pathlib import Path
+
+sys.path.insert(0, sys.argv[1])
+from migration_core import Registry, apply_plan, build_plan
+
+registry = Registry(Path(sys.argv[2]), Path(sys.argv[3]), Path(sys.argv[4]))
+plan, _ = build_plan(
+    registry,
+    "cline/ide",
+    "forge/cli",
+    ["skills"],
+    "project",
+)
+assert plan[0].status == "ready"
+shutil.copy2(
+    Path(sys.argv[5]),
+    Path(sys.argv[3], ".cline/skills/leaky/payload.sh"),
+)
+try:
+    apply_plan(plan, Path(sys.argv[3]))
+except ValueError as error:
+    assert "source credential preflight failed" in str(error)
+else:
+    raise AssertionError("apply did not rescan a changed Skill source")
+PY
+
+if HOME="$TEST_HOME" bash "$CLI" apply \
+    --workspace "$WORKSPACE" \
+    --source cline/ide \
+    --target forge/cli \
+    --objects skills \
+    --scope project \
+    --yes > "$TMP_ROOT/secret-preflight-apply.log" 2>&1; then
+    echo "FAIL: profile-aware apply copied a Skill with a literal credential" >&2
+    exit 1
+fi
+grep -Fq 'preserve-existing-target' \
+    "$WORKSPACE/.forge/skills/leaky/sentinel.txt"
+[[ ! -e "$WORKSPACE/.forge/skills/leaky/payload.sh" ]]
+mv "$WORKSPACE/.cline/skills/leaky" "$TMP_ROOT/leaky-source"
+mv "$WORKSPACE/.forge/skills/leaky" "$TMP_ROOT/leaky-target"
+
+mkdir -p \
+    "$WORKSPACE/.cline/skills/symlink-race" \
+    "$WORKSPACE/.forge/skills/symlink-race"
+cp "$SKILL_DIR/SKILL.md" \
+    "$WORKSPACE/.cline/skills/symlink-race/SKILL.md"
+printf '%s\n' 'safe-before-copy' \
+    > "$WORKSPACE/.cline/skills/symlink-race/payload.txt"
+printf '%s\n' 'outside-source-boundary' \
+    > "$TMP_ROOT/symlink-race-external.txt"
+printf '%s\n' 'preserve-symlink-race-target' \
+    > "$WORKSPACE/.forge/skills/symlink-race/sentinel.txt"
+python3 - \
+    "$SCRIPT_DIR" \
+    "$SKILL_DIR/references/registry-v2.json" \
+    "$WORKSPACE" \
+    "$TEST_HOME" \
+    "$TMP_ROOT/symlink-race-external.txt" <<'PY'
+import shutil
+import sys
+from pathlib import Path
+
+sys.path.insert(0, sys.argv[1])
+from migration_core import Registry, apply_plan, build_plan
+
+workspace = Path(sys.argv[3]).resolve()
+source_skill = workspace / ".cline/skills/symlink-race"
+payload = source_skill / "payload.txt"
+external = Path(sys.argv[5])
+registry = Registry(Path(sys.argv[2]), workspace, Path(sys.argv[4]))
+plan, _ = build_plan(
+    registry,
+    "cline/ide",
+    "forge/cli",
+    ["skills"],
+    "project",
+)
+assert plan[0].status == "ready"
+original_copytree = shutil.copytree
+
+
+def injecting_copytree(src, dst, *args, **kwargs):
+    if Path(src) == source_skill:
+        payload.unlink()
+        payload.symlink_to(external)
+    return original_copytree(src, dst, *args, **kwargs)
+
+
+shutil.copytree = injecting_copytree
+try:
+    apply_plan(plan, workspace)
+except ValueError as error:
+    assert "symbolic links are not allowed" in str(error)
+else:
+    raise AssertionError("apply followed a Skill symlink introduced during copy")
+PY
+grep -Fq 'preserve-symlink-race-target' \
+    "$WORKSPACE/.forge/skills/symlink-race/sentinel.txt"
+[[ ! -e "$WORKSPACE/.forge/skills/symlink-race/payload.txt" ]]
+mv "$WORKSPACE/.cline/skills/symlink-race" \
+    "$TMP_ROOT/symlink-race-source"
+mv "$WORKSPACE/.forge/skills/symlink-race" \
+    "$TMP_ROOT/symlink-race-target"
 
 mkdir -p "$TMP_ROOT/external-qwen"
 ln -s "$TMP_ROOT/external-qwen" "$WORKSPACE/.qwen"

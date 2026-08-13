@@ -15,6 +15,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
+from skill_secret_scanner import scan as scan_skill_source_tree
+
 
 SENSITIVE_NAME = re.compile(
     r"(?:^|[_-])(token|secret|password|passwd|api[_-]?key|authorization|cookie)(?:$|[_-])",
@@ -581,6 +583,61 @@ def choose_surface(surfaces: list[SurfacePath], scope: str) -> SurfacePath | Non
     return None
 
 
+def _skill_sources(surface: SurfacePath) -> list[Path]:
+    source = surface.resolved_path
+    if not source.is_dir():
+        return []
+    return sorted(
+        child
+        for child in source.iterdir()
+        if child.is_dir() and (child / "SKILL.md").is_file()
+    )
+
+
+def _skill_environment_files(skill_dir: Path) -> list[Path]:
+    return sorted(path for path in skill_dir.rglob(".env*") if path.is_file())
+
+
+def _ignore_skill_environment_files(_directory: str, names: list[str]) -> list[str]:
+    return [name for name in names if name.startswith(".env")]
+
+
+def preflight_skill_source(skill_dir: Path) -> None:
+    """Fail closed before copying a Skill that may contain literal credentials."""
+    try:
+        findings = scan_skill_source_tree(skill_dir)
+    except RuntimeError as error:
+        raise ValueError(
+            f"source credential preflight unavailable for {skill_dir.name}: {error}"
+        ) from error
+    if not findings:
+        return
+    details = "; ".join(f"{path}: {reason}" for path, reason in findings)
+    raise ValueError(
+        f"source credential preflight failed for {skill_dir.name}: {details}"
+    )
+
+
+def preflight_plan_skill_sources(plan: list[PlanItem]) -> None:
+    """Rescan every planned Skill before apply creates backups or target paths."""
+    for item in plan:
+        if item.object_type != "skills" or item.status != "ready":
+            continue
+        assert item.source is not None
+        ensure_no_symlink_components(
+            item.source.resolved_path,
+            item.source.boundary,
+        )
+        ensure_no_symlinks(item.source.resolved_path)
+        skill_dirs = _skill_sources(item.source)
+        if not skill_dirs:
+            raise ValueError(
+                f"source contains no Skill directories: {item.source.resolved_path}"
+            )
+        for skill_dir in skill_dirs:
+            preflight_skill_source(skill_dir)
+
+
 def build_plan(
     registry: Registry,
     source_selector: str,
@@ -649,6 +706,34 @@ def build_plan(
                 )
             )
             continue
+        if object_type == "skills":
+            skill_dirs = _skill_sources(source)
+            if not skill_dirs:
+                items.append(
+                    PlanItem(
+                        object_type,
+                        "blocked",
+                        "source contains no Skill directories",
+                        source,
+                        target,
+                    )
+                )
+                continue
+            try:
+                for skill_dir in skill_dirs:
+                    preflight_skill_source(skill_dir)
+                    for env_path in _skill_environment_files(skill_dir):
+                        losses.add(
+                            "skills",
+                            f"{skill_dir.name}/{env_path.relative_to(skill_dir)}",
+                            "environment file excluded from Skill copy",
+                            None,
+                        )
+            except ValueError as error:
+                items.append(
+                    PlanItem(object_type, "blocked", str(error), source, target)
+                )
+                continue
         if object_type == "instructions":
             instruction_paths = _instruction_sources(source)
             if not instruction_paths:
@@ -837,6 +922,7 @@ def apply_plan(
     if blocked:
         summary = ", ".join(f"{item.object_type}:{item.status}" for item in blocked)
         raise ValueError(f"plan contains non-applicable items: {summary}")
+    preflight_plan_skill_sources(plan)
     workspace = workspace.resolve()
     operation_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + f"-{os.getpid()}"
     state_root = workspace / ".agent-context-migration"
@@ -859,19 +945,36 @@ def apply_plan(
             if not source.resolved_path.is_dir():
                 raise ValueError("skills source must be a directory")
             target.resolved_path.mkdir(parents=True, exist_ok=True)
-            for child in sorted(source.resolved_path.iterdir()):
-                if not child.is_dir() or not (child / "SKILL.md").is_file():
-                    continue
+            for child in _skill_sources(source):
                 destination = target.resolved_path / child.name
                 backup = backup_path(destination, backup_root, len(changes))
                 temporary = target.resolved_path / f".{child.name}.migration-{operation_id}"
-                shutil.copytree(child, temporary)
-                if destination.exists():
-                    if destination.is_dir():
-                        shutil.rmtree(destination)
-                    else:
-                        destination.unlink()
-                os.replace(temporary, destination)
+                excluded_env_files = _skill_environment_files(child)
+                for env_path in excluded_env_files:
+                    loss_report.add(
+                        "skills",
+                        f"{child.name}/{env_path.relative_to(child)}",
+                        "environment file excluded from Skill copy",
+                        None,
+                    )
+                try:
+                    shutil.copytree(
+                        child,
+                        temporary,
+                        ignore=_ignore_skill_environment_files,
+                        symlinks=True,
+                    )
+                    ensure_no_symlinks(temporary)
+                    preflight_skill_source(temporary)
+                    if destination.exists():
+                        if destination.is_dir():
+                            shutil.rmtree(destination)
+                        else:
+                            destination.unlink()
+                    os.replace(temporary, destination)
+                finally:
+                    if temporary.exists():
+                        shutil.rmtree(temporary)
                 record_change(changes, destination, backup, target.boundary)
         elif item.object_type == "instructions":
             sources = _instruction_sources(source)

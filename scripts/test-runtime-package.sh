@@ -68,6 +68,10 @@ grep -Fq '        - python3' "$PACKAGE_ROOT/SKILL.md" || {
     echo "FAIL: runtime package omitted the source credential scanner" >&2
     exit 1
 }
+[[ -f "$PACKAGE_ROOT/scripts/skill_secret_scanner.py" ]] || {
+    echo "FAIL: runtime package omitted the shared source credential scanner" >&2
+    exit 1
+}
 [[ ! -e "$PACKAGE_ROOT/evals" ]] || {
     echo "FAIL: release helper staged maintainer evals" >&2
     exit 1
@@ -86,6 +90,7 @@ printf '%s\n' \
     legacy-smart-ide-migration.sh \
     migration_core.py \
     scan-skill-secrets.py \
+    skill_secret_scanner.py \
     smart-ide-migration.sh \
     | LC_ALL=C sort >"$TMP_ROOT/runtime-scripts.expected"
 if ! diff -u "$TMP_ROOT/runtime-scripts.expected" "$TMP_ROOT/runtime-scripts.actual"; then

@@ -52,6 +52,7 @@ for runtime_script in \
     legacy-smart-ide-migration.sh \
     migration_core.py \
     scan-skill-secrets.py \
+    skill_secret_scanner.py \
     smart-ide-migration.sh; do
     [[ -f "$SOURCE_SKILL_DIR/scripts/$runtime_script" ]] || {
         echo "ERROR: missing runtime dependency: scripts/$runtime_script" >&2
