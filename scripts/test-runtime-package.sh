@@ -124,7 +124,7 @@ for expected in \
     "--source-ref $SOURCE_REF" \
     "--source-path $SOURCE_PATH"; do
     grep -F -- "$expected" "$TMP_ROOT/release.log" >/dev/null || {
-        echo "FAIL: release command omitted source provenance: $expected" >&2
+        echo "FAIL: release command omitted source attribution: $expected" >&2
         exit 1
     }
 done
@@ -156,15 +156,15 @@ if PATH="$FAKE_BIN:$PATH" bash "$REPO_ROOT/scripts/prepare-clawhub-release.sh" \
     --version 0.0.0 \
     --publish \
     --acknowledge-mit0 >"$TMP_ROOT/no-provenance.log" 2>&1; then
-    echo "FAIL: ClawHub publish proceeded without source provenance" >&2
+    echo "FAIL: ClawHub publish proceeded without source attribution" >&2
     exit 1
 fi
-grep -Fq 'complete source provenance' "$TMP_ROOT/no-provenance.log" || {
-    echo "FAIL: source provenance blocker was not explained" >&2
+grep -Fq 'complete source attribution' "$TMP_ROOT/no-provenance.log" || {
+    echo "FAIL: source attribution blocker was not explained" >&2
     exit 1
 }
 [[ ! -e "$FAKE_CLAWHUB_LOG" ]] || {
-    echo "FAIL: ClawHub executable was called for publish without source provenance" >&2
+    echo "FAIL: ClawHub executable was called for publish without source attribution" >&2
     exit 1
 }
 
@@ -190,7 +190,7 @@ for expected in \
     "--source-ref $SOURCE_REF" \
     "--source-path $SOURCE_PATH"; do
     grep -F -- "$expected" "$FAKE_CLAWHUB_LOG" >/dev/null || {
-        echo "FAIL: authorized ClawHub publish omitted source provenance: $expected" >&2
+        echo "FAIL: authorized ClawHub publish omitted source attribution: $expected" >&2
         exit 1
     }
 done
