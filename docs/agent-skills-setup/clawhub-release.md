@@ -18,12 +18,16 @@ bash scripts/prepare-clawhub-release.sh \
   --name "Agent Skills Setup" \
   --version <version> \
   --tags latest,setup,skills,openclaw,cross-ide \
-  --changelog "<concise release note>"
+  --changelog "<concise release note>" \
+  --source-repo https://github.com/Luckycat133/skills-repo \
+  --source-commit <full-commit-sha> \
+  --source-ref main \
+  --source-path skills/agent-skills-setup
 ```
 
 辅助脚本将仓库 MIT canonical Skill 转换成独立 MIT-0 bundle：删除冲突的逐 Skill `license`，写入 ClawHub 版本和 `metadata.openclaw.requires.bins: [bash, python3]`，并按白名单加入薄包装、Python core、legacy 兼容引擎、路径表和源凭据扫描器；eval、测试和维护脚本不会进入发行包。
 
-复制脚本输出的 `clawhub publish ...` 命令，为它补充 `--source-repo`、`--source-commit`、`--source-ref`、`--source-path` 和 `--dry-run --json`；不要把这些参数传给辅助脚本。记录 dry run 返回的 `would-publish`、版本、文件数和 fingerprint。只有维护者已确认历史贡献者允许 MIT-0 再许可时，才可重新运行辅助脚本并同时加入 `--publish --acknowledge-mit0`。该确认是正式发布阻断条件，不能由测试成功替代。
+复制脚本输出的 `clawhub publish ...` 命令，为它补充 `--dry-run --json`，记录返回的 `would-publish`、版本、文件数和 fingerprint。正式发布必须再次向辅助脚本传入同一组来源参数；脚本会拒绝缺少仓库、完整提交 SHA、ref 或仓库内路径的发布。只有维护者已确认历史贡献者允许 MIT-0 再许可时，才可同时加入 `--publish --acknowledge-mit0`。该确认是正式发布阻断条件，不能由测试成功替代。
 
 发布后分别运行：
 
