@@ -4,7 +4,7 @@
 - [ ] 官方 `skills-ref validate` 和仓库安全补充 validator 都通过。
 - [ ] `bash validate-all.sh` 在干净 checkout 通过。
 - [ ] SkillSpector 或等效同源扫描无未处置 finding；报告版本与待发布版本一致。
-- [ ] Agent 可在用户已明确请求且目标无歧义时完成预览与执行，不增加重复确认回合。
+- [ ] 普通迁移请求只授权预览；`apply` 或 `rollback` 前必须展示已审阅 artifact 与精确目标路径并获得单独明确批准，CLI `--yes` 只记录批准而不能替代批准。
 - [ ] 全局默认只迁移 Skills；rules、prompts 和其他项目对象必须使用显式 workspace。
 - [ ] Skill 复制前扫描全部源文本；疑似字面凭据或越界链接会在目标变更前阻断整个 Skill。
 - [ ] rules/prompts 的默认 `backup`、`skip`、`overwrite` 策略有回归覆盖；符号链接和错误目标类型在写入前拒绝。
@@ -19,9 +19,10 @@
 - [ ] support contract 没有无证据的 `full` profile；`partial` 自动 surface 与 `evals/profile-contracts.json` 完全一致。
 - [ ] `plan --output` → `apply <plan> --yes` 回归覆盖 plan/Registry/adapter/source/target/Git 漂移，manifest 校验和、verify 和 guarded rollback。
 - [ ] JSON/JSONC 自动 adapter 及 JSON5/TOML/YAML/XML/Lua/ambiguous storage 的 manual/fail-closed 契约通过；cloud/UI 只生成无秘密 rebuild manifest。
-- [ ] legacy flag 只保留查询和零写入 dry-run；任何 `--yes` 都在运行旧引擎前拒绝，公开写入只能使用已保存的 profile-aware plan。
+- [ ] 旧接口只通过显式 `legacy` 子命令保留查询和零写入 dry-run；隐式 legacy flag 与任何 `legacy --yes` 都在运行旧引擎前拒绝，公开写入只能使用已保存的 profile-aware plan。
 - [ ] 文档新鲜度离线检查通过；定时 online workflow 的官方来源报告无未处置失败。
-- [ ] GitHub 提交已推送并核验；ClawHub dry run 返回预期版本、文件数和 fingerprint。
+- [ ] GitHub 提交已推送并核验；annotated tag 与 GitHub Release 指向同一不可变提交，Release notes 与 Changelog 一致。
+- [ ] ClawHub dry run 返回预期版本、文件数和 fingerprint。
 - [ ] ClawHub 的 slug、版本、标签、来源提交和简短 changelog 已准备；发布后已按版本及 `latest` 分别 inspect。
 
 完整命令见 [ClawHub 发布流程](clawhub-release.md)；细粒度回归由 `validate-all.sh` 自动发现的 `test-*.sh` 维护。
