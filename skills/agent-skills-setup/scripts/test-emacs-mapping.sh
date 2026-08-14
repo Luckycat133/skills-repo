@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MIGRATION_SCRIPT="$SCRIPT_DIR/smart-ide-migration.sh"
 
 for object in global project project-skills rules mcp project-mcp project-config config; do
-    if bash "$MIGRATION_SCRIPT" --print-path emacs "$object" >/dev/null 2>&1; then
+    if bash "$MIGRATION_SCRIPT" legacy --print-path emacs "$object" >/dev/null 2>&1; then
         echo "FAIL: emacs/$object must be unsupported/manual" >&2
         exit 1
     fi
@@ -16,7 +16,7 @@ done
 TMP_ROOT="$(mktemp -d /tmp/emacs-mapping-test.XXXXXX)"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 
-if ! output=$(bash "$MIGRATION_SCRIPT" \
+if ! output=$(bash "$MIGRATION_SCRIPT" legacy \
     --source codex --target emacs --workspace "$TMP_ROOT" \
     --objects skills,rules,mcp,config,project --dry-run 2>&1); then
     echo "FAIL: Emacs dry-run boundary exited non-zero" >&2

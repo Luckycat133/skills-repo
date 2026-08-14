@@ -64,7 +64,7 @@ while IFS=$'\t' read -r ide jsonkey scriptobj expected; do
     [[ -z "$ide" ]] && continue
     checks=$((checks + 1))
 
-    actual="$(bash "$MIGRATION_SCRIPT" --print-path "$ide" "$scriptobj" 2>/dev/null)"
+    actual="$(bash "$MIGRATION_SCRIPT" legacy --print-path "$ide" "$scriptobj" 2>/dev/null)"
     rc=$?
 
     if [[ -z "$expected" ]]; then
@@ -106,7 +106,7 @@ else
     failures=$((failures + 1))
 fi
 
-COPILOT_PROJECT_SKILLS="$(bash "$MIGRATION_SCRIPT" --print-path copilot project-skills 2>/dev/null)"
+COPILOT_PROJECT_SKILLS="$(bash "$MIGRATION_SCRIPT" legacy --print-path copilot project-skills 2>/dev/null)"
 checks=$((checks + 1))
 if [[ "$COPILOT_PROJECT_SKILLS" == ".github/skills" ]]; then
     echo "PASS: copilot/project_skills -> ${COPILOT_PROJECT_SKILLS}"
@@ -117,7 +117,7 @@ else
     failures=$((failures + 1))
 fi
 
-WINDSURF_GLOBAL_SKILLS="$(bash "$MIGRATION_SCRIPT" --print-path windsurf global 2>/dev/null)"
+WINDSURF_GLOBAL_SKILLS="$(bash "$MIGRATION_SCRIPT" legacy --print-path windsurf global 2>/dev/null)"
 checks=$((checks + 1))
 if [[ "$WINDSURF_GLOBAL_SKILLS" == "~/.codeium/windsurf/skills" ]]; then
     echo "PASS: windsurf/global -> ${WINDSURF_GLOBAL_SKILLS}"
@@ -126,7 +126,7 @@ else
     failures=$((failures + 1))
 fi
 
-WINDSURF_PROJECT_SKILLS="$(bash "$MIGRATION_SCRIPT" --print-path windsurf project-skills 2>/dev/null)"
+WINDSURF_PROJECT_SKILLS="$(bash "$MIGRATION_SCRIPT" legacy --print-path windsurf project-skills 2>/dev/null)"
 checks=$((checks + 1))
 if [[ "$WINDSURF_PROJECT_SKILLS" == ".windsurf/skills" ]]; then
     echo "PASS: windsurf/project-skills -> ${WINDSURF_PROJECT_SKILLS}"
@@ -135,7 +135,7 @@ else
     failures=$((failures + 1))
 fi
 
-COPILOT_HELP="$(bash "$MIGRATION_SCRIPT" --help 2>/dev/null)"
+COPILOT_HELP="$(bash "$MIGRATION_SCRIPT" legacy --help 2>/dev/null)"
 checks=$((checks + 1))
 if grep -Fq "copilot is GitHub Copilot CLI" <<< "$COPILOT_HELP" && ! grep -Fq "copilot is VS Code Copilot" <<< "$COPILOT_HELP"; then
     echo "PASS: copilot help identifies the CLI target"
@@ -148,7 +148,7 @@ COPILOT_PROMPT_WORKSPACE="$(mktemp -d /tmp/copilot-prompt-scope.XXXXXX)"
 trap 'rm -rf "$COPILOT_PROMPT_WORKSPACE"' EXIT
 mkdir -p "$COPILOT_PROMPT_WORKSPACE/.github/prompts"
 printf '%s\n' '---' 'description: test prompt' '---' > "$COPILOT_PROMPT_WORKSPACE/.github/prompts/test.prompt.md"
-COPILOT_PROMPT_OUTPUT="$(bash "$MIGRATION_SCRIPT" --source copilot --target cursor --workspace "$COPILOT_PROMPT_WORKSPACE" --objects prompts --dry-run 2>&1)"
+COPILOT_PROMPT_OUTPUT="$(bash "$MIGRATION_SCRIPT" legacy --source copilot --target cursor --workspace "$COPILOT_PROMPT_WORKSPACE" --objects prompts --dry-run 2>&1)"
 checks=$((checks + 1))
 if grep -Fq "source IDE does not support prompt templates" <<< "$COPILOT_PROMPT_OUTPUT"; then
     echo "PASS: copilot CLI prompt migration is unsupported"
@@ -159,7 +159,7 @@ fi
 
 for cody_object in global project project-skills rules mcp project-mcp project-config config; do
     checks=$((checks + 1))
-    if bash "$MIGRATION_SCRIPT" --print-path cody "$cody_object" >/dev/null 2>&1; then
+    if bash "$MIGRATION_SCRIPT" legacy --print-path cody "$cody_object" >/dev/null 2>&1; then
         echo "FAIL: cody/${cody_object} must remain unsupported/empty"
         failures=$((failures + 1))
     else
@@ -169,7 +169,7 @@ done
 
 for supermaven_object in global project project-skills rules mcp project-mcp project-config config; do
     checks=$((checks + 1))
-    if bash "$MIGRATION_SCRIPT" --print-path supermaven "$supermaven_object" >/dev/null 2>&1; then
+    if bash "$MIGRATION_SCRIPT" legacy --print-path supermaven "$supermaven_object" >/dev/null 2>&1; then
         echo "FAIL: supermaven/${supermaven_object} must remain unsupported/empty"
         failures=$((failures + 1))
     else
@@ -177,7 +177,7 @@ for supermaven_object in global project project-skills rules mcp project-mcp pro
     fi
 done
 
-GEMINI_GLOBAL_SKILLS="$(bash "$MIGRATION_SCRIPT" --print-path gemini-cli global 2>/dev/null)"
+GEMINI_GLOBAL_SKILLS="$(bash "$MIGRATION_SCRIPT" legacy --print-path gemini-cli global 2>/dev/null)"
 checks=$((checks + 1))
 if [[ "$GEMINI_GLOBAL_SKILLS" == "~/.gemini/skills" ]]; then
     echo "PASS: gemini-cli/global -> ${GEMINI_GLOBAL_SKILLS}"
@@ -186,7 +186,7 @@ else
     failures=$((failures + 1))
 fi
 
-GEMINI_PROJECT_SKILLS="$(bash "$MIGRATION_SCRIPT" --print-path gemini-cli project-skills 2>/dev/null)"
+GEMINI_PROJECT_SKILLS="$(bash "$MIGRATION_SCRIPT" legacy --print-path gemini-cli project-skills 2>/dev/null)"
 checks=$((checks + 1))
 if [[ "$GEMINI_PROJECT_SKILLS" == ".gemini/skills" ]]; then
     echo "PASS: gemini-cli/project-skills -> ${GEMINI_PROJECT_SKILLS}"
@@ -197,7 +197,7 @@ fi
 
 for gemini_object in mcp project-mcp project-config config; do
     checks=$((checks + 1))
-    actual="$(bash "$MIGRATION_SCRIPT" --print-path gemini-cli "$gemini_object" 2>/dev/null || true)"
+    actual="$(bash "$MIGRATION_SCRIPT" legacy --print-path gemini-cli "$gemini_object" 2>/dev/null || true)"
     case "$gemini_object" in
         mcp|config) expected="~/.gemini/settings.json" ;;
         project-mcp|project-config) expected=".gemini/settings.json" ;;

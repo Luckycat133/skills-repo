@@ -92,6 +92,11 @@ def create_parser() -> argparse.ArgumentParser:
     rollback.add_argument("--manifest", type=Path, required=True)
     rollback.add_argument("--yes", action="store_true")
     rollback.add_argument("--json", action="store_true")
+
+    legacy = subparsers.add_parser(
+        "legacy", help="run the explicit lookup and zero-write compatibility interface"
+    )
+    legacy.add_argument("legacy_args", nargs=argparse.REMAINDER)
     return parser
 
 
@@ -106,12 +111,22 @@ def selector(product: str | None, profile: str | None) -> str | None:
 def reject_legacy_write(argv: list[str]) -> None:
     if "--yes" not in argv and "-y" not in argv:
         return
-    if "--dry-run" in argv:
-        return
     raise ValueError(
         "legacy writes are disabled; create a saved plan with 'plan --output', "
         "then apply that exact plan file"
     )
+
+
+def run_legacy_cli(argv: list[str]) -> int:
+    reject_legacy_write(argv)
+    environment = dict(os.environ)
+    environment["AGENT_SKILLS_SETUP_INTERNAL_LEGACY"] = "1"
+    completed = subprocess.run(
+        ["bash", str(LEGACY_SCRIPT), *argv],
+        check=False,
+        env=environment,
+    )
+    return completed.returncode
 
 
 def run_new_cli(argv: list[str]) -> int:
@@ -210,20 +225,19 @@ def main() -> int:
     if not argv:
         create_parser().print_help()
         return 0
-    if argv[0] not in KNOWN_COMMANDS and argv[0].startswith("-"):
+    if argv[0] == "legacy":
         try:
-            reject_legacy_write(argv)
+            return run_legacy_cli(argv[1:])
         except (OSError, ValueError, json.JSONDecodeError) as error:
             print(f"ERROR: {error}", file=sys.stderr)
             return 1
-        environment = dict(os.environ)
-        environment["AGENT_SKILLS_SETUP_INTERNAL_LEGACY"] = "1"
-        completed = subprocess.run(
-            ["bash", str(LEGACY_SCRIPT), *argv],
-            check=False,
-            env=environment,
+    if argv[0].startswith("-"):
+        print(
+            "ERROR: implicit legacy flags are disabled; use the explicit "
+            "'legacy' subcommand for lookup or zero-write dry-run compatibility",
+            file=sys.stderr,
         )
-        return completed.returncode
+        return 2
     if argv[0] not in KNOWN_COMMANDS:
         print(f"ERROR: unknown command: {argv[0]}", file=sys.stderr)
         return 2

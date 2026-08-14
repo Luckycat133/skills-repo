@@ -13,7 +13,7 @@ assert_path() {
     local object="$1"
     local expected="$2"
     local actual
-    actual="$(HOME="$TMP_ROOT/home" bash "$MIGRATION_SCRIPT" --print-path jetbrains "$object")"
+    actual="$(HOME="$TMP_ROOT/home" bash "$MIGRATION_SCRIPT" legacy --print-path jetbrains "$object")"
     [[ "$actual" == "$expected" ]] || {
         echo "FAIL: jetbrains/${object}: expected ${expected}, got ${actual}" >&2
         exit 1
@@ -22,7 +22,7 @@ assert_path() {
 
 assert_unsupported() {
     local object="$1"
-    if HOME="$TMP_ROOT/home" bash "$MIGRATION_SCRIPT" --print-path jetbrains "$object" >/dev/null 2>&1; then
+    if HOME="$TMP_ROOT/home" bash "$MIGRATION_SCRIPT" legacy --print-path jetbrains "$object" >/dev/null 2>&1; then
         echo "FAIL: jetbrains/${object} unexpectedly has a portable path" >&2
         exit 1
     fi

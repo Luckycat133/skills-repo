@@ -10,14 +10,14 @@ SKILL_FILE="${SCRIPT_DIR}/../SKILL.md"
 
 case "$(uname -s)" in
     Darwin|MINGW*|MSYS*|CYGWIN*)
-        actual="$(bash "$MIGRATION_SCRIPT" --print-path claude-desktop mcp 2>/dev/null)"
+        actual="$(bash "$MIGRATION_SCRIPT" legacy --print-path claude-desktop mcp 2>/dev/null)"
         [[ -n "$actual" && "$actual" == *claude_desktop_config.json ]] || {
             echo "FAIL: Claude Desktop documented platform path was not resolved: ${actual}" >&2
             exit 1
         }
         ;;
     *)
-        if actual="$(bash "$MIGRATION_SCRIPT" --print-path claude-desktop mcp 2>/dev/null)"; then
+        if actual="$(bash "$MIGRATION_SCRIPT" legacy --print-path claude-desktop mcp 2>/dev/null)"; then
             echo "FAIL: Claude Desktop unexpectedly exposed an unconfirmed platform path: ${actual}" >&2
             exit 1
         fi
@@ -73,10 +73,10 @@ TMP_ROOT="$(mktemp -d /tmp/claude-desktop-mapping-test.XXXXXX)"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 mkdir -p "$TMP_ROOT/home" "$TMP_ROOT/workspace"
 
-target_output="$(HOME="$TMP_ROOT/home" bash "$MIGRATION_SCRIPT" \
+target_output="$(HOME="$TMP_ROOT/home" bash "$MIGRATION_SCRIPT" legacy \
     --source claude --target claude-desktop --workspace "$TMP_ROOT/workspace" \
     --objects mcp --dry-run 2>&1)"
-source_output="$(HOME="$TMP_ROOT/home" bash "$MIGRATION_SCRIPT" \
+source_output="$(HOME="$TMP_ROOT/home" bash "$MIGRATION_SCRIPT" legacy \
     --source claude-desktop --target cursor --workspace "$TMP_ROOT/workspace" \
     --objects mcp --dry-run 2>&1)"
 case "$(uname -s)" in
@@ -94,7 +94,7 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
     DESKTOP_CONFIG="$TMP_ROOT/home/Library/Application Support/Claude/claude_desktop_config.json"
     mkdir -p "$(dirname "$DESKTOP_CONFIG")"
     printf '%s\n' '{"mcpServers":{"desktop-local":{"command":"node","args":["server.js"],"env":{"API_KEY":"__desktop_inert_fixture__"}}}}' > "$DESKTOP_CONFIG"
-    if HOME="$TMP_ROOT/home" bash "$MIGRATION_SCRIPT" \
+    if HOME="$TMP_ROOT/home" bash "$MIGRATION_SCRIPT" legacy \
         --source claude-desktop --target cursor --workspace "$TMP_ROOT/workspace" \
         --objects mcp --yes --strategy overwrite \
         >"$TMP_ROOT/canonical.out" 2>"$TMP_ROOT/canonical.err"; then

@@ -4,6 +4,16 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-08-14
+
+### Changed
+
+- Require the explicit `legacy` subcommand for compatibility lookup and zero-write dry-runs; reject implicit flag-based fallback into the legacy shell engine.
+
+### Security
+
+- Tighten activation to named source/target products and specific object types, disclose local environment, shell, Python, read/write, backup, verification, rollback, and secret-handling capabilities, and treat generic migration requests as plan-only until separate user approval for apply or rollback.
+
 ## [0.8.1] - 2026-08-13
 
 ### Added

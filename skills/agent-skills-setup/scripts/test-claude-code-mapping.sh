@@ -13,7 +13,7 @@ check_path() {
     local object="$1"
     local expected="$2"
     local actual
-    if ! actual="$(bash "$MIGRATION_SCRIPT" --print-path claude "$object")"; then
+    if ! actual="$(bash "$MIGRATION_SCRIPT" legacy --print-path claude "$object")"; then
         actual=""
     fi
 
@@ -80,7 +80,7 @@ mkdir -p "$FIXTURE_HOME/.cursor" "$FIXTURE_HOME/Library/Application Support/Curs
 printf '%s\n' '{"mcpServers":{"fixture":{"command":"echo"}}}' > "$FIXTURE_HOME/.cursor/mcp.json"
 printf '%s\n' '{"editor.fontSize":14}' > "$FIXTURE_HOME/Library/Application Support/Cursor/User/settings.json"
 
-MCP_SCOPE_OUTPUT="$(HOME="$FIXTURE_HOME" bash "$MIGRATION_SCRIPT" --source cursor --target claude --workspace "$FIXTURE_WORKSPACE" --objects mcp --dry-run 2>&1)"
+MCP_SCOPE_OUTPUT="$(HOME="$FIXTURE_HOME" bash "$MIGRATION_SCRIPT" legacy --source cursor --target claude --workspace "$FIXTURE_WORKSPACE" --objects mcp --dry-run 2>&1)"
 if grep -Fq 'selected global/user scope' <<< "$MCP_SCOPE_OUTPUT" && grep -Fq 'project .mcp.json' <<< "$MCP_SCOPE_OUTPUT"; then
     echo "PASS: Claude MCP fixture preserves project and local scopes for manual review"
 else
@@ -88,7 +88,7 @@ else
     failures=$((failures + 1))
 fi
 
-CONFIG_SCOPE_OUTPUT="$(HOME="$FIXTURE_HOME" bash "$MIGRATION_SCRIPT" --source cursor --target claude --workspace "$FIXTURE_WORKSPACE" --objects config --dry-run 2>&1)"
+CONFIG_SCOPE_OUTPUT="$(HOME="$FIXTURE_HOME" bash "$MIGRATION_SCRIPT" legacy --source cursor --target claude --workspace "$FIXTURE_WORKSPACE" --objects config --dry-run 2>&1)"
 if grep -Fq 'automatic whole-IDE config migration is unsupported' <<< "$CONFIG_SCOPE_OUTPUT"; then
     echo "PASS: Claude settings fixture preserves project/local scopes for manual review"
 else

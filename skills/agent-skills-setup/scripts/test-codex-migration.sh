@@ -19,7 +19,7 @@ assert_path() {
     local expected="$2"
     local actual
 
-    actual="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" --print-path codex "$object")"
+    actual="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" legacy --print-path codex "$object")"
     [[ "$actual" == "$expected" ]] || {
         echo "FAIL: codex/${object} expected '${expected}', got '${actual}'" >&2
         exit 1
@@ -41,7 +41,7 @@ printf '%s\n' \
     '  }' \
     '}' > "$SOURCE_MCP"
 
-if HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+if HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" legacy \
     --source claude \
     --target codex \
     --objects mcp \
@@ -66,7 +66,7 @@ printf '%s\n' \
     '[hooks]' \
     'enabled = true' > "$SOURCE_CONFIG"
 
-if HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" \
+if HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" legacy \
     --source codex \
     --target openclaw \
     --objects config \
