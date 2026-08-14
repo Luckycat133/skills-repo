@@ -32,7 +32,7 @@ if "permissions" in frontmatter:
     raise SystemExit("FAIL: non-standard permissions metadata must not be declared")
 
 version = re.search(r'(?m)^  version:\s*"([^"]+)"\s*$', frontmatter)
-if version is None or version.group(1) != "0.8.1":
+if version is None or version.group(1) != "0.8.2":
     raise SystemExit("FAIL: metadata.version must be the quoted release version")
 
 compatibility = re.search(r"(?m)^compatibility:\s*(.*)$", frontmatter)
@@ -46,8 +46,18 @@ description = re.search(r"(?ms)^description:\s*>\s*\n(.*?)(?=\n\S|\Z)", frontmat
 if description is None:
     raise SystemExit("FAIL: description is missing")
 description_text = " ".join(line.strip() for line in description.group(1).splitlines())
-if "two named supported IDEs or agent products" not in description_text:
+if "two supported IDEs or agent products" not in description_text:
     raise SystemExit("FAIL: description must require two named supported products")
+for capability in (
+    "specific skills",
+    "bundled Bash/Python",
+    "approved apply or rollback",
+    "write targets",
+    "backups/manifests",
+    "scan or redact secrets",
+):
+    if capability not in description_text:
+        raise SystemExit(f"FAIL: description omits capability: {capability}")
 for generic in ("copy", "sync"):
     if re.search(rf"\b{re.escape(generic)}\b", description_text, re.IGNORECASE):
         raise SystemExit(f"FAIL: generic trigger word is too broad: {generic}")

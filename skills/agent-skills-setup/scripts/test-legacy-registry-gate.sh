@@ -21,8 +21,23 @@ printf '%s\n' '---' 'name: project-demo' 'description: Gate fixture.' '---' '# D
 printf '%s\n' '{"mcpServers":{"demo":{"command":"demo"}}}' \
     > "$WORKSPACE/.cursor/mcp.json"
 
+if HOME="$TEST_HOME" bash "$CLI" --print-path cline mcp \
+    > "$TMP_ROOT/implicit.out" 2>"$TMP_ROOT/implicit.err"; then
+    echo "FAIL: implicit legacy flags were accepted" >&2
+    exit 1
+fi
+grep -Fq "implicit legacy flags are disabled" "$TMP_ROOT/implicit.err"
+
+if HOME="$TEST_HOME" bash "$CLI" legacy \
+    --source cline --target windsurf --objects skills --dry-run --yes \
+    > "$TMP_ROOT/mixed.out" 2>"$TMP_ROOT/mixed.err"; then
+    echo "FAIL: legacy --yes was accepted when combined with --dry-run" >&2
+    exit 1
+fi
+grep -Fq 'legacy writes are disabled' "$TMP_ROOT/mixed.err"
+
 if HOME="$TEST_HOME" bash "$CLI" \
-    --source cline --target windsurf --objects skills --yes --strategy overwrite \
+    legacy --source cline --target windsurf --objects skills --yes --strategy overwrite \
     > "$TMP_ROOT/skills.out" 2>"$TMP_ROOT/skills.err"; then
     echo "FAIL: public legacy write reached the compatibility engine" >&2
     exit 1
@@ -33,7 +48,7 @@ grep -Fq 'legacy writes are disabled' "$TMP_ROOT/skills.err"
 mkdir -p "$WORKSPACE/.cline/rules"
 printf '%s\n' '# reviewed project rule' > "$WORKSPACE/.cline/rules/reviewed.md"
 HOME="$TEST_HOME" bash "$CLI" \
-    --source cline --target windsurf --workspace "$WORKSPACE" \
+    legacy --source cline --target windsurf --workspace "$WORKSPACE" \
     --objects rules --strategy overwrite --dry-run >"$TMP_ROOT/rules.log"
 grep -Fq 'Windsurf rules use scoped files' "$TMP_ROOT/rules.log"
 [[ ! -e "$WORKSPACE/.windsurf/rules/reviewed.md" ]]
@@ -42,7 +57,7 @@ mkdir -p "$WORKSPACE/.cline"
 printf '%s\n' '{"mcpServers":{"demo":{"command":"demo"}}}' \
     > "$WORKSPACE/.cline/mcp.json"
 if HOME="$TEST_HOME" bash "$CLI" \
-    --source cline --target windsurf --workspace "$WORKSPACE" \
+    legacy --source cline --target windsurf --workspace "$WORKSPACE" \
     --objects project-mcp --scope project --strategy overwrite --yes \
     >"$TMP_ROOT/project-mcp.out" 2>"$TMP_ROOT/project-mcp.err"; then
     echo "FAIL: project MCP was authorized from unrelated user-scope surfaces" >&2
@@ -52,7 +67,7 @@ grep -Fq 'legacy writes are disabled' "$TMP_ROOT/project-mcp.err"
 
 for target in codely roo-code bolt-new pieces emacs codeium; do
     if HOME="$TEST_HOME" bash "$CLI" \
-        --source cline --target "$target" --workspace "$WORKSPACE" \
+        legacy --source cline --target "$target" --workspace "$WORKSPACE" \
         --objects skills --scope project --yes --strategy overwrite \
         > "$TMP_ROOT/$target.log" 2>&1; then
         echo "FAIL: Registry-restricted legacy target was writable: $target" >&2
@@ -62,7 +77,7 @@ for target in codely roo-code bolt-new pieces emacs codeium; do
 done
 
 if HOME="$TEST_HOME" bash "$CLI" \
-    --source cursor --target codely --workspace "$WORKSPACE" \
+    legacy --source cursor --target codely --workspace "$WORKSPACE" \
     --objects project-mcp --scope project --yes --strategy overwrite \
     > "$TMP_ROOT/codely-mcp.log" 2>&1; then
     echo "FAIL: unverified Codely MCP target bypassed Registry v2" >&2

@@ -45,6 +45,9 @@ profile-aware CLI provides `detect`, `inventory`, `plan`, `apply`, `verify`, and
 with a loss report, and apply accepts only a saved, checksummed plan. It stages
 the full operation, creates exact backups, rolls back all earlier writes on
 failure, and emits a checksummed verification manifest only after success.
+Generic migration requests authorize planning only; `apply` and `rollback`
+require separate explicit approval. Legacy lookup and zero-write dry-runs are
+available only through the explicit `legacy` subcommand.
 Reviewed subsets are labeled `partial`, not
 `full`; remote MCP without a target transport adapter, unsupported
 JSON5/TOML/YAML/XML/Lua formats, and cloud/UI products produce explicit manual

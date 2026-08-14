@@ -330,7 +330,7 @@ usage() {
     cat <<'EOF'
 Scoped IDE-context migration.
 
-Usage: smart-ide-migration.sh --source <ide> --target <ide> [options]
+Usage: smart-ide-migration.sh legacy --source <ide> --target <ide> [options]
 
   --workspace <dir>       Workspace for project-backed objects
   --objects <csv>         skills,rules,prompts,mcp,project-mcp,config,project,
@@ -357,8 +357,9 @@ EOF
 Note: copilot is GitHub Copilot CLI; vscode and visual-studio are IDE targets.
 
 Examples:
-  smart-ide-migration.sh --source cursor --target claude --objects skills,rules --dry-run
-  smart-ide-migration.sh --source cursor --target claude --objects skills,rules --yes --json
+  smart-ide-migration.sh legacy --source cursor --target claude --objects skills,rules --dry-run
+  smart-ide-migration.sh plan --source cursor/ide --target claude/cli --objects skills,instructions --output plan.json --json
+  smart-ide-migration.sh apply plan.json --manifest manifest.json --yes --json
 EOF
 }
 

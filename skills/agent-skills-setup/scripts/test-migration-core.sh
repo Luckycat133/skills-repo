@@ -16,7 +16,7 @@ mkdir -p \
     "$TEST_HOME"
 
 bash "$CLI" > "$TMP_ROOT/help.txt"
-grep -F '{detect,inventory,plan,apply,verify,rollback}' "$TMP_ROOT/help.txt" >/dev/null
+grep -F '{detect,inventory,plan,apply,verify,rollback,legacy}' "$TMP_ROOT/help.txt" >/dev/null
 
 cp "$SKILL_DIR/evals/files/instruction-cline-source.md" \
     "$WORKSPACE/.cline/rules/source.mdc"
@@ -396,7 +396,7 @@ assert plan["items"][0]["status"] == "blocked"
 assert "source-only" in plan["items"][0]["reason"]
 PY
 
-HOME="$TEST_HOME" bash "$CLI" --print-path cline mcp \
+HOME="$TEST_HOME" bash "$CLI" legacy --print-path cline mcp \
     | grep -F '~/.cline/data/settings/cline_mcp_settings.json' >/dev/null
 
 python3 - "$SCRIPT_DIR" "$SKILL_DIR/evals/files" <<'PY'

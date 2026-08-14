@@ -39,5 +39,13 @@ grep -F 'apply that exact file' "$SKILL_FILE" >/dev/null || \
     fail "SKILL.md must require replay of the reviewed plan"
 grep -F -- '--yes' "$SKILL_FILE" >/dev/null || \
     fail "SKILL.md must retain the explicit approval gate"
+grep -F 'generic migration request authorizes planning only' "$SKILL_FILE" >/dev/null || \
+    fail "SKILL.md must make generic migration requests plan-only"
+grep -F 'separate explicit user approval' "$SKILL_FILE" >/dev/null || \
+    fail "SKILL.md must require separate user approval for writes"
+grep -F 'explicit `legacy` subcommand' "$SKILL_FILE" >/dev/null || \
+    fail "SKILL.md must require explicit legacy routing"
+grep -F 'network access is forbidden' "$SKILL_FILE" >/dev/null || \
+    fail "SKILL.md must disclose its no-network capability boundary"
 
 echo "Progressive disclosure test passed"

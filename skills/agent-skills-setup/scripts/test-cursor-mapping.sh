@@ -9,7 +9,7 @@ IDE_REFERENCE="$SCRIPT_DIR/../references/ides/cursor.md"
 
 assert_path() {
     local object="$1" expected="$2" actual
-    actual="$(bash "$MIGRATION_SCRIPT" --print-path cursor "$object" 2>/dev/null || true)"
+    actual="$(bash "$MIGRATION_SCRIPT" legacy --print-path cursor "$object" 2>/dev/null || true)"
     [[ "$actual" == "$expected" ]] || {
         echo "FAIL: cursor/${object}; expected '${expected}', got '${actual}'" >&2
         exit 1
@@ -58,7 +58,7 @@ WORKSPACE="$FIXTURE_ROOT/workspace"
 mkdir -p "$WORKSPACE/.cursor/rules"
 printf '%s\n' '---' 'description: fixture' 'alwaysApply: true' '---' 'Use the fixture.' > "$WORKSPACE/.cursor/rules/fixture.mdc"
 
-OUTPUT="$(bash "$MIGRATION_SCRIPT" --source cursor --target claude \
+OUTPUT="$(bash "$MIGRATION_SCRIPT" legacy --source cursor --target claude \
     --workspace "$WORKSPACE" --objects rules --dry-run 2>&1)"
 grep -Fq 'manual' <<<"$OUTPUT"
 grep -Fq '.cursor/rules' <<<"$OUTPUT"

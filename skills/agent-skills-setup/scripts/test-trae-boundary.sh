@@ -41,7 +41,7 @@ grep -Eq 'trae-agent|trae-cli|trae_agent' "$MIGRATION" \
 mkdir -p "$WORKSPACE/.claude/skills/demo"
 printf '%s\n' '---' 'name: demo' 'description: demo' '---' '# demo' > "$WORKSPACE/.claude/skills/demo/SKILL.md"
 OUTPUT="$(HOME="$WORKSPACE" bash "$MIGRATION" \
-    --source claude --target trae-cli --workspace "$WORKSPACE" \
+    legacy --source claude --target trae-cli --workspace "$WORKSPACE" \
     --objects skills --dry-run 2>&1 || true)"
 if grep -Eq 'manual|unsupported|not +(a |an )(supported|registered)|unknown +target|invalid +target' <<< "$OUTPUT"; then
     pass "trae-cli is rejected as an unknown target (no path invention)"
@@ -50,7 +50,7 @@ else
 fi
 
 OUTPUT2="$(HOME="$WORKSPACE" bash "$MIGRATION" \
-    --source claude --target trae --workspace "$WORKSPACE" \
+    legacy --source claude --target trae --workspace "$WORKSPACE" \
     --print-path trae config 2>/dev/null || true)"
 if [[ -z "$OUTPUT2" ]]; then
     pass "trae|config resolves to empty (no fake global config file path)"

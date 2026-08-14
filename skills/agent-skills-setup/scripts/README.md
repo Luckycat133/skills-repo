@@ -8,12 +8,14 @@ Git HEAD before any write. Apply emits a checksummed manifest with exact
 backups. `--json` reserves stdout for one JSON document and sends diagnostics
 to stderr.
 
-Calls beginning with legacy flags remain available for discovery and dry-run
-compatibility. Every legacy `--yes` write fails before the retained
-compatibility engine runs; use a saved profile-aware plan. The legacy engine is
-internal and rejects ordinary direct execution.
+Legacy discovery and dry-run compatibility require the explicit `legacy`
+subcommand. Calls beginning with implicit legacy flags are rejected. Every
+`legacy --yes` write fails before the retained compatibility engine runs; use a
+saved profile-aware plan. The legacy engine rejects ordinary direct execution.
 
-The Skill declares local file-read, file-write, and shell capabilities only.
+The Skill declares local environment lookup, file-read, file-write, and bundled
+shell/Python capabilities only; generic migration requests authorize planning,
+while apply and rollback require separate explicit user approval.
 MCP targets that are symbolic links fail before conversion. Redaction cleanup
 can remove only the exact target artifacts; copied-skill cleanup must remain
 inside its canonicalized target copy root.
