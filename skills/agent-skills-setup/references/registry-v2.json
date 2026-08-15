@@ -1968,6 +1968,281 @@
     "gptel-mcp-el": {
       "template": "manual-reference",
       "reference": "ides/gptel-mcp-el.md"
+    },
+    "rovodev": {
+      "display_name": "Atlassian Rovo Dev",
+      "category": "agent-client",
+      "lifecycle": "active",
+      "default_profile": "cli",
+      "profiles": {
+        "cli": {
+          "kind": "cli",
+          "version_range": "current as of 2026-08-15",
+          "verified_at": "2026-08-15",
+          "sources": [
+            "https://support.atlassian.com/rovo/docs/use-agent-skills-in-rovo-dev-cli/"
+          ],
+          "migration_policy": "bidirectional-reviewed",
+          "doc_conflicts": [
+            "MCP path documented at ~/.rovodev/mcp.json and ~/.rovodev/mcp_config.json; resolved via config.yml mcpConfigPath probe."
+          ],
+          "surfaces": {
+            "skills": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.rovodev/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              },
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.agents/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".rovodev/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".agents/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              }
+            ],
+            "instructions": [
+              {
+                "scope": "user",
+                "storage": "hierarchy",
+                "path": "~/.rovodev/AGENTS.md",
+                "format": "agents-md",
+                "policy": "semantic-ir-with-loss-report"
+              },
+              {
+                "scope": "project",
+                "storage": "hierarchy",
+                "path": "AGENTS.md",
+                "format": "agents-md",
+                "policy": "semantic-ir-with-loss-report"
+              },
+              {
+                "scope": "project",
+                "storage": "hierarchy",
+                "path": "AGENTS.local.md",
+                "format": "agents-md",
+                "policy": "semantic-ir-with-loss-report"
+              }
+            ],
+            "prompts": [
+              {
+                "scope": "user",
+                "storage": "file",
+                "path": "~/.rovodev/prompts.yml",
+                "format": "yaml:prompts",
+                "policy": "manual-template"
+              },
+              {
+                "scope": "project",
+                "storage": "file",
+                "path": ".rovodev/prompts.yml",
+                "format": "yaml:prompts",
+                "policy": "manual-template"
+              }
+            ],
+            "mcp": [
+              {
+                "scope": "user",
+                "storage": "file",
+                "path": "~/.rovodev/mcp.json",
+                "format": "json:mcpServers",
+                "policy": "profile-version-adapter",
+                "doc_alternative_paths": [
+                  "~/.rovodev/mcp_config.json"
+                ]
+              },
+              {
+                "scope": "project",
+                "storage": "file",
+                "path": ".rovodev/mcp.json",
+                "format": "json:mcpServers",
+                "policy": "profile-version-adapter"
+              }
+            ],
+            "subagents": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.rovodev/subagents",
+                "format": "rovodev-subagent",
+                "policy": "manual-template"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".rovodev/subagents",
+                "format": "rovodev-subagent",
+                "policy": "manual-template"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "ibm-bob": {
+      "display_name": "IBM Bob",
+      "category": "agent-suite",
+      "lifecycle": "active",
+      "default_profile": "ide",
+      "profiles": {
+        "ide": {
+          "kind": "ide-extension",
+          "version_range": "current as of 2026-08-15",
+          "verified_at": "2026-08-15",
+          "sources": [
+            "https://www.ibm.com/docs/en/bob"
+          ],
+          "migration_policy": "bidirectional-reviewed",
+          "mcp_path_note": "IDE global MCP path differs from Shell; see profiles.",
+          "surfaces": {
+            "skills": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.bob/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".bob/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              }
+            ],
+            "instructions": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.bob/rules",
+                "format": "plain-markdown",
+                "policy": "semantic-ir-with-loss-report"
+              },
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.bob/rules-agent",
+                "format": "plain-markdown",
+                "policy": "semantic-ir-with-loss-report"
+              },
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.bob/rules-plan",
+                "format": "plain-markdown",
+                "policy": "semantic-ir-with-loss-report"
+              },
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.bob/rules-ask",
+                "format": "plain-markdown",
+                "policy": "semantic-ir-with-loss-report"
+              },
+              {
+                "scope": "project",
+                "storage": "hierarchy",
+                "path": "AGENTS.md",
+                "format": "agents-md",
+                "policy": "semantic-ir-with-loss-report"
+              }
+            ],
+            "mcp": [
+              {
+                "scope": "user",
+                "storage": "file",
+                "path": "~/.bob/mcp.json",
+                "format": "json:mcpServers",
+                "policy": "profile-version-adapter"
+              },
+              {
+                "scope": "project",
+                "storage": "file",
+                "path": ".bob/mcp.json",
+                "format": "json:mcpServers",
+                "policy": "profile-version-adapter"
+              }
+            ]
+          }
+        },
+        "shell": {
+          "kind": "cli",
+          "version_range": "current as of 2026-08-15",
+          "verified_at": "2026-08-15",
+          "sources": [
+            "https://www.ibm.com/docs/en/bob/shell"
+          ],
+          "migration_policy": "bidirectional-reviewed",
+          "mcp_path_note": "Shell uses ~/.bob/mcp_settings.json (not ~/.bob/mcp.json).",
+          "surfaces": {
+            "skills": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.bob/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".bob/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              }
+            ],
+            "instructions": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.bob/rules",
+                "format": "plain-markdown",
+                "policy": "semantic-ir-with-loss-report"
+              },
+              {
+                "scope": "project",
+                "storage": "hierarchy",
+                "path": "AGENTS.md",
+                "format": "agents-md",
+                "policy": "semantic-ir-with-loss-report"
+              }
+            ],
+            "mcp": [
+              {
+                "scope": "user",
+                "storage": "file",
+                "path": "~/.bob/mcp_settings.json",
+                "format": "json:mcpServers",
+                "policy": "profile-version-adapter"
+              },
+              {
+                "scope": "project",
+                "storage": "file",
+                "path": ".bob/mcp.json",
+                "format": "json:mcpServers",
+                "policy": "profile-version-adapter"
+              }
+            ]
+          }
+        }
+      }
     }
   }
 }
