@@ -132,6 +132,33 @@ def normalize_status(value: Any) -> ItemStatus:
     raise ValueError(f"unknown plan item status: {value!r}")
 
 
+def canonical_relative_path(path: Path, boundary: Path) -> str:
+    """Return a stable, forward-slash relative path string for hashing."""
+    try:
+        relative = path.relative_to(boundary)
+    except ValueError:
+        return str(path)
+    return relative.as_posix().strip("/")
+
+
+def compute_object_id(
+    *,
+    product: str,
+    profile: str,
+    scope: str,
+    canonical_path: str,
+) -> str:
+    """Stable 16-hex-char object identifier.
+
+    Derived from the (resolved) product/profile, the scope, and the
+    canonical source-relative path.  Alias-equivalent inputs therefore
+    produce the same id; collision space is 64 bits.
+    """
+    payload = f"{product}|{profile}|{scope}|{canonical_path}"
+    digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    return digest[:16]
+
+
 @dataclass
 class InstructionIR:
     text: str
@@ -213,8 +240,22 @@ class PlanItem:
     source: SurfacePath | None = None
     target: SurfacePath | None = None
     manual_actions: list[str] = field(default_factory=list)
+    object_id: str = field(default="", repr=False)
     expected_source_state: dict[str, Any] | None = field(default=None, repr=False)
     expected_target_state: dict[str, Any] | None = field(default=None, repr=False)
+
+    def __post_init__(self) -> None:
+        # Compute a stable object_id from the resolved source when not
+        # provided.  Alias-equivalent selectors therefore share an id.
+        if not self.object_id and self.source is not None:
+            self.object_id = compute_object_id(
+                product=self.source.product,
+                profile=self.source.profile,
+                scope=self.source.scope,
+                canonical_path=canonical_relative_path(
+                    self.source.resolved_path, self.source.boundary
+                ),
+            )
 
     @property
     def status_enum(self) -> ItemStatus:
@@ -241,6 +282,7 @@ class PlanItem:
             "source": self.source.to_dict() if self.source else None,
             "target": self.target.to_dict() if self.target else None,
             "manual_actions": self.manual_actions,
+            "object_id": self.object_id,
         }
 
 
@@ -2030,8 +2072,9 @@ def _preview_plan_item(item: PlanItem) -> dict[str, Any] | None:
             if _instruction_target_is_file(target):
                 destination = target.resolved_path
             else:
-                suffix = ".mdc" if target.source_format == "cursor-mdc" else ".md"
-                destination = target.resolved_path / f"migrated-{index + 1}{suffix}"
+                destination = _instruction_target_path(
+                    target, instruction_path, item.object_id
+                )
             existing = (
                 destination.read_text(encoding="utf-8")
                 if destination.is_file()
@@ -2343,6 +2386,41 @@ def _instruction_target_is_file(surface: SurfacePath) -> bool:
     return surface.resolved_path.suffix.lower() in {".md", ".mdc", ".txt"}
 
 
+def _instruction_target_extension(target: SurfacePath) -> str:
+    if target.source_format == "cursor-mdc":
+        return ".mdc"
+    return ".md"
+
+
+def _instruction_target_path(
+    target: SurfacePath,
+    source_path: Path,
+    object_id: str,
+    used_targets: set[Path] | None = None,
+) -> Path:
+    """Pick a stable, collision-aware destination path for a directory-style
+    instruction target.
+
+    Preference order:
+
+    1. Preserve the source basename with the target extension.
+    2. On collision (filesystem or ``used_targets``), append
+       ``-<object_id[:6]>`` before the extension.
+    3. Last resort: ``migrated-<index>.md`` style; collision fallback is
+       only reached when ``object_id`` is empty (e.g. legacy plans
+       without source)."""
+    suffix = _instruction_target_extension(target)
+    used = used_targets or set()
+    if object_id:
+        primary = target.resolved_path / f"{source_path.stem}{suffix}"
+        if primary not in used and not primary.exists():
+            return primary
+        short = object_id[:6]
+        suffix_with_id = f"-{short}{suffix}"
+        return target.resolved_path / f"{source_path.stem}{suffix_with_id}"
+    return target.resolved_path / f"migrated-{source_path.stem}{suffix}"
+
+
 def _manifest_entry(
     item: PlanItem,
     item_id: str,
@@ -2579,6 +2657,7 @@ def apply_plan(
         raise ValueError(f"manifest path already exists: {manifest_path}")
     changes: list[dict[str, Any]] = []
     operations: list[dict[str, Any]] = []
+    used_targets: set[Path] = set()
     with tempfile.TemporaryDirectory(prefix="agent-context-migration-stage.") as stage_name:
         stage_root = Path(stage_name)
         for item in eligible_items:
@@ -2644,12 +2723,21 @@ def apply_plan(
                     if _instruction_target_is_file(target):
                         destination = target.resolved_path
                     else:
-                        suffix = (
-                            ".mdc" if target.source_format == "cursor-mdc" else ".md"
+                        file_object_id = compute_object_id(
+                            product=item.source.product,
+                            profile=item.source.profile,
+                            scope=item.source.scope,
+                            canonical_path=canonical_relative_path(
+                                instruction_path, item.source.boundary
+                            ),
                         )
-                        destination = (
-                            target.resolved_path / f"migrated-{index + 1}{suffix}"
+                        destination = _instruction_target_path(
+                            target,
+                            instruction_path,
+                            file_object_id,
+                            used_targets,
                         )
+                    used_targets.add(destination)
                     staged = stage_root / f"{len(operations):04d}-instruction"
                     atomic_write(staged, rendered)
                     operations.append(
