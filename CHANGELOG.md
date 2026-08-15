@@ -4,6 +4,32 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ## [Unreleased]
 
+## [0.8.3] - 2026-08-15
+
+### Added
+
+- Added the `migrate` subcommand that orchestrates `detect → inventory → plan → apply → verify` in a single invocation, defaulting to `--apply-safe --scope user,project` and writing plan/manifest/verify artifacts under `<workspace>/.migration/`.
+- Added the Agent Context Bundle (`.acb`) format with `snapshot`, `bundle-verify`, `restore`, and `doctor` subcommands. Bundles carry `manifest.json`, `inventory.json`, `compatibility.json`, `requirements.json`, `secrets.required.json`, `reauth.json`, `rebuild.json`, `checksums.json`, and `objects/`; `write_bundle` refuses to emit literal credentials (`ACBSecretLeak`).
+- Added a deterministic detection probe framework with seven installation states (`installed`, `configured-only`, `compatibility-only`, `cloud-connected`, `legacy`, `ambiguous`, `not-detected`); per-product wiring from Registry v2 lands in a follow-up release.
+- Added PromptIR / CommandIR / AgentIR / HookIR dataclasses and extended `MCPServerIR` with `cwd`, timeout variants, enabled flag, tool allow/deny lists, OAuth/auth, mTLS, server-instructions trust, target schema version, and package requirements. Full adapter emitters land in a follow-up release.
+- Added Rovo Dev and IBM Bob profiles; the Rovo MCP conflict (`mcp.json` vs `mcp_config.json`) is recorded via `doc_alternative_paths` and IBM Bob's IDE-vs-Shell MCP-path divergence is recorded via `mcp_path_note`.
+- Added ten new curated freshness checks (Cursor rules, Claude Code skills, Copilot CLI, VS Code agent skills, Gemini CLI skills, Kiro steering, Rovo Dev CLI skills, IBM Bob docs, Warp Drive prompts, Windsurf rules). Total curated checks: 18.
+
+### Changed
+
+- Made `Registry.profile()` follow the `alias_of` chain iteratively with a 16-hop depth bound and explicit cycle detection. `vscode`, `visual-studio`, `claude-desktop`, `trae-cn`, `jetbrains-ai`, `codeium`, and `trae-work` now resolve to their canonical product/profile at runtime; `Registry.profile_raw()` preserves the legacy behavior for callers and tests that need it. Added `Registry.resolve_selector()` for callers that want the full `ResolvedSelector` trace without resolving profile data.
+- Replaced the apply plan's all-or-nothing non-ready rejection with a seven-status dispatch (`ready`, `ready-lossy`, `draft-disabled`, `manual-rebuild`, `forbidden`, `conflict`, `invalid`). Conflict and invalid items now block only their own `target_group`; other groups proceed. New apply flags: `--apply-safe` (default), `--no-apply-safe`, `--include lossy`, `--accept-loss <ids>`, `--strict`.
+- Made `PlanItem` carry a stable `object_id = sha256(product|profile|scope|canonical_relative_path)[:16]` so repeated builds, alias-equivalent selectors, and same-source re-runs produce identical identifiers. Directory-style instruction targets now use basename-first naming with a short `object_id` suffix on collision; the legacy `migrated-N.md` form remains only as a last-resort fallback.
+- Broadened the Skill trigger description to match natural-language intents that name only a source and target (e.g. `把 Skill 迁到 X`). A phrase containing an action verb such as `apply` / `restore` / `迁移到` / `直接应用` is treated as combined authorization for `ready` and `draft-disabled` items under `--apply-safe`; enabling or executing Hooks, writing literal secrets, OAuth re-auth, trust grants, unresolved destructive overwrites, and enterprise or cloud policy changes still require per-item confirmation.
+- Upgraded the `cursor/ide` and `claude/code-cli` profiles from `manual-reference` to `bidirectional-reviewed` with concrete skills / instructions / mcp surfaces at user and project scopes.
+- Extended `scope_matches` to accept comma-separated scopes (`user,project`) so the migrate default scope resolves both user and project surfaces.
+- Extended the apply plan staging loops to skip items with `source` or `target` None, so plans that record forbidden or invalid items alongside ready items still satisfy the source/target state checks.
+
+### Security
+
+- Kept every existing safety invariant: source digest lock, Registry digest lock, Git HEAD lock, atomic staging, full-batch rollback, exact backups, symlink rejection, and literal-credential redaction. The PR1 dispatch refactor only routes items to the staging loop that survive those invariants.
+- Made `ACBSecretLeak` reject literal credential-looking strings anywhere in a bundle payload except the `secrets.required.json` name entries, so a snapshot can never leak an OAuth token or API key into a portable bundle.
+
 ## [0.8.2] - 2026-08-14
 
 ### Changed
