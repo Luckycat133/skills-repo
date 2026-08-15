@@ -77,6 +77,51 @@ def create_parser() -> argparse.ArgumentParser:
     )
     plan.add_argument("--output", type=Path)
 
+    migrate = subparsers.add_parser(
+        "migrate",
+        help="One-sentence migration: detect → inventory → plan → apply → verify.",
+    )
+    common_workspace(migrate)
+    migrate.add_argument("--source", required=True, help="<product>/<profile>")
+    migrate.add_argument("--target", required=True, help="<product>/<profile>")
+    migrate.add_argument(
+        "--objects",
+        default="all-portable",
+        help=(
+            "Comma-separated object list, 'all-portable' (default), or "
+            "'all-inventory' (also records forbidden/generated items)."
+        ),
+    )
+    migrate.add_argument(
+        "--scope",
+        default="user,project",
+        help="user, project, user+project, all (all requires --yes)",
+    )
+    migrate.add_argument(
+        "--plan-only", action="store_true", help="Stop after planning."
+    )
+    migrate.add_argument("--plan-out", type=Path)
+    migrate.add_argument("--manifest-out", type=Path)
+    migrate.add_argument("--verify-out", type=Path)
+    migrate.add_argument("--yes", action="store_true")
+    migrate.add_argument(
+        "--include",
+        dest="include_lossy",
+        choices=("lossy",),
+        help="Also apply ready-lossy items.",
+    )
+    migrate.add_argument(
+        "--accept-loss",
+        dest="accept_loss",
+        default="",
+        help="Comma-separated plan indices to apply as lossy.",
+    )
+    migrate.add_argument(
+        "--strict",
+        action="store_true",
+        help="Reject plans containing any non-ready item.",
+    )
+
     apply = subparsers.add_parser("apply")
     apply.add_argument("plan", type=Path)
     apply.add_argument("--registry", type=Path, default=REGISTRY_PATH)
@@ -147,6 +192,179 @@ def reject_legacy_write(argv: list[str]) -> None:
     )
 
 
+AUTOMATIC_OBJECT_TYPES = {"skills", "instructions", "mcp"}
+INVENTORY_ONLY_OBJECT_TYPES = {
+    "prompts",
+    "commands",
+    "workflows",
+    "plugins",
+    "agents",
+    "modes",
+    "personas",
+    "hooks",
+    "cron",
+    "automation",
+    "user_memory",
+    "generated_memory",
+    "cloud_knowledge",
+    "config",
+    "policy",
+    "trust",
+}
+
+
+def resolve_objects(value: str) -> list[str]:
+    """Translate --objects shorthand into an explicit object list."""
+    tokens = [token.strip() for token in value.split(",") if token.strip()]
+    if not tokens:
+        return ["skills", "instructions", "mcp"]
+    if tokens == ["all-portable"]:
+        return ["skills", "instructions", "mcp"]
+    if tokens == ["all-inventory"]:
+        return [
+            "skills",
+            "instructions",
+            "mcp",
+            *sorted(INVENTORY_ONLY_OBJECT_TYPES),
+        ]
+    return tokens
+
+
+def default_workspace_migration_dir(workspace: Path) -> Path:
+    return workspace / ".migration"
+
+
+def run_migrate(args: argparse.Namespace) -> int:
+    """Orchestrate detect -> inventory -> plan -> apply -> verify."""
+    workspace = args.workspace.resolve()
+    registry = Registry(args.registry, workspace)
+
+    # 1. detect --installed (informational; does not gate the run).
+    detect_rows = [row for row in registry.inventory(None) if row.get("exists")]
+
+    # 2. Resolve --objects.
+    object_types = resolve_objects(args.objects)
+
+    # Reject unsupported automatic object types unless all-inventory.
+    unsupported = sorted(
+        set(object_types) - AUTOMATIC_OBJECT_TYPES - INVENTORY_ONLY_OBJECT_TYPES
+    )
+    if unsupported:
+        raise ValueError(
+            "unsupported automatic objects: "
+            + ", ".join(unsupported)
+            + "; use --objects 'skills,instructions,mcp' or 'all-portable'"
+        )
+    # Inventory-only types only run as inventory metadata; the planner
+    # already records them as manual-rebuild / forbidden items.
+    auto_object_types = [
+        obj for obj in object_types if obj in AUTOMATIC_OBJECT_TYPES
+    ]
+
+    # 3. scope handling: default user,project; full-disk 'all' requires --yes.
+    scope = args.scope
+    if scope == "all" and not args.yes:
+        raise ValueError("--scope all requires --yes")
+    if scope not in {"user", "project", "user,project", "all"}:
+        raise ValueError(f"unsupported scope: {scope}")
+
+    # 4. plan
+    document = build_plan_document(
+        registry, args.source, args.target, auto_object_types, scope,
+    )
+
+    # 5. save plan
+    plan_out = (
+        args.plan_out.resolve(strict=False)
+        if args.plan_out
+        else default_workspace_migration_dir(workspace) / "migrate-plan.json"
+    )
+    plan_out.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write(
+        plan_out,
+        json.dumps(document, indent=2, sort_keys=True) + "\n",
+    )
+
+    if args.plan_only:
+        emit(
+            {
+                "ok": True,
+                "stage": "plan",
+                "plan": str(plan_out),
+                "plan_sha256": document["plan_sha256"],
+                "detected": detect_rows,
+            },
+            args.json,
+        )
+        return 0
+
+    # 6. apply (re-load the saved plan so the apply path matches the
+    # production flow exactly).
+    plan_items, _ = validate_plan_document(document, registry)
+    accept_loss_ids = {
+        token.strip() for token in args.accept_loss.split(",") if token.strip()
+    }
+    default_manifest_out = (
+        args.manifest_out.resolve(strict=False)
+        if args.manifest_out
+        else default_workspace_migration_dir(workspace) / "migrate-manifest.json"
+    )
+    manifest, manifest_path_out = apply_plan(
+        plan_items,
+        workspace,
+        default_manifest_out,
+        provenance={
+            "plan_path": str(plan_out.resolve()),
+            "plan_sha256": document["plan_sha256"],
+            "registry_sha256": document["registry_sha256"],
+            "adapter_versions": document["adapter_versions"],
+            "git_provenance": document.get("git_provenance"),
+        },
+        apply_safe=True,
+        include_lossy=(args.include_lossy == "lossy"),
+        accept_loss_ids=accept_loss_ids,
+        strict=args.strict,
+    )
+
+    # 7. verify
+    errors = verify_manifest(manifest_path_out)
+    verify_out = (
+        args.verify_out.resolve(strict=False)
+        if args.verify_out
+        else default_workspace_migration_dir(workspace) / "migrate-verify.json"
+    )
+    verify_out.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write(
+        verify_out,
+        json.dumps(
+            {
+                "ok": not errors,
+                "errors": errors,
+                "manifest": str(manifest_path_out),
+                "plan": str(plan_out),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+    )
+
+    emit(
+        {
+            "ok": not errors,
+            "stage": "verify",
+            "plan": str(plan_out),
+            "manifest": str(manifest_path_out),
+            "verify": str(verify_out),
+            "summary": manifest.get("summary", {}),
+            "errors": errors,
+            "detected": detect_rows,
+        },
+        args.json,
+    )
+    return 0 if not errors else 1
+
+
 def run_legacy_cli(argv: list[str]) -> int:
     reject_legacy_write(argv)
     environment = dict(os.environ)
@@ -215,6 +433,13 @@ def run_new_cli(argv: list[str]) -> int:
             args.json,
         )
         return 0
+
+    if args.command == "migrate":
+        if not args.yes:
+            raise ValueError(
+                "migrate requires --yes after specifying source/target/objects"
+            )
+        return run_migrate(args)
 
     registry = Registry(args.registry, args.workspace)
     if args.command in {"detect", "inventory"}:

@@ -42,7 +42,15 @@ SAFE_BEARER_REFERENCE = re.compile(
 )
 FRONTMATTER = re.compile(r"\A---\s*\n(.*?)\n---\s*\n?", re.DOTALL)
 SKILL_NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
-KNOWN_COMMANDS = {"detect", "inventory", "plan", "apply", "verify", "rollback"}
+KNOWN_COMMANDS = {
+    "detect",
+    "inventory",
+    "plan",
+    "apply",
+    "verify",
+    "rollback",
+    "migrate",
+}
 PLAN_SCHEMA_VERSION = 1
 MANIFEST_SCHEMA_VERSION = 2
 ADAPTER_VERSIONS = {
@@ -1321,14 +1329,32 @@ def emit_mcp_document(
 
 
 def scope_matches(surface_scope: str, requested_scope: str) -> bool:
+    """Match a surface's scope against a requested scope expression.
+
+    ``requested_scope`` may be a single scope (``"user"``, ``"project"``,
+    ``"local"``, ``"all"``) or a comma-separated union
+    (``"user,project"``).  The match is the union of the per-scope
+    checks; a surface matches if ANY requested scope matches it.
+    """
     scope_parts = set(surface_scope.split("+"))
     if requested_scope == "all":
         return "runtime" not in scope_parts
-    if requested_scope == "user":
-        return "user" in scope_parts
-    if requested_scope == "project":
-        return bool(scope_parts & {"project", "workspace", "repository"})
-    return requested_scope in scope_parts
+    requested_parts = requested_scope.split(",")
+    for part in requested_parts:
+        part = part.strip()
+        if not part:
+            continue
+        if part == "user" and "user" in scope_parts:
+            return True
+        if part == "project" and bool(
+            scope_parts & {"project", "workspace", "repository"}
+        ):
+            return True
+        if part == "local" and "local" in scope_parts:
+            return True
+        if part in scope_parts:
+            return True
+    return False
 
 
 def choose_surface(
@@ -2348,6 +2374,54 @@ def _manifest_entry(
     return entry
 
 
+def _build_manifest(
+    *,
+    operation_id: str,
+    workspace: Path,
+    provenance: dict[str, Any],
+    changes: list[dict[str, Any]],
+    loss_report: LossReport,
+    items: list[dict[str, Any]],
+    blockers: set[str],
+    apply_safe: bool,
+    include_lossy: bool,
+    strict: bool,
+) -> dict[str, Any]:
+    """Assemble the final manifest document (no I/O)."""
+    summary: dict[str, int] = {}
+    for entry in items:
+        summary[entry["outcome"]] = summary.get(entry["outcome"], 0) + 1
+    manifest = {
+        "schema_version": MANIFEST_SCHEMA_VERSION,
+        "operation_id": operation_id,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "workspace": str(workspace),
+        "provenance": provenance,
+        "changes": changes,
+        "loss_report": loss_report.to_dict(),
+        "items": items,
+        "blockers": [
+            {
+                "target_group": group,
+                "reason": "conflict or invalid item in target group",
+            }
+            for group in sorted(blockers)
+        ],
+        "summary": summary,
+        "apply_safe": apply_safe,
+        "include_lossy": include_lossy,
+        "strict": strict,
+    }
+    manifest["manifest_sha256"] = json_sha256(
+        {
+            key: value
+            for key, value in manifest.items()
+            if key != "manifest_sha256"
+        }
+    )
+    return manifest
+
+
 def apply_plan(
     plan: list[PlanItem],
     workspace: Path,
@@ -2393,6 +2467,7 @@ def apply_plan(
             if group is not None:
                 target_groups_blocked.add(group)
 
+    loss_report = LossReport()
     eligible_items: list[PlanItem] = []
     deferred_items: list[PlanItem] = []
     blocked_items: list[PlanItem] = []
@@ -2453,10 +2528,38 @@ def apply_plan(
         )
 
     if not eligible_items:
-        raise ValueError(
-            "plan contains no eligible items after status dispatch "
-            f"(deferred={len(deferred_items)}, blocked={len(blocked_items)})"
+        # Emit an informational manifest so callers (e.g. the migrate
+        # pipeline) always get a stable artifact path; record every
+        # item as deferred without staging any writes.
+        operation_id = (
+            datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            + f"-{os.getpid()}-{uuid.uuid4().hex[:10]}"
         )
+        workspace_resolved = workspace.resolve()
+        state_root = workspace_resolved / ".agent-context-migration"
+        ensure_no_symlink_components(state_root, workspace_resolved)
+        manifest_path_resolved = (
+            manifest_path.resolve(strict=False)
+            if manifest_path is not None
+            else state_root / "manifests" / f"{operation_id}.json"
+        )
+        manifest = _build_manifest(
+            operation_id=operation_id,
+            workspace=workspace_resolved,
+            provenance=provenance or {},
+            changes=[],
+            loss_report=loss_report,
+            items=manifest_items,
+            blockers=target_groups_blocked,
+            apply_safe=apply_safe,
+            include_lossy=include_lossy,
+            strict=strict,
+        )
+        atomic_write(
+            manifest_path_resolved,
+            json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        )
+        return manifest, manifest_path_resolved
 
     preflight_plan_skill_sources(eligible_items)
     workspace = workspace.resolve()
@@ -2475,7 +2578,6 @@ def apply_plan(
     if manifest_path.exists() or manifest_path.is_symlink():
         raise ValueError(f"manifest path already exists: {manifest_path}")
     changes: list[dict[str, Any]] = []
-    loss_report = LossReport()
     operations: list[dict[str, Any]] = []
     with tempfile.TemporaryDirectory(prefix="agent-context-migration-stage.") as stage_name:
         stage_root = Path(stage_name)
@@ -2598,7 +2700,10 @@ def apply_plan(
                 f"{manifest_path}"
             )
         for item in plan:
-            assert item.source is not None and item.target is not None
+            # Items recorded as deferred/blocked may have source or
+            # target None; only check state for items with surfaces.
+            if item.source is None or item.target is None:
+                continue
             if (
                 item.expected_source_state is not None
                 and path_state(item.source.resolved_path)
@@ -2621,7 +2726,9 @@ def apply_plan(
                 operation["destination"], backup_root, index
             )
         for item in plan:
-            assert item.target is not None
+            # Skip items without a target surface.
+            if item.target is None:
+                continue
             if (
                 item.expected_target_state is not None
                 and path_state(item.target.resolved_path)
@@ -2703,29 +2810,18 @@ def apply_plan(
             for entry in manifest_items:
                 summary[entry["outcome"]] = summary.get(entry["outcome"], 0) + 1
 
-            blockers = [
-                {
-                    "target_group": group,
-                    "reason": "conflict or invalid item in target group",
-                }
-                for group in sorted(target_groups_blocked)
-            ]
-
-            manifest = {
-                "schema_version": MANIFEST_SCHEMA_VERSION,
-                "operation_id": operation_id,
-                "created_at": datetime.now(timezone.utc).isoformat(),
-                "workspace": str(workspace),
-                "provenance": provenance or {},
-                "changes": changes,
-                "loss_report": loss_report.to_dict(),
-                "items": manifest_items,
-                "blockers": blockers,
-                "summary": summary,
-                "apply_safe": apply_safe,
-                "include_lossy": include_lossy,
-                "strict": strict,
-            }
+            manifest = _build_manifest(
+                operation_id=operation_id,
+                workspace=workspace,
+                provenance=provenance or {},
+                changes=changes,
+                loss_report=loss_report,
+                items=manifest_items,
+                blockers=target_groups_blocked,
+                apply_safe=apply_safe,
+                include_lossy=include_lossy,
+                strict=strict,
+            )
             manifest["manifest_sha256"] = json_sha256(
                 {
                     key: value
