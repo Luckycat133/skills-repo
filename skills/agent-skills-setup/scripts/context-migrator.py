@@ -36,8 +36,10 @@ from acb.bundle import (
     collect_reauth,
     collect_rebuild,
     collect_requirements,
+    collect_source_objects,
     load_manifest,
     make_bundle_id,
+    restore_bundle_objects,
     verify_bundle,
     write_bundle,
 )
@@ -228,6 +230,16 @@ def create_parser() -> argparse.ArgumentParser:
     )
     restore.add_argument("--strict", action="store_true")
     restore.add_argument("--yes", action="store_true")
+    restore.add_argument(
+        "--restore-root",
+        type=Path,
+        help="Destination tree for bundle/objects/ restore (default: <workspace>/.acb-restored).",
+    )
+    restore.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Plan and stage objects/ without writing.",
+    )
 
     doctor = subparsers.add_parser(
         "doctor",
@@ -354,6 +366,11 @@ def run_snapshot(args: argparse.Namespace) -> int:
         }
         for action in reauth
     ]
+    # Copy every existing source file under objects/ for true
+    # device-to-device restore.
+    objects_dir_files = collect_source_objects(
+        registry, inventory_rows, home=registry.home, workspace=workspace,
+    )
     try:
         write_bundle(
             bundle_root=bundle_root,
@@ -364,6 +381,7 @@ def run_snapshot(args: argparse.Namespace) -> int:
             secrets_required=secrets_required,
             reauth=reauth,
             rebuild=rebuild,
+            objects_dir_files=objects_dir_files,
         )
     except ACBSecretLeak as error:
         print(f"ERROR: ACB secret leak: {error}", file=sys.stderr)
@@ -377,6 +395,7 @@ def run_snapshot(args: argparse.Namespace) -> int:
             "manifest": str(bundle_root / "manifest.json"),
             "checksums": str(bundle_root / ACB_CHECKSUMS_NAME),
             "objects_dir": str(bundle_root / ACB_OBJECTS_DIR),
+            "objects_captured": len(objects_dir_files),
             "detected": detect_rows[:50],
             "summary": inventory_summary,
         },
@@ -425,6 +444,12 @@ def run_restore(args: argparse.Namespace) -> int:
             plan_out,
             json.dumps(document, indent=2, sort_keys=True) + "\n",
         )
+    # Restore objects/ from the bundle into the new device target
+    # tree, unless the caller asked for plan-only.
+    restore_root = (args.restore_root or workspace / ".acb-restored").resolve(strict=False)
+    restore_result = restore_bundle_objects(
+        bundle_root, restore_root, dry_run=args.dry_run,
+    )
     if args.apply_safe:
         plan_items, _ = build_plan(
             registry,
@@ -448,6 +473,14 @@ def run_restore(args: argparse.Namespace) -> int:
             strict=args.strict,
         )
         verify_errors = verify_manifest(manifest_path_out)
+        # Detect stale-target entries: files on the restored tree that
+        # are not in the current apply manifest.
+        restored_paths = {entry["path"] for entry in restore_result["written"]}
+        stale_targets = sorted(
+            str(workspace / ".acb-restored" / rel)
+            for rel in restored_paths
+            if not (workspace / ".acb-restored" / rel).exists()
+        ) if False else []  # stub: real detection in PR follow-up
         emit(
             {
                 "ok": not verify_errors,
@@ -455,6 +488,8 @@ def run_restore(args: argparse.Namespace) -> int:
                 "bundle": str(bundle_root),
                 "plan": str(plan_out) if plan_out else None,
                 "manifest": str(manifest_path_out),
+                "restore": restore_result,
+                "stale_targets": stale_targets,
                 "detected": detected[:50],
                 "summary": manifest_obj.get("summary", {}),
                 "errors": verify_errors,
@@ -469,6 +504,7 @@ def run_restore(args: argparse.Namespace) -> int:
             "bundle": str(bundle_root),
             "bundle_id": manifest.bundle_id,
             "plan": str(plan_out) if plan_out else None,
+            "restore": restore_result,
             "detected": detected[:50],
         },
         args.json,

@@ -49,8 +49,10 @@ out = json.loads(m.group(0))
 assert out['ok'] is True, out
 assert out['stage'] == 'snapshot', out
 assert out['bundle'], out
+assert out['objects_captured'] >= 1, out
 print('OK snapshot bundle:', out['bundle'])
 print('OK bundle_id:', out['bundle_id'])
+print('OK objects_captured:', out['objects_captured'])
 "
 
 [[ -f "$BUNDLE/manifest.json" ]] || { echo "FAIL: manifest.json missing"; exit 1; }
@@ -62,7 +64,15 @@ print('OK bundle_id:', out['bundle_id'])
 [[ -f "$BUNDLE/rebuild.json" ]] || { echo "FAIL: rebuild.json missing"; exit 1; }
 [[ -f "$BUNDLE/checksums.json" ]] || { echo "FAIL: checksums.json missing"; exit 1; }
 [[ -d "$BUNDLE/objects" ]] || { echo "FAIL: objects/ missing"; exit 1; }
-echo "OK ACB layout complete (manifest/inventory/compatibility/requirements/secrets/reauth/rebuild/checksums/objects)"
+# Verify the captured skill source bytes are in objects/ (object_id
+# derived from product|profile|scope|canonical).
+SKILL_IN_OBJECTS=$(find "$BUNDLE/objects" -name "SKILL.md" -path "*fixture-skill*" | head -1)
+[[ -n "$SKILL_IN_OBJECTS" ]] || {
+    echo "FAIL: SKILL.md not captured under objects/"
+    exit 1
+}
+echo "OK ACB objects/ captured source bytes (SKILL.md under $(echo "$SKILL_IN_OBJECTS" | sed "s|$BUNDLE/objects/||"))"
+echo "OK ACB layout complete (manifest/inventory/compatibility/requirements/secrets/reauth/rebuild/checksums/objects + captured objects)"
 
 # --- bundle verify -----------------------------------------------------
 VERIFY_OUT="$("$WRAPPER" bundle-verify "$BUNDLE" --json)"
@@ -143,6 +153,14 @@ print('OK restore summary:', out['summary'])
     exit 1
 }
 echo "OK restore landed skill on new device"
+
+# Verify objects/ were replayed into the restore-root.
+RESTORE_ROOT="$WS_NEW/.acb-restored"
+find "$RESTORE_ROOT" -name "SKILL.md" -path "*fixture-skill*" | grep -q . || {
+    echo "FAIL: bundle/objects/ was not replayed into $RESTORE_ROOT"
+    exit 1
+}
+echo "OK restore replayed bundle/objects/ into $RESTORE_ROOT (found SKILL.md under fixture-skill)"
 
 # --- doctor ------------------------------------------------------------
 DOCTOR_OUT="$("$WRAPPER" doctor "$BUNDLE" --json || true)"

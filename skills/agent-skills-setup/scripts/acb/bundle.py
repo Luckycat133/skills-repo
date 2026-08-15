@@ -279,6 +279,118 @@ def write_bundle(
     return bundle_root
 
 
+def collect_source_objects(
+    registry: "Any",
+    rows: list[dict[str, Any]],
+    *,
+    home: Path | None = None,
+    workspace: Path | None = None,
+) -> dict[str, bytes]:
+    """Walk existing inventory rows and copy each existing source file
+    into a stable per-object path under ``objects/``.
+
+    Recurses through Skill directories (which are one level deep),
+    copies instructions/MCP single files, and silently skips
+    anything missing or unreadable.
+    """
+    from pathlib import Path as _Path
+    objects: dict[str, bytes] = {}
+    for row in rows:
+        if not row.get("exists"):
+            continue
+        resolved = row.get("resolved_path")
+        if not isinstance(resolved, str):
+            continue
+        source_path = _Path(resolved)
+        if not source_path.exists():
+            continue
+        object_type = row.get("object_type") or "unknown"
+        product = row.get("product") or "unknown"
+        profile = row.get("profile") or "default"
+        scope = row.get("scope") or "unknown"
+        canonical = row.get("canonical_path") or source_path.name
+        relative = _path_for_object(
+            object_type, product, profile, scope, canonical
+        )
+        if source_path.is_file():
+            objects[relative] = source_path.read_bytes()
+        elif source_path.is_dir():
+            # Skill dirs have one level of children; recurse one level.
+            for child in sorted(source_path.iterdir()):
+                if child.is_file():
+                    objects[f"{relative}/{child.name}"] = child.read_bytes()
+                elif child.is_dir():
+                    for grandchild in sorted(child.iterdir()):
+                        if grandchild.is_file():
+                            objects[f"{relative}/{child.name}/{grandchild.name}"] = (
+                                grandchild.read_bytes()
+                            )
+    return objects
+
+
+def _path_for_object(
+    object_type: str, product: str, profile: str, scope: str, canonical: str
+) -> str:
+    """Build a stable relative path under ``objects/`` for a given
+    inventory row."""
+    safe_canonical = canonical.strip("/").replace("~", "home").replace("..", "_")
+    return f"{object_type}/{product}/{profile}/{scope}/{safe_canonical}"
+
+
+def restore_bundle_objects(
+    bundle_root: Path,
+    destination_root: Path,
+    *,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Copy every file recorded in ``bundle/objects/`` into the
+    destination tree.  Returns a manifest describing what was
+    written (or what would be written under ``dry_run``).
+
+    Literal-secret-looking content is refused via
+    :func:`assert_no_lateral_secrets`; any object whose path is
+    outside ``destination_root`` is rejected.
+    """
+    bundle_root = bundle_root.resolve()
+    destination_root = destination_root.resolve()
+    objects_root = bundle_root / ACB_OBJECTS_DIR
+    if not objects_root.is_dir():
+        raise ACBError(f"bundle has no objects/ directory: {bundle_root}")
+    written: list[dict[str, Any]] = []
+    skipped: list[dict[str, str]] = []
+    for source in sorted(objects_root.rglob("*")):
+        if not source.is_file():
+            continue
+        relative = source.relative_to(objects_root).as_posix()
+        target = (destination_root / relative).resolve()
+        if not str(target).startswith(str(destination_root)):
+            skipped.append({"path": relative, "reason": "escapes destination"})
+            continue
+        try:
+            payload = {"path": relative, "content": source.read_text(encoding="utf-8")}
+            assert_no_lateral_secrets(payload)
+        except (ACBSecretLeak, UnicodeDecodeError):
+            skipped.append({"path": relative, "reason": "secret-shaped content"})
+            continue
+        if not dry_run:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(source.read_bytes())
+        written.append(
+            {
+                "path": relative,
+                "sha256": sha256_file(source),
+                "size": source.stat().st_size,
+            }
+        )
+    return {
+        "bundle": str(bundle_root),
+        "destination": str(destination_root),
+        "written": written,
+        "skipped": skipped,
+        "dry_run": dry_run,
+    }
+
+
 def verify_bundle(bundle_root: Path) -> list[str]:
     """Verify every checksum recorded in checksums.json matches on disk."""
     bundle_root = bundle_root.resolve()

@@ -4,6 +4,36 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ## [Unreleased]
 
+## [0.8.4] - 2026-08-15
+
+### Added
+
+- `snapshot` now copies every existing source file into the ACB under
+  `objects/<surface>/<product>/<profile>/<scope>/<canonical-path>` so
+  the bundle survives a real device-to-device handoff. Object paths
+  are stable across re-runs and across alias-equivalent selectors.
+- `restore` replays every recorded `objects/` file into
+  `<workspace>/.acb-restored/` (overridable via `--restore-root`).
+  Literal-secret-looking content is refused via `ACBSecretLeak`; any
+  object whose target escapes the restore root is recorded as
+  `skipped` instead of being written.
+- New `restore --dry-run` flag plans the restore and records what
+  would be written without touching the destination tree.
+
+### Changed
+
+- `collect_source_objects` now recurses one level into Skill
+  directories so per-Skill files land under the canonical path.
+- `ACBManifest.objects` adds an `objects_captured` count to the
+  snapshot response so callers can sanity-check that source bytes
+  were actually written.
+
+### Security
+
+- `restore_bundle_objects` validates every restored file path stays
+  inside the configured destination root, refusing any object whose
+  path would escape via `..` or absolute-path traversal.
+
 ## [0.8.3] - 2026-08-15
 
 ### Added
