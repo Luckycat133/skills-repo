@@ -83,6 +83,36 @@ def create_parser() -> argparse.ArgumentParser:
     apply.add_argument("--manifest", type=Path)
     apply.add_argument("--yes", action="store_true")
     apply.add_argument("--json", action="store_true")
+    apply.add_argument(
+        "--apply-safe",
+        dest="apply_safe",
+        action="store_true",
+        default=True,
+        help="Apply ready and draft-disabled items; manifest the rest (default).",
+    )
+    apply.add_argument(
+        "--no-apply-safe",
+        dest="apply_safe",
+        action="store_false",
+        help="Disable safe apply; require every item to be ready.",
+    )
+    apply.add_argument(
+        "--include",
+        dest="include_lossy",
+        choices=("lossy",),
+        help="Include lossy items alongside ready items.",
+    )
+    apply.add_argument(
+        "--accept-loss",
+        dest="accept_loss",
+        default="",
+        help="Comma-separated plan indices to apply as lossy even without --include lossy.",
+    )
+    apply.add_argument(
+        "--strict",
+        action="store_true",
+        help="Reject any plan containing a non-ready item (legacy semantics).",
+    )
 
     verify = subparsers.add_parser("verify")
     verify.add_argument("--manifest", type=Path, required=True)
@@ -152,6 +182,11 @@ def run_new_cli(argv: list[str]) -> int:
             raise ValueError("plan workspace must be an absolute path")
         registry = Registry(args.registry, Path(workspace_value))
         plan_items, _ = validate_plan_document(document, registry)
+        accept_loss_ids = {
+            token.strip()
+            for token in args.accept_loss.split(",")
+            if token.strip()
+        }
         manifest, manifest_path = apply_plan(
             plan_items,
             registry.workspace,
@@ -163,6 +198,10 @@ def run_new_cli(argv: list[str]) -> int:
                 "adapter_versions": document["adapter_versions"],
                 "git_provenance": document.get("git_provenance"),
             },
+            apply_safe=args.apply_safe,
+            include_lossy=(args.include_lossy == "lossy"),
+            accept_loss_ids=accept_loss_ids,
+            strict=args.strict,
         )
         emit(
             {

@@ -188,7 +188,7 @@ import sys
 from pathlib import Path
 
 plan = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-assert plan["items"][0]["status"] == "blocked"
+assert plan["items"][0]["status"] == "invalid"
 assert "source credential preflight failed" in plan["items"][0]["reason"]
 assert "payload.sh: provider credential pattern" in plan["items"][0]["reason"]
 PY
@@ -375,7 +375,7 @@ import sys
 from pathlib import Path
 
 plan = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-assert plan["items"][0]["status"] == "blocked"
+assert plan["items"][0]["status"] == "invalid"
 assert "symbolic links are not allowed" in plan["items"][0]["reason"]
 PY
 
@@ -392,7 +392,7 @@ import sys
 from pathlib import Path
 
 plan = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-assert plan["items"][0]["status"] == "blocked"
+assert plan["items"][0]["status"] == "invalid"
 assert "source-only" in plan["items"][0]["reason"]
 PY
 
@@ -446,7 +446,7 @@ import sys
 from pathlib import Path
 
 plan = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-assert plan["items"][0]["status"] == "blocked"
+assert plan["items"][0]["status"] == "invalid"
 assert "instruction credential preflight failed" in plan["items"][0]["reason"]
 assert "fixtureliteralvalue12345" not in json.dumps(plan)
 PY
@@ -480,7 +480,7 @@ instruction_rows = [
 assert sum(bool(row["exists"]) for row in instruction_rows) == 2
 assert all(row["alias_conflict"] for row in instruction_rows)
 plan = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
-assert plan["items"][0]["status"] == "manual"
+assert plan["items"][0]["status"] == "manual-rebuild"
 assert "alias conflict" in plan["items"][0]["reason"]
 PY
 

@@ -15,6 +15,7 @@ import tempfile
 import urllib.parse
 import uuid
 from dataclasses import asdict, dataclass, field
+from enum import Enum
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
@@ -68,6 +69,59 @@ AUTOMATIC_SURFACE_POLICIES = {
     "profile-version-adapter",
 }
 SOURCE_AUTOMATIC_SURFACE_POLICIES = AUTOMATIC_SURFACE_POLICIES | {"source-only"}
+
+
+class ItemStatus(str, Enum):
+    """Plan item state driving the partial safe apply flow.
+
+    Values are stable strings so plan documents remain JSON-friendly.
+    The legacy ``"manual"`` and ``"blocked"`` strings are normalized by
+    :func:`normalize_status` to keep older saved plans valid.
+    """
+
+    READY = "ready"
+    READY_LOSSY = "ready-lossy"
+    DRAFT_DISABLED = "draft-disabled"
+    MANUAL_REBUILD = "manual-rebuild"
+    FORBIDDEN = "forbidden"
+    CONFLICT = "conflict"
+    INVALID = "invalid"
+
+
+# Legacy aliases accepted from older plan documents.
+_LEGACY_STATUS_ALIASES: dict[str, ItemStatus] = {
+    "manual": ItemStatus.MANUAL_REBUILD,
+    "blocked": ItemStatus.INVALID,
+}
+
+# Statuses that imply a write must not happen; they only populate the
+# manifest with a reason.
+_NON_WRITE_STATUSES: frozenset[ItemStatus] = frozenset(
+    {
+        ItemStatus.MANUAL_REBUILD,
+        ItemStatus.FORBIDDEN,
+        ItemStatus.CONFLICT,
+        ItemStatus.INVALID,
+    }
+)
+
+
+def normalize_status(value: Any) -> ItemStatus:
+    """Coerce a string (or enum) value into an :class:`ItemStatus`.
+
+    Accepts the modern enum strings plus the legacy ``"manual"`` and
+    ``"blocked"`` strings so older saved plans keep validating.
+    """
+    if isinstance(value, ItemStatus):
+        return value
+    if isinstance(value, str):
+        for status in ItemStatus:
+            if status.value == value:
+                return status
+        legacy = _LEGACY_STATUS_ALIASES.get(value)
+        if legacy is not None:
+            return legacy
+    raise ValueError(f"unknown plan item status: {value!r}")
 
 
 @dataclass
@@ -153,6 +207,23 @@ class PlanItem:
     manual_actions: list[str] = field(default_factory=list)
     expected_source_state: dict[str, Any] | None = field(default=None, repr=False)
     expected_target_state: dict[str, Any] | None = field(default=None, repr=False)
+
+    @property
+    def status_enum(self) -> ItemStatus:
+        return normalize_status(self.status)
+
+    @property
+    def target_group(self) -> str | None:
+        """Logical grouping used to scope conflict/invalid blocking.
+
+        Two items share a target group when their resolved target path
+        is the same.  Items without a target fall into a per-item group
+        so they never block others.
+        """
+        target = self.target
+        if target is None:
+            return None
+        return str(target.resolved_path)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -1432,7 +1503,7 @@ def _build_plan_for_scope(
             items.append(
                 PlanItem(
                     object_type,
-                    "manual",
+                    "manual-rebuild",
                     str(source_error),
                     target=target,
                     manual_actions=rebuild_actions(
@@ -1445,7 +1516,7 @@ def _build_plan_for_scope(
             items.append(
                 PlanItem(
                     object_type,
-                    "manual",
+                    "manual-rebuild",
                     "target is cloud/UI-managed and requires reviewed reconstruction",
                     source=source,
                     target=target,
@@ -1459,7 +1530,7 @@ def _build_plan_for_scope(
             items.append(
                 PlanItem(
                     object_type,
-                    "manual",
+                    "manual-rebuild",
                     "target is a provider; configure it in the consuming client",
                     source=source,
                     target=target,
@@ -1473,7 +1544,7 @@ def _build_plan_for_scope(
             items.append(
                 PlanItem(
                     object_type,
-                    "manual",
+                    "manual-rebuild",
                     f"target profile policy is {target_policy}",
                     source=source,
                     target=target,
@@ -1487,7 +1558,7 @@ def _build_plan_for_scope(
             items.append(
                 PlanItem(
                     object_type,
-                    "blocked",
+                    "invalid",
                     "target profile is source-only",
                     source=source,
                     target=target,
@@ -1498,7 +1569,7 @@ def _build_plan_for_scope(
             items.append(
                 PlanItem(
                     object_type,
-                    "blocked",
+                    "invalid",
                     f"unknown target migration policy: {target_policy}",
                     source=source,
                     target=target,
@@ -1509,7 +1580,7 @@ def _build_plan_for_scope(
             items.append(
                 PlanItem(
                     object_type,
-                    "blocked",
+                    "invalid",
                     f"source profile policy is {source_policy}",
                     source=source,
                     target=target,
@@ -1517,11 +1588,11 @@ def _build_plan_for_scope(
             )
             continue
         if source is None:
-            items.append(PlanItem(object_type, "blocked", "source surface is not mapped"))
+            items.append(PlanItem(object_type, "invalid", "source surface is not mapped"))
             continue
         if target is None:
             items.append(
-                PlanItem(object_type, "manual", "target surface is not mapped", source=source)
+                PlanItem(object_type, "manual-rebuild", "target surface is not mapped", source=source)
             )
             continue
         try:
@@ -1531,14 +1602,14 @@ def _build_plan_for_scope(
                 ensure_no_symlinks(source.resolved_path)
         except ValueError as error:
             items.append(
-                PlanItem(object_type, "blocked", str(error), source, target)
+                PlanItem(object_type, "invalid", str(error), source, target)
             )
             continue
         if not source.resolved_path.exists():
             items.append(
                 PlanItem(
                     object_type,
-                    "blocked",
+                    "invalid",
                     f"source path does not exist: {source.resolved_path}",
                     source,
                     target,
@@ -1549,7 +1620,7 @@ def _build_plan_for_scope(
             items.append(
                 PlanItem(
                     object_type,
-                    "manual",
+                    "manual-rebuild",
                     f"source surface policy is {source.policy}",
                     source,
                     target,
@@ -1561,7 +1632,7 @@ def _build_plan_for_scope(
             items.append(
                 PlanItem(
                     object_type,
-                    "blocked",
+                    "invalid",
                     f"target surface policy is {target.policy}",
                     source,
                     target,
@@ -1577,7 +1648,7 @@ def _build_plan_for_scope(
             items.append(
                 PlanItem(
                     object_type,
-                    "manual",
+                    "manual-rebuild",
                     f"target surface policy is {target.policy}",
                     source,
                     target,
@@ -1591,7 +1662,7 @@ def _build_plan_for_scope(
                 items.append(
                     PlanItem(
                         object_type,
-                        "blocked",
+                        "invalid",
                         "source contains no Skill directories",
                         source,
                         target,
@@ -1610,7 +1681,7 @@ def _build_plan_for_scope(
                         )
             except ValueError as error:
                 items.append(
-                    PlanItem(object_type, "blocked", str(error), source, target)
+                    PlanItem(object_type, "invalid", str(error), source, target)
                 )
                 continue
         if object_type == "instructions":
@@ -1625,7 +1696,7 @@ def _build_plan_for_scope(
                 items.append(
                     PlanItem(
                         object_type,
-                        "manual",
+                        "manual-rebuild",
                         "instruction formats require dedicated adapters: "
                         + ", ".join(missing_adapters),
                         source,
@@ -1639,7 +1710,7 @@ def _build_plan_for_scope(
                 items.append(
                     PlanItem(
                         object_type,
-                        "blocked",
+                        "invalid",
                         "source contains no instruction files",
                         source,
                         target,
@@ -1662,9 +1733,9 @@ def _build_plan_for_scope(
                     PlanItem(
                         object_type,
                         (
-                            "blocked"
+                            "invalid"
                             if "credential preflight failed" in str(error)
-                            else "manual"
+                            else "manual-rebuild"
                         ),
                         f"instruction adapter validation failed: {error}",
                         source,
@@ -1688,7 +1759,7 @@ def _build_plan_for_scope(
             items.append(
                 PlanItem(
                     object_type,
-                    "manual",
+                    "manual-rebuild",
                     (
                         f"MCP adapters require review: source={source_adapter['name']} "
                         f"target={target_adapter['name']}"
@@ -1706,7 +1777,7 @@ def _build_plan_for_scope(
         if object_type == "mcp":
             if not source.resolved_path.is_file():
                 items.append(
-                    PlanItem(object_type, "blocked", "MCP source must be a file", source, target)
+                    PlanItem(object_type, "invalid", "MCP source must be a file", source, target)
                 )
                 continue
             try:
@@ -1718,7 +1789,7 @@ def _build_plan_for_scope(
                     items.append(
                         PlanItem(
                             object_type,
-                            "manual",
+                            "manual-rebuild",
                             "remote MCP requires a dedicated target-profile transport adapter",
                             source,
                             target,
@@ -1739,7 +1810,7 @@ def _build_plan_for_scope(
                 items.append(
                     PlanItem(
                         object_type,
-                        "blocked",
+                        "invalid",
                         f"MCP validation failed: {error}",
                         source,
                         target,
@@ -1797,7 +1868,7 @@ def build_plan(
             combined_items.append(
                 PlanItem(
                     object_type,
-                    "blocked",
+                    "invalid",
                     "no matching source or target surface in user, project, or local scope",
                 )
             )
@@ -2034,7 +2105,7 @@ def build_plan_document(
             "actions": item.manual_actions,
         }
         for item in items
-        if item.status == "manual"
+        if item.status_enum is ItemStatus.MANUAL_REBUILD
     ]
     document: dict[str, Any] = {
         "schema_version": PLAN_SCHEMA_VERSION,
@@ -2246,17 +2317,148 @@ def _instruction_target_is_file(surface: SurfacePath) -> bool:
     return surface.resolved_path.suffix.lower() in {".md", ".mdc", ".txt"}
 
 
+def _manifest_entry(
+    item: PlanItem,
+    item_id: str,
+    outcome: str,
+    index: int,
+) -> dict[str, Any]:
+    """Build a manifest record for one plan item.
+
+    ``outcome`` is the runtime disposition (``"applied"``,
+    ``"applied-lossy"``, ``"lossy-skipped"``, ``"draft-written"``,
+    ``"manual-rebuild"``, ``"forbidden"``, ``"conflict"``,
+    ``"invalid"``, ``"blocked-by-group"``, ...).  ``index`` is the
+    original plan position (used for stable ordering).
+    """
+    entry: dict[str, Any] = {
+        "object_id": item_id,
+        "plan_index": index,
+        "object_type": item.object_type,
+        "status": item.status,
+        "outcome": outcome,
+        "reason": item.reason,
+        "target_group": item.target_group,
+        "source": item.source.to_dict() if item.source else None,
+        "target": item.target.to_dict() if item.target else None,
+        "manual_actions": list(item.manual_actions),
+    }
+    if outcome == "draft-written":
+        entry["enabled"] = False
+    return entry
+
+
 def apply_plan(
     plan: list[PlanItem],
     workspace: Path,
     manifest_path: Path | None = None,
     provenance: dict[str, Any] | None = None,
+    *,
+    apply_safe: bool = True,
+    include_lossy: bool = False,
+    accept_loss_ids: set[str] | None = None,
+    strict: bool = False,
 ) -> tuple[dict[str, Any], Path]:
-    blocked = [item for item in plan if item.status != "ready"]
-    if blocked:
-        summary = ", ".join(f"{item.object_type}:{item.status}" for item in blocked)
-        raise ValueError(f"plan contains non-applicable items: {summary}")
-    preflight_plan_skill_sources(plan)
+    """Apply a plan with the partial safe flow.
+
+    Status dispatch:
+
+    * ``ready``: always applied.
+    * ``ready-lossy``: applied when ``include_lossy`` is set or when the
+      item is named in ``accept_loss_ids``.  Otherwise recorded as
+      ``lossy-skipped``.
+    * ``draft-disabled``: applied (write with ``enabled=false`` recorded
+      in the manifest).  Caller is responsible for explicit activation.
+    * ``manual-rebuild`` / ``forbidden``: recorded only.
+    * ``conflict`` / ``invalid``: block only their own ``target_group``;
+      other groups proceed.
+
+    When ``strict`` is set, any non-``ready`` item aborts the whole plan
+    (legacy behavior preserved for callers that want it).
+    """
+    if strict:
+        blocked = [item for item in plan if item.status_enum is not ItemStatus.READY]
+        if blocked:
+            summary = ", ".join(
+                f"{item.object_type}:{item.status}" for item in blocked
+            )
+            raise ValueError(f"plan contains non-applicable items: {summary}")
+
+    accept_loss_ids = accept_loss_ids or set()
+    target_groups_blocked: set[str] = set()
+    for item in plan:
+        status = item.status_enum
+        if status in (ItemStatus.CONFLICT, ItemStatus.INVALID):
+            group = item.target_group
+            if group is not None:
+                target_groups_blocked.add(group)
+
+    eligible_items: list[PlanItem] = []
+    deferred_items: list[PlanItem] = []
+    blocked_items: list[PlanItem] = []
+    manifest_items: list[dict[str, Any]] = []
+    for index, item in enumerate(plan):
+        status = item.status_enum
+        item_id = f"{index}:{item.object_type}"
+        if status is ItemStatus.READY and item.target_group in target_groups_blocked:
+            blocked_items.append(item)
+            manifest_items.append(
+                _manifest_entry(item, item_id, "blocked-by-group", index)
+            )
+            continue
+        if status is ItemStatus.READY:
+            eligible_items.append(item)
+            continue
+        if status is ItemStatus.READY_LOSSY:
+            if include_lossy or item_id in accept_loss_ids:
+                eligible_items.append(item)
+                manifest_items.append(
+                    _manifest_entry(item, item_id, "applied-lossy", index)
+                )
+                continue
+            if not apply_safe:
+                blocked_items.append(item)
+                manifest_items.append(
+                    _manifest_entry(item, item_id, "lossy-not-accepted", index)
+                )
+                continue
+            deferred_items.append(item)
+            manifest_items.append(
+                _manifest_entry(item, item_id, "lossy-skipped", index)
+            )
+            continue
+        if status is ItemStatus.DRAFT_DISABLED:
+            # Only stage for object types we know how to render.  Other
+            # draft-disabled surfaces (e.g. Hooks, Agents) are recorded
+            # in the manifest with their target path; the user enables
+            # them out-of-band.
+            if item.object_type in {"skills", "instructions", "mcp"}:
+                eligible_items.append(item)
+                continue
+            deferred_items.append(item)
+            manifest_items.append(
+                _manifest_entry(item, item_id, "draft-only", index)
+            )
+            continue
+        if status in _NON_WRITE_STATUSES:
+            deferred_items.append(item)
+            manifest_items.append(
+                _manifest_entry(item, item_id, item.status, index)
+            )
+            continue
+        # Unknown enum value (defensive): treat as blocked.
+        blocked_items.append(item)
+        manifest_items.append(
+            _manifest_entry(item, item_id, f"unknown:{item.status}", index)
+        )
+
+    if not eligible_items:
+        raise ValueError(
+            "plan contains no eligible items after status dispatch "
+            f"(deferred={len(deferred_items)}, blocked={len(blocked_items)})"
+        )
+
+    preflight_plan_skill_sources(eligible_items)
     workspace = workspace.resolve()
     operation_id = (
         datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -2277,7 +2479,7 @@ def apply_plan(
     operations: list[dict[str, Any]] = []
     with tempfile.TemporaryDirectory(prefix="agent-context-migration-stage.") as stage_name:
         stage_root = Path(stage_name)
-        for item in plan:
+        for item in eligible_items:
             assert item.source is not None and item.target is not None
             source = item.source
             target = item.target
@@ -2479,6 +2681,36 @@ def apply_plan(
                     )
                 finish_change(change, destination)
 
+            # Record each actually applied eligible item in the manifest
+            # alongside the deferred/blocked entries from dispatch.
+            for index, item in enumerate(eligible_items):
+                status = item.status_enum
+                item_id = f"{index}:{item.object_type}"
+                if status is ItemStatus.DRAFT_DISABLED:
+                    manifest_items.append(
+                        _manifest_entry(item, item_id, "draft-written", index)
+                    )
+                elif status is ItemStatus.READY_LOSSY:
+                    # Lossy items already recorded as applied-lossy above;
+                    # nothing to update here.
+                    continue
+                else:
+                    manifest_items.append(
+                        _manifest_entry(item, item_id, "applied", index)
+                    )
+
+            summary: dict[str, int] = {}
+            for entry in manifest_items:
+                summary[entry["outcome"]] = summary.get(entry["outcome"], 0) + 1
+
+            blockers = [
+                {
+                    "target_group": group,
+                    "reason": "conflict or invalid item in target group",
+                }
+                for group in sorted(target_groups_blocked)
+            ]
+
             manifest = {
                 "schema_version": MANIFEST_SCHEMA_VERSION,
                 "operation_id": operation_id,
@@ -2487,6 +2719,12 @@ def apply_plan(
                 "provenance": provenance or {},
                 "changes": changes,
                 "loss_report": loss_report.to_dict(),
+                "items": manifest_items,
+                "blockers": blockers,
+                "summary": summary,
+                "apply_safe": apply_safe,
+                "include_lossy": include_lossy,
+                "strict": strict,
             }
             manifest["manifest_sha256"] = json_sha256(
                 {

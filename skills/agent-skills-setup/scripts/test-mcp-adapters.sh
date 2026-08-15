@@ -74,7 +74,7 @@ plan, _ = build_plan(
     ["mcp"],
     "project",
 )
-assert plan[0].status == "manual"
+assert plan[0].status == "manual-rebuild"
 assert "manual-template" in plan[0].reason
 assert plan[0].manual_actions
 
@@ -85,7 +85,7 @@ cloud = build_plan_document(
     ["skills", "instructions", "mcp"],
     "project",
 )
-assert {item["status"] for item in cloud["items"]} == {"manual"}
+assert {item["status"] for item in cloud["items"]} == {"manual-rebuild"}
 assert len(cloud["rebuild_manifest"]["items"]) == 3
 assert all(item["actions"] for item in cloud["rebuild_manifest"]["items"])
 assert "literal-secret" not in json.dumps(cloud)
@@ -101,7 +101,7 @@ remote = build_plan_document(
     ["mcp"],
     "project",
 )
-assert remote["items"][0]["status"] == "manual"
+assert remote["items"][0]["status"] == "manual-rebuild"
 assert "dedicated target-profile transport adapter" in remote["items"][0]["reason"]
 assert "literal-secret" not in json.dumps(remote)
 PY
