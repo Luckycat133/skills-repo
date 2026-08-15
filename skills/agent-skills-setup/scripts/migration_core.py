@@ -186,8 +186,92 @@ class MCPServerIR:
     env: dict[str, str] = field(default_factory=dict)
     url: str | None = None
     headers: dict[str, str] = field(default_factory=dict)
+    cwd: str | None = None
+    timeout_seconds: float | None = None
+    startup_timeout_seconds: float | None = None
+    enabled: bool = True
+    tool_allowlist: list[str] = field(default_factory=list)
+    tool_denylist: list[str] = field(default_factory=list)
+    auth: dict[str, Any] = field(default_factory=dict)
+    mtls: dict[str, Any] = field(default_factory=dict)
+    server_instructions_trust: str = "default"
+    target_schema_version: str = "1"
+    package_requirements: list[str] = field(default_factory=list)
     extra_fields: dict[str, Any] = field(default_factory=dict)
     source_format: str = "json:mcpServers"
+
+
+@dataclass
+class PromptIR:
+    name: str
+    description: str = ""
+    arguments: list[dict[str, str]] = field(default_factory=list)
+    body: str = ""
+    model: str = ""
+    agent: str = ""
+    file_references: list[str] = field(default_factory=list)
+    scope: str = "user"
+    auto_invocation: bool = False
+    extra_fields: dict[str, Any] = field(default_factory=dict)
+    source_format: str = "plain-prompt"
+
+
+@dataclass
+class CommandIR:
+    name: str
+    description: str = ""
+    arguments: list[dict[str, str]] = field(default_factory=list)
+    invocation: str = ""
+    body: str = ""
+    shell_block: str = ""
+    tool_blocks: list[dict[str, str]] = field(default_factory=list)
+    file_references: list[str] = field(default_factory=list)
+    model: str = ""
+    agent: str = ""
+    scope: str = "user"
+    auto_invocation: bool = False
+    extra_fields: dict[str, Any] = field(default_factory=dict)
+    source_format: str = "plain-command"
+
+
+@dataclass
+class AgentIR:
+    name: str
+    description: str = ""
+    system_prompt: str = ""
+    tools: list[str] = field(default_factory=list)
+    tool_groups: list[str] = field(default_factory=list)
+    model: str = ""
+    permissions: list[str] = field(default_factory=list)
+    mcp: list[str] = field(default_factory=list)
+    subagents: list[str] = field(default_factory=list)
+    handoffs: list[str] = field(default_factory=list)
+    isolation: str = ""
+    worktree: bool = False
+    memory_policy: str = ""
+    hooks: list[dict[str, Any]] = field(default_factory=list)
+    display_metadata: dict[str, str] = field(default_factory=dict)
+    extra_fields: dict[str, Any] = field(default_factory=dict)
+    source_format: str = "plain-agent"
+
+
+@dataclass
+class HookIR:
+    event: str
+    matcher: str = ""
+    command: str = ""
+    cwd: str = ""
+    env: dict[str, str] = field(default_factory=dict)
+    stdin_schema: str = ""
+    stdout_schema: str = ""
+    blocking: bool = True
+    exit_code: int | None = None
+    timeout_seconds: float | None = None
+    async_run: bool = False
+    os_overrides: dict[str, dict[str, Any]] = field(default_factory=dict)
+    target_script_references: list[str] = field(default_factory=list)
+    extra_fields: dict[str, Any] = field(default_factory=dict)
+    source_format: str = "plain-hook"
 
 
 @dataclass
