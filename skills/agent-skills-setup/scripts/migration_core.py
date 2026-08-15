@@ -50,6 +50,10 @@ KNOWN_COMMANDS = {
     "verify",
     "rollback",
     "migrate",
+    "snapshot",
+    "bundle-verify",
+    "restore",
+    "doctor",
 }
 PLAN_SCHEMA_VERSION = 1
 MANIFEST_SCHEMA_VERSION = 2

@@ -6,8 +6,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -16,12 +18,28 @@ from migration_core import (
     Registry,
     apply_plan,
     atomic_write,
+    build_plan,
     build_plan_document,
     load_plan_document,
     paths_overlap,
     rollback_manifest,
     validate_plan_document,
     verify_manifest,
+)
+
+from acb.bundle import (
+    ACB_CHECKSUMS_NAME,
+    ACB_OBJECTS_DIR,
+    ACB_SCHEMA_VERSION,
+    ACBManifest,
+    ACBSecretLeak,
+    collect_reauth,
+    collect_rebuild,
+    collect_requirements,
+    load_manifest,
+    make_bundle_id,
+    verify_bundle,
+    write_bundle,
 )
 
 
@@ -172,6 +190,51 @@ def create_parser() -> argparse.ArgumentParser:
         "legacy", help="run the explicit lookup and zero-write compatibility interface"
     )
     legacy.add_argument("legacy_args", nargs=argparse.REMAINDER)
+
+    snapshot = subparsers.add_parser(
+        "snapshot",
+        help="Capture a portable Agent Context Bundle (ACB) of the current device.",
+    )
+    common_workspace(snapshot)
+    snapshot.add_argument("--output", type=Path, help="Bundle output directory (default: <workspace>/device.acb).")
+    snapshot.add_argument("--source", default="cline/ide")
+    snapshot.add_argument("--target", default="forge/cli")
+    snapshot.add_argument("--scope", default="user,project")
+
+    verify_bundle = subparsers.add_parser(
+        "bundle-verify",
+        help="Verify checksums inside an ACB directory.",
+    )
+    verify_bundle.add_argument("bundle", type=Path)
+    verify_bundle.add_argument("--json", action="store_true", default=True)
+
+    restore = subparsers.add_parser(
+        "restore",
+        help="Verify an ACB and rebuild a local restore plan against the current device.",
+    )
+    common_workspace(restore)
+    restore.add_argument("bundle", type=Path)
+    restore.add_argument("--source", default="cline/ide")
+    restore.add_argument("--target", default="forge/cli")
+    restore.add_argument("--scope", default="user,project")
+    restore.add_argument("--plan-out", type=Path)
+    restore.add_argument("--manifest-out", type=Path)
+    restore.add_argument("--apply-safe", action="store_true", default=True)
+    restore.add_argument(
+        "--no-apply-safe", dest="apply_safe", action="store_false"
+    )
+    restore.add_argument(
+        "--include", dest="include_lossy", choices=("lossy",),
+    )
+    restore.add_argument("--strict", action="store_true")
+    restore.add_argument("--yes", action="store_true")
+
+    doctor = subparsers.add_parser(
+        "doctor",
+        help="Inspect an ACB and surface missing executables / re-auth actions.",
+    )
+    doctor.add_argument("bundle", type=Path)
+    doctor.add_argument("--json", action="store_true", default=True)
     return parser
 
 
@@ -232,6 +295,215 @@ def resolve_objects(value: str) -> list[str]:
 
 def default_workspace_migration_dir(workspace: Path) -> Path:
     return workspace / ".migration"
+
+
+def run_snapshot(args: argparse.Namespace) -> int:
+    """Capture a portable ACB snapshot of the current device."""
+    workspace = args.workspace.resolve()
+    registry = Registry(args.registry, workspace)
+    bundle_root = (args.output or workspace / "device.acb").resolve(strict=False)
+    inventory_rows = registry.inventory(None)
+    detect_rows = [row for row in inventory_rows if row.get("exists")]
+    document = build_plan_document(
+        registry,
+        args.source or "cline/ide",
+        args.target or "forge/cli",
+        ["skills", "instructions", "mcp"],
+        args.scope,
+    )
+    plan_rows = document.get("items", [])
+    inventory_summary = {
+        "installed_products": sorted(
+            {row["product"] for row in detect_rows}
+        ),
+        "surface_count": sum(
+            1 for row in inventory_rows if row.get("object_type")
+        ),
+    }
+    manifest = ACBManifest(
+        schema_version=ACB_SCHEMA_VERSION,
+        bundle_id=make_bundle_id(),
+        created_at=datetime.now(timezone.utc).isoformat(),
+        source_platform={
+            "system": sys.platform,
+            "python": sys.version.split()[0],
+        },
+        inventory_summary=inventory_summary,
+        objects=[
+            {
+                "object_id": item.get("object_id", ""),
+                "product": (item.get("source") or {}).get("product", ""),
+                "profile": (item.get("source") or {}).get("profile", ""),
+                "surface": item.get("object_type", ""),
+                "scope": (item.get("source") or {}).get("scope", ""),
+                "status": item.get("status", ""),
+                "secret_status": "clean",
+            }
+            for item in plan_rows
+        ],
+    )
+    compatibility = {"products": sorted(registry.products.keys())}
+    requirements = collect_requirements(inventory_rows, plan_rows)
+    reauth = collect_reauth(plan_rows)
+    rebuild = collect_rebuild(plan_rows)
+    secrets_required = [
+        {
+            "name": action.get("object_id", ""),
+            "used_by": [],
+            "recommended_storage": "environment-or-keychain",
+        }
+        for action in reauth
+    ]
+    try:
+        write_bundle(
+            bundle_root=bundle_root,
+            manifest=manifest,
+            inventory_rows=inventory_rows,
+            compatibility=compatibility,
+            requirements=requirements,
+            secrets_required=secrets_required,
+            reauth=reauth,
+            rebuild=rebuild,
+        )
+    except ACBSecretLeak as error:
+        print(f"ERROR: ACB secret leak: {error}", file=sys.stderr)
+        return 1
+    emit(
+        {
+            "ok": True,
+            "stage": "snapshot",
+            "bundle": str(bundle_root),
+            "bundle_id": manifest.bundle_id,
+            "manifest": str(bundle_root / "manifest.json"),
+            "checksums": str(bundle_root / ACB_CHECKSUMS_NAME),
+            "objects_dir": str(bundle_root / ACB_OBJECTS_DIR),
+            "detected": detect_rows[:50],
+            "summary": inventory_summary,
+        },
+        args.json,
+    )
+    return 0
+
+
+def run_bundle_verify(args: argparse.Namespace) -> int:
+    """Verify checksums for every file recorded in checksums.json."""
+    errors = verify_bundle(args.bundle.resolve())
+    emit(
+        {
+            "ok": not errors,
+            "bundle": str(args.bundle.resolve()),
+            "errors": errors,
+        },
+        args.json,
+    )
+    return 0 if not errors else 1
+
+
+def run_restore(args: argparse.Namespace) -> int:
+    """Verify and rebuild a plan from an ACB on the current device."""
+    bundle_root = args.bundle.resolve()
+    errors = verify_bundle(bundle_root)
+    if errors:
+        emit({"ok": False, "stage": "verify", "errors": errors}, args.json)
+        return 1
+    manifest = load_manifest(bundle_root)
+    workspace = args.workspace.resolve()
+    registry = Registry(args.registry, workspace)
+    detected = [row for row in registry.inventory(None) if row.get("exists")]
+    document = build_plan_document(
+        registry,
+        args.source or "cline/ide",
+        args.target or "forge/cli",
+        ["skills", "instructions", "mcp"],
+        args.scope,
+    )
+    plan_out = None
+    if args.plan_out:
+        plan_out = args.plan_out.resolve(strict=False)
+        plan_out.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write(
+            plan_out,
+            json.dumps(document, indent=2, sort_keys=True) + "\n",
+        )
+    if args.apply_safe:
+        plan_items, _ = build_plan(
+            registry,
+            args.source,
+            args.target,
+            ["skills", "instructions", "mcp"],
+            args.scope,
+        )
+        manifest_obj, manifest_path_out = apply_plan(
+            plan_items, workspace, args.manifest_out,
+            provenance={
+                "bundle_path": str(bundle_root),
+                "bundle_id": manifest.bundle_id,
+                "plan_sha256": document["plan_sha256"],
+                "registry_sha256": document["registry_sha256"],
+                "adapter_versions": document["adapter_versions"],
+            },
+            apply_safe=True,
+            include_lossy=(args.include_lossy == "lossy"),
+            accept_loss_ids=set(),
+            strict=args.strict,
+        )
+        verify_errors = verify_manifest(manifest_path_out)
+        emit(
+            {
+                "ok": not verify_errors,
+                "stage": "verify",
+                "bundle": str(bundle_root),
+                "plan": str(plan_out) if plan_out else None,
+                "manifest": str(manifest_path_out),
+                "detected": detected[:50],
+                "summary": manifest_obj.get("summary", {}),
+                "errors": verify_errors,
+            },
+            args.json,
+        )
+        return 0 if not verify_errors else 1
+    emit(
+        {
+            "ok": True,
+            "stage": "plan",
+            "bundle": str(bundle_root),
+            "bundle_id": manifest.bundle_id,
+            "plan": str(plan_out) if plan_out else None,
+            "detected": detected[:50],
+        },
+        args.json,
+    )
+    return 0
+
+
+def run_doctor(args: argparse.Namespace) -> int:
+    """Inspect a bundle and surface missing executables / re-auth work."""
+    bundle_root = args.bundle.resolve()
+    errors = verify_bundle(bundle_root)
+    if errors:
+        emit({"ok": False, "stage": "verify", "errors": errors}, args.json)
+        return 1
+    requirements = json.loads(
+        (bundle_root / "requirements.json").read_text(encoding="utf-8")
+    )
+    reauth = json.loads((bundle_root / "reauth.json").read_text(encoding="utf-8"))
+    rebuild = json.loads((bundle_root / "rebuild.json").read_text(encoding="utf-8"))
+    missing_executables: list[str] = []
+    for binary in requirements.get("executables", []):
+        if not shutil.which(binary):
+            missing_executables.append(binary)
+    emit(
+        {
+            "ok": not missing_executables,
+            "bundle": str(bundle_root),
+            "missing_executables": missing_executables,
+            "reauth_actions": reauth.get("items", []),
+            "rebuild_actions": rebuild.get("items", []),
+            "platform_notes": requirements.get("platform_notes", []),
+        },
+        args.json,
+    )
+    return 0 if not missing_executables else 1
 
 
 def run_migrate(args: argparse.Namespace) -> int:
@@ -440,6 +712,20 @@ def run_new_cli(argv: list[str]) -> int:
                 "migrate requires --yes after specifying source/target/objects"
             )
         return run_migrate(args)
+
+    if args.command == "snapshot":
+        return run_snapshot(args)
+
+    if args.command == "bundle-verify":
+        return run_bundle_verify(args)
+
+    if args.command == "restore":
+        if args.apply_safe and not args.yes:
+            raise ValueError("restore --apply-safe requires --yes")
+        return run_restore(args)
+
+    if args.command == "doctor":
+        return run_doctor(args)
 
     registry = Registry(args.registry, args.workspace)
     if args.command in {"detect", "inventory"}:
