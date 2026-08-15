@@ -4,8 +4,9 @@
 - **Baseline:** `27f52ae21baaf803e6b595dba5532b653fc840da` (skill 0.8.2)
 - **Audit references:**
   - `docs/agent-skills-setup/roadmap.md`
-  - `/Users/jack/Documents/skills-repo-0.8.2-device-handoff-and-ide-audit-2026-08-15.md`
-  - `/Users/jack/Documents/skills-repo-0.8.2-implementation-backlog-2026-08-15.md`
+  - Audit report and implementation backlog (kept outside the repository
+    under `~/Documents/skills-repo-0.8.2-*.md`; referenced by name only
+    here so the spec carries no private path).
 
 ## 1. Motivation and audit findings
 

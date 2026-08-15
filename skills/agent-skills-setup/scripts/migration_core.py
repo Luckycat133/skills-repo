@@ -10,6 +10,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import urllib.parse
 import uuid
@@ -19,6 +20,13 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from skill_secret_scanner import finding_reason, scan as scan_skill_source_tree
+
+from registry.alias_resolver import ResolvedSelector, resolve as resolve_alias
+from registry.exceptions import (
+    AliasCycleError,
+    AliasDepthExceededError,
+    UnknownSelectorError,
+)
 
 
 SENSITIVE_NAME = re.compile(
@@ -186,7 +194,13 @@ class Registry:
             raise ValueError(f"unknown product: {product_id}")
         return product_id, profile_id if separator else None
 
-    def profile(self, selector: str) -> tuple[str, str, dict[str, Any]]:
+    def profile_raw(self, selector: str) -> tuple[str, str, dict[str, Any]]:
+        """Resolve a selector without following ``alias_of``.
+
+        This is the legacy behavior preserved for callers that need the
+        raw alias template result (e.g. tests asserting on the
+        ``legacy-alias`` profile).  New code should use :meth:`profile`.
+        """
         product_id, requested_profile = self.split_selector(selector)
         product = self.products[product_id]
         template_id = product.get("template")
@@ -214,6 +228,87 @@ class Registry:
             raise ValueError(f"unknown profile: {product_id}/{profile_id}")
         return (
             product_id,
+            profile_id,
+            self._with_support(self._resolve_profile(profiles, profile_id, ())),
+        )
+
+    def profile(self, selector: str) -> tuple[str, str, dict[str, Any]]:
+        """Resolve a selector through the alias chain.
+
+        See :mod:`registry.alias_resolver` for chain semantics.  Returns
+        ``(resolved_product, resolved_profile, profile_data)`` using the
+        resolved identifiers.  The original user input is preserved via
+        :attr:`ResolvedSelector.requested`; callers that need it should
+        call :meth:`resolve_selector` directly.
+        """
+        resolved = resolve_alias(selector, self.data)
+        self._log_resolution(resolved)
+        return self._load_profile_data(resolved)
+
+    def resolve_selector(self, selector: str) -> ResolvedSelector:
+        """Return the :class:`ResolvedSelector` without resolving profile
+        data.  Useful for callers that want to preserve ``requested`` vs
+        ``resolved_product``/``resolved_profile`` for logs, plans, or
+        manifests."""
+        resolved = resolve_alias(selector, self.data)
+        self._log_resolution(resolved)
+        return resolved
+
+    @staticmethod
+    def _log_resolution(resolved: ResolvedSelector) -> None:
+        # Only log when an alias chain was actually followed.
+        if resolved.chain and resolved.chain[0] == resolved.resolved_product:
+            return
+        chain = " -> ".join(resolved.chain)
+        print(
+            f"alias: {resolved.requested} -> "
+            f"{resolved.resolved_product}/{resolved.resolved_profile} "
+            f"({chain})",
+            file=sys.stderr,
+        )
+        if resolved.deprecated:
+            print(
+                f"alias: {resolved.requested} is deprecated",
+                file=sys.stderr,
+            )
+
+    def _load_profile_data(
+        self, resolved: ResolvedSelector
+    ) -> tuple[str, str, dict[str, Any]]:
+        """Translate a :class:`ResolvedSelector` into the same tuple shape
+        as :meth:`profile_raw` using the resolved product/profile."""
+        product = self.products.get(resolved.resolved_product)
+        if product is None:
+            raise UnknownSelectorError(product=resolved.resolved_product)
+        template_id = product.get("template")
+        if isinstance(template_id, str) and template_id:
+            template = dict(self.data["profile_templates"][template_id])
+            for field_name in (
+                "support_level",
+                "confidence",
+                "verified_at",
+                "sources",
+                "reason",
+            ):
+                if field_name in product:
+                    template[field_name] = product[field_name]
+            if not resolved.resolved_profile:
+                profile_id = str(template.get("profile", template_id))
+            else:
+                profile_id = resolved.resolved_profile
+            return (
+                resolved.resolved_product,
+                profile_id,
+                self._with_support(template),
+            )
+        profiles = product.get("profiles", {})
+        profile_id = resolved.resolved_profile or product.get("default_profile")
+        if profile_id not in profiles:
+            raise ValueError(
+                f"unknown profile: {resolved.resolved_product}/{profile_id}"
+            )
+        return (
+            resolved.resolved_product,
             profile_id,
             self._with_support(self._resolve_profile(profiles, profile_id, ())),
         )
