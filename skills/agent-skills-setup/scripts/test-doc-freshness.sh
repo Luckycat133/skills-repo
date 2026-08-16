@@ -10,7 +10,7 @@ trap 'rm -rf "$TMP_ROOT"' EXIT
 python3 "$SCRIPT_DIR/check-doc-freshness.py" \
     --registry "$SKILL_DIR/references/registry-v2.json" \
     --checks "$SKILL_DIR/references/doc-freshness-checks.json" \
-    --today 2026-08-13 \
+    --today 2026-08-16 \
     --report "$TMP_ROOT/report.json" > "$TMP_ROOT/stdout.json"
 
 python3 - "$TMP_ROOT/report.json" <<'PY'

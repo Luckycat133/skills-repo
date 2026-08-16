@@ -2458,7 +2458,7 @@ def load_plan_document(path: Path) -> dict[str, Any]:
 
 
 def _core_plan_items(serialized_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    fields = ("object_type", "status", "reason", "source", "target", "manual_actions")
+    fields = ("object_type", "status", "reason", "source", "target", "manual_actions", "object_id")
     return [{field: item.get(field) for field in fields} for item in serialized_items]
 
 

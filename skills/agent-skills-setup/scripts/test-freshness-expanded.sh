@@ -47,7 +47,7 @@ print(f"OK checks schema: {len(ids)} unique IDs with HTTPS URLs and required ter
 
 # Provenance: every active profile must have verified_at inside the
 # 365-day window and at least one official HTTPS source.
-errors = validate_provenance(registry, date(2026, 8, 15), 365)
+errors = validate_provenance(registry, date(2026, 8, 16), 365)
 fresh_errors = [e for e in errors if "outside freshness window" in e or "verified_at" in e]
 assert not fresh_errors, fresh_errors
 print("OK every active profile has a recent verified_at (no stale demotions)")

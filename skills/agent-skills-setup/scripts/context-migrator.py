@@ -475,9 +475,11 @@ def run_snapshot(args: argparse.Namespace) -> int:
         for action in reauth
     ]
     # Copy every existing source file under objects/ for true
-    # device-to-device restore.
+    # device-to-device restore. Only collect the requested source product/profile.
+    source_product, source_profile = args.source.split("/", 1) if "/" in args.source else (args.source, None)
     objects_dir_files = collect_source_objects(
         registry, inventory_rows, home=registry.home, workspace=workspace,
+        source_product=source_product, source_profile=source_profile,
     )
     try:
         write_bundle(

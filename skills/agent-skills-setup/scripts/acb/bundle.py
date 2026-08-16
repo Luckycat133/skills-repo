@@ -285,6 +285,8 @@ def collect_source_objects(
     *,
     home: Path | None = None,
     workspace: Path | None = None,
+    source_product: str | None = None,
+    source_profile: str | None = None,
 ) -> dict[str, bytes]:
     """Walk existing inventory rows and copy each existing source file
     into a stable per-object path under ``objects/``.
@@ -292,11 +294,19 @@ def collect_source_objects(
     Recurses through Skill directories (which are one level deep),
     copies instructions/MCP single files, and silently skips
     anything missing or unreadable.
+
+    If ``source_product`` and ``source_profile`` are provided, only rows
+    matching that product/profile are collected.
     """
     from pathlib import Path as _Path
     objects: dict[str, bytes] = {}
     for row in rows:
         if not row.get("exists"):
+            continue
+        # Filter by source product/profile if provided
+        if source_product and row.get("product") != source_product:
+            continue
+        if source_profile and row.get("profile") != source_profile:
             continue
         resolved = row.get("resolved_path")
         if not isinstance(resolved, str):
