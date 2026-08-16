@@ -1099,14 +1099,14 @@
                 "storage": "directory",
                 "path": "~/.qwen/commands",
                 "format": "qwen-command",
-                "policy": "manual-template"
+                "policy": "validate-then-atomic-copy"
               },
               {
                 "scope": "project",
                 "storage": "directory",
                 "path": ".qwen/commands",
                 "format": "qwen-command",
-                "policy": "manual-template"
+                "policy": "validate-then-atomic-copy"
               }
             ],
             "agents": [
@@ -1115,14 +1115,14 @@
                 "storage": "directory",
                 "path": "~/.qwen/agents",
                 "format": "qwen-agent",
-                "policy": "manual-template"
+                "policy": "validate-then-atomic-copy"
               },
               {
                 "scope": "project",
                 "storage": "directory",
                 "path": ".qwen/agents",
                 "format": "qwen-agent",
-                "policy": "manual-template"
+                "policy": "validate-then-atomic-copy"
               }
             ],
             "hooks": [
@@ -1131,14 +1131,28 @@
                 "storage": "directory",
                 "path": "~/.qwen/hooks",
                 "format": "qwen-hook",
-                "policy": "disabled-draft-only"
+                "policy": "disabled-draft-only",
+                "events": [
+                  "pre-tool-use",
+                  "post-tool-use",
+                  "pre-prompt",
+                  "post-prompt",
+                  "notification"
+                ]
               },
               {
                 "scope": "project",
                 "storage": "directory",
                 "path": ".qwen/hooks",
                 "format": "qwen-hook",
-                "policy": "disabled-draft-only"
+                "policy": "disabled-draft-only",
+                "events": [
+                  "pre-tool-use",
+                  "post-tool-use",
+                  "pre-prompt",
+                  "post-prompt",
+                  "notification"
+                ]
               }
             ],
             "plugins": [
@@ -1155,56 +1169,6 @@
                 "path": ".qwen/plugins",
                 "format": "qwen-plugin",
                 "policy": "validate-then-atomic-copy"
-              }
-            ],
-            "commands": [
-              {
-                "scope": "user",
-                "storage": "directory",
-                "path": "~/.qwen/commands",
-                "format": "qwen-command",
-                "policy": "validate-then-atomic-copy"
-              },
-              {
-                "scope": "project",
-                "storage": "directory",
-                "path": ".qwen/commands",
-                "format": "qwen-command",
-                "policy": "validate-then-atomic-copy"
-              }
-            ],
-            "agents": [
-              {
-                "scope": "user",
-                "storage": "directory",
-                "path": "~/.qwen/agents",
-                "format": "qwen-agent",
-                "policy": "validate-then-atomic-copy"
-              },
-              {
-                "scope": "project",
-                "storage": "directory",
-                "path": ".qwen/agents",
-                "format": "qwen-agent",
-                "policy": "validate-then-atomic-copy"
-              }
-            ],
-            "hooks": [
-              {
-                "scope": "user",
-                "storage": "directory",
-                "path": "~/.qwen/hooks",
-                "format": "qwen-hook",
-                "policy": "disabled-draft-only",
-                "events": ["pre-tool-use", "post-tool-use", "pre-prompt", "post-prompt", "notification"]
-              },
-              {
-                "scope": "project",
-                "storage": "directory",
-                "path": ".qwen/hooks",
-                "format": "qwen-hook",
-                "policy": "disabled-draft-only",
-                "events": ["pre-tool-use", "post-tool-use", "pre-prompt", "post-prompt", "notification"]
               }
             ],
             "mcp-plugins": [
@@ -4073,212 +4037,215 @@
           "surfaces": {}
         }
       }
-    }
-  },
-  "aliases": {
-    "vscode": "copilot/vscode",
-    "visual-studio": "copilot/visual-studio",
-    "claude-desktop": "claude/desktop-chat",
-    "trae-cn": "trae/cn-ide",
-    "jetbrains-ai": "jetbrains/ai-assistant",
-    "codeium": "windsurf/ide"
-  },
-  "detection_config": {
-    "probes": {
-      "binary": {
-        "description": "CLI binary lookup with version command"
-      },
-      "vscode-extension": {
-        "description": "VS Code extension marketplace lookup"
-      },
-      "app-bundle": {
-        "description": "macOS app bundle identifier lookup"
-      },
-      "file-signature": {
-        "description": "File path existence with content fingerprint"
-      },
-      "cloud-account": {
-        "description": "Cloud/API account connection check"
-      },
-      "environment": {
-        "description": "Environment variable override for path"
-      },
-      "schema-probe": {
-        "description": "JSON schema validation for config files"
-      }
     },
-    "platforms": [
-      "darwin",
-      "linux",
-      "windows",
-      "wsl",
-      "remote-ssh",
-      "dev-container",
-      "codespaces",
-      "vscode-profile",
-      "extension-host"
-    ],
-    "installation_states": [
-      "installed",
-      "configured-only",
-      "compatibility-only",
-      "cloud-connected",
-      "legacy",
-      "ambiguous",
-      "not-detected"
-    ]
-  },
-  "freshness": {
-    "max_age_days": 365,
-    "online_checks_enabled": true,
-    "demote_stale_on_detect": true,
-    "stale_levels": [
-      "stale-partial",
-      "stale-manual",
-      "stale-source-only"
-    ],
-    "candidate_discovery_schedule": "weekly",
-    "candidate_discovery_sources": [
-      "github.com trending AI coding agents",
-      "npm registry @scope/agent-* packages",
-      "pypi.org AI coding assistants",
-      "product hunt AI category",
-      "official vendor release notes"
-    ]
-  },
-  "candidate_discovery": {
-    "enabled": true,
-    "schedule": "0 0 * * 1",
-    "auto_promote_threshold": {
-      "min_official_sources": 2,
-      "min_surfaces": 2,
-      "min_detection_probes": 1
-    },
-    "report_format": {
-      "include_new_products": true,
-      "include_new_paths": true,
-      "include_schema_changes": true,
-      "include_renamed_products": true,
-      "include_archived_products": true,
-      "suggest_registry_diff": true
-    }
-  },
-    "letta": {
-      "display_name": "Letta Code",
-      "category": "agent-client",
+    "gemini-code-assist": {
+      "display_name": "Gemini Code Assist",
+      "category": "ide-extension",
       "lifecycle": "active",
-      "default_profile": "cli",
+      "default_profile": "vscode",
       "profiles": {
-        "cli": {
-          "kind": "cli",
+        "vscode": {
+          "kind": "ide-extension",
           "version_range": "current as of 2026-08-16",
           "verified_at": "2026-08-16",
           "sources": [
-            "https://docs.letta.com/agents/skills"
+            "https://cloud.google.com/gemini-code-assist/docs/ide"
           ],
           "migration_policy": "bidirectional-reviewed",
           "detection": [
             {
-              "type": "binary",
-              "command": [
-                "letta"
-              ],
-              "version_command": [
-                "letta",
-                "--version"
-              ]
+              "type": "vscode-extension",
+              "id": "google.gemini-code-assist"
             },
             {
               "type": "file-signature",
               "paths": [
-                "~/.letta/skills",
-                "~/.letta/agents"
+                "~/.gemini-code-assist/skills",
+                "~/.gemini-code-assist/prompts"
               ]
             }
           ],
           "platforms": {
-            "darwin": "~/.letta",
-            "linux": "~/.letta",
-            "wsl": "~/.letta"
+            "darwin": "~/.gemini-code-assist",
+            "linux": "~/.gemini-code-assist",
+            "windows": "%APPDATA%/GeminiCodeAssist",
+            "wsl": "~/.gemini-code-assist"
           },
           "surfaces": {
             "skills": [
               {
                 "scope": "user",
                 "storage": "directory",
-                "path": "~/.letta/skills",
+                "path": "~/.gemini-code-assist/skills",
                 "format": "agent-skill",
                 "policy": "validate-then-atomic-copy"
               },
               {
                 "scope": "project",
                 "storage": "directory",
-                "path": ".letta/skills",
+                "path": ".gemini-code-assist/skills",
                 "format": "agent-skill",
                 "policy": "validate-then-atomic-copy"
               }
             ],
-            "memory": [
+            "prompts": [
               {
                 "scope": "user",
                 "storage": "directory",
-                "path": "~/.letta/editable_memory",
-                "format": "letta-memory",
+                "path": "~/.gemini-code-assist/prompts",
+                "format": "gemini-prompt",
                 "policy": "manual-template"
               },
               {
                 "scope": "project",
                 "storage": "directory",
-                "path": ".letta/editable_memory",
-                "format": "letta-memory",
+                "path": ".gemini-code-assist/prompts",
+                "format": "gemini-prompt",
                 "policy": "manual-template"
               }
             ],
-            "subagents": [
+            "mcp": [
+              {
+                "scope": "user",
+                "storage": "file",
+                "path": "~/.gemini-code-assist/mcp.json",
+                "format": "json:mcpServers",
+                "policy": "profile-version-adapter"
+              },
+              {
+                "scope": "project",
+                "storage": "file",
+                "path": ".gemini-code-assist/mcp.json",
+                "format": "json:mcpServers",
+                "policy": "profile-version-adapter"
+              }
+            ],
+            "prompt_library": [
               {
                 "scope": "user",
                 "storage": "directory",
-                "path": "~/.letta/subagents",
-                "format": "letta-subagent",
+                "path": "~/.gemini-code-assist/prompt-library",
+                "format": "gemini-prompt-library",
                 "policy": "manual-template"
               },
               {
                 "scope": "project",
                 "storage": "directory",
-                "path": ".letta/subagents",
-                "format": "letta-subagent",
+                "path": ".gemini-code-assist/prompt-library",
+                "format": "gemini-prompt-library",
                 "policy": "manual-template"
               }
-            ],
-            "scheduling": [
+            ]
+          }
+        },
+        "jetbrains": {
+          "kind": "ide-extension",
+          "version_range": "current as of 2026-08-16",
+          "verified_at": "2026-08-16",
+          "sources": [
+            "https://plugins.jetbrains.com/plugin/gemini-code-assist"
+          ],
+          "migration_policy": "bidirectional-reviewed",
+          "detection": [
+            {
+              "type": "vscode-extension",
+              "id": "com.google.gemini.code.assist"
+            },
+            {
+              "type": "file-signature",
+              "paths": [
+                "~/.config/JetBrains/GeminiCodeAssist/skills",
+                "~/.config/JetBrains/GeminiCodeAssist/prompts"
+              ]
+            }
+          ],
+          "platforms": {
+            "darwin": "~/.config/JetBrains/GeminiCodeAssist",
+            "linux": "~/.config/JetBrains/GeminiCodeAssist",
+            "windows": "%APPDATA%/JetBrains/GeminiCodeAssist"
+          },
+          "surfaces": {
+            "skills": [
               {
                 "scope": "user",
-                "storage": "file",
-                "path": "~/.letta/scheduler.json",
-                "format": "letta-scheduler",
+                "storage": "directory",
+                "path": "~/.config/JetBrains/GeminiCodeAssist/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".gemini-code-assist/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              }
+            ],
+            "prompts": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.config/JetBrains/GeminiCodeAssist/prompts",
+                "format": "gemini-prompt",
                 "policy": "manual-template"
               },
               {
                 "scope": "project",
-                "storage": "file",
-                "path": ".letta/scheduler.json",
-                "format": "letta-scheduler",
+                "storage": "directory",
+                "path": ".gemini-code-assist/prompts",
+                "format": "gemini-prompt",
                 "policy": "manual-template"
               }
             ],
-            "agentfile": [
+            "mcp": [
               {
                 "scope": "user",
                 "storage": "file",
-                "path": "~/.letta/agent.af",
-                "format": "letta-agentfile",
-                "policy": "manual-template"
+                "path": "~/.config/JetBrains/GeminiCodeAssist/mcp.json",
+                "format": "json:mcpServers",
+                "policy": "profile-version-adapter"
               },
               {
                 "scope": "project",
                 "storage": "file",
-                "path": ".letta/agent.af",
-                "format": "letta-agentfile",
+                "path": ".gemini-code-assist/mcp.json",
+                "format": "json:mcpServers",
+                "policy": "profile-version-adapter"
+              }
+            ],
+            "prompt_library": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.config/JetBrains/GeminiCodeAssist/prompt-library",
+                "format": "gemini-prompt-library",
+                "policy": "manual-template"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".gemini-code-assist/prompt-library",
+                "format": "gemini-prompt-library",
+                "policy": "manual-template"
+              }
+            ]
+          }
+        },
+        "enterprise": {
+          "kind": "cloud-ui",
+          "version_range": "current as of 2026-08-16",
+          "verified_at": "2026-08-16",
+          "sources": [
+            "https://cloud.google.com/gemini-code-assist/docs/enterprise"
+          ],
+          "migration_policy": "official-api-or-rebuild-checklist",
+          "surfaces": {
+            "policies": [
+              {
+                "scope": "enterprise",
+                "storage": "file",
+                "path": "~/.gemini-code-assist/enterprise-policies.json",
+                "format": "json",
                 "policy": "manual-template"
               }
             ]
@@ -4465,181 +4432,305 @@
             ]
           }
         }
-      },
-      "zenflow": {
-        "display_name": "Zenflow",
-        "category": "agent-client",
-        "lifecycle": "active",
-        "default_profile": "ide",
-        "profiles": {
-          "ide": {
-            "kind": "ide-extension",
-            "version_range": "current as of 2026-08-16",
-            "verified_at": "2026-08-16",
-            "sources": [
-              "https://docs.zenflow.ai/skills"
-            ],
-            "migration_policy": "bidirectional-reviewed",
-            "detection": [
-              {
-                "type": "binary",
-                "command": [
-                  "zenflow"
-                ],
-                "version_command": [
-                  "zenflow",
-                  "--version"
-                ]
-              },
-              {
-                "type": "file-signature",
-                "paths": [
-                  "~/.zenflow/skills",
-                  "~/.zenflow/settings.json"
-                ]
-              }
-            ],
-            "platforms": {
-              "darwin": "~/.zenflow",
-              "linux": "~/.zenflow",
-              "windows": "%APPDATA%/Zenflow",
-              "wsl": "~/.zenflow"
+      }
+    },
+    "zenflow": {
+      "display_name": "Zenflow",
+      "category": "agent-client",
+      "lifecycle": "active",
+      "default_profile": "ide",
+      "profiles": {
+        "ide": {
+          "kind": "ide-extension",
+          "version_range": "current as of 2026-08-16",
+          "verified_at": "2026-08-16",
+          "sources": [
+            "https://docs.zenflow.ai/skills"
+          ],
+          "migration_policy": "bidirectional-reviewed",
+          "detection": [
+            {
+              "type": "binary",
+              "command": [
+                "zenflow"
+              ],
+              "version_command": [
+                "zenflow",
+                "--version"
+              ]
             },
-            "surfaces": {
-              "skills": [
-                {
-                  "scope": "user",
-                  "storage": "directory",
-                  "path": "~/.zenflow/skills",
-                  "format": "agent-skill",
-                  "policy": "validate-then-atomic-copy"
-                },
-                {
-                  "scope": "project",
-                  "storage": "directory",
-                  "path": ".zenflow/skills",
-                  "format": "agent-skill",
-                  "policy": "validate-then-atomic-copy"
-                }
-              ],
-              "settings": [
-                {
-                  "scope": "user",
-                  "storage": "file",
-                  "path": "~/.zenflow/settings.json",
-                  "format": "json",
-                  "policy": "manual-template"
-                },
-                {
-                  "scope": "project",
-                  "storage": "file",
-                  "path": ".zenflow/settings.json",
-                  "format": "json",
-                  "policy": "manual-template"
-                }
-              ],
-              "agents": [
-                {
-                  "scope": "user",
-                  "storage": "directory",
-                  "path": "~/.zenflow/agents",
-                  "format": "zenflow-agent",
-                  "policy": "manual-template"
-                },
-                {
-                  "scope": "project",
-                  "storage": "directory",
-                  "path": ".zenflow/agents",
-                  "format": "zenflow-agent",
-                  "policy": "manual-template"
-                }
-              ],
-              "prompts": [
-                {
-                  "scope": "user",
-                  "storage": "directory",
-                  "path": "~/.zenflow/prompts",
-                  "format": "zenflow-prompt",
-                  "policy": "manual-template"
-                },
-                {
-                  "scope": "project",
-                  "storage": "directory",
-                  "path": ".zenflow/prompts",
-                  "format": "zenflow-prompt",
-                  "policy": "manual-template"
-                }
-              ],
-              "subagents": [
-                {
-                  "scope": "user",
-                  "storage": "directory",
-                  "path": "~/.zenflow/subagents",
-                  "format": "zenflow-subagent",
-                  "policy": "manual-template"
-                },
-                {
-                  "scope": "project",
-                  "storage": "directory",
-                  "path": ".zenflow/subagents",
-                  "format": "zenflow-subagent",
-                  "policy": "manual-template"
-                }
-              ],
-              "mcp": [
-                {
-                  "scope": "user",
-                  "storage": "file",
-                  "path": "~/.zenflow/mcp.json",
-                  "format": "json:mcpServers",
-                  "policy": "profile-version-adapter"
-                },
-                {
-                  "scope": "project",
-                  "storage": "file",
-                  "path": ".zenflow/mcp.json",
-                  "format": "json:mcpServers",
-                  "policy": "profile-version-adapter"
-                }
-              ],
-              "workflows": [
-                {
-                  "scope": "user",
-                  "storage": "directory",
-                  "path": "~/.zenflow/workflows",
-                  "format": "zenflow-workflow",
-                  "policy": "manual-template"
-                },
-                {
-                  "scope": "project",
-                  "storage": "directory",
-                  "path": ".zenflow/workflows",
-                  "format": "zenflow-workflow",
-                  "policy": "manual-template"
-                }
-              ],
-              "schedules": [
-                {
-                  "scope": "user",
-                  "storage": "file",
-                  "path": "~/.zenflow/schedules.json",
-                  "format": "json",
-                  "policy": "manual-template"
-                },
-                {
-                  "scope": "project",
-                  "storage": "file",
-                  "path": ".zenflow/schedules.json",
-                  "format": "json",
-                  "policy": "manual-template"
-                }
+            {
+              "type": "file-signature",
+              "paths": [
+                "~/.zenflow/skills",
+                "~/.zenflow/settings.json"
               ]
             }
+          ],
+          "platforms": {
+            "darwin": "~/.zenflow",
+            "linux": "~/.zenflow",
+            "windows": "%APPDATA%/Zenflow",
+            "wsl": "~/.zenflow"
+          },
+          "surfaces": {
+            "skills": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.zenflow/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".zenflow/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              }
+            ],
+            "settings": [
+              {
+                "scope": "user",
+                "storage": "file",
+                "path": "~/.zenflow/settings.json",
+                "format": "json",
+                "policy": "manual-template"
+              },
+              {
+                "scope": "project",
+                "storage": "file",
+                "path": ".zenflow/settings.json",
+                "format": "json",
+                "policy": "manual-template"
+              }
+            ],
+            "agents": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.zenflow/agents",
+                "format": "zenflow-agent",
+                "policy": "manual-template"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".zenflow/agents",
+                "format": "zenflow-agent",
+                "policy": "manual-template"
+              }
+            ],
+            "prompts": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.zenflow/prompts",
+                "format": "zenflow-prompt",
+                "policy": "manual-template"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".zenflow/prompts",
+                "format": "zenflow-prompt",
+                "policy": "manual-template"
+              }
+            ],
+            "subagents": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.zenflow/subagents",
+                "format": "zenflow-subagent",
+                "policy": "manual-template"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".zenflow/subagents",
+                "format": "zenflow-subagent",
+                "policy": "manual-template"
+              }
+            ],
+            "mcp": [
+              {
+                "scope": "user",
+                "storage": "file",
+                "path": "~/.zenflow/mcp.json",
+                "format": "json:mcpServers",
+                "policy": "profile-version-adapter"
+              },
+              {
+                "scope": "project",
+                "storage": "file",
+                "path": ".zenflow/mcp.json",
+                "format": "json:mcpServers",
+                "policy": "profile-version-adapter"
+              }
+            ],
+            "workflows": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.zenflow/workflows",
+                "format": "zenflow-workflow",
+                "policy": "manual-template"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".zenflow/workflows",
+                "format": "zenflow-workflow",
+                "policy": "manual-template"
+              }
+            ],
+            "schedules": [
+              {
+                "scope": "user",
+                "storage": "file",
+                "path": "~/.zenflow/schedules.json",
+                "format": "json",
+                "policy": "manual-template"
+              },
+              {
+                "scope": "project",
+                "storage": "file",
+                "path": ".zenflow/schedules.json",
+                "format": "json",
+                "policy": "manual-template"
+              }
+            ]
           }
         }
       }
     },
-    "aliases": {
+    "letta": {
+      "display_name": "Letta Code",
+      "category": "agent-client",
+      "lifecycle": "active",
+      "default_profile": "cli",
+      "profiles": {
+        "cli": {
+          "kind": "cli",
+          "version_range": "current as of 2026-08-16",
+          "verified_at": "2026-08-16",
+          "sources": [
+            "https://docs.letta.com/agents/skills"
+          ],
+          "migration_policy": "bidirectional-reviewed",
+          "detection": [
+            {
+              "type": "binary",
+              "command": [
+                "letta"
+              ],
+              "version_command": [
+                "letta",
+                "--version"
+              ]
+            },
+            {
+              "type": "file-signature",
+              "paths": [
+                "~/.letta/skills",
+                "~/.letta/agents"
+              ]
+            }
+          ],
+          "platforms": {
+            "darwin": "~/.letta",
+            "linux": "~/.letta",
+            "wsl": "~/.letta"
+          },
+          "surfaces": {
+            "skills": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.letta/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".letta/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              }
+            ],
+            "memory": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.letta/editable_memory",
+                "format": "letta-memory",
+                "policy": "manual-template"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".letta/editable_memory",
+                "format": "letta-memory",
+                "policy": "manual-template"
+              }
+            ],
+            "subagents": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.letta/subagents",
+                "format": "letta-subagent",
+                "policy": "manual-template"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".letta/subagents",
+                "format": "letta-subagent",
+                "policy": "manual-template"
+              }
+            ],
+            "scheduling": [
+              {
+                "scope": "user",
+                "storage": "file",
+                "path": "~/.letta/scheduler.json",
+                "format": "letta-scheduler",
+                "policy": "manual-template"
+              },
+              {
+                "scope": "project",
+                "storage": "file",
+                "path": ".letta/scheduler.json",
+                "format": "letta-scheduler",
+                "policy": "manual-template"
+              }
+            ],
+            "agentfile": [
+              {
+                "scope": "user",
+                "storage": "file",
+                "path": "~/.letta/agent.af",
+                "format": "letta-agentfile",
+                "policy": "manual-template"
+              },
+              {
+                "scope": "project",
+                "storage": "file",
+                "path": ".letta/agent.af",
+                "format": "letta-agentfile",
+                "policy": "manual-template"
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "aliases": {
     "vscode": "copilot/vscode",
     "visual-studio": "copilot/visual-studio",
     "claude-desktop": "claude/desktop-chat",
@@ -4725,6 +4816,777 @@
       "include_renamed_products": true,
       "include_archived_products": true,
       "suggest_registry_diff": true
+    }
+  },
+  "letta": {
+    "display_name": "Letta Code",
+    "category": "agent-client",
+    "lifecycle": "active",
+    "default_profile": "cli",
+    "profiles": {
+      "cli": {
+        "kind": "cli",
+        "version_range": "current as of 2026-08-16",
+        "verified_at": "2026-08-16",
+        "sources": [
+          "https://docs.letta.com/agents/skills"
+        ],
+        "migration_policy": "bidirectional-reviewed",
+        "detection": [
+          {
+            "type": "binary",
+            "command": [
+              "letta"
+            ],
+            "version_command": [
+              "letta",
+              "--version"
+            ]
+          },
+          {
+            "type": "file-signature",
+            "paths": [
+              "~/.letta/skills",
+              "~/.letta/agents"
+            ]
+          }
+        ],
+        "platforms": {
+          "darwin": "~/.letta",
+          "linux": "~/.letta",
+          "wsl": "~/.letta"
+        },
+        "surfaces": {
+          "skills": [
+            {
+              "scope": "user",
+              "storage": "directory",
+              "path": "~/.letta/skills",
+              "format": "agent-skill",
+              "policy": "validate-then-atomic-copy"
+            },
+            {
+              "scope": "project",
+              "storage": "directory",
+              "path": ".letta/skills",
+              "format": "agent-skill",
+              "policy": "validate-then-atomic-copy"
+            }
+          ],
+          "memory": [
+            {
+              "scope": "user",
+              "storage": "directory",
+              "path": "~/.letta/editable_memory",
+              "format": "letta-memory",
+              "policy": "manual-template"
+            },
+            {
+              "scope": "project",
+              "storage": "directory",
+              "path": ".letta/editable_memory",
+              "format": "letta-memory",
+              "policy": "manual-template"
+            }
+          ],
+          "subagents": [
+            {
+              "scope": "user",
+              "storage": "directory",
+              "path": "~/.letta/subagents",
+              "format": "letta-subagent",
+              "policy": "manual-template"
+            },
+            {
+              "scope": "project",
+              "storage": "directory",
+              "path": ".letta/subagents",
+              "format": "letta-subagent",
+              "policy": "manual-template"
+            }
+          ],
+          "scheduling": [
+            {
+              "scope": "user",
+              "storage": "file",
+              "path": "~/.letta/scheduler.json",
+              "format": "letta-scheduler",
+              "policy": "manual-template"
+            },
+            {
+              "scope": "project",
+              "storage": "file",
+              "path": ".letta/scheduler.json",
+              "format": "letta-scheduler",
+              "policy": "manual-template"
+            }
+          ],
+          "agentfile": [
+            {
+              "scope": "user",
+              "storage": "file",
+              "path": "~/.letta/agent.af",
+              "format": "letta-agentfile",
+              "policy": "manual-template"
+            },
+            {
+              "scope": "project",
+              "storage": "file",
+              "path": ".letta/agent.af",
+              "format": "letta-agentfile",
+              "policy": "manual-template"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "zencoder": {
+    "display_name": "Zencoder",
+    "category": "agent-client",
+    "lifecycle": "active",
+    "default_profile": "ide",
+    "profiles": {
+      "ide": {
+        "kind": "ide-extension",
+        "version_range": "current as of 2026-08-16",
+        "verified_at": "2026-08-16",
+        "sources": [
+          "https://docs.zencoder.ai/skills"
+        ],
+        "migration_policy": "bidirectional-reviewed",
+        "detection": [
+          {
+            "type": "binary",
+            "command": [
+              "zencoder"
+            ],
+            "version_command": [
+              "zencoder",
+              "--version"
+            ]
+          },
+          {
+            "type": "file-signature",
+            "paths": [
+              "~/.zencoder/skills",
+              "~/.zencoder/settings.json"
+            ]
+          }
+        ],
+        "platforms": {
+          "darwin": "~/.zencoder",
+          "linux": "~/.zencoder",
+          "windows": "%APPDATA%/Zencoder",
+          "wsl": "~/.zencoder"
+        },
+        "surfaces": {
+          "skills": [
+            {
+              "scope": "user",
+              "storage": "directory",
+              "path": "~/.zencoder/skills",
+              "format": "agent-skill",
+              "policy": "validate-then-atomic-copy"
+            },
+            {
+              "scope": "project",
+              "storage": "directory",
+              "path": ".zencoder/skills",
+              "format": "agent-skill",
+              "policy": "validate-then-atomic-copy"
+            }
+          ],
+          "settings": [
+            {
+              "scope": "user",
+              "storage": "file",
+              "path": "~/.zencoder/settings.json",
+              "format": "json",
+              "policy": "manual-template"
+            },
+            {
+              "scope": "project",
+              "storage": "file",
+              "path": ".zencoder/settings.json",
+              "format": "json",
+              "policy": "manual-template"
+            }
+          ],
+          "agents": [
+            {
+              "scope": "user",
+              "storage": "directory",
+              "path": "~/.zencoder/agents",
+              "format": "zencoder-agent",
+              "policy": "manual-template"
+            },
+            {
+              "scope": "project",
+              "storage": "directory",
+              "path": ".zencoder/agents",
+              "format": "zencoder-agent",
+              "policy": "manual-template"
+            }
+          ],
+          "prompts": [
+            {
+              "scope": "user",
+              "storage": "directory",
+              "path": "~/.zencoder/prompts",
+              "format": "zencoder-prompt",
+              "policy": "manual-template"
+            },
+            {
+              "scope": "project",
+              "storage": "directory",
+              "path": ".zencoder/prompts",
+              "format": "zencoder-prompt",
+              "policy": "manual-template"
+            }
+          ],
+          "subagents": [
+            {
+              "scope": "user",
+              "storage": "directory",
+              "path": "~/.zencoder/subagents",
+              "format": "zencoder-subagent",
+              "policy": "manual-template"
+            },
+            {
+              "scope": "project",
+              "storage": "directory",
+              "path": ".zencoder/subagents",
+              "format": "zencoder-subagent",
+              "policy": "manual-template"
+            }
+          ],
+          "mcp": [
+            {
+              "scope": "user",
+              "storage": "file",
+              "path": "~/.zencoder/mcp.json",
+              "format": "json:mcpServers",
+              "policy": "profile-version-adapter"
+            },
+            {
+              "scope": "project",
+              "storage": "file",
+              "path": ".zencoder/mcp.json",
+              "format": "json:mcpServers",
+              "policy": "profile-version-adapter"
+            }
+          ],
+          "workflows": [
+            {
+              "scope": "user",
+              "storage": "directory",
+              "path": "~/.zencoder/workflows",
+              "format": "zencoder-workflow",
+              "policy": "manual-template"
+            },
+            {
+              "scope": "project",
+              "storage": "directory",
+              "path": ".zencoder/workflows",
+              "format": "zencoder-workflow",
+              "policy": "manual-template"
+            }
+          ],
+          "schedules": [
+            {
+              "scope": "user",
+              "storage": "file",
+              "path": "~/.zencoder/schedules.json",
+              "format": "json",
+              "policy": "manual-template"
+            },
+            {
+              "scope": "project",
+              "storage": "file",
+              "path": ".zencoder/schedules.json",
+              "format": "json",
+              "policy": "manual-template"
+            }
+          ],
+          "cloud_task_state": [
+            {
+              "scope": "user",
+              "storage": "file",
+              "path": "~/.zencoder/cloud_state.json",
+              "format": "json",
+              "policy": "manual-template"
+            }
+          ]
+        }
+      }
+    },
+    "zenflow": {
+      "display_name": "Zenflow",
+      "category": "agent-client",
+      "lifecycle": "active",
+      "default_profile": "ide",
+      "profiles": {
+        "ide": {
+          "kind": "ide-extension",
+          "version_range": "current as of 2026-08-16",
+          "verified_at": "2026-08-16",
+          "sources": [
+            "https://docs.zenflow.ai/skills"
+          ],
+          "migration_policy": "bidirectional-reviewed",
+          "detection": [
+            {
+              "type": "binary",
+              "command": [
+                "zenflow"
+              ],
+              "version_command": [
+                "zenflow",
+                "--version"
+              ]
+            },
+            {
+              "type": "file-signature",
+              "paths": [
+                "~/.zenflow/skills",
+                "~/.zenflow/settings.json"
+              ]
+            }
+          ],
+          "platforms": {
+            "darwin": "~/.zenflow",
+            "linux": "~/.zenflow",
+            "windows": "%APPDATA%/Zenflow",
+            "wsl": "~/.zenflow"
+          },
+          "surfaces": {
+            "skills": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.zenflow/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".zenflow/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              }
+            ],
+            "settings": [
+              {
+                "scope": "user",
+                "storage": "file",
+                "path": "~/.zenflow/settings.json",
+                "format": "json",
+                "policy": "manual-template"
+              },
+              {
+                "scope": "project",
+                "storage": "file",
+                "path": ".zenflow/settings.json",
+                "format": "json",
+                "policy": "manual-template"
+              }
+            ],
+            "agents": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.zenflow/agents",
+                "format": "zenflow-agent",
+                "policy": "manual-template"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".zenflow/agents",
+                "format": "zenflow-agent",
+                "policy": "manual-template"
+              }
+            ],
+            "prompts": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.zenflow/prompts",
+                "format": "zenflow-prompt",
+                "policy": "manual-template"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".zenflow/prompts",
+                "format": "zenflow-prompt",
+                "policy": "manual-template"
+              }
+            ],
+            "subagents": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.zenflow/subagents",
+                "format": "zenflow-subagent",
+                "policy": "manual-template"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".zenflow/subagents",
+                "format": "zenflow-subagent",
+                "policy": "manual-template"
+              }
+            ],
+            "mcp": [
+              {
+                "scope": "user",
+                "storage": "file",
+                "path": "~/.zenflow/mcp.json",
+                "format": "json:mcpServers",
+                "policy": "profile-version-adapter"
+              },
+              {
+                "scope": "project",
+                "storage": "file",
+                "path": ".zenflow/mcp.json",
+                "format": "json:mcpServers",
+                "policy": "profile-version-adapter"
+              }
+            ],
+            "workflows": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.zenflow/workflows",
+                "format": "zenflow-workflow",
+                "policy": "manual-template"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".zenflow/workflows",
+                "format": "zenflow-workflow",
+                "policy": "manual-template"
+              }
+            ],
+            "schedules": [
+              {
+                "scope": "user",
+                "storage": "file",
+                "path": "~/.zenflow/schedules.json",
+                "format": "json",
+                "policy": "manual-template"
+              },
+              {
+                "scope": "project",
+                "storage": "file",
+                "path": ".zenflow/schedules.json",
+                "format": "json",
+                "policy": "manual-template"
+              }
+            ]
+          }
+        }
+      },
+      "gemini-code-assist": {
+        "display_name": "Gemini Code Assist",
+        "category": "ide-extension",
+        "lifecycle": "active",
+        "default_profile": "vscode",
+        "profiles": {
+          "vscode": {
+            "kind": "ide-extension",
+            "version_range": "current as of 2026-08-16",
+            "verified_at": "2026-08-16",
+            "sources": [
+              "https://cloud.google.com/gemini-code-assist/docs/ide"
+            ],
+            "migration_policy": "bidirectional-reviewed",
+            "detection": [
+              {
+                "type": "vscode-extension",
+                "id": "google.gemini-code-assist"
+              },
+              {
+                "type": "file-signature",
+                "paths": [
+                  "~/.gemini-code-assist/skills",
+                  "~/.gemini-code-assist/prompts"
+                ]
+              }
+            ],
+            "platforms": {
+              "darwin": "~/.gemini-code-assist",
+              "linux": "~/.gemini-code-assist",
+              "windows": "%APPDATA%/GeminiCodeAssist",
+              "wsl": "~/.gemini-code-assist"
+            },
+            "surfaces": {
+              "skills": [
+                {
+                  "scope": "user",
+                  "storage": "directory",
+                  "path": "~/.gemini-code-assist/skills",
+                  "format": "agent-skill",
+                  "policy": "validate-then-atomic-copy"
+                },
+                {
+                  "scope": "project",
+                  "storage": "directory",
+                  "path": ".gemini-code-assist/skills",
+                  "format": "agent-skill",
+                  "policy": "validate-then-atomic-copy"
+                }
+              ],
+              "prompts": [
+                {
+                  "scope": "user",
+                  "storage": "directory",
+                  "path": "~/.gemini-code-assist/prompts",
+                  "format": "gemini-prompt",
+                  "policy": "manual-template"
+                },
+                {
+                  "scope": "project",
+                  "storage": "directory",
+                  "path": ".gemini-code-assist/prompts",
+                  "format": "gemini-prompt",
+                  "policy": "manual-template"
+                }
+              ],
+              "mcp": [
+                {
+                  "scope": "user",
+                  "storage": "file",
+                  "path": "~/.gemini-code-assist/mcp.json",
+                  "format": "json:mcpServers",
+                  "policy": "profile-version-adapter"
+                },
+                {
+                  "scope": "project",
+                  "storage": "file",
+                  "path": ".gemini-code-assist/mcp.json",
+                  "format": "json:mcpServers",
+                  "policy": "profile-version-adapter"
+                }
+              ],
+              "prompt_library": [
+                {
+                  "scope": "user",
+                  "storage": "directory",
+                  "path": "~/.gemini-code-assist/prompt-library",
+                  "format": "gemini-prompt-library",
+                  "policy": "manual-template"
+                },
+                {
+                  "scope": "project",
+                  "storage": "directory",
+                  "path": ".gemini-code-assist/prompt-library",
+                  "format": "gemini-prompt-library",
+                  "policy": "manual-template"
+                }
+              ]
+            }
+          },
+          "jetbrains": {
+            "kind": "ide-extension",
+            "version_range": "current as of 2026-08-16",
+            "verified_at": "2026-08-16",
+            "sources": [
+              "https://plugins.jetbrains.com/plugin/gemini-code-assist"
+            ],
+            "migration_policy": "bidirectional-reviewed",
+            "detection": [
+              {
+                "type": "vscode-extension",
+                "id": "com.google.gemini.code.assist"
+              },
+              {
+                "type": "file-signature",
+                "paths": [
+                  "~/.config/JetBrains/GeminiCodeAssist/skills",
+                  "~/.config/JetBrains/GeminiCodeAssist/prompts"
+                ]
+              }
+            ],
+            "platforms": {
+              "darwin": "~/.config/JetBrains/GeminiCodeAssist",
+              "linux": "~/.config/JetBrains/GeminiCodeAssist",
+              "windows": "%APPDATA%/JetBrains/GeminiCodeAssist"
+            },
+            "surfaces": {
+              "skills": [
+                {
+                  "scope": "user",
+                  "storage": "directory",
+                  "path": "~/.config/JetBrains/GeminiCodeAssist/skills",
+                  "format": "agent-skill",
+                  "policy": "validate-then-atomic-copy"
+                },
+                {
+                  "scope": "project",
+                  "storage": "directory",
+                  "path": ".gemini-code-assist/skills",
+                  "format": "agent-skill",
+                  "policy": "validate-then-atomic-copy"
+                }
+              ],
+              "prompts": [
+                {
+                  "scope": "user",
+                  "storage": "directory",
+                  "path": "~/.config/JetBrains/GeminiCodeAssist/prompts",
+                  "format": "gemini-prompt",
+                  "policy": "manual-template"
+                },
+                {
+                  "scope": "project",
+                  "storage": "directory",
+                  "path": ".gemini-code-assist/prompts",
+                  "format": "gemini-prompt",
+                  "policy": "manual-template"
+                }
+              ],
+              "mcp": [
+                {
+                  "scope": "user",
+                  "storage": "file",
+                  "path": "~/.config/JetBrains/GeminiCodeAssist/mcp.json",
+                  "format": "json:mcpServers",
+                  "policy": "profile-version-adapter"
+                },
+                {
+                  "scope": "project",
+                  "storage": "file",
+                  "path": ".gemini-code-assist/mcp.json",
+                  "format": "json:mcpServers",
+                  "policy": "profile-version-adapter"
+                }
+              ],
+              "prompt_library": [
+                {
+                  "scope": "user",
+                  "storage": "directory",
+                  "path": "~/.config/JetBrains/GeminiCodeAssist/prompt-library",
+                  "format": "gemini-prompt-library",
+                  "policy": "manual-template"
+                },
+                {
+                  "scope": "project",
+                  "storage": "directory",
+                  "path": ".gemini-code-assist/prompt-library",
+                  "format": "gemini-prompt-library",
+                  "policy": "manual-template"
+                }
+              ]
+            }
+          },
+          "enterprise": {
+            "kind": "cloud-ui",
+            "version_range": "current as of 2026-08-16",
+            "verified_at": "2026-08-16",
+            "sources": [
+              "https://cloud.google.com/gemini-code-assist/docs/enterprise"
+            ],
+            "migration_policy": "official-api-or-rebuild-checklist",
+            "surfaces": {
+              "policies": [
+                {
+                  "scope": "enterprise",
+                  "storage": "file",
+                  "path": "~/.gemini-code-assist/enterprise-policies.json",
+                  "format": "json",
+                  "policy": "manual-template"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "aliases": {
+        "probes": {
+          "binary": {
+            "description": "CLI binary lookup with version command"
+          },
+          "vscode-extension": {
+            "description": "VS Code extension marketplace lookup"
+          },
+          "app-bundle": {
+            "description": "macOS app bundle identifier lookup"
+          },
+          "file-signature": {
+            "description": "File path existence with content fingerprint"
+          },
+          "cloud-account": {
+            "description": "Cloud/API account connection check"
+          },
+          "environment": {
+            "description": "Environment variable override for path"
+          },
+          "schema-probe": {
+            "description": "JSON schema validation for config files"
+          }
+        },
+        "platforms": [
+          "darwin",
+          "linux",
+          "windows",
+          "wsl",
+          "remote-ssh",
+          "dev-container",
+          "codespaces",
+          "vscode-profile",
+          "extension-host"
+        ],
+        "installation_states": [
+          "installed",
+          "configured-only",
+          "compatibility-only",
+          "cloud-connected",
+          "legacy",
+          "ambiguous",
+          "not-detected"
+        ]
+      },
+      "freshness": {
+        "max_age_days": 365,
+        "online_checks_enabled": true,
+        "demote_stale_on_detect": true,
+        "stale_levels": [
+          "stale-partial",
+          "stale-manual",
+          "stale-source-only"
+        ],
+        "candidate_discovery_schedule": "weekly",
+        "candidate_discovery_sources": [
+          "github.com trending AI coding agents",
+          "npm registry @scope/agent-* packages",
+          "pypi.org AI coding assistants",
+          "product hunt AI category",
+          "official vendor release notes"
+        ]
+      },
+      "candidate_discovery": {
+        "enabled": true,
+        "schedule": "0 0 * * 1",
+        "auto_promote_threshold": {
+          "min_official_sources": 2,
+          "min_surfaces": 2,
+          "min_detection_probes": 1
+        },
+        "report_format": {
+          "include_new_products": true,
+          "include_new_paths": true,
+          "include_schema_changes": true,
+          "include_renamed_products": true,
+          "include_archived_products": true,
+          "suggest_registry_diff": true
+        }
+      }
     }
   }
 }
