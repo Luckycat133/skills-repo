@@ -555,6 +555,16 @@ class Registry:
             boundary = self._absolute(base)
             path = boundary / str(relative) if relative else boundary
             return self._absolute(path), boundary
+        # Honour Registry v2 per-surface platform overrides (darwin,
+        # linux, windows, wsl, remote-ssh, dev-container, codespaces,
+        # vscode-profile, extension-host).  The override keys live on
+        # the parent surface entry, looked up via
+        # ``entry.get("platform_paths", {})`` or the product-level
+        # ``profile.platforms`` map.
+        platforms = entry.get("platforms") or {}
+        env_platform = os.environ.get("AGENT_SKILLS_PLATFORM", "")
+        if platforms and env_platform in platforms:
+            raw_path = str(platforms[env_platform])
         if raw_path == "~":
             return self.home, self.home
         if raw_path.startswith("~/"):
@@ -636,6 +646,8 @@ class Registry:
                         "confidence": profile.get("confidence"),
                         "object_type": None,
                         "exists": False,
+                        "detection": profile.get("detection", []),
+                        "platforms": profile.get("platforms", {}),
                     }
                 )
                 continue
@@ -655,6 +667,8 @@ class Registry:
                     row["support_level"] = profile.get("support_level")
                     row["confidence"] = profile.get("confidence")
                     row["exists"] = surface.resolved_path.exists()
+                    row["detection"] = profile.get("detection", [])
+                    row["platforms"] = profile.get("platforms", {})
                     existing = existing_by_group.get(
                         (surface.scope, surface.canonical_path), []
                     )

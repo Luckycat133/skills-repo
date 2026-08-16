@@ -309,6 +309,114 @@ def default_workspace_migration_dir(workspace: Path) -> Path:
     return workspace / ".migration"
 
 
+def run_detection(args: argparse.Namespace) -> int:
+    """Run per-product detection probes against the local device.
+
+    Uses the Registry v2 ``detection`` block on each profile (binary,
+    file-signature, app-bundle) and falls back to the inventory's
+    ``exists`` flag.  Returns one ``InstallState`` per profile.
+    """
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from detect.probes import (
+        detect_profile,
+        detect_product,
+        probe_binary,
+        probe_file_signature,
+        InstallState,
+    )
+    workspace = args.workspace.resolve()
+    registry = Registry(args.registry, workspace)
+    home = registry.home
+    rows = registry.inventory(None)
+    profiles_to_check: set[tuple[str, str]] = set()
+    for product_id, product in registry.products.items():
+        for profile_id in product.get("profiles", {}):
+            profiles_to_check.add((product_id, profile_id))
+    detections: list[dict[str, str]] = []
+    for product_id, profile_id in sorted(profiles_to_check):
+        product = registry.products[product_id]
+        profile = product["profiles"][profile_id]
+        detection = profile.get("detection", []) or []
+        state = InstallState.NOT_DETECTED
+        evidence: list[str] = []
+        for probe in detection:
+            if not isinstance(probe, dict):
+                continue
+            kind = probe.get("type")
+            if kind == "binary":
+                names = probe.get("command") or probe.get("binaries") or []
+                version_command = probe.get("version_command")
+                if isinstance(names, str):
+                    names = [names]
+                result = probe_binary(
+                    product_id, profile_id, names,
+                    version_command=version_command,
+                )
+                if result.state is InstallState.INSTALLED:
+                    state = result.state
+                    evidence.extend(result.evidence)
+                    break
+            elif kind == "file-signature":
+                paths = probe.get("paths") or []
+                resolved_paths = []
+                for p in paths:
+                    raw = str(p)
+                    if raw.startswith("~"):
+                        resolved_paths.append(
+                            Path(str(home) + raw[1:]).expanduser()
+                        )
+                    else:
+                        resolved_paths.append(Path(raw).expanduser())
+                result = probe_file_signature(
+                    product_id, profile_id, resolved_paths,
+                )
+                if result.state is InstallState.INSTALLED:
+                    state = result.state
+                    evidence.extend(result.evidence)
+                    break
+            elif kind == "app-bundle":
+                result = detect_product(
+                    product_id, profile_id,
+                    app_bundle_id=probe.get("darwin_bundle_id"),
+                )
+                if result.state is InstallState.INSTALLED:
+                    state = result.state
+                    evidence.extend(result.evidence)
+                    break
+        if state is InstallState.NOT_DETECTED:
+            # Fall back to inventory ``exists`` on any surface.
+            for row in rows:
+                if (
+                    row.get("product") == product_id
+                    and row.get("profile") == profile_id
+                    and row.get("exists")
+                ):
+                    state = InstallState.INSTALLED
+                    evidence.append(
+                        f"inventory:{row.get('object_type')}:{row.get('canonical_path')}"
+                    )
+                    break
+        detections.append(
+            {
+                "product": product_id,
+                "profile": profile_id,
+                "state": state.value,
+                "evidence": evidence,
+            }
+        )
+    emit(
+        {
+            "ok": True,
+            "stage": "detect",
+            "platform": sys.platform,
+            "home": str(home),
+            "detections": detections,
+        },
+        args.json,
+    )
+    return 0
+
+
 def run_snapshot(args: argparse.Namespace) -> int:
     """Capture a portable ACB snapshot of the current device."""
     workspace = args.workspace.resolve()
@@ -765,10 +873,10 @@ def run_new_cli(argv: list[str]) -> int:
 
     registry = Registry(args.registry, args.workspace)
     if args.command in {"detect", "inventory"}:
+        if args.command == "detect":
+            return run_detection(args)
         selected = selector(args.product, args.profile)
         rows = registry.inventory(selected)
-        if args.command == "detect":
-            rows = [row for row in rows if row.get("exists")]
         emit(rows, args.json)
         return 0
 

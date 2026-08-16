@@ -271,6 +271,30 @@
                 "policy": "forbidden-regenerate"
               }
             ]
+          },
+          "detection": [
+            {
+              "type": "binary",
+              "command": [
+                "cline"
+              ],
+              "version_command": [
+                "cline",
+                "--version"
+              ]
+            },
+            {
+              "type": "file-signature",
+              "paths": [
+                "~/.cline/skills",
+                "~/.clinerules"
+              ]
+            }
+          ],
+          "platforms": {
+            "darwin": "~/.cline/skills",
+            "linux": "~/.cline/skills",
+            "windows": "$APPDATA/cline/skills"
           }
         },
         "cli": {
@@ -499,6 +523,32 @@
                 "policy": "explicit-subobject-only"
               }
             ]
+          },
+          "detection": [
+            {
+              "type": "binary",
+              "command": [
+                "forge"
+              ],
+              "version_command": [
+                "forge",
+                "--version"
+              ]
+            },
+            {
+              "type": "file-signature",
+              "paths": [
+                "~/.forge/skills",
+                "~/.agents/skills"
+              ]
+            }
+          ],
+          "platforms": {
+            "darwin": "~/.forge/skills",
+            "linux": "~/.forge/skills",
+            "wsl": "~/.forge/skills",
+            "remote-ssh": "~/.forge/skills",
+            "extension-host": "~/.forge/skills"
           }
         }
       }
@@ -633,7 +683,26 @@
                 "policy": "never-migrate"
               }
             ]
-          }
+          },
+          "detection": [
+            {
+              "type": "binary",
+              "command": [
+                "codex"
+              ],
+              "version_command": [
+                "codex",
+                "--version"
+              ]
+            },
+            {
+              "type": "file-signature",
+              "paths": [
+                "~/.codex/AGENTS.md",
+                "~/.codex/skills"
+              ]
+            }
+          ]
         }
       }
     },
@@ -1464,6 +1533,30 @@
                 "policy": "profile-version-adapter"
               }
             ]
+          },
+          "detection": [
+            {
+              "type": "binary",
+              "command": [
+                "claude"
+              ],
+              "version_command": [
+                "claude",
+                "--version"
+              ]
+            },
+            {
+              "type": "file-signature",
+              "paths": [
+                "~/.claude/skills",
+                "CLAUDE.md"
+              ]
+            }
+          ],
+          "platforms": {
+            "darwin": "~/.claude/skills",
+            "linux": "~/.claude/skills",
+            "wsl": "~/.claude/skills"
           }
         },
         "desktop-code": {
@@ -1823,6 +1916,24 @@
                 "policy": "disabled-draft-only"
               }
             ]
+          },
+          "detection": [
+            {
+              "type": "app-bundle",
+              "darwin_bundle_id": "com.todesclient.ios"
+            },
+            {
+              "type": "file-signature",
+              "paths": [
+                "~/.cursor/skills",
+                "~/.cursor/rules"
+              ]
+            }
+          ],
+          "platforms": {
+            "darwin": "~/.cursor/skills",
+            "linux": "~/.cursor/skills",
+            "windows": "$APPDATA/Cursor/skills"
           }
         }
       }
