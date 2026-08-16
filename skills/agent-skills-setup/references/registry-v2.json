@@ -4862,6 +4862,165 @@
           }
         }
       }
+    },
+    "letta-code": {
+      "display_name": "Letta Code",
+      "category": "agent-client",
+      "lifecycle": "active",
+      "default_profile": "desktop-cli",
+      "profiles": {
+        "desktop-cli": {
+          "kind": "desktop-cli",
+          "version_range": "current as of 2026-08-16",
+          "verified_at": "2026-08-16",
+          "sources": [
+            "https://docs.letta.ai/letta-code"
+          ],
+          "migration_policy": "bidirectional-reviewed",
+          "detection": [
+            {
+              "type": "binary",
+              "command": [
+                "letta"
+              ],
+              "version_command": [
+                "letta",
+                "--version"
+              ]
+            },
+            {
+              "type": "file-signature",
+              "paths": [
+                "~/.letta/skills",
+                "~/.letta/memories",
+                "~/.letta/agents"
+              ]
+            }
+          ],
+          "platforms": {
+            "darwin": "~/.letta",
+            "linux": "~/.letta",
+            "wsl": "~/.letta"
+          },
+          "surfaces": {
+            "skills": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.letta/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".letta/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              }
+            ],
+            "memory": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.letta/memories",
+                "format": "letta-memory",
+                "policy": "manual-template"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".letta/memories",
+                "format": "letta-memory",
+                "policy": "manual-template"
+              }
+            ],
+            "subagents": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.letta/agents",
+                "format": "letta-agent",
+                "policy": "manual-template"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".letta/agents",
+                "format": "letta-agent",
+                "policy": "manual-template"
+              }
+            ],
+            "instructions": [
+              {
+                "scope": "user",
+                "storage": "hierarchy",
+                "path": "~/.letta/AGENTS.md",
+                "format": "agents-md",
+                "policy": "semantic-ir-with-loss-report"
+              },
+              {
+                "scope": "project",
+                "storage": "hierarchy",
+                "path": "AGENTS.md",
+                "format": "agents-md",
+                "policy": "semantic-ir-with-loss-report"
+              }
+            ]
+          }
+        },
+        "cloud": {
+          "kind": "cloud-ui",
+          "version_range": "current as of 2026-08-16",
+          "verified_at": "2026-08-16",
+          "sources": [
+            "https://app.letta.com"
+          ],
+          "migration_policy": "official-api-or-rebuild-checklist",
+          "surfaces": {}
+        },
+        "agent-file": {
+          "kind": "agent-file",
+          "version_range": "current as of 2026-08-16",
+          "verified_at": "2026-08-16",
+          "sources": [
+            "https://docs.letta.ai/agent-file"
+          ],
+          "migration_policy": "bidirectional-reviewed",
+          "detection": [
+            {
+              "type": "file-signature",
+              "paths": [
+                "~/.letta/agents.af",
+                ".letta/agents.af"
+              ]
+            }
+          ],
+          "platforms": {
+            "darwin": "~/.letta",
+            "linux": "~/.letta",
+            "wsl": "~/.letta"
+          },
+          "surfaces": {
+            "agent_file": [
+              {
+                "scope": "user",
+                "storage": "file",
+                "path": "~/.letta/agents.af",
+                "format": "letta-agent-file",
+                "policy": "preserve-package"
+              },
+              {
+                "scope": "project",
+                "storage": "file",
+                "path": ".letta/agents.af",
+                "format": "letta-agent-file",
+                "policy": "preserve-package"
+              }
+            ]
+          }
+        }
+      }
     }
   },
   "aliases": {

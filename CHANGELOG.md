@@ -4,6 +4,14 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ## [Unreleased]
 
+## [0.8.13] - 2026-08-16
+
+### Added
+
+- **Letta Code**：desktop-cli、cloud、agent-file（`.af` AgentFile 适配器）
+  三个 profile；skills/memory/subagents/instructions 完整 surface；
+  `.af` AgentFile 用 `preserve-package` 策略保留完整 agent 状态。
+
 ## [0.8.12] - 2026-08-16
 
 ### Verified
