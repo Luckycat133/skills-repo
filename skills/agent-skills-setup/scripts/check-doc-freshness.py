@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -108,6 +109,52 @@ def probe(check: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def check_stale_profiles(registry: dict[str, Any], today: date, max_age_days: int) -> list[str]:
+    """Return list of profiles that have exceeded freshness window."""
+    stale: list[str] = []
+    for product_id, product in registry.get("products", {}).items():
+        if product.get("lifecycle") != "active":
+            continue
+        profiles = product.get("profiles", {})
+        for profile_id in profiles:
+            profile = registry["products"][product_id]["profiles"][profile_id]
+            try:
+                verified = date.fromisoformat(str(profile.get("verified_at", "")))
+                age = (today - verified).days
+                if age > max_age_days:
+                    stale.append(f"{product_id}/{profile_id}")
+            except ValueError:
+                stale.append(f"{product_id}/{profile_id} (invalid verified_at)")
+    return stale
+
+
+def demote_stale_support(registry: dict[str, Any], stale_profiles: list[str]) -> int:
+    """Demote stale profiles from partial/manual to stale-* support levels.
+    Returns number of profiles demoted.
+    """
+    demoted = 0
+    for profile_spec in stale_profiles:
+        product_id, profile_id = profile_spec.split("/", 1)
+        if product_id not in registry.get("products", {}):
+            continue
+        product = registry["products"][product_id]
+        profiles = product.get("profiles", {})
+        if profile_id not in profiles:
+            continue
+        profile = profiles[profile_id]
+        level = profile.get("support_level", "")
+        if level == "partial":
+            profile["support_level"] = "stale-partial"
+            demoted += 1
+        elif level == "manual":
+            profile["support_level"] = "stale-manual"
+            demoted += 1
+        elif level == "source-only":
+            profile["support_level"] = "stale-source-only"
+            demoted += 1
+    return demoted
+
+
 def probe_with_retries(check: dict[str, Any], retries: int) -> dict[str, Any]:
     last_error: OSError | ValueError | urllib.error.URLError | None = None
     for attempt in range(1, retries + 2):
@@ -133,6 +180,7 @@ def main() -> int:
     parser.add_argument("--online", action="store_true")
     parser.add_argument("--retries", type=int, default=2)
     parser.add_argument("--report", type=Path)
+    parser.add_argument("--demote-stale", action="store_true", help="Demote stale profiles in registry")
     args = parser.parse_args()
 
     try:
@@ -142,6 +190,21 @@ def main() -> int:
         registry = load_object(args.registry)
         checks_document = load_object(args.checks)
         errors = validate_provenance(registry, today, args.max_age_days)
+
+        # Check for stale profiles and optionally demote them
+        stale_profiles = check_stale_profiles(registry, today, args.max_age_days)
+        if stale_profiles:
+            stale_error = f"stale profiles detected: {', '.join(stale_profiles)}"
+            errors.append(stale_error)
+            if args.demote_stale:
+                demoted = demote_stale_support(registry, stale_profiles)
+                if demoted:
+                    # Write back the updated registry
+                    args.registry.write_text(
+                        json.dumps(registry, indent=2, sort_keys=True) + "\n",
+                        encoding="utf-8",
+                    )
+                    print(f"Demoted {demoted} stale profiles", file=sys.stderr)
         checks = checks_document.get("checks")
         if checks_document.get("schema_version") != 1 or not isinstance(checks, list):
             errors.append("freshness checks: unsupported schema")

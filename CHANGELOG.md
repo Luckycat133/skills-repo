@@ -4,6 +4,40 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ## [Unreleased]
 
+## [0.8.10] - 2026-08-16
+
+### Added
+
+- **Freshness automation**: Online HTTP probe integration for curated
+  official sources with retries and required-terms validation.
+  New `--demote-stale` flag on `check-doc-freshness.py` auto-demotes
+  stale profiles (`partial` → `stale-partial`, `manual` →
+  `stale-manual`, `source-only` → `stale-source-only`) and writes
+  back the updated registry.
+- **Stale demotion**: Profiles exceeding the `max_age_days` window
+  are demoted (`partial` → `stale-partial`, `manual` →
+  `stale-manual`, `source-only` → `stale-source-only`) so they are
+  no longer advertised as current support.
+- **Registry v2.1 schema**: New fields for `aliases`, `detection_config`,
+  `freshness` (with `max_age_days`, `demote_stale_on_detect`,
+  `stale_levels`, `candidate_discovery_schedule`),
+  `candidate_discovery` (with `schedule`, `auto_promote_threshold`,
+  `report_format`), and new `support_contract` levels
+  `stale-partial`, `stale-manual`, `stale-source-only`.
+- **Weekly candidate discovery**: Automated weekly scan for new
+  products, new official paths, schema changes, renamed/archived
+  products, and suggested registry diffs.
+
+### Changed
+
+- Registry schema version bumped to 2.1; `migration_core.py`
+  accepts both 2.0 and 2.1.
+- `check-doc-freshness.py` adds `--demote-stale` flag for CI/CD
+  integration; stale profiles recorded in report and optionally
+  demoted in-place with updated registry written back.
+- Registry now carries `aliases`, `detection_config`, `freshness`,
+  `candidate_discovery` at top level for tooling consumption.
+
 ## [0.8.9] - 2026-08-16
 
 ### Added

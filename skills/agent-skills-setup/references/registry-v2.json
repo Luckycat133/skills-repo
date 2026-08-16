@@ -1,6 +1,6 @@
 {
   "$schema": "./registry-v2.schema.json",
-  "schema_version": 2,
+  "schema_version": 2.1,
   "verified_at": "2026-08-12",
   "object_policies": {
     "skill": "validate-then-atomic-copy",
@@ -54,6 +54,21 @@
     "alias-only": {
       "support_level": "alias",
       "confidence": "high"
+    },
+    "stale-partial": {
+      "support_level": "stale-partial",
+      "confidence": "low",
+      "description": "Profile was partial but exceeded freshness window; may have outdated paths/schemas"
+    },
+    "stale-manual": {
+      "support_level": "stale-manual",
+      "confidence": "low",
+      "description": "Profile was manual but exceeded freshness window; may have outdated docs/paths"
+    },
+    "stale-source-only": {
+      "support_level": "stale-source-only",
+      "confidence": "low",
+      "description": "Profile was source-only but exceeded freshness window"
     }
   },
   "profile_templates": {
@@ -3974,6 +3989,94 @@
           "surfaces": {}
         }
       }
+    }
+  },
+  "aliases": {
+    "vscode": "copilot/vscode",
+    "visual-studio": "copilot/visual-studio",
+    "claude-desktop": "claude/desktop-chat",
+    "trae-cn": "trae/cn-ide",
+    "jetbrains-ai": "jetbrains/ai-assistant",
+    "codeium": "windsurf/ide"
+  },
+  "detection_config": {
+    "probes": {
+      "binary": {
+        "description": "CLI binary lookup with version command"
+      },
+      "vscode-extension": {
+        "description": "VS Code extension marketplace lookup"
+      },
+      "app-bundle": {
+        "description": "macOS app bundle identifier lookup"
+      },
+      "file-signature": {
+        "description": "File path existence with content fingerprint"
+      },
+      "cloud-account": {
+        "description": "Cloud/API account connection check"
+      },
+      "environment": {
+        "description": "Environment variable override for path"
+      },
+      "schema-probe": {
+        "description": "JSON schema validation for config files"
+      }
+    },
+    "platforms": [
+      "darwin",
+      "linux",
+      "windows",
+      "wsl",
+      "remote-ssh",
+      "dev-container",
+      "codespaces",
+      "vscode-profile",
+      "extension-host"
+    ],
+    "installation_states": [
+      "installed",
+      "configured-only",
+      "compatibility-only",
+      "cloud-connected",
+      "legacy",
+      "ambiguous",
+      "not-detected"
+    ]
+  },
+  "freshness": {
+    "max_age_days": 365,
+    "online_checks_enabled": true,
+    "demote_stale_on_detect": true,
+    "stale_levels": [
+      "stale-partial",
+      "stale-manual",
+      "stale-source-only"
+    ],
+    "candidate_discovery_schedule": "weekly",
+    "candidate_discovery_sources": [
+      "github.com trending AI coding agents",
+      "npm registry @scope/agent-* packages",
+      "pypi.org AI coding assistants",
+      "product hunt AI category",
+      "official vendor release notes"
+    ]
+  },
+  "candidate_discovery": {
+    "enabled": true,
+    "schedule": "0 0 * * 1",
+    "auto_promote_threshold": {
+      "min_official_sources": 2,
+      "min_surfaces": 2,
+      "min_detection_probes": 1
+    },
+    "report_format": {
+      "include_new_products": true,
+      "include_new_paths": true,
+      "include_schema_changes": true,
+      "include_renamed_products": true,
+      "include_archived_products": true,
+      "suggest_registry_diff": true
     }
   }
 }

@@ -382,8 +382,8 @@ class Registry:
         self.workspace = workspace.resolve()
         self.home = (home or Path.home()).resolve()
         self.data = json.loads(path.read_text(encoding="utf-8"))
-        if self.data.get("schema_version") != 2:
-            raise ValueError("registry schema_version must be 2")
+        if self.data.get("schema_version") not in (2, 2.1):
+            raise ValueError("registry schema_version must be 2 or 2.1")
 
     @property
     def products(self) -> dict[str, Any]:
