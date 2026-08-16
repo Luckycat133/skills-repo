@@ -81,7 +81,7 @@ assert plan[0].manual_actions
 cloud = build_plan_document(
     registry,
     "cline/ide",
-    "trae/work",
+    "trae/ide",
     ["skills", "instructions", "mcp"],
     "project",
 )

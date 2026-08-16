@@ -4,6 +4,36 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ## [Unreleased]
 
+## [0.8.6] - 2026-08-16
+
+### Added
+
+- Upgraded 10 core products from `manual-reference` to
+  `bidirectional-reviewed` profiles with concrete surfaces:
+  - **Copilot**: `cli`, `vscode`, `visual-studio` — skills, instructions, MCP
+  - **Gemini CLI** — skills, instructions, MCP
+  - **Kiro** — skills, steering rules
+  - **OpenCode** — skills, AGENTS.md instructions
+  - **TRAE**: `ide` and `cn-ide` — skills, rules
+  - **JetBrains**: `junie` and `ai-assistant` — skills
+  - **Zed** — skills, AGENTS.md instructions
+  - **Continue** — skills, AGENTS.md instructions
+  - **Sourcegraph Amp** — skills, AGENTS.md instructions
+  - **OpenHands** — skills, AGENTS.md instructions
+- Each new profile includes `detection` probes (binary, file-signature) and
+  `platforms` mapping (darwin, linux, windows, wsl, dev-container,
+  vscode-profile, extension-host) for accurate environment detection.
+- `detect` command now returns structured `InstallState` with evidence
+  instead of simple `exists` boolean.
+
+### Changed
+
+- Registry v2 profile resolution now honors per-profile `platforms`
+  overrides when `AGENT_SKILLS_PLATFORM` is set.
+- `scope_matches` expanded to accept comma-separated scopes
+  (`user,project`) enabling the `migrate` default scope to resolve
+  both user and project surfaces simultaneously.
+
 ## [0.8.5] - 2026-08-16
 
 ### Added

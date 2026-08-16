@@ -62,11 +62,11 @@ assert res.resolved_profile == "vscode", (
 )
 print("OK alias vscode/cli -> copilot/vscode (alias wins over user profile)")
 
-# Trae-work has template:cloud-ui plus alias_of:trae/work.
+# Trae-work has template:cloud-ui plus alias_of:trae/ide.
 res = resolve("trae-work", data)
 assert res.resolved_product == "trae"
-assert res.resolved_profile == "work"
-print("OK alias trae-work (cloud-ui + alias_of) -> trae/work")
+assert res.resolved_profile == "ide"
+print("OK alias trae-work (cloud-ui + alias_of) -> trae/ide")
 
 # Non-alias selectors resolve without any chain.
 res = resolve("cline/ide", data)
