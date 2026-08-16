@@ -361,7 +361,8 @@
                 "policy": "profile-version-adapter"
               }
             ]
-          }
+          },
+          "mcp_path_note": "Dual paths documented: ~/.aws/amazonq/default.json and ~/.aws/amazonq/agents/default.json - probe both and validate root key/signature"
         },
         "cli": {
           "kind": "cli",
@@ -996,58 +997,131 @@
     },
     "qwen-code": {
       "display_name": "Qwen Code",
-      "category": "coding-agent",
+      "category": "agent-client",
       "lifecycle": "active",
       "default_profile": "cli",
       "profiles": {
         "cli": {
           "kind": "cli",
-          "version_range": "current as of 2026-08-12",
-          "migration_policy": "bidirectional-reviewed",
-          "verified_at": "2026-08-12",
+          "version_range": "current as of 2026-08-13",
+          "verified_at": "2026-08-13",
           "sources": [
-            "https://github.com/QwenLM/qwen-code/blob/main/docs/users/features/skills.md",
-            "https://github.com/QwenLM/qwen-code/blob/main/docs/users/features/mcp.md"
+            "https://github.com/QwenLM/Qwen-Code"
           ],
+          "migration_policy": "bidirectional-reviewed",
+          "detection": [
+            {
+              "type": "binary",
+              "command": [
+                "qwen"
+              ],
+              "version_command": [
+                "qwen",
+                "--version"
+              ]
+            },
+            {
+              "type": "file-signature",
+              "paths": [
+                "~/.qwen/skills",
+                "~/.qwen/commands",
+                "~/.qwen/agents"
+              ]
+            }
+          ],
+          "platforms": {
+            "darwin": "~/.qwen",
+            "linux": "~/.qwen",
+            "wsl": "~/.qwen"
+          },
           "surfaces": {
             "skills": [
               {
                 "scope": "user",
                 "storage": "directory",
                 "path": "~/.qwen/skills",
-                "format": "qwen-skill",
+                "format": "agent-skill",
                 "policy": "validate-then-atomic-copy"
               },
               {
                 "scope": "project",
                 "storage": "directory",
                 "path": ".qwen/skills",
-                "format": "qwen-skill",
+                "format": "agent-skill",
                 "policy": "validate-then-atomic-copy"
+              }
+            ],
+            "instructions": [
+              {
+                "scope": "project",
+                "storage": "hierarchy",
+                "path": "AGENTS.md",
+                "format": "agents-md",
+                "policy": "semantic-ir-with-loss-report"
               }
             ],
             "mcp": [
               {
                 "scope": "user",
-                "storage": "config-subobject",
-                "path": "~/.qwen/settings.json",
+                "storage": "file",
+                "path": "~/.qwen/mcp.json",
                 "format": "json:mcpServers",
                 "policy": "profile-version-adapter"
               },
               {
                 "scope": "project",
-                "storage": "config-subobject",
-                "path": ".qwen/settings.json",
+                "storage": "file",
+                "path": ".qwen/mcp.json",
                 "format": "json:mcpServers",
                 "policy": "profile-version-adapter"
               }
             ],
-            "generated_memory": [
+            "commands": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.qwen/commands",
+                "format": "qwen-command",
+                "policy": "manual-template"
+              },
               {
                 "scope": "project",
-                "storage": "generated-state",
-                "path": ".qwen/archived-skills",
-                "policy": "forbidden-regenerate"
+                "storage": "directory",
+                "path": ".qwen/commands",
+                "format": "qwen-command",
+                "policy": "manual-template"
+              }
+            ],
+            "agents": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.qwen/agents",
+                "format": "qwen-agent",
+                "policy": "manual-template"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".qwen/agents",
+                "format": "qwen-agent",
+                "policy": "manual-template"
+              }
+            ],
+            "hooks": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.qwen/hooks",
+                "format": "qwen-hook",
+                "policy": "disabled-draft-only"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".qwen/hooks",
+                "format": "qwen-hook",
+                "policy": "disabled-draft-only"
               }
             ]
           }
@@ -1145,20 +1219,41 @@
     },
     "factory-droid": {
       "display_name": "Factory Droid",
-      "category": "coding-agent",
+      "category": "agent-client",
       "lifecycle": "active",
       "default_profile": "cli",
       "profiles": {
         "cli": {
-          "kind": "cli-and-desktop",
-          "version_range": "current as of 2026-08-12",
-          "migration_policy": "bidirectional-reviewed",
-          "verified_at": "2026-08-12",
+          "kind": "cli",
+          "version_range": "current as of 2026-08-16",
+          "verified_at": "2026-08-16",
           "sources": [
-            "https://docs.factory.ai/cli/configuration/mcp",
-            "https://docs.factory.ai/reference/hooks-reference",
-            "https://docs.factory.ai/cli/configuration/custom-droids"
+            "https://factory.ai/docs/plugins"
           ],
+          "migration_policy": "bidirectional-reviewed",
+          "detection": [
+            {
+              "type": "binary",
+              "command": [
+                "factory"
+              ],
+              "version_command": [
+                "factory",
+                "--version"
+              ]
+            },
+            {
+              "type": "file-signature",
+              "paths": [
+                "~/.factory/skills",
+                "~/.factory/plugins"
+              ]
+            }
+          ],
+          "platforms": {
+            "darwin": "~/.factory",
+            "linux": "~/.factory"
+          },
           "surfaces": {
             "skills": [
               {
@@ -1176,20 +1271,20 @@
                 "policy": "validate-then-atomic-copy"
               }
             ],
-            "instructions": [
+            "commands": [
               {
                 "scope": "user",
-                "storage": "file",
-                "path": "~/.factory/AGENTS.md",
-                "format": "agents-md",
-                "policy": "semantic-ir-with-loss-report"
+                "storage": "directory",
+                "path": "~/.factory/commands",
+                "format": "factory-command",
+                "policy": "manual-template"
               },
               {
                 "scope": "project",
-                "storage": "hierarchy",
-                "path": "AGENTS.md",
-                "format": "agents-md",
-                "policy": "semantic-ir-with-loss-report"
+                "storage": "directory",
+                "path": ".factory/commands",
+                "format": "factory-command",
+                "policy": "manual-template"
               }
             ],
             "agents": [
@@ -1211,23 +1306,16 @@
             "hooks": [
               {
                 "scope": "user",
-                "storage": "config-subobject",
-                "path": "~/.factory/settings.json",
-                "format": "json:hooks",
+                "storage": "file",
+                "path": "~/.factory/hooks/hooks.json",
+                "format": "factory-hooks",
                 "policy": "disabled-draft-only"
               },
               {
                 "scope": "project",
-                "storage": "config-subobject",
-                "path": ".factory/settings.json",
-                "format": "json:hooks",
-                "policy": "disabled-draft-only"
-              },
-              {
-                "scope": "local",
-                "storage": "config-subobject",
-                "path": ".factory/settings.local.json",
-                "format": "json:hooks",
+                "storage": "file",
+                "path": ".factory/hooks/hooks.json",
+                "format": "factory-hooks",
                 "policy": "disabled-draft-only"
               }
             ],
@@ -1245,6 +1333,22 @@
                 "path": ".factory/mcp.json",
                 "format": "json:mcpServers",
                 "policy": "profile-version-adapter"
+              }
+            ],
+            "plugins": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.factory/plugins",
+                "format": "factory-plugin",
+                "policy": "preserve-package"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".factory/plugins",
+                "format": "factory-plugin",
+                "policy": "preserve-package"
               }
             ]
           }
@@ -2115,8 +2219,90 @@
       "reference": "ides/helix.md"
     },
     "devin": {
-      "template": "cloud-ui",
-      "reference": "ides/devin.md"
+      "display_name": "Devin",
+      "category": "agent-suite",
+      "lifecycle": "active",
+      "default_profile": "terminal",
+      "profiles": {
+        "terminal": {
+          "kind": "cli",
+          "version_range": "current as of 2026-08-16",
+          "verified_at": "2026-08-16",
+          "sources": [
+            "https://docs.devin.ai/cli"
+          ],
+          "migration_policy": "bidirectional-reviewed",
+          "detection": [
+            {
+              "type": "binary",
+              "command": [
+                "devin"
+              ],
+              "version_command": [
+                "devin",
+                "--version"
+              ]
+            },
+            {
+              "type": "file-signature",
+              "paths": [
+                "~/.devin/skills",
+                "~/.devin/sessions"
+              ]
+            }
+          ],
+          "platforms": {
+            "darwin": "~/.devin",
+            "linux": "~/.devin"
+          },
+          "surfaces": {
+            "skills": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.devin/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".devin/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              }
+            ],
+            "instructions": [
+              {
+                "scope": "project",
+                "storage": "hierarchy",
+                "path": "AGENTS.md",
+                "format": "agents-md",
+                "policy": "semantic-ir-with-loss-report"
+              }
+            ],
+            "handoff": [
+              {
+                "scope": "user",
+                "storage": "file",
+                "path": "~/.devin/sessions",
+                "format": "devin-session",
+                "policy": "manual-template"
+              }
+            ]
+          }
+        },
+        "cloud": {
+          "kind": "cloud-ui",
+          "version_range": "current as of 2026-08-16",
+          "verified_at": "2026-08-16",
+          "sources": [
+            "https://app.devin.ai"
+          ],
+          "migration_policy": "official-api-or-rebuild-checklist",
+          "surfaces": {}
+        }
+      }
     },
     "v0": {
       "template": "cloud-ui",
@@ -3143,6 +3329,175 @@
               }
             ]
           }
+        }
+      }
+    },
+    "warp": {
+      "display_name": "Warp",
+      "category": "agent-client",
+      "lifecycle": "active",
+      "default_profile": "desktop",
+      "profiles": {
+        "desktop": {
+          "kind": "desktop-agent",
+          "version_range": "current as of 2026-08-16",
+          "verified_at": "2026-08-16",
+          "sources": [
+            "https://docs.warp.dev/agents/skills"
+          ],
+          "migration_policy": "bidirectional-reviewed",
+          "detection": [
+            {
+              "type": "app-bundle",
+              "darwin_bundle_id": "dev.warp.Warp"
+            },
+            {
+              "type": "file-signature",
+              "paths": [
+                "~/.warp/skills",
+                "~/.warp/drive"
+              ]
+            }
+          ],
+          "platforms": {
+            "darwin": "~/.warp",
+            "linux": "~/.warp",
+            "windows": "%APPDATA%/Warp"
+          },
+          "surfaces": {
+            "skills": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.warp/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".warp/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              }
+            ],
+            "instructions": [
+              {
+                "scope": "user",
+                "storage": "hierarchy",
+                "path": "~/.warp/AGENTS.md",
+                "format": "agents-md",
+                "policy": "semantic-ir-with-loss-report"
+              },
+              {
+                "scope": "project",
+                "storage": "hierarchy",
+                "path": "AGENTS.md",
+                "format": "agents-md",
+                "policy": "semantic-ir-with-loss-report"
+              }
+            ],
+            "mcp": [
+              {
+                "scope": "user",
+                "storage": "file",
+                "path": "~/.warp/mcp.json",
+                "format": "json:mcpServers",
+                "policy": "profile-version-adapter"
+              },
+              {
+                "scope": "project",
+                "storage": "file",
+                "path": ".warp/mcp.json",
+                "format": "json:mcpServers",
+                "policy": "profile-version-adapter"
+              }
+            ],
+            "prompts": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.warp/drive/prompts",
+                "format": "warp-prompt",
+                "policy": "manual-template"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".warp/drive/prompts",
+                "format": "warp-prompt",
+                "policy": "manual-template"
+              }
+            ],
+            "workflows": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.warp/drive/workflows",
+                "format": "warp-workflow",
+                "policy": "manual-template"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".warp/drive/workflows",
+                "format": "warp-workflow",
+                "policy": "manual-template"
+              }
+            ]
+          }
+        },
+        "oz-cli": {
+          "kind": "cli",
+          "version_range": "current as of 2026-08-16",
+          "verified_at": "2026-08-16",
+          "sources": [
+            "https://docs.warp.dev/warp-oz"
+          ],
+          "migration_policy": "bidirectional-reviewed",
+          "detection": [
+            {
+              "type": "binary",
+              "command": [
+                "warp"
+              ],
+              "version_command": [
+                "warp",
+                "--version"
+              ]
+            },
+            {
+              "type": "file-signature",
+              "paths": [
+                "~/.warp/skills"
+              ]
+            }
+          ],
+          "platforms": {
+            "darwin": "~/.warp",
+            "linux": "~/.warp"
+          },
+          "surfaces": {
+            "skills": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.warp/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              }
+            ]
+          }
+        },
+        "cloud": {
+          "kind": "cloud-ui",
+          "version_range": "current as of 2026-08-16",
+          "verified_at": "2026-08-16",
+          "sources": [
+            "https://app.warp.dev"
+          ],
+          "migration_policy": "official-api-or-rebuild-checklist",
+          "surfaces": {}
         }
       }
     }

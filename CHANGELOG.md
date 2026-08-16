@@ -4,6 +4,29 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ## [Unreleased]
 
+## [0.8.7] - 2026-08-16
+
+### Updated
+
+- **Zed** (`zed/ide`): Added detection probes (binary + app-bundle) and platform paths for darwin/linux/WSL.
+- **Continue** (`continue/cli`): Added binary probe and file-signature detection; platforms for darwin/linux/WSL.
+- **Sourcegraph Amp** (`sourcegraph-amp/cli`): Added binary probe and multi-path file-signature detection; platforms for darwin/linux/WSL.
+- **OpenHands** (`openhands/cli`): Added binary probe and dual-path file-signature detection; platforms for darwin/linux/WSL.
+- **Qwen Code** (`qwen-code/cli`): Upgraded from manual-reference to `bidirectional-reviewed` with full surfaces (skills, instructions, MCP, commands, agents, hooks) and detection probes.
+- **Warp** split into three profiles:
+  - `warp/desktop` — skills, AGENTS.md instructions, MCP, Warp Drive prompts, workflows
+  - `warp/oz-cli` — CLI skills
+  - `warp/cloud` — cloud UI placeholder
+- **Factory Droid** (`factory-droid/cli`): Added plugin package surface (`.factory-plugin/plugin.json` + commands, droids, hooks, MCP).
+- **Devin** split into `devin/terminal` (local CLI with skills, AGENTS.md, session handoff) and `devin/cloud` (cloud UI).
+- **Amazon Q** IDE profile: Added `mcp_path_note` documenting the dual-path conflict (`~/.aws/amazonq/default.json` vs `~/.aws/amazonq/agents/default.json`) with probe-both strategy.
+
+### Changed
+
+- Detection probes for Zed, Continue, Amp, OpenHands now use binary + file-signature probes with explicit platform paths.
+- Warp split enables precise migration targeting per surface (desktop vs CLI vs cloud).
+- Factory Droid plugin package surface uses `preserve-package` policy for `.factory-plugin/` bundles.
+
 ## [0.8.6] - 2026-08-16
 
 ### Added
