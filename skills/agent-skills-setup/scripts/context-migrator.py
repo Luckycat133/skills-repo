@@ -267,7 +267,7 @@ def reject_legacy_write(argv: list[str]) -> None:
     )
 
 
-AUTOMATIC_OBJECT_TYPES = {"skills", "instructions", "mcp"}
+AUTOMATIC_OBJECT_TYPES = {"skills", "instructions", "mcp", "plugins", "handoff"}
 INVENTORY_ONLY_OBJECT_TYPES = {
     "prompts",
     "commands",

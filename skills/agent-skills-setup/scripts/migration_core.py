@@ -1614,12 +1614,25 @@ def adapt_plugin_package(
     report = LossReport()
     if target_format == "factory-plugin":
         # Preserve the entire .factory-plugin/ directory structure
-        plugin_json = source_path / ".factory-plugin" / "plugin.json"
-        if not plugin_json.exists():
-            report.add("plugin", "plugin.json", "missing plugin.json in .factory-plugin/", None)
+        # Copy the entire .factory-plugin/ directory to target
+        source_plugin_dir = source_path / ".factory-plugin"
+        if not source_plugin_dir.exists():
+            report.add("plugin", ".factory-plugin", "missing .factory-plugin/ directory", None)
             return "", report
-        content = plugin_json.read_text(encoding="utf-8")
-        return content, report
+
+        # Return a manifest of all files in the plugin package
+        files = []
+        for f in source_plugin_dir.rglob("*"):
+            if f.is_file():
+                rel = f.relative_to(source_plugin_dir)
+                files.append(str(rel))
+
+        manifest = {
+            "plugin_package": ".factory-plugin",
+            "files": sorted(files),
+            "preserved": True
+        }
+        return json.dumps(manifest, indent=2), report
     if target_format == "preserve-package":
         # Generic package preservation - return manifest of all files
         files = []
@@ -3024,8 +3037,84 @@ def apply_plan(
                         "boundary": target.boundary,
                     }
                 )
-            else:
-                raise ValueError(f"unsupported automatic object: {item.object_type}")
+            elif item.object_type == "plugins":
+                # Plugin packages: copy entire .factory-plugin/ directory structure
+                # preserving all subdirectories (commands/, skills/, droids/, hooks/, mcp.json, plugin.json)
+                if not source.resolved_path.is_dir():
+                    raise ValueError("plugins source must be a directory")
+                for child in sorted(source.resolved_path.iterdir()):
+                    if child.is_file():
+                        staged = stage_root / f"{len(operations):04d}-{child.name}"
+                        shutil.copy2(child, staged)
+                        operations.append(
+                            {
+                                "kind": "file",
+                                "staged": staged,
+                                "destination": target.resolved_path / child.name,
+                                "boundary": target.boundary,
+                            }
+                        )
+                    elif child.is_dir():
+                        # Copy directory recursively
+                        staged_dir = stage_root / f"{len(operations):04d}-{child.name}"
+                        shutil.copytree(child, staged_dir)
+                        operations.append(
+                            {
+                                "kind": "directory",
+                                "staged": staged_dir,
+                                "destination": target.resolved_path / child.name,
+                                "boundary": target.boundary,
+                            }
+                        )
+            elif item.object_type == "handoff":
+                # Devin session handoff: package session data + Git branch info
+                if source.resolved_path.is_file():
+                    # Single session file
+                    source_text = source.resolved_path.read_text(encoding="utf-8")
+                    try:
+                        session_data = json.loads(source_text)
+                    except json.JSONDecodeError:
+                        session_data = {"raw": source_text}
+                    # Add Git branch info if available
+                    git_info = git_provenance(workspace)
+                    if git_info:
+                        session_data["git_branch"] = git_info.get("head")
+                        session_data["git_root"] = git_info.get("repository_root")
+                    rendered = json.dumps(session_data, indent=2, sort_keys=True) + "\n"
+                    staged = stage_root / f"{len(operations):04d}-handoff"
+                    atomic_write(staged, rendered)
+                    operations.append(
+                        {
+                            "kind": "file",
+                            "staged": staged,
+                            "destination": target.resolved_path,
+                            "boundary": target.boundary,
+                        }
+                    )
+                elif source.resolved_path.is_dir():
+                    # Directory of session files
+                    for session_file in sorted(source.resolved_path.iterdir()):
+                        if session_file.is_file():
+                            session_text = session_file.read_text(encoding="utf-8")
+                            try:
+                                session_data = json.loads(session_text)
+                            except json.JSONDecodeError:
+                                session_data = {"raw": session_text}
+                            git_info = git_provenance(workspace)
+                            if git_info:
+                                session_data["git_branch"] = git_info.get("head")
+                                session_data["git_root"] = git_info.get("repository_root")
+                            rendered = json.dumps(session_data, indent=2, sort_keys=True) + "\n"
+                            staged = stage_root / f"{len(operations):04d}-{session_file.name}"
+                            atomic_write(staged, rendered)
+                            operations.append(
+                                {
+                                    "kind": "file",
+                                    "staged": staged,
+                                    "destination": target.resolved_path / session_file.name,
+                                    "boundary": target.boundary,
+                                }
+                            )
 
         destinations = [operation["destination"] for operation in operations]
         if len(destinations) != len(set(destinations)):
