@@ -1472,6 +1472,98 @@ def emit_mcp_document(
     return json.dumps(existing, indent=2, sort_keys=True) + "\n", report
 
 
+def emit_prompt(prompt: PromptIR, target_format: str) -> tuple[str, LossReport]:
+    report = LossReport()
+    if target_format == "plain-prompt":
+        body = prompt.body
+        if prompt.arguments:
+            arg_lines = "\n".join(f"${arg['name']}: {arg.get('description', '')}" for arg in prompt.arguments)
+            body = f"{arg_lines}\n\n{body}"
+        return body, report
+    raise ValueError(f"unsupported prompt target format: {target_format}")
+
+
+def emit_command(cmd: CommandIR, target_format: str) -> tuple[str, LossReport]:
+    report = LossReport()
+    if target_format == "plain-command":
+        lines = []
+        if cmd.invocation:
+            lines.append(f"# {cmd.invocation}")
+        if cmd.description:
+            lines.append(f"# {cmd.description}")
+        if cmd.shell_block:
+            lines.append(cmd.shell_block)
+        for block in cmd.tool_blocks:
+            lines.append(f"# tool: {block.get('name', '')}")
+            lines.append(block.get("input", ""))
+        return "\n\n".join(lines), report
+    raise ValueError(f"unsupported command target format: {target_format}")
+
+
+def emit_agent(agent: AgentIR, target_format: str) -> tuple[str, LossReport]:
+    report = LossReport()
+    if target_format == "plain-agent":
+        lines = [
+            f"name: {agent.name}",
+            f"description: {agent.description}",
+            f"system_prompt: {agent.system_prompt}",
+            f"model: {agent.model}",
+        ]
+        if agent.tools:
+            lines.append("tools: " + ", ".join(agent.tools))
+        if agent.subagents:
+            lines.append("subagents: " + ", ".join(agent.subagents))
+        if agent.handoffs:
+            lines.append("handoffs: " + " -> ".join(agent.handoffs))
+        if agent.hooks:
+            lines.append("hooks: " + str(agent.hooks))
+        if agent.isolation:
+            lines.append(f"isolation: {agent.isolation}")
+        if agent.worktree:
+            lines.append("worktree: true")
+        if agent.memory_policy:
+            lines.append(f"memory_policy: {agent.memory_policy}")
+        if agent.mcp:
+            lines.append("mcp: " + ", ".join(agent.mcp))
+        if agent.display_metadata:
+            lines.append(f"display: {agent.display_metadata}")
+        return "\n".join(lines), report
+    raise ValueError(f"unsupported agent target format: {target_format}")
+
+
+def emit_hook(hook: HookIR, target_format: str) -> tuple[str, LossReport]:
+    report = LossReport()
+    if target_format == "plain-hook":
+        lines = [
+            f"event: {hook.event}",
+            f"matcher: {hook.matcher}",
+            f"command: {hook.command}",
+        ]
+        if hook.cwd:
+            lines.append(f"cwd: {hook.cwd}")
+        if hook.env:
+            lines.append("env: " + str(hook.env))
+        if hook.stdin_schema:
+            lines.append(f"stdin_schema: {hook.stdin_schema}")
+        if hook.stdout_schema:
+            lines.append(f"stdout_schema: {hook.stdout_schema}")
+        if hook.blocking is not None:
+            lines.append(f"blocking: {hook.blocking}")
+        if hook.exit_code is not None:
+            lines.append(f"exit_code: {hook.exit_code}")
+        if hook.timeout_seconds is not None:
+            lines.append(f"timeout: {hook.timeout_seconds}")
+        if hook.async_run:
+            lines.append("async: true")
+        if hook.os_overrides:
+            for os_name, override in hook.os_overrides.items():
+                lines.append(f"os:{os_name}: {override}")
+        if hook.target_script_references:
+            lines.append("scripts: " + ", ".join(hook.target_script_references))
+        return "\n".join(lines), report
+    raise ValueError(f"unsupported hook target format: {target_format}")
+
+
 def scope_matches(surface_scope: str, requested_scope: str) -> bool:
     """Match a surface's scope against a requested scope expression.
 
@@ -1499,6 +1591,40 @@ def scope_matches(surface_scope: str, requested_scope: str) -> bool:
         if part in scope_parts:
             return True
     return False
+
+
+def adapt_plugin_package(
+    source_path: Path,
+    target_format: str,
+) -> tuple[str, LossReport]:
+    """Adapt a plugin package from source format to target format.
+
+    Currently supports:
+    - factory-plugin: preserves .factory-plugin/ structure with commands/,
+      skills/, droids/, hooks/, mcp.json
+    - copilot-plugin: VS Code extension package format
+    - claude-plugin: Claude Code plugin format
+
+    Returns rendered manifest/content and loss report.
+    """
+    report = LossReport()
+    if target_format == "factory-plugin":
+        # Preserve the entire .factory-plugin/ directory structure
+        plugin_json = source_path / ".factory-plugin" / "plugin.json"
+        if not plugin_json.exists():
+            report.add("plugin", "plugin.json", "missing plugin.json in .factory-plugin/", None)
+            return "", report
+        content = plugin_json.read_text(encoding="utf-8")
+        return content, report
+    if target_format == "preserve-package":
+        # Generic package preservation - return manifest of all files
+        files = []
+        for f in source_path.rglob("*"):
+            if f.is_file():
+                rel = f.relative_to(source_path)
+                files.append(str(rel))
+        return json.dumps({"files": files}, indent=2), report
+    raise ValueError(f"unsupported plugin target format: {target_format}")
 
 
 def choose_surface(
@@ -2863,6 +2989,28 @@ def apply_plan(
                 )
                 loss_report.items.extend(report.items)
                 staged = stage_root / f"{len(operations):04d}-mcp"
+                atomic_write(staged, rendered)
+                operations.append(
+                    {
+                        "kind": "file",
+                        "staged": staged,
+                        "destination": target.resolved_path,
+                        "boundary": target.boundary,
+                    }
+                )
+            elif item.object_type == "hooks":
+                # Hooks are always staged as disabled drafts per safety policy
+                source_text = source.resolved_path.read_text(encoding="utf-8")
+                hook_data = json.loads(source_text)
+                # Add disabled flag
+                if isinstance(hook_data, dict):
+                    hook_data["enabled"] = False
+                elif isinstance(hook_data, list):
+                    for h in hook_data:
+                        if isinstance(h, dict):
+                            h["enabled"] = False
+                rendered = json.dumps(hook_data, indent=2, sort_keys=True) + "\n"
+                staged = stage_root / f"{len(operations):04d}-hook"
                 atomic_write(staged, rendered)
                 operations.append(
                     {

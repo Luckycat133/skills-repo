@@ -4,6 +4,33 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ## [Unreleased]
 
+## [0.8.9] - 2026-08-16
+
+### Added
+
+- **PromptIR / CommandIR / AgentIR / HookIR emitters**: New
+  `emit_prompt()`, `emit_command()`, `emit_agent()`, `emit_hook()`
+  functions in `migration_core.py` for round-tripping portable IR
+  to plain-text target formats.  Currently targets `plain-prompt`,
+  `plain-command`, `plain-agent`, `plain-hook`; format-specific
+  adapters will extend these in follow-up releases.
+- **Plugin package adapter**: `adapt_plugin_package()` handles
+  `.factory-plugin/` bundles (preserving `commands/`, `skills/`,
+  `droids/`, `hooks/`, `mcp.json`), with `preserve-package` mode
+  for generic package preservation.
+- **Hooks staging path**: Hooks are now an automatic object type
+  (`hooks`) in the apply pipeline.  Per safety policy, all hooks
+  are staged with `enabled: false` so they are written to disk as
+  disabled drafts and never auto-enabled.
+
+### Changed
+
+- Hook objects are now a first-class automatic migration surface.
+  They flow through the same staged/atomic/verified pipeline as
+  Skills, Instructions, and MCP, but always land with
+  `enabled: false` to satisfy the safety policy that hooks must
+  never be auto-enabled.
+
 ## [0.8.8] - 2026-08-16
 
 ### Added
