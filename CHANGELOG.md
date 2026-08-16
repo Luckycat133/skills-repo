@@ -4,6 +4,16 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ## [Unreleased]
 
+## [0.8.11] - 2026-08-16
+
+### Added
+
+- **Qwen Code 08-13 刷新**：review_context、session、desktop、serve 四个新 surface；
+  检测探针新增 `~/.qwen/review-context`、`~/.qwen/sessions`、`~/.qwen/desktop`、
+  `~/.qwen/serve` 路径；platforms 扩展 dev-container、codespaces。
+- Qwen Code hooks 支持的事件扩展：pre-tool-use、post-tool-use、pre-prompt、
+  post-prompt、notification。
+
 ## [0.8.10] - 2026-08-16
 
 ### Added

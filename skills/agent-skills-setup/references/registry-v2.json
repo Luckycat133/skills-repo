@@ -315,12 +315,20 @@
         "cli": {
           "inherits": "ide",
           "kind": "cli",
-          "migration_policy": "bidirectional-reviewed"
+          "migration_policy": "bidirectional-reviewed",
+          "verified_at": "2026-08-12",
+          "sources": [
+            "https://docs.cline.bot/getting-started/config"
+          ]
         },
         "sdk": {
           "inherits": "ide",
           "kind": "sdk",
-          "migration_policy": "manual-rebuild"
+          "migration_policy": "manual-rebuild",
+          "verified_at": "2026-08-12",
+          "sources": [
+            "https://docs.cline.bot/getting-started/config"
+          ]
         }
       }
     },
@@ -968,7 +976,13 @@
         "ide": {
           "inherits": "cli",
           "kind": "ide",
-          "migration_policy": "bidirectional-reviewed"
+          "migration_policy": "bidirectional-reviewed",
+          "verified_at": "2026-08-12",
+          "sources": [
+            "https://docs.qoder.com/en/cli/Skills",
+            "https://docs.qoder.com/en/cli/mcp-servers",
+            "https://docs.qoder.com/cli/hooks"
+          ]
         },
         "cn-ide": {
           "kind": "ide",
@@ -1020,8 +1034,8 @@
       "profiles": {
         "cli": {
           "kind": "cli",
-          "version_range": "current as of 2026-08-13",
-          "verified_at": "2026-08-13",
+          "version_range": "current as of 2026-08-15 (08-13 release)",
+          "verified_at": "2026-08-15",
           "sources": [
             "https://github.com/QwenLM/Qwen-Code"
           ],
@@ -1044,12 +1058,23 @@
                 "~/.qwen/commands",
                 "~/.qwen/agents"
               ]
+            },
+            {
+              "type": "file-signature",
+              "paths": [
+                "~/.qwen/review-context",
+                "~/.qwen/sessions",
+                "~/.qwen/desktop",
+                "~/.qwen/serve"
+              ]
             }
           ],
           "platforms": {
             "darwin": "~/.qwen",
             "linux": "~/.qwen",
-            "wsl": "~/.qwen"
+            "wsl": "~/.qwen",
+            "dev-container": "~/.qwen",
+            "codespaces": "~/.qwen"
           },
           "surfaces": {
             "skills": [
@@ -1185,6 +1210,49 @@
                 "path": ".qwen/mcp-plugins",
                 "format": "qwen-mcp-plugin",
                 "policy": "validate-then-atomic-copy"
+              }
+            ],
+            "review_context": [
+              {
+                "scope": "project",
+                "storage": "file",
+                "path": ".qwen/review-context.md",
+                "format": "qwen-review-context",
+                "policy": "semantic-ir-with-loss-report"
+              },
+              {
+                "scope": "user",
+                "storage": "file",
+                "path": "~/.qwen/review-context.md",
+                "format": "qwen-review-context",
+                "policy": "semantic-ir-with-loss-report"
+              }
+            ],
+            "session": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.qwen/sessions",
+                "format": "qwen-session",
+                "policy": "forbidden-regenerate"
+              }
+            ],
+            "desktop": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.qwen/desktop",
+                "format": "qwen-desktop",
+                "policy": "manual-rebuild"
+              }
+            ],
+            "serve": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.qwen/serve",
+                "format": "qwen-serve",
+                "policy": "manual-rebuild"
               }
             ]
           }
