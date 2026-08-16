@@ -3500,6 +3500,480 @@
           "surfaces": {}
         }
       }
+    },
+    "hermes": {
+      "display_name": "Hermes Agent",
+      "category": "agent-client",
+      "lifecycle": "active",
+      "default_profile": "cli",
+      "profiles": {
+        "cli": {
+          "kind": "cli",
+          "version_range": "current as of 2026-08-16",
+          "verified_at": "2026-08-16",
+          "sources": [
+            "https://github.com/hermes-agent/hermes"
+          ],
+          "migration_policy": "bidirectional-reviewed",
+          "detection": [
+            {
+              "type": "binary",
+              "command": [
+                "hermes"
+              ],
+              "version_command": [
+                "hermes",
+                "--version"
+              ]
+            },
+            {
+              "type": "file-signature",
+              "paths": [
+                "~/.hermes/skills",
+                "~/.hermes/memories"
+              ]
+            }
+          ],
+          "platforms": {
+            "darwin": "~/.hermes",
+            "linux": "~/.hermes",
+            "wsl": "~/.hermes"
+          },
+          "surfaces": {
+            "skills": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.hermes/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".hermes/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              }
+            ],
+            "memory": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.hermes/memories",
+                "format": "hermes-memory",
+                "policy": "manual-template"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".hermes/memories",
+                "format": "hermes-memory",
+                "policy": "manual-template"
+              }
+            ],
+            "subagents": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.hermes/subagents",
+                "format": "hermes-subagent",
+                "policy": "manual-template"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".hermes/subagents",
+                "format": "hermes-subagent",
+                "policy": "manual-template"
+              }
+            ],
+            "cron": [
+              {
+                "scope": "user",
+                "storage": "file",
+                "path": "~/.hermes/cron.json",
+                "format": "hermes-cron",
+                "policy": "manual-template"
+              },
+              {
+                "scope": "project",
+                "storage": "file",
+                "path": ".hermes/cron.json",
+                "format": "hermes-cron",
+                "policy": "manual-template"
+              }
+            ],
+            "mcp": [
+              {
+                "scope": "user",
+                "storage": "file",
+                "path": "~/.hermes/mcp.json",
+                "format": "json:mcpServers",
+                "policy": "profile-version-adapter"
+              },
+              {
+                "scope": "project",
+                "storage": "file",
+                "path": ".hermes/mcp.json",
+                "format": "json:mcpServers",
+                "policy": "profile-version-adapter"
+              }
+            ],
+            "acp": [
+              {
+                "scope": "user",
+                "storage": "file",
+                "path": "~/.hermes/acp.json",
+                "format": "hermes-acp",
+                "policy": "manual-template"
+              },
+              {
+                "scope": "project",
+                "storage": "file",
+                "path": ".hermes/acp.json",
+                "format": "hermes-acp",
+                "policy": "manual-template"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "gitlab-duo": {
+      "display_name": "GitLab Duo Agent Platform",
+      "category": "agent-suite",
+      "lifecycle": "active",
+      "default_profile": "vscode",
+      "profiles": {
+        "vscode": {
+          "kind": "ide-extension",
+          "version_range": "current as of 2026-08-16",
+          "verified_at": "2026-08-16",
+          "sources": [
+            "https://docs.gitlab.com/ee/user/duo_agent_platform/"
+          ],
+          "migration_policy": "bidirectional-reviewed",
+          "detection": [
+            {
+              "type": "vscode-extension",
+              "id": "gitlab.gitlab-duo"
+            },
+            {
+              "type": "file-signature",
+              "paths": [
+                "~/.gitlab/duo/AGENTS.md",
+                "~/.config/gitlab/duo/AGENTS.md"
+              ]
+            }
+          ],
+          "platforms": {
+            "darwin": "~/.gitlab/duo",
+            "linux": "~/.gitlab/duo",
+            "wsl": "~/.gitlab/duo",
+            "dev-container": "~/.gitlab/duo"
+          },
+          "surfaces": {
+            "skills": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.gitlab/duo/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".gitlab/duo/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              }
+            ],
+            "instructions": [
+              {
+                "scope": "user",
+                "storage": "hierarchy",
+                "path": "~/.gitlab/duo/AGENTS.md",
+                "format": "agents-md",
+                "policy": "semantic-ir-with-loss-report"
+              },
+              {
+                "scope": "project",
+                "storage": "hierarchy",
+                "path": "AGENTS.md",
+                "format": "agents-md",
+                "policy": "semantic-ir-with-loss-report"
+              }
+            ],
+            "flows": [
+              {
+                "scope": "project",
+                "storage": "file",
+                "path": ".gitlab/duo/flows.yaml",
+                "format": "gitlab-flow",
+                "policy": "manual-template"
+              }
+            ]
+          }
+        },
+        "jetbrains": {
+          "kind": "ide-extension",
+          "version_range": "current as of 2026-08-16",
+          "verified_at": "2026-08-16",
+          "sources": [
+            "https://plugins.jetbrains.com/plugin/18657-gitlab-duo"
+          ],
+          "migration_policy": "bidirectional-reviewed",
+          "detection": [
+            {
+              "type": "vscode-extension",
+              "id": "gitlab.gitlab-duo"
+            },
+            {
+              "type": "file-signature",
+              "paths": [
+                "~/.config/JetBrains/GitLabDuo/AGENTS.md"
+              ]
+            }
+          ],
+          "platforms": {
+            "darwin": "~/.config/JetBrains/GitLabDuo",
+            "linux": "~/.config/JetBrains/GitLabDuo",
+            "windows": "%APPDATA%/JetBrains/GitLabDuo"
+          },
+          "surfaces": {
+            "skills": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.config/JetBrains/GitLabDuo/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".gitlab/duo/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              }
+            ],
+            "instructions": [
+              {
+                "scope": "user",
+                "storage": "hierarchy",
+                "path": "~/.config/JetBrains/GitLabDuo/AGENTS.md",
+                "format": "agents-md",
+                "policy": "semantic-ir-with-loss-report"
+              },
+              {
+                "scope": "project",
+                "storage": "hierarchy",
+                "path": "AGENTS.md",
+                "format": "agents-md",
+                "policy": "semantic-ir-with-loss-report"
+              }
+            ]
+          }
+        },
+        "cli": {
+          "kind": "cli",
+          "version_range": "current as of 2026-08-16",
+          "verified_at": "2026-08-16",
+          "sources": [
+            "https://docs.gitlab.com/ee/user/duo_agent_platform/cli.html"
+          ],
+          "migration_policy": "bidirectional-reviewed",
+          "detection": [
+            {
+              "type": "binary",
+              "command": [
+                "glab"
+              ],
+              "version_command": [
+                "glab",
+                "--version"
+              ]
+            },
+            {
+              "type": "file-signature",
+              "paths": [
+                "~/.gitlab/duo/AGENTS.md"
+              ]
+            }
+          ],
+          "platforms": {
+            "darwin": "~/.gitlab/duo",
+            "linux": "~/.gitlab/duo",
+            "wsl": "~/.gitlab/duo"
+          },
+          "surfaces": {
+            "skills": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.gitlab/duo/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".gitlab/duo/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              }
+            ],
+            "instructions": [
+              {
+                "scope": "project",
+                "storage": "hierarchy",
+                "path": "AGENTS.md",
+                "format": "agents-md",
+                "policy": "semantic-ir-with-loss-report"
+              }
+            ],
+            "flows": [
+              {
+                "scope": "project",
+                "storage": "file",
+                "path": ".gitlab/duo/flows.yaml",
+                "format": "gitlab-flow",
+                "policy": "manual-template"
+              }
+            ]
+          }
+        },
+        "web": {
+          "kind": "cloud-ui",
+          "version_range": "current as of 2026-08-16",
+          "verified_at": "2026-08-16",
+          "sources": [
+            "https://gitlab.com/-/duo"
+          ],
+          "migration_policy": "official-api-or-rebuild-checklist",
+          "surfaces": {}
+        },
+        "flows": {
+          "kind": "workflow",
+          "version_range": "current as of 2026-08-16",
+          "verified_at": "2026-08-16",
+          "sources": [
+            "https://docs.gitlab.com/ee/user/duo_agent_platform/flows.html"
+          ],
+          "migration_policy": "manual-rebuild",
+          "surfaces": {}
+        }
+      }
+    },
+    "jules": {
+      "display_name": "Google Jules",
+      "category": "agent-suite",
+      "lifecycle": "active",
+      "default_profile": "cloud",
+      "profiles": {
+        "cloud": {
+          "kind": "cloud-ui",
+          "version_range": "current as of 2026-08-16",
+          "verified_at": "2026-08-16",
+          "sources": [
+            "https://jules.google.com"
+          ],
+          "migration_policy": "official-api-or-rebuild-checklist",
+          "surfaces": {
+            "instructions": [
+              {
+                "scope": "project",
+                "storage": "hierarchy",
+                "path": "AGENTS.md",
+                "format": "agents-md",
+                "policy": "semantic-ir-with-loss-report"
+              }
+            ],
+            "environment_setup": [
+              {
+                "scope": "project",
+                "storage": "file",
+                "path": ".jules/setup.sh",
+                "format": "bash",
+                "policy": "manual-template"
+              }
+            ],
+            "environment_snapshot": [
+              {
+                "scope": "project",
+                "storage": "file",
+                "path": ".jules/snapshot.json",
+                "format": "json",
+                "policy": "manual-template"
+              }
+            ],
+            "schedules": [
+              {
+                "scope": "project",
+                "storage": "file",
+                "path": ".jules/schedules.yaml",
+                "format": "yaml",
+                "policy": "manual-template"
+              }
+            ]
+          }
+        },
+        "cli": {
+          "kind": "cli",
+          "version_range": "current as of 2026-08-16",
+          "verified_at": "2026-08-16",
+          "sources": [
+            "https://cloud.google.com/jules/docs/cli"
+          ],
+          "migration_policy": "bidirectional-reviewed",
+          "detection": [
+            {
+              "type": "binary",
+              "command": [
+                "jules"
+              ],
+              "version_command": [
+                "jules",
+                "--version"
+              ]
+            },
+            {
+              "type": "file-signature",
+              "paths": [
+                "~/.jules/config.yaml"
+              ]
+            }
+          ],
+          "platforms": {
+            "darwin": "~/.jules",
+            "linux": "~/.jules",
+            "wsl": "~/.jules"
+          },
+          "surfaces": {
+            "instructions": [
+              {
+                "scope": "project",
+                "storage": "hierarchy",
+                "path": "AGENTS.md",
+                "format": "agents-md",
+                "policy": "semantic-ir-with-loss-report"
+              }
+            ]
+          }
+        },
+        "api": {
+          "kind": "cloud-api",
+          "version_range": "current as of 2026-08-16",
+          "verified_at": "2026-08-16",
+          "sources": [
+            "https://cloud.google.com/jules/docs/api"
+          ],
+          "migration_policy": "official-api-or-rebuild-checklist",
+          "surfaces": {}
+        }
+      }
     }
   }
 }
