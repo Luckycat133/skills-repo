@@ -574,6 +574,7 @@ class Registry:
     def surfaces(self, selector: str, object_type: str) -> list[SurfacePath]:
         product_id, profile_id, profile = self.profile(selector)
         entries = profile.get("surfaces", {}).get(object_type, [])
+        profile_platforms = profile.get("platforms", {})
         surfaces: list[SurfacePath] = []
         for entry in entries:
             canonical_path = str(entry["path"])
@@ -582,6 +583,9 @@ class Registry:
             for precedence, candidate_path in enumerate(candidates):
                 candidate_entry = dict(entry)
                 candidate_entry["path"] = candidate_path
+                # Pass profile-level platforms down for resolve_path to use
+                if profile_platforms and "platforms" not in candidate_entry:
+                    candidate_entry["platforms"] = profile_platforms
                 if precedence:
                     candidate_entry.pop("override_env", None)
                     candidate_entry.pop("override_relative_path", None)
