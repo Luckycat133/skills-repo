@@ -4,6 +4,38 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ## [Unreleased]
 
+## [0.8.5] - 2026-08-16
+
+### Added
+
+- Registry v2 profiles now carry a `detection` block supporting
+  `binary` (with version command), `file-signature`, and `app-bundle`
+  probes.  Added to Cline, Forge, Cursor, Claude Code CLI, and Codex
+  CLI profiles.
+- Profiles carry a `platforms` map (darwin, linux, windows, wsl,
+  remote-ssh, dev-container, codespaces, vscode-profile,
+  extension-host) that overrides surface path resolution.
+- New `detect` subcommand runs per-profile probes and returns one of
+  seven `InstallState` values (`installed`, `configured-only`,
+  `compatibility-only`, `cloud-connected`, `legacy`, `ambiguous`,
+  `not-detected`) with per-profile evidence.
+
+### Changed
+
+- `detect` subcommand now runs the new probe framework instead of
+  simply filtering inventory rows by `exists: true`.  It returns
+  structured per-profile state with evidence rather than a simple
+  boolean filter.
+- `resolve_path` now honours per-surface `platforms` overrides
+  when the `AGENT_SKILLS_PLATFORM` environment variable is set.
+
+### Security
+
+- Detection probes only access local filesystem and PATH; no network
+  calls are made.  Static probe types (`binary`, `file-signature`,
+  `app-bundle`) are pure-Python and do not invoke external processes
+  except the optional version command.
+
 ## [0.8.4] - 2026-08-15
 
 ### Added
