@@ -3532,7 +3532,8 @@
             {
               "type": "file-signature",
               "paths": [
-                "~/.warp/skills"
+                "~/.warp/skills",
+                "~/.warp/drive"
               ]
             }
           ],
@@ -3549,6 +3550,70 @@
                 "format": "agent-skill",
                 "policy": "validate-then-atomic-copy"
               }
+            ],
+            "instructions": [
+              {
+                "scope": "user",
+                "storage": "hierarchy",
+                "path": "~/.warp/AGENTS.md",
+                "format": "agents-md",
+                "policy": "semantic-ir-with-loss-report"
+              },
+              {
+                "scope": "project",
+                "storage": "hierarchy",
+                "path": "AGENTS.md",
+                "format": "agents-md",
+                "policy": "semantic-ir-with-loss-report"
+              }
+            ],
+            "mcp": [
+              {
+                "scope": "user",
+                "storage": "file",
+                "path": "~/.warp/mcp.json",
+                "format": "json:mcpServers",
+                "policy": "profile-version-adapter"
+              },
+              {
+                "scope": "project",
+                "storage": "file",
+                "path": ".warp/mcp.json",
+                "format": "json:mcpServers",
+                "policy": "profile-version-adapter"
+              }
+            ],
+            "prompts": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.warp/drive/prompts",
+                "format": "warp-prompt",
+                "policy": "manual-template"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".warp/drive/prompts",
+                "format": "warp-prompt",
+                "policy": "manual-template"
+              }
+            ],
+            "workflows": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.warp/drive/workflows",
+                "format": "warp-workflow",
+                "policy": "manual-template"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".warp/drive/workflows",
+                "format": "warp-workflow",
+                "policy": "manual-template"
+              }
             ]
           }
         },
@@ -3560,7 +3625,8 @@
             "https://app.warp.dev"
           ],
           "migration_policy": "official-api-or-rebuild-checklist",
-          "surfaces": {}
+          "surfaces": {},
+          "note": "Warp Cloud is a cloud-only UI; no local configuration files. Use Warp desktop app or Warp Drive web interface for configuration."
         }
       }
     },
