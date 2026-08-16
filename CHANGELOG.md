@@ -4,6 +4,19 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ## [Unreleased]
 
+## [0.8.8] - 2026-08-16
+
+### Added
+
+- **Letta Code** (`letta-code/desktop-cli`, `letta/cloud`, `letta/agent-file`): Local desktop/CLI, cloud, and `.af` AgentFile adapter with persistent editable memory, skills, subagents, scheduling, conversation search. AgentFile `.af` import/export serves as portable stateful agent format reference.
+- **Zencoder / Zenflow** (`zencoder/ide`, `zenflow/code`, `zenflow/work`, `zencoder/cli-adapters`): Settings, saved prompts, skills, subagents, custom agents/models, MCP integrations, `.zenflow/workflows`, scheduled automations, cloud/task context. CLI adapters for cross-IDE use.
+- **Gemini Code Assist** (`gemini-code-assist/vscode`, `gemini-code-assist/jetbrains`, `gemini-code-assist/enterprise`): Distinct from Gemini CLI; VS Code and JetBrains profiles with UI Prompt Library (not mapped to CLI commands), enterprise policy surfaces.
+
+### Changed
+
+- Registry now explicitly separates `gemini-cli` (CLI tool) from `gemini-code-assist` (IDE/enterprise product) to avoid path conflation.
+- Letta's `.af` AgentFile format documented as external portable stateful agent reference for ACB design.
+
 ## [0.8.7] - 2026-08-16
 
 ### Updated
