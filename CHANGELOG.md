@@ -4,6 +4,23 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ## [Unreleased]
 
+## [0.8.12] - 2026-08-16
+
+### Verified
+
+- **Warp 拆分**：desktop/oz-cli/cloud 三个 profile 完整迁移路径，desktop 和
+  oz-cli 共享 skills/instructions/mcp/prompts/workflows surfaces，cloud
+  为占位（云端无本地配置文件）。
+- **Factory Droid**：`.factory-plugin/` 包保留策略（`preserve-package`），
+  skills/commands/agents(droids)/hooks/mcp 全部 surface 完整。
+- **Devin Terminal**：skills/AGENTS.md/handoff surfaces 完整，handoff 支持
+  `/handoff` 会话/Git 打包到云会话恢复。
+- **Amazon Q**：双路径 MCP 探针（`~/.aws/amazonq/default.json` vs
+  `~/.aws/amazonq/agents/default.json`）已通过 compatibility_paths 和
+  mcp_path_note 记录，probe-both 策略已实现。
+- **Hermes Agent**：skills/memory/subagents/cron/mcp/acp 全部 surface
+  完整，OpenClaw 迁移兼容（默认不迁 API keys）。
+
 ## [0.8.11] - 2026-08-16
 
 ### Added
