@@ -61,6 +61,9 @@ ACB_JSON_FILES = (
 _SECRET_HINT = re.compile(
     r"(?i)(token|secret|password|passwd|api[_-]?key|authorization|cookie|bearer)"
 )
+_PROVIDER_SECRET_HINT = re.compile(
+    r"(?:sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{16,}|AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}|ya29\.[A-Za-z0-9_-]+|AIza[0-9A-Za-z_-]{30,}|sk_live_[A-Za-z0-9]{16,}|Bearer\s+[A-Za-z0-9._~+/-]{16,})"
+)
 
 
 class ACBError(Exception):
@@ -120,7 +123,7 @@ def looks_like_secret_value(value: Any) -> bool:
         return False
     if not value or value.startswith("${") or value.startswith("$") or value.startswith("<"):
         return False
-    return bool(_SECRET_HINT.search(value))
+    return bool(_SECRET_HINT.search(value) or _PROVIDER_SECRET_HINT.search(value))
 
 
 def assert_no_lateral_secrets(payload: dict[str, Any]) -> None:
