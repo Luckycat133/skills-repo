@@ -4,25 +4,19 @@ Layout::
 
     <bundle>.acb/
         manifest.json          schema_version, source_platform, objects
-        inventory.json         full per-product surface inventory
+        inventory.json         portable per-product surface inventory
         compatibility.json     per-product target-eligibility matrix
         requirements.json      executables, packages, extensions, manual_installs
         secrets.required.json  non-secret names of required credentials
         reauth.json            per-MCP re-auth action list
         rebuild.json           per-object manual-rebuild manifest
-        checksums.json         sha256 of every other JSON file
+        checksums.json         sha256 of every other file
         objects/<surface>/     reviewed object content (no secrets)
-        raw-reviewed/          pre-conversion source snapshots
 
 The bundle is created from a snapshot of the local filesystem plus the
-Registry v2 inventory.  :func:`verify_bundle` re-reads the checksums
-file and re-hashes every other JSON file.
-
-Secret handling: the snapshot phase redacts literal credentials before
-they reach the bundle.  Only the names of required credentials (e.g.
-``LINEAR_API_KEY``) end up in :file:`secrets.required.json`.  The
-function rejects any attempt to write literal secret values into the
-bundle and returns an explicit error.
+Registry v2 inventory.  :func:`verify_bundle` performs closed-world integrity
+checks ensuring no unexpected or missing files, no symlinks/devices, and
+accurate SHA256 hashes.
 """
 
 from __future__ import annotations
@@ -33,6 +27,7 @@ import json
 import os
 import re
 import shutil
+import stat
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -58,11 +53,29 @@ ACB_JSON_FILES = (
     ACB_REBUILD_NAME,
 )
 
+# Resource safety limits
+MAX_BUNDLE_FILES = 5000
+MAX_FILE_SIZE = 10 * 1024 * 1024       # 10 MB per file
+MAX_TOTAL_SIZE = 100 * 1024 * 1024     # 100 MB total
+MAX_DIR_DEPTH = 16
+
+# Safe binary extensions allowlist
+SAFE_BINARY_EXTENSIONS = frozenset({
+    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico",
+    ".svg", ".woff", ".woff2", ".ttf", ".eot", ".otf"
+})
+
 _SECRET_HINT = re.compile(
     r"(?i)(token|secret|password|passwd|api[_-]?key|authorization|cookie|bearer)"
 )
 _PROVIDER_SECRET_HINT = re.compile(
     r"(?:sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{16,}|AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}|ya29\.[A-Za-z0-9_-]+|AIza[0-9A-Za-z_-]{30,}|sk_live_[A-Za-z0-9]{16,}|Bearer\s+[A-Za-z0-9._~+/-]{16,})"
+)
+_PRIVATE_KEY_HINT = re.compile(
+    r"-----BEGIN\s+(?:[A-Z\s]+)?PRIVATE\s+KEY-----"
+)
+_SENSITIVE_FILENAME_HINT = re.compile(
+    r"(?i)(^\.env(\..+)?$|\.pem$|\.key$|^id_rsa|^id_ed25519|^id_ecdsa|\.p12$|\.pfx$)"
 )
 
 
@@ -72,6 +85,10 @@ class ACBError(Exception):
 
 class ACBSecretLeak(ACBError):
     """Raised when literal secret values are detected in bundle content."""
+
+
+class ACBIntegrityError(ACBError):
+    """Raised when bundle integrity or containment check fails."""
 
 
 @dataclasses.dataclass
@@ -94,7 +111,7 @@ class ACBManifest:
         }
 
     @classmethod
-    def from_dict(cls, payload: dict[str, str]) -> "ACBManifest":
+    def from_dict(cls, payload: dict[str, Any]) -> "ACBManifest":
         return cls(
             schema_version=int(payload["schema_version"]),
             bundle_id=str(payload["bundle_id"]),
@@ -117,28 +134,80 @@ def sha256_file(path: Path) -> str:
     return sha256_bytes(path.read_bytes())
 
 
+def is_binary_bytes(data: bytes) -> bool:
+    """Determine whether data is non-text binary."""
+    if b"\x00" in data:
+        return True
+    try:
+        data.decode("utf-8")
+        return False
+    except UnicodeDecodeError:
+        return True
+
+
 def looks_like_secret_value(value: Any) -> bool:
     """Heuristic check: does this string look like a credential?"""
     if not isinstance(value, str):
         return False
     if not value or value.startswith("${") or value.startswith("$") or value.startswith("<"):
         return False
-    return bool(_SECRET_HINT.search(value) or _PROVIDER_SECRET_HINT.search(value))
+    return bool(
+        _SECRET_HINT.search(value)
+        or _PROVIDER_SECRET_HINT.search(value)
+        or _PRIVATE_KEY_HINT.search(value)
+    )
+
+
+def scan_object_bytes(data: bytes, path_name: str) -> None:
+    """Perform strict secret, private-key, and binary safety scans on raw object bytes."""
+    path = Path(path_name)
+    base_name = path.name
+
+    # 1. Block sensitive file names (.env, private keys, certificates)
+    if _SENSITIVE_FILENAME_HINT.search(base_name):
+        raise ACBSecretLeak(f"forbidden sensitive file in bundle: {path_name}")
+
+    # 2. Check binary safety
+    if is_binary_bytes(data):
+        # Check executable magic headers
+        if data.startswith(b"\x7fELF"):
+            raise ACBSecretLeak(f"executable ELF binary rejected: {path_name}")
+        if data.startswith((b"\xfe\xed\xfa\xce", b"\xfe\xed\xfa\xcf", b"\xcf\xfa\xed\xfe", b"\xca\xfe\xba\xbe")):
+            raise ACBSecretLeak(f"executable Mach-O binary rejected: {path_name}")
+        if data.startswith(b"MZ"):
+            raise ACBSecretLeak(f"executable PE binary rejected: {path_name}")
+
+        # Check extension against binary allowlist
+        ext = path.suffix.lower()
+        if ext not in SAFE_BINARY_EXTENSIONS:
+            raise ACBSecretLeak(f"unallowlisted binary file rejected: {path_name}")
+        return
+
+    # 3. Check decoded text
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        raise ACBSecretLeak(f"undecodable non-allowlisted text: {path_name}")
+
+    if _PRIVATE_KEY_HINT.search(text):
+        raise ACBSecretLeak(f"private key detected in {path_name}")
+
+    if _PROVIDER_SECRET_HINT.search(text):
+        match = _PROVIDER_SECRET_HINT.search(text)
+        sample = match.group(0)[:16] if match else "secret"
+        raise ACBSecretLeak(f"provider credential detected in {path_name}: {sample}...")
 
 
 def assert_no_lateral_secrets(payload: dict[str, Any]) -> None:
-    """Reject literal secret-looking strings in a payload."""
+    """Reject literal secret-looking strings in a structured payload."""
     for key, value in _walk(payload):
-            if isinstance(value, str) and looks_like_secret_value(value):
-                # secrets.required.json is the only allowed home for
-                # secret names; flag any other occurrence as a leak.
-                if key == "name" and isinstance(value, str) and re.match(
-                    r"^[A-Z][A-Z0-9_]+$", value
-                ):
+        if isinstance(value, str) and looks_like_secret_value(value):
+            if key.endswith(".name") or key == "name":
+                if isinstance(value, str) and re.match(r"^[A-Z][A-Z0-9_]+$", value):
                     continue
-                raise ACBSecretLeak(
-                    f"literal credential-looking string at {key}: {value[:32]!r}"
-                )
+            raise ACBSecretLeak(
+                f"literal credential-looking string at {key}: {value[:32]!r}"
+            )
 
 
 def _walk(payload: Any, path: tuple[str, ...] = ()) -> Any:
@@ -152,15 +221,45 @@ def _walk(payload: Any, path: tuple[str, ...] = ()) -> Any:
         yield ".".join(path), payload
 
 
+def validate_path_containment(relative_path: str | Path, base_dir: Path) -> Path:
+    """Ensure path has no absolute segments, traversal, drive specifiers, and stays within base_dir."""
+    p_str = str(relative_path).replace("\\", "/")
+    if p_str.startswith("/") or re.match(r"^[a-zA-Z]:", p_str) or p_str.startswith("//"):
+        raise ACBIntegrityError(f"forbidden absolute/UNC path: {relative_path}")
+    parts = Path(p_str).parts
+    if ".." in parts or any(part.startswith("/") for part in parts):
+        raise ACBIntegrityError(f"path traversal detected: {relative_path}")
+    resolved_target = (base_dir / p_str).resolve()
+    try:
+        resolved_target.relative_to(base_dir.resolve())
+    except ValueError:
+        raise ACBIntegrityError(f"path escapes base directory: {relative_path}")
+    return resolved_target
+
+
+def sanitize_inventory_for_bundle(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Sanitize inventory rows for portable bundles by stripping machine-specific paths and local user info."""
+    clean_rows: list[dict[str, Any]] = []
+    for row in rows:
+        clean_row = {
+            "product": row.get("product", ""),
+            "profile": row.get("profile", "default"),
+            "object_type": row.get("object_type", ""),
+            "scope": row.get("scope", ""),
+            "canonical_path": row.get("canonical_path", ""),
+            "format": row.get("format", ""),
+            "policy": row.get("policy", ""),
+            "content_hash": row.get("content_hash", ""),
+            "exists": bool(row.get("exists", False)),
+        }
+        clean_rows.append(clean_row)
+    return clean_rows
+
+
 def collect_requirements(
     inventory_rows: list[dict[str, Any]],
     plan_rows: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    """Derive a structured requirements document from inventory + plan.
-
-    Heuristic: extract binary-style hints from ``inventory_rows``
-    (e.g. cline CLI -> ``cline`` binary) plus per-object MCP packages.
-    """
     executables: set[str] = set()
     extensions: set[str] = set()
     packages: list[dict[str, str]] = []
@@ -189,7 +288,6 @@ def collect_requirements(
 def collect_reauth(
     plan_rows: list[dict[str, Any]],
 ) -> list[dict[str, str]]:
-    """Per-MCP re-auth action list derived from plan rows."""
     actions: list[dict[str, str]] = []
     for item in plan_rows:
         if item.get("status") == "manual-rebuild" and item.get("object_type") == "mcp":
@@ -206,7 +304,6 @@ def collect_reauth(
 def collect_rebuild(
     plan_rows: list[dict[str, Any]],
 ) -> list[dict[str, str]]:
-    """Per-object manual-rebuild manifest."""
     actions: list[dict[str, str]] = []
     for item in plan_rows:
         if item.get("status") in {"manual-rebuild", "forbidden"}:
@@ -233,12 +330,7 @@ def write_bundle(
     rebuild: list[dict[str, str]],
     objects_dir_files: dict[str, bytes] | None = None,
 ) -> Path:
-    """Write a fully-formed ACB at ``bundle_root``.
-
-    ``objects_dir_files`` is an optional mapping of relative paths
-    (under ``objects/``) to file bytes.  Literal-secret values inside
-    the JSON payloads raise :class:`ACBSecretLeak`.
-    """
+    """Write a fully-formed, closed-world ACB at ``bundle_root``."""
     bundle_root = bundle_root.resolve()
     bundle_root.mkdir(parents=True, exist_ok=True)
     objects_root = bundle_root / ACB_OBJECTS_DIR
@@ -246,9 +338,12 @@ def write_bundle(
         shutil.rmtree(objects_root)
     objects_root.mkdir(parents=True)
 
+    # Sanitize inventory for portable bundle
+    portable_inventory = sanitize_inventory_for_bundle(inventory_rows)
+
     json_payloads: dict[str, dict[str, Any]] = {
         ACB_MANIFEST_NAME: manifest.to_dict(),
-        ACB_INVENTORY_NAME: {"rows": inventory_rows},
+        ACB_INVENTORY_NAME: {"rows": portable_inventory},
         ACB_COMPATIBILITY_NAME: compatibility,
         ACB_REQUIREMENTS_NAME: requirements,
         ACB_SECRETS_NAME: {"items": secrets_required},
@@ -262,18 +357,41 @@ def write_bundle(
             encoding="utf-8",
         )
 
+    # Verify and write raw object files with byte-level scanning
+    total_bytes = 0
+    file_count = 0
     if objects_dir_files:
-        for relative, data in objects_dir_files.items():
-            target = objects_root / relative
+        for relative, data in sorted(objects_dir_files.items()):
+            file_count += 1
+            total_bytes += len(data)
+            if file_count > MAX_BUNDLE_FILES:
+                raise ACBError(f"bundle file count exceeded limit ({MAX_BUNDLE_FILES})")
+            if len(data) > MAX_FILE_SIZE:
+                raise ACBError(f"file size exceeded limit ({MAX_FILE_SIZE} bytes): {relative}")
+            if total_bytes > MAX_TOTAL_SIZE:
+                raise ACBError(f"bundle total size exceeded limit ({MAX_TOTAL_SIZE} bytes)")
+
+            # Strict byte-level secret and binary scan
+            scan_object_bytes(data, relative)
+
+            # Strict path containment check
+            target = validate_path_containment(relative, objects_root)
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(data)
 
+    # Post-write directory-wide secret scan
+    for p in bundle_root.rglob("*"):
+        if p.is_file() and p.name != ACB_CHECKSUMS_NAME:
+            scan_object_bytes(p.read_bytes(), str(p.relative_to(bundle_root)))
+
+    # Compute checksums for all written files
     checksums: dict[str, str] = {}
     for name in ACB_JSON_FILES:
         checksums[name] = sha256_file(bundle_root / name)
-    for relative_path in (objects_dir_files or {}).keys():
-        checksums[f"{ACB_OBJECTS_DIR}/{relative_path}"] = sha256_file(
-            objects_root / relative_path
+    for relative_path in sorted((objects_dir_files or {}).keys()):
+        norm_path = Path(relative_path).as_posix()
+        checksums[f"{ACB_OBJECTS_DIR}/{norm_path}"] = sha256_file(
+            objects_root / norm_path
         )
     (bundle_root / ACB_CHECKSUMS_NAME).write_text(
         json.dumps(checksums, indent=2, sort_keys=True) + "\n",
@@ -283,7 +401,7 @@ def write_bundle(
 
 
 def collect_source_objects(
-    registry: "Any",
+    registry: Any,
     rows: list[dict[str, Any]],
     *,
     home: Path | None = None,
@@ -291,22 +409,11 @@ def collect_source_objects(
     source_product: str | None = None,
     source_profile: str | None = None,
 ) -> dict[str, bytes]:
-    """Walk existing inventory rows and copy each existing source file
-    into a stable per-object path under ``objects/``.
-
-    Recurses through Skill directories (which are one level deep),
-    copies instructions/MCP single files, and silently skips
-    anything missing or unreadable.
-
-    If ``source_product`` and ``source_profile`` are provided, only rows
-    matching that product/profile are collected.
-    """
-    from pathlib import Path as _Path
+    """Walk existing inventory rows and copy source files into stable paths under ``objects/``."""
     objects: dict[str, bytes] = {}
     for row in rows:
         if not row.get("exists"):
             continue
-        # Filter by source product/profile if provided
         if source_product and row.get("product") != source_product:
             continue
         if source_profile and row.get("profile") != source_profile:
@@ -314,39 +421,46 @@ def collect_source_objects(
         resolved = row.get("resolved_path")
         if not isinstance(resolved, str):
             continue
-        source_path = _Path(resolved)
-        if not source_path.exists():
+        source_path = Path(resolved)
+        if not source_path.exists() or source_path.is_symlink():
             continue
         object_type = row.get("object_type") or "unknown"
         product = row.get("product") or "unknown"
         profile = row.get("profile") or "default"
         scope = row.get("scope") or "unknown"
         canonical = row.get("canonical_path") or source_path.name
-        relative = _path_for_object(
-            object_type, product, profile, scope, canonical
-        )
+        relative = _path_for_object(object_type, product, profile, scope, canonical)
+
         if source_path.is_file():
-            objects[relative] = source_path.read_bytes()
+            if not _SENSITIVE_FILENAME_HINT.search(source_path.name):
+                objects[relative] = source_path.read_bytes()
         elif source_path.is_dir():
-            # Skill dirs have one level of children; recurse one level.
-            for child in sorted(source_path.iterdir()):
-                if child.is_file():
-                    objects[f"{relative}/{child.name}"] = child.read_bytes()
-                elif child.is_dir():
-                    for grandchild in sorted(child.iterdir()):
-                        if grandchild.is_file():
-                            objects[f"{relative}/{child.name}/{grandchild.name}"] = (
-                                grandchild.read_bytes()
-                            )
+            # Deep recursive collection up to MAX_DIR_DEPTH
+            _collect_tree(source_path, relative, objects, depth=0)
     return objects
+
+
+def _collect_tree(dir_path: Path, prefix: str, out: dict[str, bytes], depth: int = 0) -> None:
+    if depth > MAX_DIR_DEPTH:
+        return
+    for item in sorted(dir_path.iterdir()):
+        if item.is_symlink():
+            continue
+        if _SENSITIVE_FILENAME_HINT.search(item.name):
+            continue
+        rel = f"{prefix}/{item.name}"
+        if item.is_file():
+            out[rel] = item.read_bytes()
+        elif item.is_dir():
+            _collect_tree(item, rel, out, depth + 1)
 
 
 def _path_for_object(
     object_type: str, product: str, profile: str, scope: str, canonical: str
 ) -> str:
-    """Build a stable relative path under ``objects/`` for a given
-    inventory row."""
-    safe_canonical = canonical.strip("/").replace("~", "home").replace("..", "_")
+    """Build a sanitized stable relative path under ``objects/``."""
+    safe_canonical = canonical.strip("/\\").replace("~", "home").replace("..", "_")
+    safe_canonical = re.sub(r"[/\\:]+", "/", safe_canonical)
     return f"{object_type}/{product}/{profile}/{scope}/{safe_canonical}"
 
 
@@ -356,14 +470,7 @@ def restore_bundle_objects(
     *,
     dry_run: bool = False,
 ) -> dict[str, Any]:
-    """Copy every file recorded in ``bundle/objects/`` into the
-    destination tree.  Returns a manifest describing what was
-    written (or what would be written under ``dry_run``).
-
-    Literal-secret-looking content is refused via
-    :func:`assert_no_lateral_secrets`; any object whose path is
-    outside ``destination_root`` is rejected.
-    """
+    """Extract files from ``bundle/objects/`` safely into destination tree."""
     bundle_root = bundle_root.resolve()
     destination_root = destination_root.resolve()
     objects_root = bundle_root / ACB_OBJECTS_DIR
@@ -372,22 +479,25 @@ def restore_bundle_objects(
     written: list[dict[str, Any]] = []
     skipped: list[dict[str, str]] = []
     for source in sorted(objects_root.rglob("*")):
-        if not source.is_file():
+        if not source.is_file() or source.is_symlink():
             continue
         relative = source.relative_to(objects_root).as_posix()
-        target = (destination_root / relative).resolve()
-        if not str(target).startswith(str(destination_root)):
-            skipped.append({"path": relative, "reason": "escapes destination"})
-            continue
         try:
-            payload = {"path": relative, "content": source.read_text(encoding="utf-8")}
-            assert_no_lateral_secrets(payload)
-        except (ACBSecretLeak, UnicodeDecodeError):
-            skipped.append({"path": relative, "reason": "secret-shaped content"})
+            target = validate_path_containment(relative, destination_root)
+        except ACBIntegrityError as error:
+            skipped.append({"path": relative, "reason": str(error)})
             continue
+
+        try:
+            data = source.read_bytes()
+            scan_object_bytes(data, relative)
+        except ACBSecretLeak as error:
+            skipped.append({"path": relative, "reason": str(error)})
+            continue
+
         if not dry_run:
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(source.read_bytes())
+            target.write_bytes(data)
         written.append(
             {
                 "path": relative,
@@ -405,22 +515,82 @@ def restore_bundle_objects(
 
 
 def verify_bundle(bundle_root: Path) -> list[str]:
-    """Verify every checksum recorded in checksums.json matches on disk."""
+    """Perform closed-world verification of ACB bundle integrity."""
     bundle_root = bundle_root.resolve()
+    if not bundle_root.is_dir():
+        return [f"bundle directory not found: {bundle_root}"]
+
     checksums_path = bundle_root / ACB_CHECKSUMS_NAME
-    if not checksums_path.is_file():
-        return [f"missing {ACB_CHECKSUMS_NAME}"]
-    checksums = json.loads(checksums_path.read_text(encoding="utf-8"))
+    if not checksums_path.is_file() or checksums_path.is_symlink():
+        return [f"missing or invalid {ACB_CHECKSUMS_NAME}"]
+
+    try:
+        checksums = json.loads(checksums_path.read_text(encoding="utf-8"))
+    except Exception as error:
+        return [f"corrupted {ACB_CHECKSUMS_NAME}: {error}"]
+
     errors: list[str] = []
-    for relative, expected in checksums.items():
-        target = bundle_root / relative
-        if not target.is_file():
-            errors.append(f"missing file: {relative}")
+
+    # 1. Closed-world file enumeration: actual files == expected files
+    expected_files = set(checksums.keys())
+    actual_files: set[str] = set()
+
+    for path in sorted(bundle_root.rglob("*")):
+        # Reject non-regular files: symlinks, sockets, FIFOs, devices
+        st = path.lstat()
+        if stat.S_ISLNK(st.st_mode) or stat.S_ISFIFO(st.st_mode) or stat.S_ISSOCK(st.st_mode) or stat.S_ISCHR(st.st_mode) or stat.S_ISBLK(st.st_mode):
+            errors.append(f"illegal non-regular file in bundle: {path.relative_to(bundle_root).as_posix()}")
             continue
-        actual = sha256_file(target)
-        if actual != expected:
-            errors.append(f"checksum mismatch: {relative}")
+        if path.is_file():
+            rel_posix = path.relative_to(bundle_root).as_posix()
+            if rel_posix != ACB_CHECKSUMS_NAME:
+                actual_files.add(rel_posix)
+
+    extra_files = actual_files - expected_files
+    if extra_files:
+        for extra in sorted(extra_files):
+            errors.append(f"unexpected extra file in bundle: {extra}")
+
+    missing_files = expected_files - actual_files
+    if missing_files:
+        for missing in sorted(missing_files):
+            errors.append(f"missing file: {missing}")
+
+    # 2. Checksum validation for all listed files
+    for relative, expected in sorted(checksums.items()):
+        target = bundle_root / relative
+        if target.is_file() and not target.is_symlink():
+            actual = sha256_file(target)
+            if actual != expected:
+                errors.append(f"checksum mismatch: {relative}")
+
+    # 3. Validate JSON schemas & secret scans
+    for json_name in ACB_JSON_FILES:
+        target = bundle_root / json_name
+        if target.is_file():
+            try:
+                payload = json.loads(target.read_text(encoding="utf-8"))
+                assert_no_lateral_secrets(payload)
+            except Exception as error:
+                errors.append(f"invalid JSON payload in {json_name}: {error}")
+
     return errors
+
+
+class BundleSurfaceProvider:
+    """Provides virtual surface items and content from verified bundle objects."""
+
+    def __init__(self, bundle_root: Path):
+        self.bundle_root = bundle_root.resolve()
+        self.objects_root = self.bundle_root / ACB_OBJECTS_DIR
+        self.manifest = load_manifest(self.bundle_root)
+
+    def get_object_tree(self, object_type: str, product: str, profile: str, scope: str) -> list[Path]:
+        """Find all files belonging to a specific surface object in the bundle."""
+        target_dir = self.objects_root / object_type / product / profile / scope
+        if not target_dir.is_dir():
+            return []
+        return sorted(p for p in target_dir.rglob("*") if p.is_file())
 
 
 def load_manifest(bundle_root: Path) -> ACBManifest:

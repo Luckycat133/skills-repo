@@ -106,6 +106,52 @@ if ! diff -u "$TMP_ROOT/runtime-scripts.expected" "$TMP_ROOT/runtime-scripts.act
     exit 1
 fi
 
+find "$PACKAGE_ROOT/scripts" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; \
+    | LC_ALL=C sort >"$TMP_ROOT/runtime-packages.actual"
+printf '%s\n' \
+    acb \
+    detect \
+    registry \
+    | LC_ALL=C sort >"$TMP_ROOT/runtime-packages.expected"
+if ! diff -u "$TMP_ROOT/runtime-packages.expected" "$TMP_ROOT/runtime-packages.actual"; then
+    echo "FAIL: package subpackages do not match runtime requirements (acb, detect, registry)" >&2
+    exit 1
+fi
+
+for pkg in acb detect registry; do
+    [[ -f "$PACKAGE_ROOT/scripts/$pkg/__init__.py" ]] || {
+        echo "FAIL: package $pkg is missing __init__.py" >&2
+        exit 1
+    }
+done
+
+# Execute isolated CLI smoke test inside the staged package
+(
+    cd "$PACKAGE_ROOT"
+    unset PYTHONPATH
+    export PYTHONPATH=""
+    python3 -I scripts/context-migrator.py --help >/dev/null || {
+        echo "FAIL: staged context-migrator.py failed to run in isolated environment" >&2
+        exit 1
+    }
+    bash scripts/smart-ide-migration.sh --help >/dev/null || {
+        echo "FAIL: staged smart-ide-migration.sh --help failed" >&2
+        exit 1
+    }
+    bash scripts/smart-ide-migration.sh inventory --product cline --profile ide --json >/dev/null || {
+        echo "FAIL: staged smart-ide-migration.sh inventory failed" >&2
+        exit 1
+    }
+    bash scripts/smart-ide-migration.sh snapshot --help >/dev/null || {
+        echo "FAIL: staged smart-ide-migration.sh snapshot --help failed" >&2
+        exit 1
+    }
+    bash scripts/smart-ide-migration.sh restore --help >/dev/null || {
+        echo "FAIL: staged smart-ide-migration.sh restore --help failed" >&2
+        exit 1
+    }
+)
+
 if find "$PACKAGE_ROOT" -type l -print -quit | grep -q .; then
     echo "FAIL: runtime package contains a symbolic link" >&2
     exit 1

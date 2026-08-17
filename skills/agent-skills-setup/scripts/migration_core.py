@@ -20,6 +20,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
+_SCRIPT_DIR = str(Path(__file__).resolve().parent)
+if _SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPT_DIR)
+
 from skill_secret_scanner import finding_reason, scan as scan_skill_source_tree
 
 from registry.alias_resolver import ResolvedSelector, resolve as resolve_alias
@@ -3262,19 +3266,19 @@ def apply_plan(
                             }
                         )
             elif item.object_type == "handoff":
-                # Devin session handoff: package session data + Git branch info
+                # Handoff: only transfer reviewed summary / branch info without raw machine paths
                 if source.resolved_path.is_file():
-                    # Single session file
                     source_text = source.resolved_path.read_text(encoding="utf-8")
                     try:
                         session_data = json.loads(source_text)
                     except json.JSONDecodeError:
-                        session_data = {"raw": source_text}
-                    # Add Git branch info if available
+                        session_data = {"summary": "Reviewed handoff snapshot"}
+                    # Remove raw session logs or machine-specific paths
+                    session_data.pop("raw", None)
+                    session_data.pop("messages", None)
                     git_info = git_provenance(workspace)
                     if git_info:
                         session_data["git_branch"] = git_info.get("head")
-                        session_data["git_root"] = git_info.get("repository_root")
                     rendered = json.dumps(session_data, indent=2, sort_keys=True) + "\n"
                     staged = stage_root / f"{len(operations):04d}-handoff"
                     atomic_write(staged, rendered)
@@ -3287,18 +3291,18 @@ def apply_plan(
                         }
                     )
                 elif source.resolved_path.is_dir():
-                    # Directory of session files
                     for session_file in sorted(source.resolved_path.iterdir()):
                         if session_file.is_file():
                             session_text = session_file.read_text(encoding="utf-8")
                             try:
                                 session_data = json.loads(session_text)
                             except json.JSONDecodeError:
-                                session_data = {"raw": session_text}
+                                session_data = {"summary": "Reviewed handoff snapshot"}
+                            session_data.pop("raw", None)
+                            session_data.pop("messages", None)
                             git_info = git_provenance(workspace)
                             if git_info:
                                 session_data["git_branch"] = git_info.get("head")
-                                session_data["git_root"] = git_info.get("repository_root")
                             rendered = json.dumps(session_data, indent=2, sort_keys=True) + "\n"
                             staged = stage_root / f"{len(operations):04d}-{session_file.name}"
                             atomic_write(staged, rendered)

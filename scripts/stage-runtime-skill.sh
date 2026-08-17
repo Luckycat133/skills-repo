@@ -60,3 +60,11 @@ for runtime_script in \
     }
     cp "$SOURCE_SKILL_DIR/scripts/$runtime_script" "$PACKAGE_DIR/scripts/$runtime_script"
 done
+
+for runtime_pkg in acb detect registry; do
+    if [[ -d "$SOURCE_SKILL_DIR/scripts/$runtime_pkg" ]]; then
+        cp -R "$SOURCE_SKILL_DIR/scripts/$runtime_pkg" "$PACKAGE_DIR/scripts/$runtime_pkg"
+        # Ensure __init__.py exists in each package
+        touch "$PACKAGE_DIR/scripts/$runtime_pkg/__init__.py"
+    fi
+done

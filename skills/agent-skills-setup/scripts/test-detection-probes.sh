@@ -32,16 +32,19 @@ assert res.state is InstallState.INSTALLED, res
 assert any("binary:" in e for e in res.evidence), res.evidence
 print(f"OK probe_binary found python3 with evidence: {res.evidence}")
 
-# File-signature probe: tmp dir exists in HOME.
-import os
-home = Path(os.environ.get("HOME", "/tmp")).resolve()
+# File-signature probe: use a guaranteed temporary test fixture.
+import tempfile
+tmp_home = Path(tempfile.mkdtemp(prefix="detect-probe-test-"))
+fixture_file = tmp_home / ".config_fixture"
+fixture_file.write_text("dummy", encoding="utf-8")
+
 res = probe_file_signature(
     "test",
     "ide",
-    [home / ".zshrc", home / "__acb_probe_should_not_exist__"],
+    [fixture_file, tmp_home / "__acb_probe_should_not_exist__"],
 )
 assert res.state is InstallState.INSTALLED, res
-print(f"OK probe_file_signature found ~/.zshrc")
+print("OK probe_file_signature found fixture file")
 
 # detect_profile convenience wrapper.
 res = detect_profile(
@@ -49,7 +52,7 @@ res = detect_profile(
     "ide",
     binaries=["python3"],
     version_command=["python3", "--version"],
-    home=home,
+    home=tmp_home,
 )
 assert res.state is InstallState.INSTALLED, res
 print("OK detect_profile composes binary + version probes")
@@ -59,8 +62,8 @@ res = detect_profile(
     "fs-only",
     "ide",
     binaries=["this-binary-does-not-exist"],
-    file_signatures=[str(home / ".zshrc")],
-    home=home,
+    file_signatures=[str(fixture_file)],
+    home=tmp_home,
 )
 assert res.state is InstallState.INSTALLED, res
 print("OK detect_profile falls back to file signature")

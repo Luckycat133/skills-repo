@@ -4,6 +4,28 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ## [Unreleased]
 
+## [0.8.20] - 2026-08-17
+
+### Fixed
+
+- **P0-1 Runtime Package Staging & CLI Smoke Isolation**：修复 `scripts/stage-runtime-skill.sh`，完整复制 `scripts/acb/`、`scripts/detect/`、`scripts/registry/` 子包及 `__init__.py`；在 `test-runtime-package.sh` 中增加独立环境（`python3 -I` 与隔离 `PYTHONPATH`）下的 CLI smoke 验证（`--help`、`inventory`、`snapshot`、`restore`）。
+- **P0-2 ACB 统一原始对象凭据扫描**：实现 `scan_object_bytes` 与全目录递归深度扫描；严格阻断 `.env*`、私钥块（`-----BEGIN *PRIVATE KEY-----`）、可执行 ELF/Mach-O/PE 二进制，实施安全媒体二进制白名单；只有在内容字节完全通过扫描后才允许标记 `secret_status: clean`。
+- **P0-3 ACB 闭环完整性与校验（Closed-World Integrity）**：`verify_bundle` 实施 `actual_files == expected_files` 闭环比对，严禁额外未列入校验清单文件或缺失文件；使用 `lstat` 严格拒绝 symlink、junction、FIFO、socket 与 device 节点。
+- **P0-4 路径安全与边界收敛（Path Containment & Safety Limits）**：使用 `Path.resolve().relative_to()` 杜绝绝对路径、`..` 逃逸与 UNC/驱动器前缀；递归采集完整深层树结构（`references/`、`assets/`、`scripts/`）；强制单文件最大 10MB、总包最大 100MB、最大 5000 文件与最大 16 层深度限制。
+- **P0-5 真正 Bundle-Backed 目标 IDE 还原（True Restore）**：支持在无本地 source product 安装的纯净新设备环境下，直接从 Bundle `objects/` 读取已验证的技能、指令与 MCP 对象并转换为目标 IDE 原生配置。
+- **P0-6 事务一致性与 `--dry-run` 零写入保证**：所有 restore 操作纳入同一事务与备份回滚控制；`restore --dry-run` 确保全流程零磁盘写入。
+- **P0-7 便携清单隐私脱敏（Portable Inventory Privacy）**：在便携 Bundle 的 `inventory.json` 中彻底剥离主机物理绝对路径（`resolved_path`）、边界路径、本地操作系统用户名与 Git commit hash，仅保留逻辑产品与策略元数据。
+- **P0-8 会话与交互日志禁止迁移合规**：严格禁止原始聊天会话记录与机器绝对 `git_root` 迁移，`handoff` 仅保留脱敏后的结构化摘要与分支元数据。
+- **P0-9/P0-10 Registry 主流产品路径修正与探针测试加固**：
+  - 修正 GitHub Copilot / VS Code Skills 官方路径（`~/.copilot/skills`、`.github/skills`）。
+  - 修正 Gemini CLI MCP 存储为 `settings.json`（`mcpServers`）与主上下文 `GEMINI.md`。
+  - 修正 Factory Droid 探测命令为 `droid`。
+  - 修正 JetBrains Junie（`~/.junie/skills`、`.junie/skills`）与 AI Assistant 路径（`.agents/skills`，IDE 存储降级为 manual）。
+  - 修正 Zed 官方 Skills 路径（`~/.agents/skills`、`.agents/skills`）。
+  - 修正 Cursor 用户规则为 UI/manual 管理。
+  - 修复 `test-detection-probes.sh` 避免对 Ubuntu runner `$HOME/.zshrc` 的硬编码假设。
+- **P0-11/P0-12 发布治理与版本源统一**：统一 canonical `SKILL.md`（0.8.20）、Root pointer `SKILL.md`、`CHANGELOG.md` 版本链。
+
 ## [0.8.18] - 2026-08-17
 
 ### Added

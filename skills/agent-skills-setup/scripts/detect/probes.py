@@ -152,15 +152,16 @@ def detect_product(
         if result.state is InstallState.INSTALLED:
             return result
     if file_signature:
-        candidates = [
-            (path.expanduser() if str(path).startswith("~") else path)
-            for path in file_signature
-        ]
-        if home is not None:
-            candidates = [
-                path.replace("~", str(home)) if str(path).startswith("~") else path
-                for path in candidates
-            ]
+        candidates: list[Path] = []
+        for path in file_signature:
+            p_str = str(path)
+            if home is not None and p_str.startswith("~"):
+                rel_part = p_str.lstrip("~").lstrip("/\\")
+                candidates.append(home / rel_part)
+            elif p_str.startswith("~"):
+                candidates.append(Path(p_str).expanduser())
+            else:
+                candidates.append(Path(p_str))
         result = probe_file_signature(product, profile, candidates)
         if result.state is not InstallState.NOT_DETECTED:
             return result

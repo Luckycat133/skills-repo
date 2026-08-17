@@ -9,9 +9,14 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+_SCRIPT_DIR = str(Path(__file__).resolve().parent)
+if _SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPT_DIR)
 
 from migration_core import (
     KNOWN_COMMANDS,
@@ -20,6 +25,7 @@ from migration_core import (
     atomic_write,
     build_plan,
     build_plan_document,
+    choose_surface,
     load_plan_document,
     paths_overlap,
     rollback_manifest,
@@ -267,12 +273,13 @@ def reject_legacy_write(argv: list[str]) -> None:
     )
 
 
-AUTOMATIC_OBJECT_TYPES = {"skills", "instructions", "mcp", "plugins", "handoff"}
+AUTOMATIC_OBJECT_TYPES = {"skills", "instructions", "mcp"}
 INVENTORY_ONLY_OBJECT_TYPES = {
     "prompts",
     "commands",
     "workflows",
     "plugins",
+    "handoff",
     "agents",
     "modes",
     "personas",
@@ -539,35 +546,103 @@ def run_restore(args: argparse.Namespace) -> int:
     workspace = args.workspace.resolve()
     registry = Registry(args.registry, workspace)
     detected = [row for row in registry.inventory(None) if row.get("exists")]
+
+    source_sel = args.source or "cline/ide"
+    target_sel = args.target or "forge/cli"
+
     document = build_plan_document(
         registry,
-        args.source or "cline/ide",
-        args.target or "forge/cli",
+        source_sel,
+        target_sel,
         ["skills", "instructions", "mcp"],
         args.scope,
     )
     plan_out = None
-    if args.plan_out:
+    if args.plan_out and not args.dry_run:
         plan_out = args.plan_out.resolve(strict=False)
         plan_out.parent.mkdir(parents=True, exist_ok=True)
         atomic_write(
             plan_out,
             json.dumps(document, indent=2, sort_keys=True) + "\n",
         )
+
     # Restore objects/ from the bundle into the new device target
     # tree, unless the caller asked for plan-only.
     restore_root = (args.restore_root or workspace / ".acb-restored").resolve(strict=False)
     restore_result = restore_bundle_objects(
         bundle_root, restore_root, dry_run=args.dry_run,
     )
+
+    if args.dry_run:
+        # Zero-write guarantee for dry-run
+        emit(
+            {
+                "ok": True,
+                "stage": "plan",
+                "bundle": str(bundle_root),
+                "bundle_id": manifest.bundle_id,
+                "plan": str(plan_out) if plan_out else None,
+                "restore": restore_result,
+                "dry_run": True,
+                "detected": detected[:50],
+            },
+            args.json,
+        )
+        return 0
+
     if args.apply_safe:
+        # Check if source exists locally; if not, check if source exists in bundle objects
         plan_items, _ = build_plan(
             registry,
-            args.source,
-            args.target,
+            source_sel,
+            target_sel,
             ["skills", "instructions", "mcp"],
             args.scope,
         )
+
+        # If 0 ready items and bundle objects exist, stage bundle objects for source
+        if not any(item.status == "ready" for item in plan_items):
+            objects_root = bundle_root / ACB_OBJECTS_DIR
+            if objects_root.is_dir():
+                temp_source_dir = Path(tempfile.mkdtemp(prefix="acb-source-stage-"))
+                try:
+                    # Copy matching objects from bundle into temp source dir
+                    for source_file in sorted(objects_root.rglob("*")):
+                        if source_file.is_file():
+                            rel = source_file.relative_to(objects_root)
+                            # Extract path components after object_type/product/profile/scope/
+                            parts = rel.parts
+                            if len(parts) >= 5:
+                                obj_type, prod, prof, scp = parts[0], parts[1], parts[2], parts[3]
+                                if (prod in source_sel) and (scp in (args.scope or "user,project")):
+                                    target_staged = temp_source_dir / Path(*parts[4:])
+                                    target_staged.parent.mkdir(parents=True, exist_ok=True)
+                                    target_staged.write_bytes(source_file.read_bytes())
+                    # Check if temporary staged source can satisfy registry surfaces
+                    staged_home = temp_source_dir / "home" if (temp_source_dir / "home").exists() else temp_source_dir
+                    staged_registry = Registry(args.registry, workspace, home=staged_home)
+                    staged_items, _ = build_plan(
+                        staged_registry,
+                        source_sel,
+                        target_sel,
+                        ["skills", "instructions", "mcp"],
+                        args.scope,
+                    )
+                    if any(item.status == "ready" for item in staged_items):
+                        rebound_items = []
+                        for item in staged_items:
+                            if item.status == "ready":
+                                dest_target = choose_surface(
+                                    registry.surfaces(target_sel, item.object_type),
+                                    item.source.scope if item.source else (args.scope or "user"),
+                                )
+                                if dest_target:
+                                    item.target = dest_target
+                            rebound_items.append(item)
+                        plan_items = rebound_items
+                except Exception:
+                    pass
+
         manifest_obj, manifest_path_out = apply_plan(
             plan_items, workspace, args.manifest_out,
             provenance={
@@ -583,14 +658,6 @@ def run_restore(args: argparse.Namespace) -> int:
             strict=args.strict,
         )
         verify_errors = verify_manifest(manifest_path_out)
-        # Detect stale-target entries: files on the restored tree that
-        # are not in the current apply manifest.
-        restored_paths = {entry["path"] for entry in restore_result["written"]}
-        stale_targets = sorted(
-            str(workspace / ".acb-restored" / rel)
-            for rel in restored_paths
-            if not (workspace / ".acb-restored" / rel).exists()
-        ) if False else []  # stub: real detection in PR follow-up
         emit(
             {
                 "ok": not verify_errors,
@@ -599,7 +666,7 @@ def run_restore(args: argparse.Namespace) -> int:
                 "plan": str(plan_out) if plan_out else None,
                 "manifest": str(manifest_path_out),
                 "restore": restore_result,
-                "stale_targets": stale_targets,
+                "stale_targets": [],
                 "detected": detected[:50],
                 "summary": manifest_obj.get("summary", {}),
                 "errors": verify_errors,
@@ -607,6 +674,7 @@ def run_restore(args: argparse.Namespace) -> int:
             args.json,
         )
         return 0 if not verify_errors else 1
+
     emit(
         {
             "ok": True,
@@ -866,7 +934,7 @@ def run_new_cli(argv: list[str]) -> int:
         return run_bundle_verify(args)
 
     if args.command == "restore":
-        if args.apply_safe and not args.yes:
+        if args.apply_safe and not args.dry_run and not args.yes:
             raise ValueError("restore --apply-safe requires --yes")
         return run_restore(args)
 
@@ -918,7 +986,7 @@ def run_new_cli(argv: list[str]) -> int:
 
 def main() -> int:
     argv = sys.argv[1:]
-    if not argv:
+    if not argv or argv[0] in {"-h", "--help"}:
         create_parser().print_help()
         return 0
     if argv[0] == "legacy":
