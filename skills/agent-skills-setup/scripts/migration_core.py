@@ -1477,7 +1477,12 @@ def emit_mcp_document(
 
 
 def emit_prompt(prompt: PromptIR, target_format: str) -> tuple[str, LossReport]:
+    """Emit a prompt to the target format."""
     report = LossReport()
+    handler = _PROMPT_EMITTERS.get(target_format)
+    if handler:
+        return handler(prompt, report)
+    # Fallback to plain-prompt
     if target_format == "plain-prompt":
         body = prompt.body
         if prompt.arguments:
@@ -1487,84 +1492,272 @@ def emit_prompt(prompt: PromptIR, target_format: str) -> tuple[str, LossReport]:
     raise ValueError(f"unsupported prompt target format: {target_format}")
 
 
+def _emit_prompt_plain(prompt: PromptIR, report: LossReport) -> tuple[str, LossReport]:
+    body = prompt.body
+    if prompt.arguments:
+        arg_lines = "\n".join(f"${arg['name']}: {arg.get('description', '')}" for arg in prompt.arguments)
+        body = f"{arg_lines}\n\n{body}"
+    return body, report
+
+
+def _emit_prompt_qwen(prompt: PromptIR, report: LossReport) -> tuple[str, LossReport]:
+    """Emit Qwen command format (qwen-command)."""
+    # Qwen commands are shell scripts with frontmatter
+    parts = []
+    if prompt.arguments:
+        parts.append("# Arguments:")
+        for arg in prompt.arguments:
+            parts.append(f"# {arg['name']}: {arg.get('description', '')}")
+    parts.append(prompt.body)
+    return "\n\n".join(parts), report
+
+
+# Prompt emitter registry
+_PROMPT_EMITTERS: dict[str, Callable[[PromptIR, LossReport], tuple[str, LossReport]]] = {
+    "plain-prompt": _emit_prompt_plain,
+    "qwen-command": _emit_prompt_qwen,
+    "qwen-prompt": _emit_prompt_qwen,
+    "zencoder-prompt": _emit_prompt_plain,
+    "zenflow-prompt": _emit_prompt_plain,
+    "factory-command": _emit_prompt_plain,
+    "gemini-prompt": _emit_prompt_plain,
+    "gemini-prompt-library": _emit_prompt_plain,
+    "warp-prompt": _emit_prompt_plain,
+    "qwen-prompt": _emit_prompt_qwen,
+    "claude-prompt": _emit_prompt_plain,
+    "cursor-prompt": _emit_prompt_plain,
+    "amazon-q-prompt": _emit_prompt_plain,
+    "factory-prompt": _emit_prompt_plain,
+    "zencoder-prompt": _emit_prompt_plain,
+    "zenflow-prompt": _emit_prompt_plain,
+    "letta-prompt": _emit_prompt_plain,
+    "qoder-prompt": _emit_prompt_plain,
+    "gemini-code-assist-prompt": _emit_prompt_plain,
+    "qwen-prompt-library": _emit_prompt_plain,
+}
+
+
+def _emit_command_plain(cmd: CommandIR, report: LossReport) -> tuple[str, LossReport]:
+    lines = []
+    if cmd.invocation:
+        lines.append(f"# {cmd.invocation}")
+    if cmd.description:
+        lines.append(f"# {cmd.description}")
+    if cmd.shell_block:
+        lines.append(cmd.shell_block)
+    for block in cmd.tool_blocks:
+        lines.append(f"# tool: {block.get('name', '')}")
+        lines.append(block.get("input", ""))
+    return "\n\n".join(lines), report
+
+
+def _emit_command_qwen(cmd: CommandIR, report: LossReport) -> tuple[str, LossReport]:
+    # Qwen commands are shell scripts
+    lines = []
+    if cmd.invocation:
+        lines.append(f"# {cmd.invocation}")
+    if cmd.description:
+        lines.append(f"# {cmd.description}")
+    if cmd.shell_block:
+        lines.append(cmd.shell_block)
+    for block in cmd.tool_blocks:
+        lines.append(f"# tool: {block.get('name', '')}")
+        lines.append(block.get("input", ""))
+    return "\n\n".join(lines), report
+
+
+def _emit_command_factory(cmd: CommandIR, report: LossReport) -> tuple[str, LossReport]:
+    # Factory commands are shell scripts
+    lines = []
+    if cmd.invocation:
+        lines.append(f"# {cmd.invocation}")
+    if cmd.description:
+        lines.append(f"# {cmd.description}")
+    if cmd.shell_block:
+        lines.append(cmd.shell_block)
+    for block in cmd.tool_blocks:
+        lines.append(f"# tool: {block.get('name', '')}")
+        lines.append(block.get("input", ""))
+    return "\n\n".join(lines), report
+
+
+def _emit_command_zencoder(cmd: CommandIR, report: LossReport) -> tuple[str, LossReport]:
+    return _emit_command_plain(cmd, report)
+
+
+def _emit_command_warp(cmd: CommandIR, report: LossReport) -> tuple[str, LossReport]:
+    return _emit_command_plain(cmd, report)
+
+
+# Command emitter registry
+_COMMAND_EMITTERS: dict[str, Callable[[CommandIR, LossReport], tuple[str, LossReport]]] = {
+    "plain-command": _emit_command_plain,
+    "qwen-command": _emit_command_qwen,
+    "factory-command": _emit_command_factory,
+    "zencoder-command": _emit_command_zencoder,
+    "warp-command": _emit_command_warp,
+}
+
+
 def emit_command(cmd: CommandIR, target_format: str) -> tuple[str, LossReport]:
-    report = LossReport()
+    handler = _COMMAND_EMITTERS.get(target_format)
+    if handler:
+        return handler(cmd, LossReport())
     if target_format == "plain-command":
-        lines = []
-        if cmd.invocation:
-            lines.append(f"# {cmd.invocation}")
-        if cmd.description:
-            lines.append(f"# {cmd.description}")
-        if cmd.shell_block:
-            lines.append(cmd.shell_block)
-        for block in cmd.tool_blocks:
-            lines.append(f"# tool: {block.get('name', '')}")
-            lines.append(block.get("input", ""))
-        return "\n\n".join(lines), report
+        return _emit_command_plain(cmd, LossReport())
     raise ValueError(f"unsupported command target format: {target_format}")
 
 
+def _emit_agent_plain(agent: AgentIR, report: LossReport) -> tuple[str, LossReport]:
+    lines = [
+        f"name: {agent.name}",
+        f"description: {agent.description}",
+        f"system_prompt: {agent.system_prompt}",
+        f"model: {agent.model}",
+    ]
+    if agent.tools:
+        lines.append("tools: " + ", ".join(agent.tools))
+    if agent.subagents:
+        lines.append("subagents: " + ", ".join(agent.subagents))
+    if agent.handoffs:
+        lines.append("handoffs: " + " -> ".join(agent.handoffs))
+    if agent.hooks:
+        lines.append("hooks: " + str(agent.hooks))
+    if agent.isolation:
+        lines.append(f"isolation: {agent.isolation}")
+    if agent.worktree:
+        lines.append("worktree: true")
+    if agent.memory_policy:
+        lines.append(f"memory_policy: {agent.memory_policy}")
+    if agent.mcp:
+        lines.append("mcp: " + ", ".join(agent.mcp))
+    if agent.display_metadata:
+        lines.append(f"display: {agent.display_metadata}")
+    return "\n".join(lines), report
+
+
+# Agent emitter registry
+_AGENT_EMITTERS: dict[str, Callable[[AgentIR, LossReport], tuple[str, LossReport]]] = {
+    "plain-agent": _emit_agent_plain,
+    "qwen-agent": _emit_agent_plain,
+    "zencoder-agent": _emit_agent_plain,
+    "zenflow-agent": _emit_agent_plain,
+    "factory-droid": _emit_agent_plain,
+    "gemini-agent": _emit_agent_plain,
+    "warp-agent": _emit_agent_plain,
+    "letta-agent": _emit_agent_plain,
+    "qoder-agent": _emit_agent_plain,
+    "gemini-code-assist-agent": _emit_agent_plain,
+    "amazon-q-agent": _emit_agent_plain,
+    "cursor-agent": _emit_agent_plain,
+    "factory-agent": _emit_agent_plain,
+}
+
+
 def emit_agent(agent: AgentIR, target_format: str) -> tuple[str, LossReport]:
-    report = LossReport()
+    handler = _AGENT_EMITTERS.get(target_format)
+    if handler:
+        return handler(agent, LossReport())
     if target_format == "plain-agent":
-        lines = [
-            f"name: {agent.name}",
-            f"description: {agent.description}",
-            f"system_prompt: {agent.system_prompt}",
-            f"model: {agent.model}",
-        ]
-        if agent.tools:
-            lines.append("tools: " + ", ".join(agent.tools))
-        if agent.subagents:
-            lines.append("subagents: " + ", ".join(agent.subagents))
-        if agent.handoffs:
-            lines.append("handoffs: " + " -> ".join(agent.handoffs))
-        if agent.hooks:
-            lines.append("hooks: " + str(agent.hooks))
-        if agent.isolation:
-            lines.append(f"isolation: {agent.isolation}")
-        if agent.worktree:
-            lines.append("worktree: true")
-        if agent.memory_policy:
-            lines.append(f"memory_policy: {agent.memory_policy}")
-        if agent.mcp:
-            lines.append("mcp: " + ", ".join(agent.mcp))
-        if agent.display_metadata:
-            lines.append(f"display: {agent.display_metadata}")
-        return "\n".join(lines), report
+        return _emit_agent_plain(agent, LossReport())
     raise ValueError(f"unsupported agent target format: {target_format}")
 
 
+def _emit_hook_plain(hook: HookIR, report: LossReport) -> tuple[str, LossReport]:
+    lines = [
+        f"event: {hook.event}",
+        f"matcher: {hook.matcher}",
+        f"command: {hook.command}",
+    ]
+    if hook.cwd:
+        lines.append(f"cwd: {hook.cwd}")
+    if hook.env:
+        lines.append("env: " + str(hook.env))
+    if hook.stdin_schema:
+        lines.append(f"stdin_schema: {hook.stdin_schema}")
+    if hook.stdout_schema:
+        lines.append(f"stdout_schema: {hook.stdout_schema}")
+    if hook.blocking is not None:
+        lines.append(f"blocking: {hook.blocking}")
+    if hook.exit_code is not None:
+        lines.append(f"exit_code: {hook.exit_code}")
+    if hook.timeout_seconds is not None:
+        lines.append(f"timeout: {hook.timeout_seconds}")
+    if hook.async_run:
+        lines.append("async: true")
+    if hook.os_overrides:
+        for os_name, override in hook.os_overrides.items():
+            lines.append(f"os:{os_name}: {override}")
+    if hook.target_script_references:
+        lines.append("scripts: " + ", ".join(hook.target_script_references))
+    return "\n".join(lines), report
+
+
+def _emit_hook_qwen(hook: HookIR, report: LossReport) -> tuple[str, LossReport]:
+    return _emit_hook_plain(hook, report)
+
+
+def _emit_hook_cline(hook: HookIR, report: LossReport) -> tuple[str, LossReport]:
+    # Cline hooks are JSON with specific structure
+    hook_dict = {
+        "event": hook.event,
+        "matcher": hook.matcher,
+        "command": hook.command,
+        "enabled": False,  # Always disabled per safety policy
+    }
+    if hook.cwd:
+        hook_dict["cwd"] = hook.cwd
+    if hook.env:
+        hook_dict["env"] = hook.env
+    if hook.stdin_schema:
+        hook_dict["stdin_schema"] = hook.stdin_schema
+    if hook.stdout_schema:
+        hook_dict["stdout_schema"] = hook.stdout_schema
+    if hook.blocking is not None:
+        hook_dict["blocking"] = hook.blocking
+    if hook.exit_code is not None:
+        hook_dict["exit_code"] = hook.exit_code
+    if hook.timeout_seconds is not None:
+        hook_dict["timeout"] = hook.timeout_seconds
+    if hook.async_run:
+        hook_dict["async"] = hook.async_run
+    if hook.os_overrides:
+        hook_dict["os_overrides"] = hook.os_overrides
+    if hook.target_script_references:
+        hook_dict["target_script_references"] = hook.target_script_references
+    return json.dumps(hook_dict, indent=2, sort_keys=True) + "\n", report
+
+
+def _emit_hook_factory(hook: HookIR, report: LossReport) -> tuple[str, LossReport]:
+    return _emit_hook_plain(hook, report)
+
+
+# Hook emitter registry
+_HOOK_EMITTERS: dict[str, Callable[[HookIR, LossReport], tuple[str, LossReport]]] = {
+    "plain-hook": _emit_hook_plain,
+    "qwen-hook": _emit_hook_qwen,
+    "cline-hook": _emit_hook_cline,
+    "factory-hooks": _emit_hook_factory,
+    "zencoder-hook": _emit_hook_plain,
+    "zenflow-hook": _emit_hook_plain,
+    "factory-hook": _emit_hook_plain,
+    "warp-hook": _emit_hook_plain,
+    "gemini-hook": _emit_hook_plain,
+    "letta-hook": _emit_hook_plain,
+    "qoder-hook": _emit_hook_plain,
+    "gemini-code-assist-hook": _emit_hook_plain,
+    "amazon-q-hook": _emit_hook_plain,
+    "cursor-hook": _emit_hook_plain,
+    "factory-hooks": _emit_hook_plain,
+}
+
+
 def emit_hook(hook: HookIR, target_format: str) -> tuple[str, LossReport]:
-    report = LossReport()
+    handler = _HOOK_EMITTERS.get(target_format)
+    if handler:
+        return handler(hook, LossReport())
     if target_format == "plain-hook":
-        lines = [
-            f"event: {hook.event}",
-            f"matcher: {hook.matcher}",
-            f"command: {hook.command}",
-        ]
-        if hook.cwd:
-            lines.append(f"cwd: {hook.cwd}")
-        if hook.env:
-            lines.append("env: " + str(hook.env))
-        if hook.stdin_schema:
-            lines.append(f"stdin_schema: {hook.stdin_schema}")
-        if hook.stdout_schema:
-            lines.append(f"stdout_schema: {hook.stdout_schema}")
-        if hook.blocking is not None:
-            lines.append(f"blocking: {hook.blocking}")
-        if hook.exit_code is not None:
-            lines.append(f"exit_code: {hook.exit_code}")
-        if hook.timeout_seconds is not None:
-            lines.append(f"timeout: {hook.timeout_seconds}")
-        if hook.async_run:
-            lines.append("async: true")
-        if hook.os_overrides:
-            for os_name, override in hook.os_overrides.items():
-                lines.append(f"os:{os_name}: {override}")
-        if hook.target_script_references:
-            lines.append("scripts: " + ", ".join(hook.target_script_references))
-        return "\n".join(lines), report
+        return _emit_hook_plain(hook, LossReport())
     raise ValueError(f"unsupported hook target format: {target_format}")
 
 

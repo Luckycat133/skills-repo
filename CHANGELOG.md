@@ -4,6 +4,18 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ## [Unreleased]
 
+## [0.8.14] - 2026-08-17
+
+### Added
+
+- **PromptIR/CommandIR/AgentIR/HookIR emitters** - 完整的 target format 适配器注册表，支持所有 Registry v2.1 定义的目标格式（Cline、Qwen、Zencoder、Zenflow、Factory、Gemini、Warp、Amazon Q、Claude、Cursor、Amazon Q Code Assist 等）
+- **Plugin package adapter** - `.factory-plugin/` 包完整保留策略，支持 commands/skills/droids/hooks/mcp.json/plugin.json 结构保留
+
+### Changed
+
+- `emit_prompt/emit_command/emit_agent/emit_hook` 现在通过注册表路由到具体的 target format handler，支持 Cline、Qwen、Zencoder、Zenflow、Factory、Gemini、Warp、Amazon Q、Claude、Cursor、Gemini Code Assist 等所有 profile 的原生格式
+- Hooks staging 现已完整集成到 apply pipeline，强制 `enabled: false` 禁用草稿模式
+
 ## [0.8.13] - 2026-08-16
 
 ### Added

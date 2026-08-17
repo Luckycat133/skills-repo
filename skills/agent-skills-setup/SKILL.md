@@ -3,7 +3,7 @@ name: agent-skills-setup
 license: MIT
 compatibility: Requires local Bash, Python 3, environment lookup, and filesystem reads. Writes only approved migration targets; no network access.
 metadata:
-  version: "0.8.13"
+  version: "0.8.14"
 description: >
   Use when a user names supported IDEs or agent products and asks to plan,
   perform, or "一键" / "一句话" migrate their context. Natural-language
