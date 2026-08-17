@@ -4,6 +4,20 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ## [Unreleased]
 
+## [0.8.16] - 2026-08-17
+
+### Added
+
+- **Agent Context Bundle (ACB) 跨设备换机标准**：定义便携式 `.acb` 规范（`manifest.json`, `inventory.json`, `compatibility.json`, `requirements.json`, `secrets.required.json`, `reauth.json`, `rebuild.json`, `checksums.json`, `objects/`），实现 `snapshot`、`restore`、`doctor` 与 `bundle-verify` 命令。
+- **一句话全流程编排（High-Level `migrate`）**：单命令自动完成 `detect` → `inventory` → `plan` → `apply` → `verify`，支持 `--apply-safe` 与 `--plan-only` 模式。
+- **运行时 Alias 递归解析**：`Registry.profile()` 递归跟随 `alias_of` 链，内置循环检测（`AliasCycleError`）、深度限制（16层）并保留用户原始意图（`requested_selector` 与审计链路）。
+- **Safe Partial Apply 7 状态机**：解耦 `ready / ready-lossy / draft-disabled / manual-rebuild / forbidden / conflict / invalid`，manual / forbidden 项进入重建清单，不再阻断无关 ready 对象的应用。
+- **确定性稳定 Object ID**：基于 `sha256(selector + scope + canonical_relpath)` 消除 `migrated-N.md` 序号命名，目标路径严格保留源文件名与目录层级。
+- **多模态真实探测探针（Detection Probes）**：支持 binary/version、file signature 与 app bundle 探测，7 种判定状态（`installed`, `configured-only`, `compatibility-only`, `cloud-connected`, `legacy`, `ambiguous`, `not-detected`），支持 darwin/linux/windows/wsl/remote-ssh 跨平台模型。
+- **8 大新产品全量建模与 53 个 Active Profile 覆盖**：新增 Atlassian Rovo Dev、IBM Bob、Hermes Agent、GitLab Duo、Google Jules、Letta Code、Zencoder / Zenflow、Gemini Code Assist 的完整 surface 契约与参考文档。
+- **9 组 E2E 跨 IDE 迁移矩阵回归套件**：新增 `test-audit-e2e-matrix.sh`，覆盖 Cursor↔Claude、Claude↔Copilot、Cline↔Cursor、Gemini↔Codex、Kiro↔Continue、Windsurf↔OpenCode、Qwen↔Factory、Copilot↔Rovo、OpenHands↔Amp 的端到端真实 Plan & Apply 验证。
+- **强化凭据防泄漏体系**：`looks_like_secret_value` 扩展 Provider 凭据正则（`sk-`, `ghp_`, `AKIA`, `ASIA`, `xoxb`, `ya29`, `AIza`, `sk_live_`, `Bearer`），实现全量递归密钥扫描与零字面泄漏防御。
+
 ## [0.8.14] - 2026-08-17
 
 ### Added
