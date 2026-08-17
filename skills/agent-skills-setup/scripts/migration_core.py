@@ -708,6 +708,8 @@ FORMAT_FEATURES: dict[str, set[str]] = {
     "claude-rule": {"text", "activation", "globs"},
     "windsurf-rule": {"text", "activation", "globs", "description"},
     "plain-markdown": {"text"},
+    "trae-rule": {"text"},
+    "qoder-rule": {"text"},
 }
 
 
@@ -832,7 +834,7 @@ def parse_instruction(
         raise ValueError(
             f"instruction format {source_format} requires a dedicated adapter"
         )
-    plain_formats = {"agents-md", "amazon-q-rule", "plain-markdown"}
+    plain_formats = {"agents-md", "amazon-q-rule", "plain-markdown", "trae-rule", "qoder-rule"}
     metadata, body = ({}, text) if source_format in plain_formats else _parse_frontmatter(text)
     activation = "always"
     globs: list[str] = []
@@ -975,7 +977,7 @@ def emit_instruction(
 
     activation = instruction.activation
     body = instruction.text
-    if target_format in {"agents-md", "amazon-q-rule", "plain-markdown"}:
+    if target_format in {"agents-md", "amazon-q-rule", "plain-markdown", "trae-rule", "qoder-rule"}:
         if activation not in {"", "always", "true"}:
             raise ValueError(
                 f"{target_format} cannot safely represent {activation} activation"

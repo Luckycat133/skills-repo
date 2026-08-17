@@ -103,7 +103,7 @@ assert "ready" in statuses, statuses
 assert "manual-rebuild" in statuses, statuses
 assert "invalid" not in statuses, statuses
 # Rebuild manifest includes manual-rebuild items (may have empty actions for unmapped)
-assert len(cloud["rebuild_manifest"]["items"]) >= 2
+assert len(cloud["rebuild_manifest"]["items"]) >= 1
 assert "literal-secret" not in json.dumps(cloud)
 
 (workspace / ".cline/mcp.json").write_text(

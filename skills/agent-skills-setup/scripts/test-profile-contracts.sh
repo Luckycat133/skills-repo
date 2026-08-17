@@ -92,6 +92,8 @@ instruction_fixtures = {
     "windsurf-rule": (
         "---\ntrigger: glob\nglobs: 'src/**/*.ts,tests/**/*.ts'\n---\nReview.\n"
     ),
+    "trae-rule": "# Review\n\nReview every external input.\n",
+    "qoder-rule": "# Review\n\nReview every external input.\n",
 }
 assert set(instruction_fixtures) == set(FORMAT_FEATURES)
 
@@ -114,7 +116,7 @@ for source_format, fixture in instruction_fixtures.items():
     assert reparsed.globs == instruction.globs
     assert reparsed.imports == instruction.imports
     assert report.lossy is False
-    if source_format in {"agents-md", "amazon-q-rule", "plain-markdown"}:
+    if source_format in {"agents-md", "amazon-q-rule", "plain-markdown", "trae-rule", "qoder-rule"}:
         assert not rendered.startswith("---")
     else:
         assert native_markers[source_format] in rendered

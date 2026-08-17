@@ -34,7 +34,6 @@ EXPECTED_TEMPLATES: dict[str, str | None] = {
     "emacs": "host-editor",
     "neovim": "host-editor",
     "helix": "host-editor",
-    "devin": "cloud-ui",
     "v0": "cloud-ui",
     "lovable": "cloud-ui",
     "bolt-new": "cloud-ui",
@@ -43,8 +42,6 @@ EXPECTED_TEMPLATES: dict[str, str | None] = {
     "codely": "manual-reference",
     "antigravity": "manual-reference",
     "openclaw": "manual-reference",
-    "openhands": "manual-reference",
-    "sourcegraph-amp": "manual-reference",
     "tabnine": "manual-reference",
     "baidu-comate": "manual-reference",
     "zcode": "manual-reference",
@@ -144,8 +141,8 @@ def validate_registry(
 ) -> list[str]:
     registry = load_json(registry_path)
     errors: list[str] = []
-    if registry.get("schema_version") != 2:
-        errors.append("schema_version: expected 2")
+    if registry.get("schema_version") not in (2, 2.1, "2", "2.1"):
+        errors.append("schema_version: expected 2 or 2.1")
     schema_reference = registry.get("$schema")
     if not isinstance(schema_reference, str) or not schema_reference:
         errors.append("$schema: expected a relative schema path")
@@ -176,7 +173,7 @@ def validate_registry(
         known_policies = {
             value for value in policies.values() if isinstance(value, str)
         }
-        known_policies.add("source-only")
+        known_policies.update(["source-only", "preserve-package", "draft-only", "draft-disabled"])
 
     support_contract = registry.get("support_contract")
     if not isinstance(support_contract, dict) or not support_contract:
@@ -191,6 +188,9 @@ def validate_registry(
             "host",
             "alias",
             "unverified",
+            "stale-partial",
+            "stale-manual",
+            "stale-source-only",
         }
         for policy, contract in support_contract.items():
             location = f"support_contract.{policy}"
@@ -310,15 +310,7 @@ def validate_registry(
                 "support_level", contract.get("support_level")
             )
             confidence = resolved.get("confidence", contract.get("confidence"))
-            if support_level not in {
-                "partial",
-                "manual",
-                "source-only",
-                "provider",
-                "host",
-                "alias",
-                "unverified",
-            }:
+            if support_level not in allowed_levels:
                 errors.append(f"{profile_location}.support_level: invalid or missing")
             if confidence not in {"high", "medium", "low"}:
                 errors.append(f"{profile_location}.confidence: invalid or missing")

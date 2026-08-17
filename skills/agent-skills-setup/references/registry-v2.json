@@ -322,13 +322,87 @@
           ]
         },
         "sdk": {
-          "inherits": "ide",
           "kind": "sdk",
-          "migration_policy": "manual-rebuild",
-          "verified_at": "2026-08-12",
+          "version_range": "current as of 2026-08-17",
+          "verified_at": "2026-08-17",
           "sources": [
             "https://docs.cline.bot/getting-started/config"
-          ]
+          ],
+          "migration_policy": "bidirectional-reviewed",
+          "detection": [
+            {
+              "type": "binary",
+              "command": [
+                "cline"
+              ],
+              "version_command": [
+                "cline",
+                "--version"
+              ]
+            },
+            {
+              "type": "file-signature",
+              "paths": [
+                "~/.cline/skills",
+                "~/.cline/rules"
+              ]
+            }
+          ],
+          "platforms": {
+            "darwin": "~/.cline",
+            "linux": "~/.cline",
+            "wsl": "~/.cline"
+          },
+          "surfaces": {
+            "skills": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.cline/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".cline/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              }
+            ],
+            "instructions": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.cline/rules",
+                "format": "cline-rule",
+                "policy": "semantic-ir-with-loss-report"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".cline/rules",
+                "format": "cline-rule",
+                "policy": "semantic-ir-with-loss-report"
+              }
+            ],
+            "mcp": [
+              {
+                "scope": "user",
+                "storage": "file",
+                "path": "~/.cline/data/settings/cline_mcp_settings.json",
+                "format": "json:mcpServers",
+                "policy": "profile-version-adapter"
+              },
+              {
+                "scope": "project",
+                "storage": "file",
+                "path": ".cline/mcp.json",
+                "format": "json:mcpServers",
+                "policy": "profile-version-adapter"
+              }
+            ]
+          }
         }
       }
     },
@@ -985,24 +1059,130 @@
           ]
         },
         "cn-ide": {
-          "kind": "ide",
-          "version_range": "profile boundary only as of 2026-08-12",
-          "verified_at": "2026-08-12",
+          "kind": "ide-extension",
+          "version_range": "current as of 2026-08-16",
+          "verified_at": "2026-08-17",
           "sources": [
             "https://docs.qoder.com/"
           ],
-          "migration_policy": "manual-rebuild",
-          "surfaces": {}
+          "migration_policy": "bidirectional-reviewed",
+          "detection": [
+            {
+              "type": "app-bundle",
+              "darwin_bundle_id": "com.qoder.ide"
+            },
+            {
+              "type": "file-signature",
+              "paths": [
+                "~/.qoder/skills",
+                "~/.qoder/rules"
+              ]
+            }
+          ],
+          "platforms": {
+            "darwin": "~/.qoder",
+            "linux": "~/.qoder",
+            "windows": "%APPDATA%/Qoder"
+          },
+          "surfaces": {
+            "skills": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.qoder/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".qoder/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              }
+            ],
+            "instructions": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.qoder/rules",
+                "format": "qoder-rule",
+                "policy": "semantic-ir-with-loss-report"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".qoder/rules",
+                "format": "qoder-rule",
+                "policy": "semantic-ir-with-loss-report"
+              }
+            ],
+            "mcp": [
+              {
+                "scope": "user",
+                "storage": "file",
+                "path": "~/.qoder/mcp.json",
+                "format": "json:mcpServers",
+                "policy": "profile-version-adapter"
+              },
+              {
+                "scope": "project",
+                "storage": "file",
+                "path": ".qoder/mcp.json",
+                "format": "json:mcpServers",
+                "policy": "profile-version-adapter"
+              }
+            ]
+          }
         },
         "cn-cli": {
           "kind": "cli",
-          "version_range": "profile boundary only as of 2026-08-12",
-          "verified_at": "2026-08-12",
+          "version_range": "current as of 2026-08-16",
+          "verified_at": "2026-08-17",
           "sources": [
-            "https://docs.qoder.com/"
+            "https://docs.qoder.com/cli"
           ],
-          "migration_policy": "manual-rebuild",
-          "surfaces": {}
+          "migration_policy": "bidirectional-reviewed",
+          "detection": [
+            {
+              "type": "binary",
+              "command": [
+                "qoder"
+              ],
+              "version_command": [
+                "qoder",
+                "--version"
+              ]
+            },
+            {
+              "type": "file-signature",
+              "paths": [
+                "~/.qoder/skills"
+              ]
+            }
+          ],
+          "platforms": {
+            "darwin": "~/.qoder",
+            "linux": "~/.qoder"
+          },
+          "surfaces": {
+            "skills": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.qoder/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".qoder/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              }
+            ]
+          }
         },
         "work": {
           "kind": "cloud-ui",
@@ -1971,13 +2151,66 @@
         },
         "desktop-code": {
           "kind": "desktop-coding",
-          "version_range": "current as of 2026-08-12",
-          "verified_at": "2026-08-12",
+          "version_range": "current as of 2026-08-16",
+          "verified_at": "2026-08-17",
           "sources": [
             "https://code.claude.com/docs/en/desktop"
           ],
-          "migration_policy": "manual-rebuild",
-          "surfaces": {}
+          "migration_policy": "bidirectional-reviewed",
+          "detection": [
+            {
+              "type": "app-bundle",
+              "darwin_bundle_id": "com.anthropic.claude-code"
+            },
+            {
+              "type": "file-signature",
+              "paths": [
+                "~/.claude/skills",
+                "CLAUDE.md"
+              ]
+            }
+          ],
+          "platforms": {
+            "darwin": "~/.claude",
+            "linux": "~/.claude",
+            "wsl": "~/.claude"
+          },
+          "surfaces": {
+            "skills": [
+              {
+                "scope": "user",
+                "storage": "directory",
+                "path": "~/.claude/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              },
+              {
+                "scope": "project",
+                "storage": "directory",
+                "path": ".claude/skills",
+                "format": "agent-skill",
+                "policy": "validate-then-atomic-copy"
+              }
+            ],
+            "instructions": [
+              {
+                "scope": "project",
+                "storage": "hierarchy",
+                "path": "CLAUDE.md",
+                "format": "agents-md",
+                "policy": "semantic-ir-with-loss-report"
+              }
+            ],
+            "mcp": [
+              {
+                "scope": "user",
+                "storage": "file",
+                "path": "~/.claude.json",
+                "format": "json:mcpServers",
+                "policy": "profile-version-adapter"
+              }
+            ]
+          }
         },
         "desktop-chat": {
           "kind": "desktop-chat",
@@ -4055,12 +4288,35 @@
         "flows": {
           "kind": "workflow",
           "version_range": "current as of 2026-08-16",
-          "verified_at": "2026-08-16",
+          "verified_at": "2026-08-17",
           "sources": [
             "https://docs.gitlab.com/ee/user/duo_agent_platform/flows.html"
           ],
-          "migration_policy": "manual-rebuild",
-          "surfaces": {}
+          "migration_policy": "bidirectional-reviewed",
+          "detection": [
+            {
+              "type": "file-signature",
+              "paths": [
+                ".gitlab/duo/flows.yaml"
+              ]
+            }
+          ],
+          "platforms": {
+            "darwin": "~/.gitlab/duo",
+            "linux": "~/.gitlab/duo",
+            "wsl": "~/.gitlab/duo"
+          },
+          "surfaces": {
+            "flows": [
+              {
+                "scope": "project",
+                "storage": "file",
+                "path": ".gitlab/duo/flows.yaml",
+                "format": "gitlab-flow",
+                "policy": "manual-template"
+              }
+            ]
+          }
         }
       }
     },

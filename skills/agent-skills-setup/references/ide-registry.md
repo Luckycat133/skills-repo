@@ -103,3 +103,14 @@ fixtures, secret/rollback coverage, and a fresh documentation check.
 - [`warp-oz`](ides/warp-oz.md) — Warp Oz local/cloud agent CLI
 - [`pi`](ides/pi.md) — Pi coding agent
 - [`crush`](ides/crush.md) — Crush terminal coding agent
+- [`gemini-code-assist`](ides/gemini-code-assist.md) — Gemini Code Assist
+- [`gitlab-duo`](ides/gitlab-duo.md) — GitLab Duo Agent Platform
+- [`hermes`](ides/hermes.md) — Hermes Agent
+- [`ibm-bob`](ides/ibm-bob.md) — IBM Bob
+- [`jules`](ides/jules.md) — Google Jules
+- [`letta`](ides/letta.md) — Letta
+- [`letta-code`](ides/letta-code.md) — Letta Code
+- [`rovodev`](ides/rovodev.md) — Atlassian Rovo Dev
+- [`warp`](ides/warp.md) — Warp
+- [`zencoder`](ides/zencoder.md) — Zencoder
+- [`zenflow`](ides/zenflow.md) — Zenflow

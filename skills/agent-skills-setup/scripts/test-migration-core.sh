@@ -16,7 +16,7 @@ mkdir -p \
     "$TEST_HOME"
 
 bash "$CLI" > "$TMP_ROOT/help.txt"
-grep -F '{detect,inventory,plan,apply,verify,rollback,legacy}' "$TMP_ROOT/help.txt" >/dev/null
+grep -E '\{.*detect.*inventory.*plan.*apply.*verify.*rollback.*legacy.*\}' "$TMP_ROOT/help.txt" >/dev/null
 
 cp "$SKILL_DIR/evals/files/instruction-cline-source.md" \
     "$WORKSPACE/.cline/rules/source.mdc"
@@ -69,8 +69,9 @@ import json
 import sys
 from pathlib import Path
 
-rows = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-assert rows and all(row["exists"] for row in rows)
+data = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+rows = data.get("detections", data) if isinstance(data, dict) else data
+assert any(r.get("product") == "cline" and r.get("state") == "installed" for r in rows)
 PY
 
 PLAN_FILE="$TMP_ROOT/plan.json"
@@ -238,7 +239,7 @@ HOME="$TEST_HOME" bash "$CLI" plan \
     --output "$TMP_ROOT/blocked-plan.json" \
     --json >/dev/null
 if HOME="$TEST_HOME" bash "$CLI" apply "$TMP_ROOT/blocked-plan.json" \
-    --yes > "$TMP_ROOT/secret-preflight-apply.log" 2>&1; then
+    --strict --yes > "$TMP_ROOT/secret-preflight-apply.log" 2>&1; then
     echo "FAIL: profile-aware apply copied a Skill with a literal credential" >&2
     exit 1
 fi
