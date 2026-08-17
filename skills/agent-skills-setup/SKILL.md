@@ -16,7 +16,7 @@ description: >
 
 ## Capabilities and authorization
 
-- `detect`, `inventory`, and `plan` read only named products and workspace; network access is forbidden.
+- `detect`, `doctor`, `inventory`, `plan`, `snapshot`, and `bundle-verify` read only named products and workspace; network access is forbidden.
 - A generic migration request authorizes planning only; separate explicit user approval (`--yes`) or explicit action verbs (apply, restore, 迁到) under `--apply-safe` authorize write.
 - Save the plan, review its diff/rebuild manifest, and apply that exact file.
 - The explicit `legacy` subcommand keeps lookup compatibility; legacy writes are disabled.
@@ -31,11 +31,13 @@ description: >
    - Other file objects: [references/object-migration.md](references/object-migration.md)
    - Approved apply / proof: [references/verification.md](references/verification.md)
 
-## Execution
+## Execution & Scope
 
 - High-level: `bash scripts/smart-ide-migration.sh migrate --source <src> --target <dst> --workspace . --objects all-portable --yes`
 - Step-by-step: `plan --output <plan.json>` -> `apply <plan.json> --manifest <manifest.json> --yes` -> `verify --manifest <manifest.json>` -> `rollback --manifest <manifest.json> --yes`.
-- Default `--apply-safe` lands `ready` and `draft-disabled`; manual/forbidden items record to manifest.
-- Rejects changed source/target, Registry, adapter, or Git HEAD. Atomic writes, exact backups, guarded rollback.
+- Device handoff (ACB): `snapshot --output-bundle <b.acb>` -> `bundle-verify --bundle <b.acb>` -> `restore --bundle <b.acb> --yes` (offline self-contained archive).
+- Diagnostics: `detect` / `doctor` inspect local probes and installation states offline.
+- Surface scope: skills, instructions, MCP, prompts, commands, workflows, agents/droids, and hooks (executable agents/hooks default to `draft-disabled`).
+- Plugins & extensions: opaque binaries/plugins are non-executable and marked manual-rebuild.
 - Claude Desktop app MCP in **Settings → Extensions** and **Settings → Connectors** is UI-managed; do not infer or rewrite it from legacy JSON.
 - Never move secrets, OAuth/session state, runtime metadata, approval grants, chat history, or generated memory.

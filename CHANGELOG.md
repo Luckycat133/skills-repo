@@ -4,6 +4,16 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ## [Unreleased]
 
+## [0.8.18] - 2026-08-17
+
+### Added
+
+- **ClawScan 安全审计全面对齐与能力透明化**：在 `SKILL.md`、`migration-safety.md` 与 `object-migration.md` 中全面显式披露 `snapshot`、`bundle-verify`、`restore`、`detect` 与 `doctor` 的功能边界。
+- **扩展对象安全边界明确化**：
+  - **插件与扩展（Plugins & Extensions）**：明确二进制扩展不自动安装执行，仅生成 `draft-disabled` 草稿或 `manual-rebuild` 重建清单。
+  - **会话与运行时状态（Sessions & Runtime Logs）**：明确交互式会话记录、运行时 OAuth/凭据与授权授予不予迁移。
+  - **ACB 换机归档（Agent Context Bundle）**：明确离线打包、无明文凭证、无主机绝对路径泄漏的便携规范。
+
 ## [0.8.16] - 2026-08-17
 
 ### Added
