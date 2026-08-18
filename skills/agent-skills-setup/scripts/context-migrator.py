@@ -237,6 +237,11 @@ def create_parser() -> argparse.ArgumentParser:
     restore.add_argument("--strict", action="store_true")
     restore.add_argument("--yes", action="store_true")
     restore.add_argument(
+        "--plan-only",
+        action="store_true",
+        help="Build and review restore plan without applying to target surfaces.",
+    )
+    restore.add_argument(
         "--restore-root",
         type=Path,
         help="Destination tree for bundle/objects/ restore (default: <workspace>/.acb-restored).",
@@ -430,17 +435,36 @@ def run_detection(args: argparse.Namespace) -> int:
 
 
 def run_snapshot(args: argparse.Namespace) -> int:
-    """Capture a portable ACB snapshot of the current device."""
+    """Capture a portable ACB snapshot of the current device.
+
+    Strict Snapshot Allowlist (audit P0-2):
+    - Collects only the requested source product/profile and requested scope(s).
+    - Collects only portable object types (skills, instructions, mcp) in the migration plan.
+    - Strictly rejects forbidden-regenerate, never-migrate, session, chat, runtime,
+      database, generated memory, and trust/credential stores.
+    """
     workspace = args.workspace.resolve()
     registry = Registry(args.registry, workspace)
     bundle_root = (args.output or workspace / "device.acb").resolve(strict=False)
     inventory_rows = registry.inventory(None)
     detect_rows = [row for row in inventory_rows if row.get("exists")]
+
+    requested_scopes = {
+        s.strip().lower()
+        for s in (args.scope or "user,project").split(",")
+        if s.strip()
+    }
+    if "all" in requested_scopes:
+        requested_scopes = {"user", "project", "local"}
+    allowed_object_types = set(
+        resolve_objects(getattr(args, "objects", "skills,instructions,mcp"))
+    )
+
     document = build_plan_document(
         registry,
         args.source or "cline/ide",
         args.target or "forge/cli",
-        ["skills", "instructions", "mcp"],
+        sorted(allowed_object_types),
         args.scope,
     )
     plan_rows = document.get("items", [])
@@ -452,6 +476,28 @@ def run_snapshot(args: argparse.Namespace) -> int:
             1 for row in inventory_rows if row.get("object_type")
         ),
     }
+
+    # Only include authorized, planned objects in manifest
+    manifest_objects = []
+    for item in plan_rows:
+        surface_type = item.get("object_type", "")
+        item_scope = (item.get("source") or {}).get("scope", "")
+        if surface_type not in allowed_object_types:
+            continue
+        if requested_scopes and item_scope not in requested_scopes:
+            continue
+        manifest_objects.append(
+            {
+                "object_id": item.get("object_id", ""),
+                "product": (item.get("source") or {}).get("product", ""),
+                "profile": (item.get("source") or {}).get("profile", ""),
+                "surface": surface_type,
+                "scope": item_scope,
+                "status": item.get("status", ""),
+                "secret_status": "clean",
+            }
+        )
+
     manifest = ACBManifest(
         schema_version=ACB_SCHEMA_VERSION,
         bundle_id=make_bundle_id(),
@@ -461,18 +507,7 @@ def run_snapshot(args: argparse.Namespace) -> int:
             "python": sys.version.split()[0],
         },
         inventory_summary=inventory_summary,
-        objects=[
-            {
-                "object_id": item.get("object_id", ""),
-                "product": (item.get("source") or {}).get("product", ""),
-                "profile": (item.get("source") or {}).get("profile", ""),
-                "surface": item.get("object_type", ""),
-                "scope": (item.get("source") or {}).get("scope", ""),
-                "status": item.get("status", ""),
-                "secret_status": "clean",
-            }
-            for item in plan_rows
-        ],
+        objects=manifest_objects,
     )
     compatibility = {"products": sorted(registry.products.keys())}
     requirements = collect_requirements(inventory_rows, plan_rows)
@@ -486,12 +521,20 @@ def run_snapshot(args: argparse.Namespace) -> int:
         }
         for action in reauth
     ]
-    # Copy every existing source file under objects/ for true
-    # device-to-device restore. Only collect the requested source product/profile.
-    source_product, source_profile = args.source.split("/", 1) if "/" in args.source else (args.source, None)
+    # Copy source files under objects/ using strict allowlist (audit P0-2).
+    source_product, source_profile = (
+        args.source.split("/", 1) if "/" in args.source else (args.source, None)
+    )
     objects_dir_files = collect_source_objects(
-        registry, inventory_rows, home=registry.home, workspace=workspace,
-        source_product=source_product, source_profile=source_profile,
+        registry,
+        inventory_rows,
+        home=registry.home,
+        workspace=workspace,
+        source_product=source_product,
+        source_profile=source_profile,
+        allowed_scopes=requested_scopes,
+        allowed_object_types=allowed_object_types,
+        plan_items=plan_rows,
     )
     try:
         write_bundle(
@@ -543,17 +586,18 @@ def run_bundle_verify(args: argparse.Namespace) -> int:
 def run_restore(args: argparse.Namespace) -> int:
     """Verify and rebuild a plan from an ACB on the current device.
 
-    Audit #1: the reviewed plan document must be backed by the SAME source
-    that produces the executed items. When the local device resolves no ready
-    items but the bundle carries objects, we stage the bundle's objects into a
-    throwaway source tree and rebuild BOTH the plan items and the reviewed plan
-    document from that staged registry. The executed items read their content
-    directly from the staged (verified) copy, so reviewed == executed.
-
-    Audit #4: the object extraction into ``.acb-restored`` is OPT-IN (only when
-    ``--restore-root`` is given). We never imply a full atomic "restore" landed
-    there; the real migration is performed by the plan apply to the target
-    surfaces. ACB restore is multi-phase and is not a single atomic transaction.
+    Dual-side Plan Architecture (audit P0-1 & P0-3):
+    1. Restore source is ALWAYS the verified bundle. Local source installation on
+       device B does not alter or replace bundle content.
+    2. Bundle objects are staged into an isolated temporary source tree.
+    3. Source surfaces are resolved from the staged source registry; target
+       surfaces are resolved from the real destination registry on this device.
+    4. The reviewed PlanDocument contains the real destination target paths,
+       real pre-apply target states (evaluating exists -> replace vs create),
+       real unified/semantic diffs against the destination, and real workspace.
+    5. The hash of this exact document is locked as plan_sha256 and recorded in
+       provenance upon apply.
+    6. Executed target paths == reviewed plan target paths at all times.
     """
     bundle_root = args.bundle.resolve()
     errors = verify_bundle(bundle_root)
@@ -562,12 +606,12 @@ def run_restore(args: argparse.Namespace) -> int:
         return 1
     manifest = load_manifest(bundle_root)
     workspace = args.workspace.resolve()
-    registry = Registry(args.registry, workspace)
-    detected = [row for row in registry.inventory(None) if row.get("exists")]
+    target_registry = Registry(args.registry, workspace)
+    detected = [row for row in target_registry.inventory(None) if row.get("exists")]
 
     source_sel = args.source or "cline/ide"
     target_sel = args.target or "forge/cli"
-    object_types = ["skills", "instructions", "mcp"]
+    object_types = resolve_objects(getattr(args, "objects", "skills,instructions,mcp"))
     have_bundle_objects = (bundle_root / ACB_OBJECTS_DIR).is_dir()
 
     # Optional object extraction into an explicit restore-root (audit #4:
@@ -581,82 +625,60 @@ def run_restore(args: argparse.Namespace) -> int:
         else None
     )
 
-    def make_document(reg: "Registry") -> dict[str, Any]:
-        return build_plan_document(
-            reg, source_sel, target_sel, object_types, args.scope
-        )
-
-    # Baseline (local-device) plan + reviewed document.
-    document = make_document(registry)
-    plan_items, _ = build_plan(
-        registry, source_sel, target_sel, object_types, args.scope
-    )
-
-    # Bundle-backed override: if the local device resolves nothing eligible but
-    # the bundle carries objects, stage them and rebuild from the bundle.
     temp_dir: str | None = None
     try:
-        if (
-            not any(item.status == "ready" for item in plan_items)
-            and have_bundle_objects
-        ):
-            temp_dir = tempfile.mkdtemp(prefix="acb-source-stage-")
-            temp_source_dir = Path(temp_dir)
+        temp_dir = tempfile.mkdtemp(prefix="acb-source-stage-")
+        temp_source_dir = Path(temp_dir)
+        staged_home = temp_source_dir / "home"
+        staged_home.mkdir(parents=True, exist_ok=True)
+
+        if have_bundle_objects:
             objects_root = bundle_root / ACB_OBJECTS_DIR
             requested_scopes = {
                 s.strip().lower()
                 for s in (args.scope or "user,project").split(",")
                 if s.strip()
             }
+            if "all" in requested_scopes:
+                requested_scopes = {"user", "project", "local"}
+            source_prod = source_sel.split("/")[0]
+
             for source_file in sorted(objects_root.rglob("*")):
                 if source_file.is_file():
                     rel = source_file.relative_to(objects_root)
                     parts = rel.parts
                     if len(parts) >= 5:
-                        prod, scp = parts[1], parts[3]
-                        # Audit #3: proper comma-scope expansion so a
-                        # `--scope user,project` request considers every
-                        # requested scope rather than a substring match.
-                        if (prod in source_sel) and (
+                        obj_t, prod, prof, scp = parts[0], parts[1], parts[2], parts[3]
+                        if (prod == source_prod or prod in source_sel) and (
                             scp.lower() in requested_scopes
                         ):
                             target_staged = temp_source_dir / Path(*parts[4:])
                             target_staged.parent.mkdir(parents=True, exist_ok=True)
                             target_staged.write_bytes(source_file.read_bytes())
-            # Audit #3: the staged tree is the SOURCE for both user (under
-            # <stage>/home, mapped via Registry.home) and project/local scopes
-            # (under <stage>, mapped via Registry.workspace). Point BOTH roots
-            # at the stage so project-scope objects resolve during plan build;
-            # the executed targets are still chosen from the real device via
-            # choose_surface below.
-            staged_home = (
-                temp_source_dir / "home"
-                if (temp_source_dir / "home").exists()
-                else temp_source_dir
-            )
-            staged_registry = Registry(
-                args.registry, temp_source_dir, home=staged_home
-            )
-            staged_items, _ = build_plan(
-                staged_registry, source_sel, target_sel, object_types, args.scope
-            )
-            if any(item.status == "ready" for item in staged_items):
-                # Rebuild the reviewed document from the bundle-backed source so
-                # the plan the user reviews is exactly what we execute.
-                document = make_document(staged_registry)
-                rebound_items = []
-                for item in staged_items:
-                    if item.status == "ready":
-                        dest_target = choose_surface(
-                            registry.surfaces(target_sel, item.object_type),
-                            item.source.scope if item.source else (args.scope or "user"),
-                        )
-                        if dest_target:
-                            item.target = dest_target
-                    rebound_items.append(item)
-                plan_items = rebound_items
 
-        # Write the (bundle-backed when applicable) reviewed plan document.
+        source_registry = Registry(
+            args.registry, temp_source_dir, home=staged_home
+        )
+
+        # Build dual-side plan: source=bundle (source_registry), target=destination device (target_registry)
+        plan_items, _ = build_plan(
+            source_registry,
+            source_sel,
+            target_sel,
+            object_types,
+            args.scope,
+            target_registry=target_registry,
+        )
+        document = build_plan_document(
+            source_registry,
+            source_sel,
+            target_sel,
+            object_types,
+            args.scope,
+            target_registry=target_registry,
+        )
+
+        # Write the reviewed plan document if requested
         plan_out = None
         if args.plan_out and not args.dry_run:
             plan_out = args.plan_out.resolve(strict=False)
@@ -675,8 +697,26 @@ def run_restore(args: argparse.Namespace) -> int:
                     "bundle": str(bundle_root),
                     "bundle_id": manifest.bundle_id,
                     "plan": str(plan_out) if plan_out else None,
+                    "plan_sha256": document["plan_sha256"],
                     "restore": restore_result,
                     "dry_run": True,
+                    "detected": detected[:50],
+                },
+                args.json,
+            )
+            return 0
+
+        is_plan_only = getattr(args, "plan_only", False) or not args.yes
+        if is_plan_only:
+            emit(
+                {
+                    "ok": True,
+                    "stage": "plan",
+                    "bundle": str(bundle_root),
+                    "bundle_id": manifest.bundle_id,
+                    "plan": str(plan_out) if plan_out else None,
+                    "plan_sha256": document["plan_sha256"],
+                    "restore": restore_result,
                     "detected": detected[:50],
                 },
                 args.json,
@@ -711,6 +751,7 @@ def run_restore(args: argparse.Namespace) -> int:
                 "bundle": str(bundle_root),
                 "bundle_id": manifest.bundle_id,
                 "plan": str(plan_out) if plan_out else None,
+                "plan_sha256": document["plan_sha256"],
                 "restore": restore_result,
                 "detected": detected[:50],
             },
@@ -1012,8 +1053,6 @@ def run_new_cli(argv: list[str]) -> int:
         return run_bundle_verify(args)
 
     if args.command == "restore":
-        if args.apply_safe and not args.dry_run and not args.yes:
-            raise ValueError("restore --apply-safe requires --yes")
         return run_restore(args)
 
     if args.command == "doctor":

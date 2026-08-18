@@ -74,11 +74,27 @@ assert out['stage'] == 'verify', out
 print('OK restore reported ok, stage=verify')
 "
 
-# 3. #1: reviewed plan == executed plan.
-python3 - "$PLAN" "$RESTORE_JSON" <<'PY'
+# 3. #1: reviewed plan == executed plan with strict dual-side assertions.
+python3 - "$PLAN" "$RESTORE_JSON" "$WS_B" "$HOME_B" <<'PY'
 import json, sys
+from pathlib import Path
+
 plan = json.load(open(sys.argv[1]))
 restore = json.loads(sys.argv[2])
+ws_b = Path(sys.argv[3]).resolve()
+home_b = Path(sys.argv[4]).resolve()
+
+manifest_path = restore.get('manifest')
+manifest = json.load(open(manifest_path))
+
+# P0-1 assertion: plan workspace == real workspace
+plan_ws = Path(plan.get('workspace', '')).resolve()
+assert plan_ws == ws_b, f"plan workspace {plan_ws} != real workspace {ws_b}"
+
+# P0-1 assertion: plan_sha256 in provenance matches reviewed plan_sha256
+plan_sha = plan.get('plan_sha256')
+prov_sha = manifest.get('provenance', {}).get('plan_sha256')
+assert plan_sha == prov_sha, f"manifest provenance plan_sha ({prov_sha}) != reviewed plan_sha ({plan_sha})"
 
 plan_ready = [it for it in plan.get('items', []) if it.get('status') == 'ready']
 applied = restore.get('summary', {}).get('applied', 0)
@@ -88,7 +104,35 @@ assert len(plan_ready) == applied, (
     f"reviewed plan ready count ({len(plan_ready)}) != applied ({applied}); "
     "reviewed plan diverged from executed plan"
 )
+
+# P0-1 assertion: plan target path matches the real target on Device B (not a temporary stage path)
+for item in plan_ready:
+    target_path = Path(item.get('target', {}).get('resolved_path', '')).resolve()
+    assert target_path, f"missing target path in plan item: {item}"
+    assert "/tmp/acb-source-stage-" not in str(target_path), f"leak of temporary stage path into reviewed plan target: {target_path}"
+    assert target_path == home_b / "forge/skills" or home_b in target_path.parents or target_path == ws_b or ws_b in target_path.parents, f"target path not rooted in Device B: {target_path}"
+
+    # Check review preview
+    preview = item.get('review_preview')
+    assert preview is not None, f"missing review_preview in plan item: {item}"
+    for change in preview.get('changes', []):
+        change_path = Path(change.get('path', '')).resolve()
+        assert "/tmp/acb-source-stage-" not in str(change_path), f"temporary stage path in preview change: {change_path}"
+        assert home_b in change_path.parents or ws_b in change_path.parents, f"change path not rooted in Device B: {change_path}"
+
+# P0-1 assertion: manifest applied changes match reviewed plan target paths
+manifest_changes = manifest.get('changes', [])
+for change in manifest_changes:
+    dest_str = change.get('path') or change.get('destination') or ''
+    assert dest_str, f"missing path in manifest change: {change}"
+    dest = Path(dest_str).resolve()
+    assert "/tmp/acb-source-stage-" not in str(dest), f"temporary stage path in manifest change: {dest}"
+    assert home_b in dest.parents or ws_b in dest.parents or dest == home_b / "forge/skills/awesome-skill", f"manifest destination not rooted in Device B: {dest}"
+
 print(f"OK #1 reviewed plan ready items ({len(plan_ready)}) == applied ({applied})")
+print(f"OK #1 reviewed plan target ({target_path}) == manifest target ({dest}) == written target")
+print(f"OK #1 plan workspace ({plan_ws}) == real workspace ({ws_b})")
+print(f"OK #1 plan_sha256 matches manifest provenance ({plan_sha})")
 PY
 
 # 4. The target skill actually landed.

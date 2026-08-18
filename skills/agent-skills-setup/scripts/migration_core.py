@@ -1993,15 +1993,58 @@ def rebuild_actions(
     return actions
 
 
+def serialize_portable_handoff(
+    raw_data: Any,
+    workspace: Path | None = None,
+) -> dict[str, Any]:
+    """Serialize ONLY strictly allowed portable handoff fields.
+
+    Any un-whitelisted fields (history, conversation, events, tool_calls,
+    oauth_state, tokens, cwd, git_root, approval_state, session_state,
+    environment, machine paths, raw logs) are completely discarded (audit P0-4).
+    """
+    summary = ""
+    selected_files: list[str] = []
+    patch: str | None = None
+
+    if isinstance(raw_data, dict):
+        raw_summary = raw_data.get("reviewed_summary") or raw_data.get("summary") or ""
+        if isinstance(raw_summary, str):
+            summary = raw_summary.strip()
+        raw_files = raw_data.get("selected_files")
+        if isinstance(raw_files, list):
+            for f in raw_files:
+                if isinstance(f, str) and not f.startswith("/") and ".." not in f:
+                    selected_files.append(f)
+        raw_patch = raw_data.get("patch")
+        if isinstance(raw_patch, str):
+            patch = raw_patch
+
+    git_branch: str | None = None
+    if workspace is not None:
+        git_info = git_provenance(workspace)
+        if git_info and git_info.get("branch"):
+            git_branch = str(git_info["branch"])
+
+    return {
+        "reviewed_summary": summary or "Reviewed handoff snapshot",
+        "git_branch": git_branch,
+        "selected_files": sorted(set(selected_files)),
+        "patch": patch,
+    }
+
+
 def _build_plan_for_scope(
     registry: Registry,
     source_selector: str,
     target_selector: str,
     object_types: list[str],
     scope: str,
+    target_registry: Registry | None = None,
 ) -> tuple[list[PlanItem], LossReport]:
+    target_reg = target_registry if target_registry is not None else registry
     _, _, source_profile = registry.profile(source_selector)
-    _, _, target_profile = registry.profile(target_selector)
+    _, _, target_profile = target_reg.profile(target_selector)
     source_policy = source_profile.get("migration_policy", "manual-rebuild")
     target_policy = target_profile.get("migration_policy", "manual-rebuild")
     source_automatic = source_policy in AUTOMATIC_MIGRATION_POLICIES | {"source-only"}
@@ -2020,7 +2063,7 @@ def _build_plan_for_scope(
             source = None
             source_error = error
         target = choose_surface(
-            registry.surfaces(target_selector, object_type), scope
+            target_reg.surfaces(target_selector, object_type), scope
         )
         if source_error is not None:
             items.append(
@@ -2350,7 +2393,9 @@ def build_plan(
     target_selector: str,
     object_types: list[str],
     scope: str,
+    target_registry: Registry | None = None,
 ) -> tuple[list[PlanItem], LossReport]:
+    target_reg = target_registry if target_registry is not None else registry
     # Audit #3: a comma-separated union (e.g. "user,project") must plan every
     # requested scope, not collapse them into a single per-object-type item.
     # Reuse the same per-scope expansion already used by "all".
@@ -2361,6 +2406,7 @@ def build_plan(
             target_selector,
             object_types,
             scope,
+            target_registry=target_reg,
         )
     requested_scopes = (
         tuple(s.strip() for s in scope.split(",") if s.strip())
@@ -2378,6 +2424,7 @@ def build_plan(
             target_selector,
             object_types,
             requested_scope,
+            target_registry=target_reg,
         )
         for item in scoped_items:
             if item.source is None and item.target is None:
@@ -2609,16 +2656,19 @@ def build_plan_document(
     target_selector: str,
     object_types: list[str],
     scope: str,
+    target_registry: Registry | None = None,
 ) -> dict[str, Any]:
+    target_reg = target_registry if target_registry is not None else registry
     items, losses = build_plan(
         registry,
         source_selector,
         target_selector,
         object_types,
         scope,
+        target_registry=target_reg,
     )
     _, source_profile_id, source_profile = registry.profile(source_selector)
-    _, target_profile_id, target_profile = registry.profile(target_selector)
+    _, target_profile_id, target_profile = target_reg.profile(target_selector)
     serialized_items: list[dict[str, Any]] = []
     for item in items:
         serialized = item.to_dict()
@@ -2642,7 +2692,7 @@ def build_plan_document(
     document: dict[str, Any] = {
         "schema_version": PLAN_SCHEMA_VERSION,
         "created_at": datetime.now(timezone.utc).isoformat(),
-        "workspace": str(registry.workspace),
+        "workspace": str(target_reg.workspace),
         "source": source_selector,
         "source_profile": source_profile_id,
         "source_support_level": source_profile.get("support_level"),
@@ -2651,9 +2701,9 @@ def build_plan_document(
         "target_support_level": target_profile.get("support_level"),
         "scope": scope,
         "objects": object_types,
-        "registry_sha256": hash_path(registry.path),
+        "registry_sha256": hash_path(target_reg.path),
         "adapter_versions": ADAPTER_VERSIONS,
-        "git_provenance": git_provenance(registry.workspace),
+        "git_provenance": git_provenance(target_reg.workspace),
         "items": serialized_items,
         "loss_report": losses.to_dict(),
         "rebuild_manifest": {
@@ -2683,7 +2733,9 @@ def _core_plan_items(serialized_items: list[dict[str, Any]]) -> list[dict[str, A
 def validate_plan_document(
     document: dict[str, Any],
     registry: Registry,
+    source_registry: Registry | None = None,
 ) -> tuple[list[PlanItem], LossReport]:
+    src_reg = source_registry if source_registry is not None else registry
     if document.get("adapter_versions") != ADAPTER_VERSIONS:
         raise ValueError("plan adapter versions do not match this runtime")
     if document.get("registry_sha256") != hash_path(registry.path):
@@ -2706,11 +2758,12 @@ def validate_plan_document(
     ):
         raise ValueError("plan objects must be an array of strings")
     items, losses = build_plan(
-        registry,
+        src_reg,
         str(document.get("source")),
         str(document.get("target")),
         object_types,
         str(document.get("scope")),
+        target_registry=registry,
     )
     stored_items = document.get("items")
     if not isinstance(stored_items, list) or not all(
@@ -3285,23 +3338,17 @@ def apply_plan(
                             }
                         )
             elif item.object_type == "handoff":
-                # Handoff: only transfer reviewed summary / branch info without raw machine paths
+                # Strict whitelist serialization (P0-4): only transfer reviewed_summary,
+                # git_branch, selected_files, patch. Discard all raw conversation, logs,
+                # tokens, machine paths, cwd, git_root, oauth/session state.
                 if source.resolved_path.is_file():
                     source_text = source.resolved_path.read_text(encoding="utf-8")
                     try:
-                        session_data = json.loads(source_text)
+                        session_raw = json.loads(source_text)
                     except json.JSONDecodeError:
-                        session_data = {"summary": "Reviewed handoff snapshot"}
-                    # Remove raw session logs or machine-specific paths
-                    session_data.pop("raw", None)
-                    session_data.pop("messages", None)
-                    git_info = git_provenance(workspace)
-                    branch = git_info.get("branch") if git_info else None
-                    if branch:
-                        # Whitelist the human-readable branch name only; never
-                        # serialize a commit SHA into the portable handoff.
-                        session_data["git_branch"] = branch
-                    rendered = json.dumps(session_data, indent=2, sort_keys=True) + "\n"
+                        session_raw = {"reviewed_summary": "Reviewed handoff snapshot"}
+                    portable_data = serialize_portable_handoff(session_raw, workspace)
+                    rendered = json.dumps(portable_data, indent=2, sort_keys=True) + "\n"
                     staged = stage_root / f"{len(operations):04d}-handoff"
                     atomic_write(staged, rendered)
                     operations.append(
@@ -3317,19 +3364,11 @@ def apply_plan(
                         if session_file.is_file():
                             session_text = session_file.read_text(encoding="utf-8")
                             try:
-                                session_data = json.loads(session_text)
+                                session_raw = json.loads(session_text)
                             except json.JSONDecodeError:
-                                session_data = {"summary": "Reviewed handoff snapshot"}
-                            session_data.pop("raw", None)
-                            session_data.pop("messages", None)
-                            git_info = git_provenance(workspace)
-                            branch = git_info.get("branch") if git_info else None
-                            if branch:
-                                # Whitelist the human-readable branch name only;
-                                # never serialize a commit SHA into the portable
-                                # handoff.
-                                session_data["git_branch"] = branch
-                            rendered = json.dumps(session_data, indent=2, sort_keys=True) + "\n"
+                                session_raw = {"reviewed_summary": "Reviewed handoff snapshot"}
+                            portable_data = serialize_portable_handoff(session_raw, workspace)
+                            rendered = json.dumps(portable_data, indent=2, sort_keys=True) + "\n"
                             staged = stage_root / f"{len(operations):04d}-{session_file.name}"
                             atomic_write(staged, rendered)
                             operations.append(

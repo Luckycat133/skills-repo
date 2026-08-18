@@ -4,6 +4,16 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ## [Unreleased]
 
+## [0.8.22] - 2026-08-18
+
+### Fixed
+
+- **P0-1 True Dual-Side Plan Architecture (`restore` reviewed plan equals executed plan)**: `restore` now establishes a dual-side plan binding the verified bundle source (`source_registry`) directly to real destination surfaces on the target machine (`target_registry`). Target paths, pre-apply states (`exists` -> `replace` vs `create`), diff previews, and the destination workspace are accurately evaluated on the real device and locked into `plan_sha256` before apply. Executed targets strictly match reviewed targets with zero post-hoc mutation.
+- **P0-2 Strict Snapshot Allowlist (Zero leakage of forbidden or unrequested data)**: `collect_source_objects` and `run_snapshot` now enforce a strict allowlist. Objects with policies like `forbidden-regenerate`, `never-migrate`, `source-only`, or object types like `generated_memory`, `session`, `chat`, `runtime`, `database`, `trust`, `approval`, `oauth_state` are blocked before reading. Snapshot collects only authorized portable items within requested scopes.
+- **P0-3 Bundle Source Precedence**: `restore` always treats the bundle as the authoritative source of truth. The presence of a local source IDE on the destination machine cannot bypass or overwrite bundle content.
+- **P0-4 Strict Handoff Whitelist Serialization**: Replaced blacklist `pop()` filtering with a strict whitelist schema (`reviewed_summary`, `git_branch`, `selected_files`, `patch`). All raw session logs, conversation histories, tokens, OAuth states, cwd, and git_root paths are dropped.
+- **CLI Restore Semantics & `--plan-only`**: `restore <bundle.acb>` (or `restore <bundle.acb> --plan-only`) generates and reviews the dual-side migration plan without modifying destination files; `restore <bundle.acb> --yes` applies the reviewed plan to target surfaces; `--restore-root <dir>` opts into extracting a separate raw `objects/` review tree.
+
 ## [0.8.21] - 2026-08-18
 
 ### Fixed

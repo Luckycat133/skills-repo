@@ -67,6 +67,27 @@ SAFE_BINARY_EXTENSIONS = frozenset({
     ".svg", ".woff", ".woff2", ".ttf", ".eot", ".otf"
 })
 
+# Forbidden snapshot policies and non-migratable object types (audit P0-2)
+FORBIDDEN_SNAPSHOT_POLICIES = frozenset({
+    "forbidden-regenerate",
+    "never-migrate",
+    "source-only",
+    "cloud-rebuild",
+    "disabled-draft-only",
+})
+
+FORBIDDEN_SNAPSHOT_OBJECT_TYPES = frozenset({
+    "generated_memory",
+    "session",
+    "chat",
+    "runtime",
+    "database",
+    "trust",
+    "approval",
+    "oauth_state",
+    "credentials",
+})
+
 _SENSITIVE_FILENAME_HINT = re.compile(
     r"(?i)(^\.env(\..+)?$|\.pem$|\.key$|^id_rsa|^id_ed25519|^id_ecdsa|\.p12$|\.pfx$)"
 )
@@ -404,9 +425,20 @@ def collect_source_objects(
     workspace: Path | None = None,
     source_product: str | None = None,
     source_profile: str | None = None,
+    allowed_scopes: set[str] | None = None,
+    allowed_object_types: set[str] | None = None,
+    plan_items: list[dict[str, Any]] | None = None,
 ) -> dict[str, bytes]:
-    """Walk existing inventory rows and copy source files into stable paths under ``objects/``."""
+    """Walk existing inventory rows and copy source files into stable paths under ``objects/``.
+
+    Strict Allowlist (audit P0-2):
+    - Refuses forbidden policies (forbidden-regenerate, never-migrate, source-only, etc.)
+    - Refuses non-migratable types (generated_memory, session, chat, runtime, database, trust, etc.)
+    - Only collects requested scopes and requested object types
+    - Only collects objects that match the planned migration items when plan_items is provided
+    """
     objects: dict[str, bytes] = {}
+    plan_object_types = {item.get("object_type") for item in plan_items} if plan_items else None
     for row in rows:
         if not row.get("exists"):
             continue
@@ -414,16 +446,32 @@ def collect_source_objects(
             continue
         if source_profile and row.get("profile") != source_profile:
             continue
+
+        object_type = row.get("object_type") or "unknown"
+        policy = row.get("policy") or ""
+        scope = row.get("scope") or "unknown"
+
+        # P0-2: Strict snapshot allowlist
+        if policy in FORBIDDEN_SNAPSHOT_POLICIES:
+            continue
+        if object_type in FORBIDDEN_SNAPSHOT_OBJECT_TYPES:
+            continue
+        if allowed_scopes is not None and scope not in allowed_scopes:
+            continue
+        if allowed_object_types is not None and object_type not in allowed_object_types:
+            continue
+        if plan_object_types is not None and object_type not in plan_object_types:
+            continue
+
         resolved = row.get("resolved_path")
         if not isinstance(resolved, str):
             continue
         source_path = Path(resolved)
         if not source_path.exists() or source_path.is_symlink():
             continue
-        object_type = row.get("object_type") or "unknown"
+
         product = row.get("product") or "unknown"
         profile = row.get("profile") or "default"
-        scope = row.get("scope") or "unknown"
         canonical = row.get("canonical_path") or source_path.name
         relative = _path_for_object(object_type, product, profile, scope, canonical)
 
