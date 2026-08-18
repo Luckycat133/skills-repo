@@ -32,6 +32,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import skill_secret_scanner
+
 ACB_SCHEMA_VERSION = 1
 ACB_MANIFEST_NAME = "manifest.json"
 ACB_INVENTORY_NAME = "inventory.json"
@@ -65,15 +67,6 @@ SAFE_BINARY_EXTENSIONS = frozenset({
     ".svg", ".woff", ".woff2", ".ttf", ".eot", ".otf"
 })
 
-_SECRET_HINT = re.compile(
-    r"(?i)(token|secret|password|passwd|api[_-]?key|authorization|cookie|bearer)"
-)
-_PROVIDER_SECRET_HINT = re.compile(
-    r"(?:sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{16,}|AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}|ya29\.[A-Za-z0-9_-]+|AIza[0-9A-Za-z_-]{30,}|sk_live_[A-Za-z0-9]{16,}|Bearer\s+[A-Za-z0-9._~+/-]{16,})"
-)
-_PRIVATE_KEY_HINT = re.compile(
-    r"-----BEGIN\s+(?:[A-Z\s]+)?PRIVATE\s+KEY-----"
-)
 _SENSITIVE_FILENAME_HINT = re.compile(
     r"(?i)(^\.env(\..+)?$|\.pem$|\.key$|^id_rsa|^id_ed25519|^id_ecdsa|\.p12$|\.pfx$)"
 )
@@ -146,16 +139,18 @@ def is_binary_bytes(data: bytes) -> bool:
 
 
 def looks_like_secret_value(value: Any) -> bool:
-    """Heuristic check: does this string look like a credential?"""
+    """Heuristic check: does this string look like a literal credential?
+
+    Uses the SAME unified scanner as Skills/objects (audit #6) so that only
+    genuine credential SHAPES are flagged — provider tokens, private-key
+    blocks, or ``key=value`` / ``key: value`` assignments — not prose that
+    merely mentions words like "secret" or "token".
+    """
     if not isinstance(value, str):
         return False
     if not value or value.startswith("${") or value.startswith("$") or value.startswith("<"):
         return False
-    return bool(
-        _SECRET_HINT.search(value)
-        or _PROVIDER_SECRET_HINT.search(value)
-        or _PRIVATE_KEY_HINT.search(value)
-    )
+    return skill_secret_scanner.finding_reason(value.encode("utf-8")) is not None
 
 
 def scan_object_bytes(data: bytes, path_name: str) -> None:
@@ -183,19 +178,20 @@ def scan_object_bytes(data: bytes, path_name: str) -> None:
             raise ACBSecretLeak(f"unallowlisted binary file rejected: {path_name}")
         return
 
-    # 3. Check decoded text
+    # 3. Unified generic secret scan. Reuses skill_secret_scanner.finding_reason
+    # so that credentials are detected identically across the Skill scanner and
+    # ACB objects (audit #6): private keys, provider patterns, Bearer tokens,
+    # connection-string userinfo, and literal credential assignments
+    # (password=, client_secret:, DATABASE_URL with embedded creds, etc.).
+    secret_reason = skill_secret_scanner.finding_reason(data)
+    if secret_reason is not None:
+        raise ACBSecretLeak(f"{secret_reason} in {path_name}")
+
+    # 4. Require clean UTF-8 text for non-binary allowlisted content.
     try:
-        text = data.decode("utf-8")
+        data.decode("utf-8")
     except UnicodeDecodeError:
         raise ACBSecretLeak(f"undecodable non-allowlisted text: {path_name}")
-
-    if _PRIVATE_KEY_HINT.search(text):
-        raise ACBSecretLeak(f"private key detected in {path_name}")
-
-    if _PROVIDER_SECRET_HINT.search(text):
-        match = _PROVIDER_SECRET_HINT.search(text)
-        sample = match.group(0)[:16] if match else "secret"
-        raise ACBSecretLeak(f"provider credential detected in {path_name}: {sample}...")
 
 
 def assert_no_lateral_secrets(payload: dict[str, Any]) -> None:
@@ -573,6 +569,53 @@ def verify_bundle(bundle_root: Path) -> list[str]:
                 assert_no_lateral_secrets(payload)
             except Exception as error:
                 errors.append(f"invalid JSON payload in {json_name}: {error}")
+
+    # 3b. Re-scan every stored object with the same strict secret/binary
+    # scanner used at write time (audit #7). A bundle that passed write-time
+    # scanning but was later tampered (or supplied by an untrusted source)
+    # must still be rejected at verify time. We also re-apply the
+    # resource safety limits (file count, per-file size, total size, depth).
+    objects_root = bundle_root / ACB_OBJECTS_DIR
+    if not objects_root.is_dir():
+        errors.append(f"bundle has no {ACB_OBJECTS_DIR}/ directory")
+    else:
+        total_object_bytes = 0
+        max_depth_seen = 0
+        object_count = 0
+        for source in sorted(objects_root.rglob("*")):
+            if not source.is_file() or source.is_symlink():
+                continue
+            object_count += 1
+            rel = source.relative_to(objects_root).as_posix()
+            depth = len(Path(rel).parts)
+            max_depth_seen = max(max_depth_seen, depth)
+            if object_count > MAX_BUNDLE_FILES:
+                errors.append(
+                    f"object file count exceeded limit ({MAX_BUNDLE_FILES}): {rel}"
+                )
+                break
+            try:
+                data = source.read_bytes()
+            except Exception as error:
+                errors.append(f"cannot read object {rel}: {error}")
+                continue
+            if len(data) > MAX_FILE_SIZE:
+                errors.append(
+                    f"object size exceeded limit ({MAX_FILE_SIZE} bytes): {rel}"
+                )
+            total_object_bytes += len(data)
+            try:
+                scan_object_bytes(data, rel)
+            except ACBSecretLeak as error:
+                errors.append(f"secret/binary violation in object {rel}: {error}")
+        if max_depth_seen > MAX_DIR_DEPTH:
+            errors.append(
+                f"object directory depth exceeded limit ({MAX_DIR_DEPTH}): {max_depth_seen}"
+            )
+        if total_object_bytes > MAX_TOTAL_SIZE:
+            errors.append(
+                f"object total size exceeded limit ({MAX_TOTAL_SIZE} bytes)"
+            )
 
     return errors
 

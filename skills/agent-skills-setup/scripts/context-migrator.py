@@ -242,6 +242,11 @@ def create_parser() -> argparse.ArgumentParser:
         help="Destination tree for bundle/objects/ restore (default: <workspace>/.acb-restored).",
     )
     restore.add_argument(
+        "--allow-noop",
+        action="store_true",
+        help="Allow restore to succeed with zero applied items (otherwise a bundle that resolves no eligible items is a hard failure).",
+    )
+    restore.add_argument(
         "--dry-run",
         action="store_true",
         help="Plan and stage objects/ without writing.",
@@ -536,7 +541,20 @@ def run_bundle_verify(args: argparse.Namespace) -> int:
 
 
 def run_restore(args: argparse.Namespace) -> int:
-    """Verify and rebuild a plan from an ACB on the current device."""
+    """Verify and rebuild a plan from an ACB on the current device.
+
+    Audit #1: the reviewed plan document must be backed by the SAME source
+    that produces the executed items. When the local device resolves no ready
+    items but the bundle carries objects, we stage the bundle's objects into a
+    throwaway source tree and rebuild BOTH the plan items and the reviewed plan
+    document from that staged registry. The executed items read their content
+    directly from the staged (verified) copy, so reviewed == executed.
+
+    Audit #4: the object extraction into ``.acb-restored`` is OPT-IN (only when
+    ``--restore-root`` is given). We never imply a full atomic "restore" landed
+    there; the real migration is performed by the plan apply to the target
+    surfaces. ACB restore is multi-phase and is not a single atomic transaction.
+    """
     bundle_root = args.bundle.resolve()
     errors = verify_bundle(bundle_root)
     if errors:
@@ -549,32 +567,143 @@ def run_restore(args: argparse.Namespace) -> int:
 
     source_sel = args.source or "cline/ide"
     target_sel = args.target or "forge/cli"
+    object_types = ["skills", "instructions", "mcp"]
+    have_bundle_objects = (bundle_root / ACB_OBJECTS_DIR).is_dir()
 
-    document = build_plan_document(
-        registry,
-        source_sel,
-        target_sel,
-        ["skills", "instructions", "mcp"],
-        args.scope,
+    # Optional object extraction into an explicit restore-root (audit #4:
+    # opt-in; defaults OFF so we never imply a transaction landed there).
+    restore_root = (
+        args.restore_root.resolve(strict=False) if args.restore_root else None
     )
-    plan_out = None
-    if args.plan_out and not args.dry_run:
-        plan_out = args.plan_out.resolve(strict=False)
-        plan_out.parent.mkdir(parents=True, exist_ok=True)
-        atomic_write(
-            plan_out,
-            json.dumps(document, indent=2, sort_keys=True) + "\n",
+    restore_result = (
+        restore_bundle_objects(bundle_root, restore_root, dry_run=args.dry_run)
+        if restore_root is not None
+        else None
+    )
+
+    def make_document(reg: "Registry") -> dict[str, Any]:
+        return build_plan_document(
+            reg, source_sel, target_sel, object_types, args.scope
         )
 
-    # Restore objects/ from the bundle into the new device target
-    # tree, unless the caller asked for plan-only.
-    restore_root = (args.restore_root or workspace / ".acb-restored").resolve(strict=False)
-    restore_result = restore_bundle_objects(
-        bundle_root, restore_root, dry_run=args.dry_run,
+    # Baseline (local-device) plan + reviewed document.
+    document = make_document(registry)
+    plan_items, _ = build_plan(
+        registry, source_sel, target_sel, object_types, args.scope
     )
 
-    if args.dry_run:
-        # Zero-write guarantee for dry-run
+    # Bundle-backed override: if the local device resolves nothing eligible but
+    # the bundle carries objects, stage them and rebuild from the bundle.
+    temp_dir: str | None = None
+    try:
+        if (
+            not any(item.status == "ready" for item in plan_items)
+            and have_bundle_objects
+        ):
+            temp_dir = tempfile.mkdtemp(prefix="acb-source-stage-")
+            temp_source_dir = Path(temp_dir)
+            objects_root = bundle_root / ACB_OBJECTS_DIR
+            requested_scopes = {
+                s.strip().lower()
+                for s in (args.scope or "user,project").split(",")
+                if s.strip()
+            }
+            for source_file in sorted(objects_root.rglob("*")):
+                if source_file.is_file():
+                    rel = source_file.relative_to(objects_root)
+                    parts = rel.parts
+                    if len(parts) >= 5:
+                        prod, scp = parts[1], parts[3]
+                        # Audit #3: proper comma-scope expansion so a
+                        # `--scope user,project` request considers every
+                        # requested scope rather than a substring match.
+                        if (prod in source_sel) and (
+                            scp.lower() in requested_scopes
+                        ):
+                            target_staged = temp_source_dir / Path(*parts[4:])
+                            target_staged.parent.mkdir(parents=True, exist_ok=True)
+                            target_staged.write_bytes(source_file.read_bytes())
+            # Audit #3: the staged tree is the SOURCE for both user (under
+            # <stage>/home, mapped via Registry.home) and project/local scopes
+            # (under <stage>, mapped via Registry.workspace). Point BOTH roots
+            # at the stage so project-scope objects resolve during plan build;
+            # the executed targets are still chosen from the real device via
+            # choose_surface below.
+            staged_home = (
+                temp_source_dir / "home"
+                if (temp_source_dir / "home").exists()
+                else temp_source_dir
+            )
+            staged_registry = Registry(
+                args.registry, temp_source_dir, home=staged_home
+            )
+            staged_items, _ = build_plan(
+                staged_registry, source_sel, target_sel, object_types, args.scope
+            )
+            if any(item.status == "ready" for item in staged_items):
+                # Rebuild the reviewed document from the bundle-backed source so
+                # the plan the user reviews is exactly what we execute.
+                document = make_document(staged_registry)
+                rebound_items = []
+                for item in staged_items:
+                    if item.status == "ready":
+                        dest_target = choose_surface(
+                            registry.surfaces(target_sel, item.object_type),
+                            item.source.scope if item.source else (args.scope or "user"),
+                        )
+                        if dest_target:
+                            item.target = dest_target
+                    rebound_items.append(item)
+                plan_items = rebound_items
+
+        # Write the (bundle-backed when applicable) reviewed plan document.
+        plan_out = None
+        if args.plan_out and not args.dry_run:
+            plan_out = args.plan_out.resolve(strict=False)
+            plan_out.parent.mkdir(parents=True, exist_ok=True)
+            atomic_write(
+                plan_out,
+                json.dumps(document, indent=2, sort_keys=True) + "\n",
+            )
+
+        if args.dry_run:
+            # Zero-write guarantee for dry-run.
+            emit(
+                {
+                    "ok": True,
+                    "stage": "plan",
+                    "bundle": str(bundle_root),
+                    "bundle_id": manifest.bundle_id,
+                    "plan": str(plan_out) if plan_out else None,
+                    "restore": restore_result,
+                    "dry_run": True,
+                    "detected": detected[:50],
+                },
+                args.json,
+            )
+            return 0
+
+        if args.apply_safe:
+            # No-op guard (audit #2): bundle carried objects but nothing
+            # eligible was resolved — refuse to report success.
+            if have_bundle_objects and not any(
+                item.status == "ready" for item in plan_items
+            ):
+                if not getattr(args, "allow_noop", False):
+                    emit(
+                        {
+                            "ok": False,
+                            "stage": "apply",
+                            "error": "restore resolved no eligible items; refusing silent no-op (use --allow-noop to override)",
+                        },
+                        args.json,
+                    )
+                    return 1
+            return _apply_restore(
+                plan_items, workspace, args, bundle_root, manifest,
+                document, restore_result, detected,
+            )
+
         emit(
             {
                 "ok": True,
@@ -583,111 +712,60 @@ def run_restore(args: argparse.Namespace) -> int:
                 "bundle_id": manifest.bundle_id,
                 "plan": str(plan_out) if plan_out else None,
                 "restore": restore_result,
-                "dry_run": True,
                 "detected": detected[:50],
             },
             args.json,
         )
         return 0
+    finally:
+        # The staged source tree must stay alive until apply_plan has read it,
+        # so it is cleaned up only here (audit #5: never leak to /tmp).
+        if temp_dir is not None and Path(temp_dir).exists():
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
-    if args.apply_safe:
-        # Check if source exists locally; if not, check if source exists in bundle objects
-        plan_items, _ = build_plan(
-            registry,
-            source_sel,
-            target_sel,
-            ["skills", "instructions", "mcp"],
-            args.scope,
-        )
 
-        # If 0 ready items and bundle objects exist, stage bundle objects for source
-        if not any(item.status == "ready" for item in plan_items):
-            objects_root = bundle_root / ACB_OBJECTS_DIR
-            if objects_root.is_dir():
-                temp_source_dir = Path(tempfile.mkdtemp(prefix="acb-source-stage-"))
-                try:
-                    # Copy matching objects from bundle into temp source dir
-                    for source_file in sorted(objects_root.rglob("*")):
-                        if source_file.is_file():
-                            rel = source_file.relative_to(objects_root)
-                            # Extract path components after object_type/product/profile/scope/
-                            parts = rel.parts
-                            if len(parts) >= 5:
-                                obj_type, prod, prof, scp = parts[0], parts[1], parts[2], parts[3]
-                                if (prod in source_sel) and (scp in (args.scope or "user,project")):
-                                    target_staged = temp_source_dir / Path(*parts[4:])
-                                    target_staged.parent.mkdir(parents=True, exist_ok=True)
-                                    target_staged.write_bytes(source_file.read_bytes())
-                    # Check if temporary staged source can satisfy registry surfaces
-                    staged_home = temp_source_dir / "home" if (temp_source_dir / "home").exists() else temp_source_dir
-                    staged_registry = Registry(args.registry, workspace, home=staged_home)
-                    staged_items, _ = build_plan(
-                        staged_registry,
-                        source_sel,
-                        target_sel,
-                        ["skills", "instructions", "mcp"],
-                        args.scope,
-                    )
-                    if any(item.status == "ready" for item in staged_items):
-                        rebound_items = []
-                        for item in staged_items:
-                            if item.status == "ready":
-                                dest_target = choose_surface(
-                                    registry.surfaces(target_sel, item.object_type),
-                                    item.source.scope if item.source else (args.scope or "user"),
-                                )
-                                if dest_target:
-                                    item.target = dest_target
-                            rebound_items.append(item)
-                        plan_items = rebound_items
-                except Exception:
-                    pass
-
-        manifest_obj, manifest_path_out = apply_plan(
-            plan_items, workspace, args.manifest_out,
-            provenance={
-                "bundle_path": str(bundle_root),
-                "bundle_id": manifest.bundle_id,
-                "plan_sha256": document["plan_sha256"],
-                "registry_sha256": document["registry_sha256"],
-                "adapter_versions": document["adapter_versions"],
-            },
-            apply_safe=True,
-            include_lossy=(args.include_lossy == "lossy"),
-            accept_loss_ids=set(),
-            strict=args.strict,
-        )
-        verify_errors = verify_manifest(manifest_path_out)
-        emit(
-            {
-                "ok": not verify_errors,
-                "stage": "verify",
-                "bundle": str(bundle_root),
-                "plan": str(plan_out) if plan_out else None,
-                "manifest": str(manifest_path_out),
-                "restore": restore_result,
-                "stale_targets": [],
-                "detected": detected[:50],
-                "summary": manifest_obj.get("summary", {}),
-                "errors": verify_errors,
-            },
-            args.json,
-        )
-        return 0 if not verify_errors else 1
-
+def _apply_restore(
+    plan_items: list,
+    workspace: Path,
+    args: argparse.Namespace,
+    bundle_root: Path,
+    manifest,
+    document: dict,
+    restore_result,
+    detected,
+) -> int:
+    """Apply a resolved plan, verify it, and emit the result."""
+    manifest_obj, manifest_path_out = apply_plan(
+        plan_items, workspace, args.manifest_out,
+        provenance={
+            "bundle_path": str(bundle_root),
+            "bundle_id": manifest.bundle_id,
+            "plan_sha256": document["plan_sha256"],
+            "registry_sha256": document["registry_sha256"],
+            "adapter_versions": document["adapter_versions"],
+        },
+        apply_safe=True,
+        include_lossy=(args.include_lossy == "lossy"),
+        accept_loss_ids=set(),
+        strict=args.strict,
+    )
+    verify_errors = verify_manifest(manifest_path_out)
     emit(
         {
-            "ok": True,
-            "stage": "plan",
+            "ok": not verify_errors,
+            "stage": "verify",
             "bundle": str(bundle_root),
-            "bundle_id": manifest.bundle_id,
-            "plan": str(plan_out) if plan_out else None,
+            "plan": str(args.plan_out) if getattr(args, "plan_out", None) else None,
+            "manifest": str(manifest_path_out),
             "restore": restore_result,
+            "stale_targets": [],
             "detected": detected[:50],
+            "summary": manifest_obj.get("summary", {}),
+            "errors": verify_errors,
         },
         args.json,
     )
-    return 0
+    return 0 if not verify_errors else 1
 
 
 def run_doctor(args: argparse.Namespace) -> int:

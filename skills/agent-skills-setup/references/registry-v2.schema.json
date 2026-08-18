@@ -5,7 +5,7 @@
   "type": "object",
   "required": ["schema_version", "verified_at", "object_policies", "support_contract", "profile_templates", "products"],
   "properties": {
-    "schema_version": {"const": 2},
+    "schema_version": {"enum": [2, 2.1]},
     "verified_at": {"type": "string", "format": "date"},
     "object_policies": {"type": "object", "additionalProperties": {"type": "string"}},
     "support_contract": {
@@ -14,8 +14,9 @@
         "type": "object",
         "required": ["support_level", "confidence"],
         "properties": {
-          "support_level": {"enum": ["partial", "manual", "source-only", "provider", "host", "alias", "unverified"]},
-          "confidence": {"enum": ["high", "medium", "low"]}
+          "support_level": {"enum": ["partial", "manual", "source-only", "provider", "host", "alias", "unverified", "stale-partial", "stale-manual", "stale-source-only"]},
+          "confidence": {"enum": ["high", "medium", "low"]},
+          "description": {"type": "string"}
         },
         "additionalProperties": false
       }
@@ -26,8 +27,14 @@
       "additionalProperties": {
         "$ref": "#/$defs/product"
       }
-    }
+    },
+    "$schema": {"type": "string"},
+    "aliases": {"type": "object"},
+    "candidate_discovery": {"type": "object"},
+    "detection_config": {"type": "object"},
+    "freshness": {"type": "object"}
   },
+  "additionalProperties": false,
   "$defs": {
     "surface": {
       "type": "object",

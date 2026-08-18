@@ -1859,15 +1859,26 @@ def choose_surface(
         )
     existing = [surface for surface in matching if surface.resolved_path.exists()]
     if len(existing) > 1:
-        paths = ", ".join(str(surface.resolved_path) for surface in existing)
-        if all(
-            surface.location_role == "precedence" for surface in existing[1:]
-        ):
+        # A genuine conflict only occurs when the duplicates share a SCOPE
+        # (e.g. two ``user`` surfaces). Distinct scopes (``user`` vs
+        # ``project``) are legitimate separate sources and must not abort a
+        # multi-scope restore (audit #3); the caller plans them per scope.
+        distinct_scopes = {surface.scope for surface in existing}
+        if len(distinct_scopes) == 1:
+            paths = ", ".join(str(surface.resolved_path) for surface in existing)
+            if all(
+                surface.location_role == "precedence" for surface in existing[1:]
+            ):
+                raise ValueError(
+                    "multiple precedence instruction surfaces require manual reconstruction: "
+                    + paths
+                )
             raise ValueError(
-                "multiple precedence instruction surfaces require manual reconstruction: "
-                + paths
+                "source alias conflict requires explicit selection: " + paths
             )
-        raise ValueError("source alias conflict requires explicit selection: " + paths)
+        # Different scopes: return the first existing source for a single
+        # per-object-type selection; multi-scope plans expand per scope.
+        return existing[0]
     if existing:
         return existing[0]
     return next(
@@ -2340,7 +2351,10 @@ def build_plan(
     object_types: list[str],
     scope: str,
 ) -> tuple[list[PlanItem], LossReport]:
-    if scope != "all":
+    # Audit #3: a comma-separated union (e.g. "user,project") must plan every
+    # requested scope, not collapse them into a single per-object-type item.
+    # Reuse the same per-scope expansion already used by "all".
+    if scope != "all" and "," not in scope:
         return _build_plan_for_scope(
             registry,
             source_selector,
@@ -2348,11 +2362,16 @@ def build_plan(
             object_types,
             scope,
         )
+    requested_scopes = (
+        tuple(s.strip() for s in scope.split(",") if s.strip())
+        if scope != "all"
+        else ("user", "project", "local")
+    )
     combined_items: list[PlanItem] = []
     combined_losses = LossReport()
     seen_items: set[str] = set()
     seen_losses: set[str] = set()
-    for requested_scope in ("user", "project", "local"):
+    for requested_scope in requested_scopes:
         scoped_items, scoped_losses = _build_plan_for_scope(
             registry,
             source_selector,
@@ -2381,7 +2400,7 @@ def build_plan(
                 PlanItem(
                     object_type,
                     "invalid",
-                    "no matching source or target surface in user, project, or local scope",
+                    "no matching source or target surface in requested scope(s)",
                 )
             )
     return combined_items, combined_losses
@@ -3277,8 +3296,11 @@ def apply_plan(
                     session_data.pop("raw", None)
                     session_data.pop("messages", None)
                     git_info = git_provenance(workspace)
-                    if git_info:
-                        session_data["git_branch"] = git_info.get("head")
+                    branch = git_info.get("branch") if git_info else None
+                    if branch:
+                        # Whitelist the human-readable branch name only; never
+                        # serialize a commit SHA into the portable handoff.
+                        session_data["git_branch"] = branch
                     rendered = json.dumps(session_data, indent=2, sort_keys=True) + "\n"
                     staged = stage_root / f"{len(operations):04d}-handoff"
                     atomic_write(staged, rendered)
@@ -3301,8 +3323,12 @@ def apply_plan(
                             session_data.pop("raw", None)
                             session_data.pop("messages", None)
                             git_info = git_provenance(workspace)
-                            if git_info:
-                                session_data["git_branch"] = git_info.get("head")
+                            branch = git_info.get("branch") if git_info else None
+                            if branch:
+                                # Whitelist the human-readable branch name only;
+                                # never serialize a commit SHA into the portable
+                                # handoff.
+                                session_data["git_branch"] = branch
                             rendered = json.dumps(session_data, indent=2, sort_keys=True) + "\n"
                             staged = stage_root / f"{len(operations):04d}-{session_file.name}"
                             atomic_write(staged, rendered)

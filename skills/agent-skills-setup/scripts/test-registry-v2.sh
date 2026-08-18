@@ -87,3 +87,37 @@ grep -Fq 'registry is stale' "$TMP_ROOT/stale.log" || {
 }
 
 echo "Registry v2 test passed"
+
+# Negative gate: a stray top-level product duplicate (the #9 pollution class)
+# must be rejected by the JSON Schema enforcement, not silently accepted.
+POLLUTED="$TMP_ROOT/registry-polluted.json"
+python3 - "$REFERENCES_DIR/registry-v2.json" "$POLLUTED" "$REFERENCES_DIR/registry-v2.schema.json" <<'PY'
+import json
+import shutil
+import sys
+from pathlib import Path
+
+registry = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+# Re-introduce the pollution the audit removed: a product object duplicated at
+# the root level instead of living only under "products".
+registry["letta"] = registry["products"]["letta"]
+Path(sys.argv[2]).write_text(json.dumps(registry, indent=2), encoding="utf-8")
+# Stage the schema next to the polluted copy so the relative $schema resolves.
+shutil.copyfile(Path(sys.argv[3]), Path(sys.argv[2]).parent / "registry-v2.schema.json")
+PY
+
+if python3 "$SCRIPT_DIR/validate-registry-v2.py" \
+    --registry "$POLLUTED" \
+    --index "$REFERENCES_DIR/ide-registry.md" \
+    --references "$REFERENCES_DIR/ides" \
+    --today 2026-08-17 >"$TMP_ROOT/polluted.log" 2>&1; then
+    echo "FAIL: polluted registry (stray top-level product) passed validation" >&2
+    exit 1
+fi
+grep -Fq "letta' was unexpected" "$TMP_ROOT/polluted.log" || {
+    echo "FAIL: schema gate did not flag the stray top-level product" >&2
+    exit 1
+}
+
+echo "Registry pollution gate test passed"
+

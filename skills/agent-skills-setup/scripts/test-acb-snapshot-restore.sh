@@ -131,6 +131,7 @@ RESTORE_OUT="$(HOME="$HOME_NEW" "$WRAPPER" restore \
     --workspace "$WS_NEW" \
     --source cline/ide --target forge/cli \
     --scope user \
+    --restore-root "$WS_NEW/.acb-restored" \
     --apply-safe \
     --yes --json 2>&1)" || {
     echo "restore failed: $RESTORE_OUT" | head -30

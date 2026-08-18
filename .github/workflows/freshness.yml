@@ -36,7 +36,7 @@ jobs:
       - name: Run freshness check
         id: freshness
         run: |
-          python3 scripts/check-doc-freshness.py \
+          python3 skills/agent-skills-setup/scripts/check-doc-freshness.py \
             --registry skills/agent-skills-setup/references/registry-v2.json \
             --checks skills/agent-skills-setup/references/doc-freshness-checks.json \
             --online \
@@ -84,7 +84,7 @@ jobs:
       - name: Run freshness check with demote-stale
         id: demote
         run: |
-          python3 scripts/check-doc-freshness.py \
+          python3 skills/agent-skills-setup/scripts/check-doc-freshness.py \
             --registry skills/agent-skills-setup/references/registry-v2.json \
             --checks skills/agent-skills-setup/references/doc-freshness-checks.json \
             --online \

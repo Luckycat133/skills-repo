@@ -19,14 +19,26 @@ PROVIDER_PATTERNS = (
     re.compile(rb"ya29\.[A-Za-z0-9_-]+"),
     re.compile(rb"AIza[0-9A-Za-z_-]{35}"),
     re.compile(rb"sk_live_[A-Za-z0-9]{16,}"),
+    # Bearer authorization tokens: "Bearer eyJhbGci...", "bearer abc123..."
+    re.compile(rb"(?i)bearer[ \t]+[A-Za-z0-9._~+/-]{16,}"),
 )
 PRIVATE_KEY = re.compile(
     rb"-----BEGIN (?:OPENSSH |RSA |EC |DSA )?PRIVATE KEY-----"
 )
+# Credentials embedded in a connection-string userinfo component:
+#   postgres://user:pass@host:5432/db
+#   redis://:secret@cache:6379/
+#   amqp://guest:guest@broker/
+# The username component is optional (redis://:pass@host);
+# the colon separating userinfo from password is required so that a plain
+# email-style URL (https://user@example.com) is NOT flagged.
+CONNECTION_STRING_USERINFO = re.compile(
+    rb"(?i)[a-z][a-z0-9+.\-]*://[^\s:/@\"'\(\)]*:[^\s:/@\"'\(\)]+@[^\s\"'\)]+"
+)
 SECRET_ASSIGNMENT = re.compile(
     r"(?im)(?<![A-Za-z0-9_])(?:api[_-]?key|token|secret|password|passwd|"
-    r"authorization|client[_-]?secret|private[_-]?key)(?![A-Za-z0-9_])"
-    r"[ \t]*[=:][ \t]*[\"']?"
+    r"authorization|bearer|client[_-]?secret|private[_-]?key)(?![A-Za-z0-9_])"
+    r"[\"']?[ \t]*[=:][ \t]*[\"']?"
     r"([^\s\"'`,;]{12,})"
 )
 PLACEHOLDER_WORDS = (
@@ -57,6 +69,8 @@ def finding_reason(data: bytes) -> str | None:
         return "private key block"
     if any(pattern.search(data) for pattern in PROVIDER_PATTERNS):
         return "provider credential pattern"
+    if CONNECTION_STRING_USERINFO.search(data):
+        return "credential embedded in connection-string userinfo"
     if b"\x00" in data[:8192]:
         return None
     text = data.decode("utf-8", errors="replace")

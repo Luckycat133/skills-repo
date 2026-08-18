@@ -4,6 +4,23 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ## [Unreleased]
 
+## [0.8.21] - 2026-08-18
+
+### Fixed
+
+- **#1 Bundle-backed reviewed plan equals executed plan**: `restore` now stages the bundle `objects/` and rebuilds the `document`/`PlanDocument` from the staged registry, so the reviewed/saved plan is exactly the plan executed (no fallback divergence).
+- **#2 No silent no-op**: `restore` hard-fails when the bundle resolves zero eligible items (opt out with `--allow-noop`); mapping failures surface instead of being swallowed.
+- **#3 Multi-scope & project ACB restore**: `build_plan` expands comma-scope unions per scope; `choose_surface` permits distinct-scope duplicates; staging resolves project-scope `objects/` under the workspace root, so `--scope user,project` migrates both user and project items.
+- **#4 Transaction/opt-in restore**: object extraction is opt-in via `--restore-root`; without it `restore` only builds/reviews the plan. No `.acb-restored` directory or transaction claim is produced unless extraction actually runs.
+- **#5 Temp-dir hygiene**: the staged ACB source directory is removed in a `try/finally`, eliminating the prior `acb-source-stage-*` leak.
+- **#6 Unified secret scanning**: ACB object bytes are scanned through `skill_secret_scanner.finding_reason` (covers `sk-`, `Bearer`, connection-string `userinfo`, private-key blocks, and assignment patterns); `looks_like_secret_value` now reuses the same engine instead of a broad substring hint.
+- **#7 `bundle-verify` re-scans objects**: `verify_bundle` re-runs the secret/binary scan over every `objects/` file and re-enforces file-count / size / total / depth limits.
+- **#8 Handoff branch whitelist**: `git_branch` records the human-readable branch name (never a commit SHA); `raw`/`messages` are stripped from the portable handoff.
+- **#9 Registry structure pollution**: removed the duplicate top-level `letta`/`zencoder` product objects (they remain correctly under `products`).
+- **#10 JSON Schema enforcement**: `validate-registry-v2.py` now runs `jsonschema.Draft202012Validator` against `registry-v2.schema.json`; the schema was reconciled (`schema_version` 2.1, `stale-*` support levels, `description` on contracts) and hardened with `additionalProperties: false` at the root to block future pollution.
+- **#11 Freshness workflows merged**: fixed `freshness.yml` script path (`skills/agent-skills-setup/scripts/check-doc-freshness.py`) and removed the redundant `docs-freshness.yml`.
+- **#12 SKILL.md / CLI docs**: bumped `version` to `0.8.21`; corrected the device-handoff example to use `restore ... --restore-root <dir>` and removed the stale plan/exec caveat.
+
 ## [0.8.20] - 2026-08-17
 
 ### Fixed
@@ -25,6 +42,20 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
   - 修正 Cursor 用户规则为 UI/manual 管理。
   - 修复 `test-detection-probes.sh` 避免对 Ubuntu runner `$HOME/.zshrc` 的硬编码假设。
 - **P0-11/P0-12 发布治理与版本源统一**：统一 canonical `SKILL.md`（0.8.20）、Root pointer `SKILL.md`、`CHANGELOG.md` 版本链。
+
+### Experimental (not production-ready in 0.8.20)
+
+> The following capabilities shipped in 0.8.20 were **experimental** and tracked for general availability in **0.8.21**. They are resolved in **0.8.21** — see the `[0.8.21]` changelog.
+
+- **ACB clean-device restore** (`restore` on a device without the source product installed): the fallback plan-rebuild path does not yet guarantee that the reviewed/saved plan is the one executed (0.8.21 #1), and mapping failures can currently be swallowed (0.8.21 #2).
+- **`--scope user,project` default**: only a single scope may actually be migrated today (0.8.21 #3).
+- **Project-level ACB restore** and **ACB Instructions / MCP restore**: the staged source surface does not currently resolve project paths; only user-scope Skills are verified end-to-end (0.8.21 #3).
+- **Handoff**: still blacklist-based; arbitrary session JSON fields may pass through, and `git_branch` currently records a commit SHA rather than a branch name (0.8.21 #8).
+- **Untrusted third-party bundle restore**: `bundle-verify` does not yet re-scan object bytes or verify a signature, so externally sourced bundles are not yet safe to restore (0.8.21 #6/#7).
+- **Agents / Hooks / Plugins "native conversion"**: these still emit via the shared plain emitter / file-copy path, not strict target-native schemas (audit P1).
+- **`doctor` requirements/compatibility output**: still uses product IDs / config paths in place of real executables / package names (audit P1).
+
+The "True Restore", "Atomic Restore (single transaction with backup + rollback)", and "all P0 blockers closed" statements apply only to the **staged single-scope Skills migration and local stdio JSON/JSONC MCP** paths. They do **not** yet apply to cross-device restore, handoff, or project-level ACB objects.
 
 ## [0.8.18] - 2026-08-17
 

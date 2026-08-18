@@ -62,6 +62,37 @@ def load_json(path: Path) -> dict[str, Any]:
     return value
 
 
+def validate_against_schema(
+    registry: dict[str, Any],
+    schema_path: Path,
+) -> list[str]:
+    """Enforce the JSON Schema (Draft 2020-12) on the registry.
+
+    The schema is the authoritative contract for registry structure; this
+    catches structural drift (e.g. stray top-level product duplicates) that the
+    manual checks below may miss. ``jsonschema`` is required for this gate; if
+    it is not installed the gate is skipped with an actionable message rather
+    than crashing the whole validator.
+    """
+    try:
+        from jsonschema import Draft202012Validator
+    except ImportError:
+        return [
+            "schema: jsonschema is not installed; "
+            "run `pip install jsonschema` to enforce the JSON Schema"
+        ]
+    try:
+        schema = load_json(schema_path)
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        return [f"schema: cannot load {schema_path}: {error}"]
+    validator = Draft202012Validator(schema)
+    errors: list[str] = []
+    for err in sorted(validator.iter_errors(registry), key=lambda e: list(e.path)):
+        location = "/".join(str(part) for part in err.path) or "<root>"
+        errors.append(f"schema[{location}]: {err.message}")
+    return errors
+
+
 def resolve_profile(
     product_id: str,
     profile_id: str,
@@ -152,6 +183,8 @@ def validate_registry(
             load_json(schema_path)
         except (OSError, ValueError, json.JSONDecodeError) as error:
             errors.append(f"$schema: cannot load {schema_reference}: {error}")
+        else:
+            errors.extend(validate_against_schema(registry, schema_path))
 
     try:
         registry_verified = date.fromisoformat(str(registry.get("verified_at", "")))
