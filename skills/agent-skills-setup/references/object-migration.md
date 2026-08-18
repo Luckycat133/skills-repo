@@ -14,7 +14,7 @@ Read with [migration-safety.md](migration-safety.md) for non-MCP objects.
 | Plugins / Extensions | Non-executable; binaries and package installations are flagged `manual-rebuild` or `draft-disabled`. |
 | Sessions / Chat logs | Strictly non-transferable; runtime conversation logs and state are excluded from migration (handoff uses strict whitelist serialization). |
 | Memory / Context | Do not copy private/generated state (e.g. `~/.cline/data` generated memory); rewrite selected context as rules. |
-| Bundles (ACB) | Package reviewed objects into self-contained, secret-redacted, offline portable archives (`.acb`) under strict allowlists and dual-side plan binding. |
+| Bundles (ACB) | Package reviewed objects into self-contained, secret-redacted, offline portable archives (`.acb`) under strict allowlists, sub-object field isolation, and replayable dual-side plan binding (`--plan-in`). |
 
 Treat living or generated files, including Replit `replit.md`, as manual conversation state rather than overwrite targets. When no compatible target format is documented, describe reconstruction instead of an unvalidated copy. There is no generic embedded-config exception: a sub-object is automatic only when Registry v2 names a reviewed source and target adapter for the exact profile/version.
 

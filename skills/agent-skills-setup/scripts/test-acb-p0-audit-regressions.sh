@@ -202,5 +202,166 @@ assert clean["selected_files"] == ["README.md", "src/main.py"], f"file sanitizat
 print("OK P0-4: strict handoff whitelist successfully dropped all unsafe session fields")
 PY
 
+# -----------------------------------------------------------------------------
+# Test 5: Replayable Restore Plan with --plan-out, --plan-in, and TOCTOU state guard
+# -----------------------------------------------------------------------------
+echo "=== Test 5: Replayable Restore Plan with --plan-in and TOCTOU state guard ==="
+SAVED_PLAN="$TMP_ROOT/reviewed-replayable-plan.json"
+HOME="$HOME_B" "$WRAPPER" restore \
+    "$BUNDLE" \
+    --workspace "$WS_B" \
+    --source cline/ide --target forge/cli \
+    --scope user \
+    --plan-out "$SAVED_PLAN" \
+    --plan-only \
+    --json >/dev/null
+
+[ -f "$SAVED_PLAN" ] || { echo "FAIL: plan-out did not create plan file"; exit 1; }
+
+# Replay the exact reviewed plan with --plan-in and --yes
+HOME="$HOME_B" "$WRAPPER" restore \
+    "$BUNDLE" \
+    --workspace "$WS_B" \
+    --plan-in "$SAVED_PLAN" \
+    --apply-safe \
+    --yes \
+    --json >"$TMP_ROOT/replay_applied.json"
+
+grep -q '"stage": "verify"' "$TMP_ROOT/replay_applied.json" || {
+    echo "FAIL: replay with --plan-in did not succeed:"
+    cat "$TMP_ROOT/replay_applied.json"
+    exit 1
+}
+echo "OK Test 5a: reviewed plan successfully replayed via --plan-in"
+
+# Test TOCTOU state guard: modify destination file so expected_target_state mismatches
+echo "tampered content" > "$HOME_B/forge/skills/portable-skill/SKILL.md"
+if HOME="$HOME_B" "$WRAPPER" restore \
+    "$BUNDLE" \
+    --workspace "$WS_B" \
+    --plan-in "$SAVED_PLAN" \
+    --apply-safe \
+    --yes \
+    --json >"$TMP_ROOT/toctou_tampered.json" 2>&1; then
+    echo "FAIL: restore --plan-in did not abort when target was modified (TOCTOU violation)!"
+    cat "$TMP_ROOT/toctou_tampered.json"
+    exit 1
+fi
+echo "OK Test 5b: TOCTOU state guard rejected tampered target state"
+
+# -----------------------------------------------------------------------------
+# Test 6: Sub-object Field-Level Whitelist (config-subobject data minimization)
+# -----------------------------------------------------------------------------
+echo "=== Test 6: Sub-object Field-Level Whitelist (config-subobject isolation) ==="
+HOME_MCP_A="$TMP_ROOT/home_mcp_a"
+WS_MCP_A="$TMP_ROOT/ws_mcp_a"
+HOME_MCP_B="$TMP_ROOT/home_mcp_b"
+WS_MCP_B="$TMP_ROOT/ws_mcp_b"
+BUNDLE_MCP="$TMP_ROOT/mcp-subobject.acb"
+mkdir -p "$HOME_MCP_A/.augment" "$WS_MCP_A" "$HOME_MCP_B" "$WS_MCP_B"
+
+# Write Augment settings.json with mcpServers AND unrelated/sensitive sibling keys
+cat > "$HOME_MCP_A/.augment/settings.json" <<'EOF'
+{
+  "augment.apiKey": "sk-unrelated-provider-token-123456",
+  "telemetry.enabled": true,
+  "editor.theme": "dark-plus",
+  "org_confidential_policy": "do-not-leak",
+  "mcpServers": {
+    "weather-server": {
+      "command": "python3",
+      "args": ["-m", "weather_mcp"]
+    }
+  }
+}
+EOF
+
+HOME="$HOME_MCP_A" "$WRAPPER" snapshot \
+    --workspace "$WS_MCP_A" \
+    --source augment-code/cli-ide --target cline/ide \
+    --scope user \
+    --output "$BUNDLE_MCP" \
+    --json >/dev/null
+
+python3 - "$BUNDLE_MCP" <<'PY'
+import json, sys
+from pathlib import Path
+
+bundle_root = Path(sys.argv[1])
+objects_dir = bundle_root / "objects"
+
+# Find settings.json in bundle
+settings_files = list(objects_dir.rglob("settings.json"))
+assert settings_files, f"settings.json not found in bundle objects: {list(objects_dir.rglob('*'))}"
+content = settings_files[0].read_text(encoding="utf-8")
+parsed = json.loads(content)
+
+# Sibling keys must NOT exist in the bundle
+assert "augment.apiKey" not in parsed, "leaked sibling key augment.apiKey in bundle!"
+assert "telemetry.enabled" not in parsed, "leaked sibling key telemetry.enabled in bundle!"
+assert "org_confidential_policy" not in parsed, "leaked sibling key org_confidential_policy in bundle!"
+assert "editor.theme" not in parsed, "leaked sibling key editor.theme in bundle!"
+
+# Only mcpServers should be present
+assert "mcpServers" in parsed, f"mcpServers missing from subobject export: {parsed}"
+assert "weather-server" in parsed["mcpServers"], f"weather-server missing: {parsed}"
+print("OK Test 6: config-subobject exported ONLY mcpServers slice without sibling config leakage")
+PY
+
+# -----------------------------------------------------------------------------
+# Test 7: Cross-Platform & Windows Path Resolver
+# -----------------------------------------------------------------------------
+echo "=== Test 7: Cross-Platform and Windows Path Resolver ==="
+python3 - <<'PY'
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path("skills/agent-skills-setup/scripts").resolve()))
+from migration_core import Registry, _expand_path_vars
+
+fake_home = Path("/fake/home")
+# Test %APPDATA% and %USERPROFILE% expansion
+appdata_res = _expand_path_vars("%APPDATA%/Code/User/settings.json", fake_home)
+assert "/fake/home/AppData/Roaming/Code/User/settings.json" in appdata_res, f"unexpected APPDATA: {appdata_res}"
+
+userprofile_res = _expand_path_vars("%USERPROFILE%/.cursor/skills", fake_home)
+assert "/fake/home/.cursor/skills" in userprofile_res, f"unexpected USERPROFILE: {userprofile_res}"
+
+# Test $APPDATA and $LOCALAPPDATA expansion
+posix_appdata = _expand_path_vars("$APPDATA/app/config.json", fake_home)
+assert "/fake/home/AppData/Roaming/app/config.json" in posix_appdata, f"unexpected $APPDATA: {posix_appdata}"
+
+print("OK Test 7: %APPDATA%, %USERPROFILE%, and $APPDATA correctly expanded across platforms")
+PY
+
+# -----------------------------------------------------------------------------
+# Test 8: Detection Probe Fidelity (Shared Path Classification)
+# -----------------------------------------------------------------------------
+echo "=== Test 8: Detection Probe Fidelity ==="
+python3 - <<'PY'
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path("skills/agent-skills-setup/scripts").resolve()))
+from detect.probes import probe_file_signature, InstallState
+
+fake_tmp = Path("/tmp/fake-probe-test")
+fake_tmp.mkdir(parents=True, exist_ok=True)
+shared_file = fake_tmp / "AGENTS.md"
+shared_file.write_text("# Shared agents")
+
+# Probe against shared file
+res = probe_file_signature("generic-ide", "default", [shared_file])
+assert res.state == InstallState.COMPATIBILITY_ONLY, f"shared file should be COMPATIBILITY_ONLY, got: {res.state}"
+
+# Probe against product-specific file
+specific_file = fake_tmp / ".clinerules"
+specific_file.write_text("# Cline rules")
+res_specific = probe_file_signature("cline", "ide", [specific_file])
+assert res_specific.state in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY), f"specific file state: {res_specific.state}"
+
+print("OK Test 8: probe correctly classified shared paths as compatibility-only")
+PY
+
 echo
-echo "All 0.8.22 P0 Audit regression tests PASSED"
+echo "All P0 Audit regression tests PASSED"

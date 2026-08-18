@@ -475,9 +475,37 @@ def collect_source_objects(
         canonical = row.get("canonical_path") or source_path.name
         relative = _path_for_object(object_type, product, profile, scope, canonical)
 
+        storage = row.get("storage") or ""
+        format_name = row.get("source_format") or row.get("format") or ""
+
         if source_path.is_file():
             if not _SENSITIVE_FILENAME_HINT.search(source_path.name):
-                objects[relative] = source_path.read_bytes()
+                if storage == "config-subobject":
+                    # Strict field-level whitelist for config subobjects (audit P0):
+                    # Never copy the entire host config file (e.g. settings.json with sibling tokens/telemetry/keys).
+                    if object_type == "mcp":
+                        try:
+                            from migration_core import parse_mcp_document, emit_mcp_document
+                            raw_text = source_path.read_text(encoding="utf-8")
+                            servers = parse_mcp_document(raw_text, format_name)
+                            emitted_text, _ = emit_mcp_document(servers, format_name)
+                            objects[relative] = emitted_text.encode("utf-8")
+                        except Exception:
+                            pass
+                    elif object_type == "instructions":
+                        try:
+                            from migration_core import parse_instruction, emit_instruction
+                            raw_text = source_path.read_text(encoding="utf-8")
+                            instruction = parse_instruction(raw_text, format_name, scope, storage)
+                            emitted_text, _ = emit_instruction(instruction, format_name)
+                            objects[relative] = emitted_text.encode("utf-8")
+                        except Exception:
+                            pass
+                    else:
+                        # Refuse to copy raw host config files for unsupported subobject types
+                        pass
+                else:
+                    objects[relative] = source_path.read_bytes()
         elif source_path.is_dir():
             # Deep recursive collection up to MAX_DIR_DEPTH
             _collect_tree(source_path, relative, objects, depth=0)

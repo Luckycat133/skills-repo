@@ -378,6 +378,48 @@ class PlanItem:
         }
 
 
+def _expand_path_vars(raw_path: str, home: Path) -> str:
+    """Expand Windows %VAR% and POSIX $VAR environment variables.
+
+    Provides safe cross-platform fallback paths for APPDATA, LOCALAPPDATA,
+    USERPROFILE, and HOMEPATH when evaluating paths in cross-device/OS contexts.
+    """
+    def _replace_win_var(match: re.Match) -> str:
+        var_name = match.group(1).upper()
+        if var_name in os.environ:
+            return os.environ[var_name]
+        if var_name == "APPDATA":
+            return str(home / "AppData" / "Roaming")
+        if var_name == "LOCALAPPDATA":
+            return str(home / "AppData" / "Local")
+        if var_name in ("USERPROFILE", "HOMEPATH"):
+            return str(home)
+        if var_name == "PROGRAMDATA":
+            return "C:/ProgramData"
+        return match.group(0)
+
+    expanded = re.sub(r"%([A-Za-z0-9_]+)%", _replace_win_var, raw_path)
+
+    def _replace_posix_var(match: re.Match) -> str:
+        var_name = (match.group(1) or match.group(2) or "").upper()
+        if var_name in os.environ:
+            return os.environ[var_name]
+        if var_name == "APPDATA":
+            return str(home / "AppData" / "Roaming")
+        if var_name == "LOCALAPPDATA":
+            return str(home / "AppData" / "Local")
+        if var_name in ("USERPROFILE", "HOME"):
+            return str(home)
+        return match.group(0)
+
+    expanded = re.sub(
+        r"\$\{([A-Za-z0-9_]+)\}|\$([A-Za-z_][A-Za-z0-9_]*)",
+        _replace_posix_var,
+        expanded,
+    )
+    return expanded.replace("\\", "/")
+
+
 class Registry:
     """Resolve registry v2 products, profiles, and concrete surface paths."""
 
@@ -561,24 +603,43 @@ class Registry:
             return self._absolute(path), boundary
         # Honour Registry v2 per-surface platform overrides (darwin,
         # linux, windows, wsl, remote-ssh, dev-container, codespaces,
-        # vscode-profile, extension-host).  The override keys live on
-        # the parent surface entry, looked up via
-        # ``entry.get("platform_paths", {})`` or the product-level
-        # ``profile.platforms`` map.
-        platforms = entry.get("platforms") or {}
+        # vscode-profile, extension-host).
+        platforms = entry.get("platforms") or entry.get("platform_paths") or {}
         env_platform = os.environ.get("AGENT_SKILLS_PLATFORM", "")
+        if not env_platform:
+            if sys.platform == "win32":
+                env_platform = "windows"
+            elif sys.platform == "darwin":
+                env_platform = "darwin"
+            elif sys.platform.startswith("linux"):
+                env_platform = "linux"
+            else:
+                env_platform = "linux"
+
         if platforms and env_platform in platforms:
             raw_path = str(platforms[env_platform])
-        if raw_path == "~":
+
+        expanded_str = _expand_path_vars(raw_path, self.home)
+
+        if expanded_str == "~":
             return self.home, self.home
-        if raw_path.startswith("~/"):
-            return self._absolute(self.home / raw_path[2:]), self.home
-        return self._absolute(self.workspace / raw_path), self.workspace
+        if expanded_str.startswith("~/"):
+            return self._absolute(self.home / expanded_str[2:]), self.home
+
+        p = Path(expanded_str)
+        if p.is_absolute() or re.match(r"^[a-zA-Z]:", expanded_str):
+            resolved = self._absolute(p)
+            try:
+                resolved.relative_to(self.home)
+                return resolved, self.home
+            except ValueError:
+                return resolved, resolved.parent
+
+        return self._absolute(self.workspace / expanded_str), self.workspace
 
     def surfaces(self, selector: str, object_type: str) -> list[SurfacePath]:
         product_id, profile_id, profile = self.profile(selector)
         entries = profile.get("surfaces", {}).get(object_type, [])
-        profile_platforms = profile.get("platforms", {})
         surfaces: list[SurfacePath] = []
         for entry in entries:
             canonical_path = str(entry["path"])
@@ -587,9 +648,6 @@ class Registry:
             for precedence, candidate_path in enumerate(candidates):
                 candidate_entry = dict(entry)
                 candidate_entry["path"] = candidate_path
-                # Pass profile-level platforms down for resolve_path to use
-                if profile_platforms and "platforms" not in candidate_entry:
-                    candidate_entry["platforms"] = profile_platforms
                 if precedence:
                     candidate_entry.pop("override_env", None)
                     candidate_entry.pop("override_relative_path", None)
@@ -2725,9 +2783,64 @@ def load_plan_document(path: Path) -> dict[str, Any]:
     return document
 
 
+def _normalize_surface_for_comparison(
+    surface_dict: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    if not surface_dict:
+        return None
+    keys = (
+        "product",
+        "profile",
+        "object_type",
+        "scope",
+        "storage",
+        "path",
+        "canonical_path",
+        "source_format",
+        "policy",
+        "location_role",
+        "precedence",
+    )
+    return {k: surface_dict.get(k) for k in keys}
+
+
+def _normalize_target_for_comparison(
+    target_dict: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    if not target_dict:
+        return None
+    keys = (
+        "product",
+        "profile",
+        "object_type",
+        "scope",
+        "storage",
+        "path",
+        "canonical_path",
+        "resolved_path",
+        "source_format",
+        "policy",
+        "location_role",
+        "precedence",
+    )
+    return {k: target_dict.get(k) for k in keys}
+
+
 def _core_plan_items(serialized_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    fields = ("object_type", "status", "reason", "source", "target", "manual_actions", "object_id")
-    return [{field: item.get(field) for field in fields} for item in serialized_items]
+    result = []
+    for item in serialized_items:
+        result.append(
+            {
+                "object_type": item.get("object_type"),
+                "status": item.get("status"),
+                "reason": item.get("reason"),
+                "source": _normalize_surface_for_comparison(item.get("source")),
+                "target": _normalize_target_for_comparison(item.get("target")),
+                "manual_actions": item.get("manual_actions"),
+                "object_id": item.get("object_id"),
+            }
+        )
+    return result
 
 
 def validate_plan_document(
@@ -2770,7 +2883,7 @@ def validate_plan_document(
         isinstance(item, dict) for item in stored_items
     ):
         raise ValueError("plan items must be an array")
-    if _core_plan_items(stored_items) != [item.to_dict() for item in items]:
+    if _core_plan_items(stored_items) != _core_plan_items([item.to_dict() for item in items]):
         raise ValueError("resolved plan changed after review")
     for stored, item in zip(stored_items, items):
         if item.source is not None:

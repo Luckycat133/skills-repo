@@ -4,6 +4,15 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ## [Unreleased]
 
+## [0.8.23] - 2026-08-18
+
+### Fixed
+
+- **P0 Replayable Restore Plan & Strict TOCTOU State Guard (`--plan-in` / `--plan`)**: Restore plans generated via `restore <bundle.acb> --plan-out <plan.json>` can now be independently reviewed and reliably replayed using `restore <bundle.acb> --plan-in <plan.json> --yes` (or `apply <plan.json> --bundle <bundle.acb> --yes`). Replay verifies bundle integrity, plan checksum (`plan_sha256`), registry checksum, git provenance, and enforces strict TOCTOU state locks (`expected_source_state` and `expected_target_state`) against destination surfaces prior to any disk write.
+- **P0 Sub-Object Field-Level Whitelist for Snapshot (`config-subobject` Data Minimization)**: Snapshot extraction for `config-subobject` storage (e.g. `settings.json` storing `mcpServers` in Augment, Gemini, VS Code, Qoder) now extracts, validates, and serializes ONLY the authorized sub-object slice. Host configuration sibling keys (API keys, provider tokens, telemetry, UI preferences, proxy configs, organizational policies) are strictly excluded from the bundle.
+- **Cross-Platform & Windows Path Resolver Enhancements**: Added automatic platform detection fallback from `sys.platform` when `AGENT_SKILLS_PLATFORM` is unset. Added full resolution and expansion for Windows environment variables (`%APPDATA%`, `%USERPROFILE%`, `%LOCALAPPDATA%`, `%PROGRAMDATA%`, `%HOMEPATH%`) and POSIX variables (`$APPDATA`, `$LOCALAPPDATA`, `$USERPROFILE`, `$HOME`). Resolved the profile-level platforms mapping bug to prevent indiscriminate replacement of surface paths.
+- **Detection Probe Fidelity & Multi-IDE Auto-Orchestration**: Updated detection probes to distinguish `installed`, `configured-only`, and `compatibility-only` states (shared paths like `~/.agents/skills` or `AGENTS.md` no longer misclassify all products as installed). Fixed macOS app bundle probe to search standard application directories and Spotlight indexes. Added `--all-installed` and `sources auto` orchestration for multi-IDE snapshot and restore.
+
 ## [0.8.22] - 2026-08-18
 
 ### Fixed

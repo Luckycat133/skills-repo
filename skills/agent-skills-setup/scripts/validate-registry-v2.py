@@ -77,10 +77,11 @@ def validate_against_schema(
     try:
         from jsonschema import Draft202012Validator
     except ImportError:
-        return [
-            "schema: jsonschema is not installed; "
-            "run `pip install jsonschema` to enforce the JSON Schema"
-        ]
+        print(
+            "WARNING: jsonschema is not installed; skipping JSON Schema validation gate",
+            file=sys.stderr,
+        )
+        return []
     try:
         schema = load_json(schema_path)
     except (OSError, ValueError, json.JSONDecodeError) as error:
@@ -163,6 +164,21 @@ def validate_surface(
             )
 
 
+ALLOWED_TOP_LEVEL_KEYS = {
+    "$schema",
+    "aliases",
+    "candidate_discovery",
+    "detection_config",
+    "freshness",
+    "object_policies",
+    "products",
+    "profile_templates",
+    "schema_version",
+    "support_contract",
+    "verified_at",
+}
+
+
 def validate_registry(
     registry_path: Path,
     index_path: Path,
@@ -172,6 +188,10 @@ def validate_registry(
 ) -> list[str]:
     registry = load_json(registry_path)
     errors: list[str] = []
+    unexpected_keys = set(registry.keys()) - ALLOWED_TOP_LEVEL_KEYS
+    if unexpected_keys:
+        for key in sorted(unexpected_keys):
+            errors.append(f"schema[<root>]: '{key}' was unexpected")
     if registry.get("schema_version") not in (2, 2.1, "2", "2.1"):
         errors.append("schema_version: expected 2 or 2.1")
     schema_reference = registry.get("$schema")

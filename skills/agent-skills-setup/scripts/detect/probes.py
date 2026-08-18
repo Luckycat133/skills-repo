@@ -76,6 +76,17 @@ def probe_binary(
     return ProbeResult(product, profile, InstallState.NOT_DETECTED, ())
 
 
+_SHARED_COMPATIBILITY_NAMES = frozenset({
+    "AGENTS.md",
+    "skills",
+})
+
+_SHARED_COMPATIBILITY_SUFFIXES = (
+    ".agents/skills",
+    ".agents",
+)
+
+
 def probe_file_signature(
     product: str,
     profile: str,
@@ -84,11 +95,20 @@ def probe_file_signature(
     """Check whether any of the candidate paths exists on disk."""
     for path in candidate_paths:
         if path.exists():
-            state = (
-                InstallState.INSTALLED
-                if path.is_dir() or path.is_file()
-                else InstallState.CONFIGURED_ONLY
+            # Distinguish shared/fallback paths from product-specific installation evidence
+            p_posix = path.as_posix()
+            is_shared = (
+                path.name in _SHARED_COMPATIBILITY_NAMES
+                or any(p_posix.endswith(suf) for suf in _SHARED_COMPATIBILITY_SUFFIXES)
             )
+            if is_shared:
+                state = InstallState.COMPATIBILITY_ONLY
+            else:
+                state = (
+                    InstallState.INSTALLED
+                    if path.is_dir() or path.is_file()
+                    else InstallState.CONFIGURED_ONLY
+                )
             return ProbeResult(product, profile, state, (f"file:{path}",))
     return ProbeResult(product, profile, InstallState.NOT_DETECTED, ())
 
@@ -99,24 +119,46 @@ def probe_app_bundle(
     *,
     darwin_bundle_id: str | None = None,
 ) -> ProbeResult:
-    """Best-effort macOS app-bundle probe using ``mdls`` / ``lsappinfo``."""
+    """Best-effort macOS app-bundle probe."""
     if not darwin_bundle_id or sys.platform != "darwin":
         return ProbeResult(product, profile, InstallState.NOT_DETECTED, ())
+
+    # 1. Search standard macOS app locations
+    for app_dir in (Path("/Applications"), Path.home() / "Applications"):
+        if not app_dir.is_dir():
+            continue
+        for app in app_dir.glob("*.app"):
+            plist = app / "Contents" / "Info.plist"
+            if plist.is_file():
+                try:
+                    text = plist.read_text(encoding="utf-8", errors="ignore")
+                    if darwin_bundle_id in text:
+                        return ProbeResult(
+                            product, profile, InstallState.INSTALLED,
+                            (f"app-bundle:{app}",),
+                        )
+                except OSError:
+                    pass
+
+    # 2. Try mdfind for Spotlight index lookup
     try:
         proc = subprocess.run(
-            ["mdls", "-name", "kMDItemCFBundleIdentifier", darwin_bundle_id],
+            ["mdfind", f"kMDItemCFBundleIdentifier == '{darwin_bundle_id}'"],
             capture_output=True,
             text=True,
             timeout=2,
             check=False,
         )
+        if proc.returncode == 0 and proc.stdout.strip():
+            found_app = proc.stdout.strip().splitlines()[0]
+            if Path(found_app).exists():
+                return ProbeResult(
+                    product, profile, InstallState.INSTALLED,
+                    (f"app-bundle:{found_app}",),
+                )
     except (OSError, subprocess.SubprocessError):
-        proc = None
-    if proc and proc.returncode == 0 and "kMDItemCFBundleIdentifier" in proc.stdout:
-        return ProbeResult(
-            product, profile, InstallState.INSTALLED,
-            (f"app-bundle:{darwin_bundle_id}",),
-        )
+        pass
+
     return ProbeResult(product, profile, InstallState.NOT_DETECTED, ())
 
 
