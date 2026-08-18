@@ -6,10 +6,12 @@ Apply stages and validates every output before the first target mutation, snapsh
 
 ## Device handoff and Agent Context Bundle (ACB) safety
 
-- ACB bundles (`<name>.acb/`) package reviewed objects offline without capturing machine-specific paths, local usernames, or Git commits.
-- Bundles must pass `bundle-verify` against `checksums.json` before restore.
-- Credential redaction (`assert_no_lateral_secrets`) scans all bundle JSON and files; any literal token or secret immediately halts bundling.
-- Restoring a bundle requires explicit user approval (`--yes`) and writes only approved target paths.
+- **Strict Allowlist Snapshotting (P0-2)**: `snapshot` captures only requested scopes and valid portable objects (skills, instructions, mcp). Policies like `forbidden-regenerate`, `never-migrate`, `source-only`, and objects like `generated_memory`, `session`, `chat`, `runtime`, `database`, `trust`, `approval`, `oauth_state` are strictly blocked before disk read.
+- **Dual-Side Plan Architecture (P0-1)**: `restore` builds a dual-side plan with the verified bundle as `source_registry` and the local host as `target_registry`. Real destination paths, pre-apply states (`exists` -> `replace` vs `create`), semantic diffs, and workspace are evaluated on the destination device and locked into `plan_sha256` before apply.
+- **Authoritative Bundle Precedence (P0-3)**: The bundle is always the single source of truth during `restore`. The presence of a local source IDE on the destination device cannot override or bypass bundle content.
+- **Strict Handoff Whitelist (P0-4)**: Handoff data serializes only explicitly whitelisted fields (`reviewed_summary`, `git_branch`, `selected_files`, `patch`). Raw logs, conversation histories, tokens, and machine paths are dropped.
+- **Closed-World Integrity Verification**: Bundles must pass `bundle-verify` against `checksums.json` and deep secret/binary scans before restore.
+- **Plan-Only Review & Execution Safety**: `restore <bundle.acb>` (or `--plan-only`) builds and reviews the plan with zero disk writes. Applying requires explicit `--yes`. Extraction into a review tree (`--restore-root <dir>`) is opt-in.
 
 ## Surface and runtime boundaries
 
