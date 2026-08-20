@@ -4,6 +4,17 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ## [Unreleased]
 
+## [0.8.24] - 2026-08-20
+
+### Fixed
+
+- **Offline Boundary Enforcement & Network Disablement**: Removed optional `--online` network probing from `check-doc-freshness.py` and `scripts/README.md`; set `online_checks_enabled: false` and `candidate_discovery.enabled: false` in `registry-v2.json`; replaced remote MCP endpoint in `evals/files/cursor-project-mcp.json` with local stdio server to guarantee strict offline-only execution.
+- **Probe Argument & Spotlight Query Injection Hardening (AST4)**: Hardened `probe_app_bundle` in `scripts/detect/probes.py` with a strict alphanumeric and delimiter regex allowlist (`DARWIN_BUNDLE_ID_RE`) for `darwin_bundle_id`, completely blocking query injection and argument manipulation against macOS `mdfind`.
+- **Static Analysis & Test Harness Hardening**: Eliminated dynamic module execution (`exec_module`) from `test-freshness-expanded.sh` by introducing `doc_freshness.py`; dynamically constructed test payload byte literals in `test-acb-secret-scan-unified.sh` to prevent false-positive literal secret matches during static scans.
+- **ACB Write & Restore Safety Gates (SQP-2)**: Added containment validation before `objects/` staging deletion in `write_bundle`; added symlink target rejection in `restore_bundle_objects` to prevent symlink-based overwrite attacks during object extraction.
+- **Plugin Package Traversal & Symlink Hardening**: Enforced symlink exclusion and path containment in `adapt_plugin_package` and plugin directory staging in `migration_core.py`.
+
+
 ## [0.8.23] - 2026-08-18
 
 ### Fixed

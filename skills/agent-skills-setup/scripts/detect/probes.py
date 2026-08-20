@@ -9,6 +9,7 @@ network.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -113,6 +114,9 @@ def probe_file_signature(
     return ProbeResult(product, profile, InstallState.NOT_DETECTED, ())
 
 
+DARWIN_BUNDLE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.-]{0,255}$")
+
+
 def probe_app_bundle(
     product: str,
     profile: str,
@@ -120,7 +124,11 @@ def probe_app_bundle(
     darwin_bundle_id: str | None = None,
 ) -> ProbeResult:
     """Best-effort macOS app-bundle probe."""
-    if not darwin_bundle_id or sys.platform != "darwin":
+    if (
+        not darwin_bundle_id
+        or sys.platform != "darwin"
+        or not DARWIN_BUNDLE_ID_RE.match(darwin_bundle_id)
+    ):
         return ProbeResult(product, profile, InstallState.NOT_DETECTED, ())
 
     # 1. Search standard macOS app locations

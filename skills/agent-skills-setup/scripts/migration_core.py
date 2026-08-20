@@ -1872,17 +1872,18 @@ def adapt_plugin_package(
     if target_format == "factory-plugin":
         # Preserve the entire .factory-plugin/ directory structure
         # Copy the entire .factory-plugin/ directory to target
-        source_plugin_dir = source_path / ".factory-plugin"
-        if not source_plugin_dir.exists():
+        source_plugin_dir = (source_path / ".factory-plugin").resolve()
+        if not source_plugin_dir.exists() or not source_plugin_dir.is_dir():
             report.add("plugin", ".factory-plugin", "missing .factory-plugin/ directory", None)
             return "", report
 
-        # Return a manifest of all files in the plugin package
+        ensure_no_symlinks(source_plugin_dir)
         files = []
-        for f in source_plugin_dir.rglob("*"):
-            if f.is_file():
+        for f in sorted(source_plugin_dir.rglob("*")):
+            if f.is_file() and not f.is_symlink():
                 rel = f.relative_to(source_plugin_dir)
-                files.append(str(rel))
+                if ".." not in str(rel) and not str(rel).startswith("/"):
+                    files.append(str(rel))
 
         manifest = {
             "plugin_package": ".factory-plugin",
@@ -1891,13 +1892,15 @@ def adapt_plugin_package(
         }
         return json.dumps(manifest, indent=2), report
     if target_format == "preserve-package":
-        # Generic package preservation - return manifest of all files
+        resolved_source = source_path.resolve()
+        ensure_no_symlinks(resolved_source)
         files = []
-        for f in source_path.rglob("*"):
-            if f.is_file():
-                rel = f.relative_to(source_path)
-                files.append(str(rel))
-        return json.dumps({"files": files}, indent=2), report
+        for f in sorted(resolved_source.rglob("*")):
+            if f.is_file() and not f.is_symlink():
+                rel = f.relative_to(resolved_source)
+                if ".." not in str(rel) and not str(rel).startswith("/"):
+                    files.append(str(rel))
+        return json.dumps({"files": sorted(files)}, indent=2), report
     raise ValueError(f"unsupported plugin target format: {target_format}")
 
 
@@ -3426,7 +3429,10 @@ def apply_plan(
                 # preserving all subdirectories (commands/, skills/, droids/, hooks/, mcp.json, plugin.json)
                 if not source.resolved_path.is_dir():
                     raise ValueError("plugins source must be a directory")
+                ensure_no_symlinks(source.resolved_path)
                 for child in sorted(source.resolved_path.iterdir()):
+                    if child.is_symlink():
+                        continue
                     if child.is_file():
                         staged = stage_root / f"{len(operations):04d}-{child.name}"
                         shutil.copy2(child, staged)
@@ -3439,7 +3445,7 @@ def apply_plan(
                             }
                         )
                     elif child.is_dir():
-                        # Copy directory recursively
+                        ensure_no_symlinks(child)
                         staged_dir = stage_root / f"{len(operations):04d}-{child.name}"
                         shutil.copytree(child, staged_dir)
                         operations.append(

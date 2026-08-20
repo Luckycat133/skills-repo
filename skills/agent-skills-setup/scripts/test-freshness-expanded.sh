@@ -13,21 +13,13 @@ python3 - "$REGISTRY_PATH" "$CHECKS_PATH" <<'PYEOF'
 import json
 import sys
 from pathlib import Path
+from datetime import date
 
 registry_path = Path(sys.argv[1])
 checks_path = Path(sys.argv[2])
 sys.path.insert(0, str(registry_path.parent.parent / "scripts"))
 
-from datetime import date
-import importlib.util
-spec = importlib.util.spec_from_file_location(
-    "check_doc_freshness",
-    str(registry_path.parent.parent / "scripts" / "check-doc-freshness.py"),
-)
-mod = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(mod)  # noqa: E402
-load_object = mod.load_object
-validate_provenance = mod.validate_provenance
+from doc_freshness import load_object, validate_provenance
 
 registry = load_object(registry_path)
 checks_doc = load_object(checks_path)

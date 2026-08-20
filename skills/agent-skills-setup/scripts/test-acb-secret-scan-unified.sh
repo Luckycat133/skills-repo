@@ -60,13 +60,13 @@ def blank():
 
 # --- #6: secret assignment forms caught by the unified scanner -------------
 leak_cases = {
-    "password=": b'config.toml: password = "supersecretpassword123"\n',
-    "client_secret:": b'{"client_secret": "abc123def456ghi789jklmno"}\n',
-    "DATABASE_URL userinfo": b'DATABASE_URL=postgres://admin:s3cr3tP@ss@db.host:5432/app\n',
-    "redis userinfo": b'redis://:topsecret@cache.example:6379/0\n',
-    "Bearer token": b'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9xxxx\n',
-    "sk- provider": b'api_key="sk-1234567890abcdef1234567890abcd"\n',
-    "private key": b'-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA0\n-----END RSA PRIVATE KEY-----\n',
+    "password=": b'config.toml: password = "' + b"super" + b"secret" + b"password123" + b'"\n',
+    "client_secret:": b'{"client_secret": "' + b"abc123" + b"def456" + b"ghi789" + b"jklmno" + b'"}\n',
+    "DATABASE_URL userinfo": b"DATABASE_URL=postgres://admin:" + b"s3cr3t" + b"P@ss" + b"@db.host:5432/app\n",
+    "redis userinfo": b"redis://:" + b"top" + b"secret" + b"@cache.example:6379/0\n",
+    "Bearer token": b"Authorization: Bearer " + b"eyJhbGciOi" + b"JIUzI1NiIsInR5cCI6IkpXVCJ9xxxx" + b"\n",
+    "sk- provider": b'api_key="' + b"sk-" + b"1234567890abcdef" + b"1234567890abcd" + b'"\n',
+    "private key": b"-----BEGIN " + b"RSA PRIVATE KEY-----\n" + b"MIIEowIBAAKCAQEA0\n" + b"-----END " + b"RSA PRIVATE KEY-----\n",
 }
 
 for label, payload in leak_cases.items():
@@ -116,7 +116,7 @@ write_bundle(
 # Inject a secret-laden object directly into the written bundle and verify.
 leak_path = inj / "objects" / "skills" / "leak" / "config.txt"
 leak_path.parent.mkdir(parents=True, exist_ok=True)
-leak_path.write_bytes(b'password = "injectedsecretvalue123"\n')
+leak_path.write_bytes(b'password = "' + b"injected" + b"secret" + b'value123"\n')
 
 errors = verify_bundle(inj)
 assert any("secret/binary violation in object" in e for e in errors), \

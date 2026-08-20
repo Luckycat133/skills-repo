@@ -20,7 +20,15 @@ from detect.probes import (  # noqa: E402
     detect_profile,
     probe_binary,
     probe_file_signature,
+    probe_app_bundle,
 )
+
+# App bundle probe: test bundle ID allowlist rejects injection attempts
+res = probe_app_bundle("test", "ide", darwin_bundle_id="com.example.app' || rm -rf /")
+assert res.state is InstallState.NOT_DETECTED, res
+res = probe_app_bundle("test", "ide", darwin_bundle_id="valid-bundle.id-123")
+# Should not crash or inject
+print("OK probe_app_bundle rejects invalid bundle ID injection")
 
 # Binary probe: python3 is always available; cline likely is not.
 res = probe_binary("cline", "ide", ["cline"])

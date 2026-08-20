@@ -14,7 +14,7 @@
       "min_official_sources": 2,
       "min_surfaces": 2
     },
-    "enabled": true,
+    "enabled": false,
     "report_format": {
       "include_archived_products": true,
       "include_new_paths": true,
@@ -23,7 +23,7 @@
       "include_schema_changes": true,
       "suggest_registry_diff": true
     },
-    "schedule": "0 0 * * 1"
+    "schedule": "disabled"
   },
   "detection_config": {
     "installation_states": [
@@ -71,17 +71,11 @@
     }
   },
   "freshness": {
-    "candidate_discovery_schedule": "weekly",
-    "candidate_discovery_sources": [
-      "github.com trending AI coding agents",
-      "npm registry @scope/agent-* packages",
-      "pypi.org AI coding assistants",
-      "product hunt AI category",
-      "official vendor release notes"
-    ],
+    "candidate_discovery_schedule": "disabled",
+    "candidate_discovery_sources": [],
     "demote_stale_on_detect": true,
     "max_age_days": 365,
-    "online_checks_enabled": true,
+    "online_checks_enabled": false,
     "stale_levels": [
       "stale-partial",
       "stale-manual",

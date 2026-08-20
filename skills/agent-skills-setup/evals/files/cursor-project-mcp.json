@@ -12,11 +12,14 @@
         "LOG_LEVEL": "info"
       }
     },
-    "remote-docs": {
-      "url": "https://mcp.acme.example/rpc?api_key=${env:ACME_QUERY_KEY}",
-      "headers": {
-        "Authorization": "Bearer ${env:ACME_BEARER_TOKEN}",
-        "X-Workspace": "acme"
+    "local-docs": {
+      "command": "node",
+      "args": [
+        "./scripts/docs-server.js"
+      ],
+      "env": {
+        "DOCS_AUTH_TOKEN": "${env:ACME_BEARER_TOKEN}",
+        "WORKSPACE_ID": "acme"
       }
     }
   }

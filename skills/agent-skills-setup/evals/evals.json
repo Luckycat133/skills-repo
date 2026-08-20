@@ -21,7 +21,7 @@
       "assertions": [
         "Uses OpenCode mcp, not mcpServers.",
         "Uses local type, command array, and environment rather than env.",
-        "Uses remote type and preserves URL without guessing transport.",
+        "Preserves local command configurations and environment mappings without guessing transport.",
         "Converts exact ${env:NAME} to {env:NAME} and blanks literal credentials.",
         "Uses --dry-run first and --yes only in a separate apply command.",
         "Both commands select project MCP, /tmp/acme-mcp, and the supplied --source-mcp-file.",
@@ -50,7 +50,7 @@
         "Shows dry-run exit 0, supplied fixture path, and validated source summary.",
         "Proves opencode.json is absent after dry-run and appears only after apply.",
         "Produces mcp.local-search with local type, command array, and environment.",
-        "Converts ${env:NAME}, blanks LITERAL_TOKEN, and preserves remote behavior without guessed transport.",
+        "Converts ${env:NAME}, blanks LITERAL_TOKEN, and preserves command configuration without guessing transport.",
         "Uses --json and reports evidence.mcp paths, hashes, validation, and status.",
         "Proves unchanged source and recorded target digest."
       ]

@@ -352,6 +352,8 @@ def write_bundle(
     bundle_root.mkdir(parents=True, exist_ok=True)
     objects_root = bundle_root / ACB_OBJECTS_DIR
     if objects_root.exists():
+        # Validate containment before removing existing objects staging directory
+        validate_path_containment(ACB_OBJECTS_DIR, bundle_root)
         shutil.rmtree(objects_root)
     objects_root.mkdir(parents=True)
 
@@ -556,6 +558,8 @@ def restore_bundle_objects(
         relative = source.relative_to(objects_root).as_posix()
         try:
             target = validate_path_containment(relative, destination_root)
+            if target.is_symlink():
+                raise ACBIntegrityError(f"target path is a symlink: {target}")
         except ACBIntegrityError as error:
             skipped.append({"path": relative, "reason": str(error)})
             continue

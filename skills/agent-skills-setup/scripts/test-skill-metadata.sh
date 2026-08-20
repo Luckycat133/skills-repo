@@ -32,8 +32,8 @@ if "permissions" in frontmatter:
     raise SystemExit("FAIL: non-standard permissions metadata must not be declared")
 
 version = re.search(r'(?m)^  version:\s*"([^"]+)"\s*$', frontmatter)
-if version is None or version.group(1) != "0.8.23":
-    raise SystemExit("FAIL: metadata.version must be the quoted release version (0.8.23)")
+if version is None or version.group(1) != "0.8.24":
+    raise SystemExit("FAIL: metadata.version must be the quoted release version (0.8.24)")
 
 compatibility = re.search(r"(?m)^compatibility:\s*(.*)$", frontmatter)
 if compatibility is None:

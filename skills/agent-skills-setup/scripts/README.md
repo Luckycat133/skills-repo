@@ -26,9 +26,9 @@ reports only relative paths and reason categories, never credential values.
 with `sync-ide-reference-summaries.py`, never edit it directly. `common.sh` is
 an internal helper.
 
-`check-doc-freshness.py` validates source/freshness metadata offline and can
-fetch a curated set of official documents with `--online --report`. The weekly
-workflow stores that report as an artifact.
+`check-doc-freshness.py` validates source/freshness metadata and provenance
+offline without network access. It verifies schemas, official HTTPS source
+declarations, and verified_at freshness boundaries locally.
 
 `test-*.sh` files are maintainer regression suites run by `bash validate-all.sh`,
 not local-IDE migration commands. Legacy converter suites opt into the private

@@ -39,8 +39,6 @@ jobs:
           python3 skills/agent-skills-setup/scripts/check-doc-freshness.py \
             --registry skills/agent-skills-setup/references/registry-v2.json \
             --checks skills/agent-skills-setup/references/doc-freshness-checks.json \
-            --online \
-            --retries 2 \
             --max-age-days 365 \
             --report freshness-report.json
         env:
@@ -87,8 +85,6 @@ jobs:
           python3 skills/agent-skills-setup/scripts/check-doc-freshness.py \
             --registry skills/agent-skills-setup/references/registry-v2.json \
             --checks skills/agent-skills-setup/references/doc-freshness-checks.json \
-            --online \
-            --retries 2 \
             --max-age-days 365 \
             --demote-stale \
             --report demote-report.json
