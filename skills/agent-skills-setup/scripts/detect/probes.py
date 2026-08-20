@@ -91,10 +91,49 @@ _SHARED_COMPATIBILITY_SUFFIXES = (
 def probe_file_signature(
     product: str,
     profile: str,
-    candidate_paths: Iterable[Path],
+    candidate_paths: Iterable[Path | str],
+    *,
+    workspace: Path | None = None,
+    home: Path | None = None,
 ) -> ProbeResult:
-    """Check whether any of the candidate paths exists on disk."""
-    for path in candidate_paths:
+    """Check whether any of the candidate paths exists on disk.
+
+    Supports exact paths, globs (e.g. ``github.copilot-*``), home resolution,
+    and workspace-relative resolution.
+    """
+    effective_home = home or Path.home()
+    for raw in candidate_paths:
+        p_str = str(raw)
+        if p_str.startswith("~"):
+            target_str = str(effective_home) + p_str[1:]
+        elif workspace is not None and not (p_str.startswith("/") or re.match(r"^[a-zA-Z]:", p_str)):
+            target_str = str(workspace / p_str)
+        else:
+            target_str = p_str
+
+        # Check for glob wildcard matching
+        if any(char in target_str for char in ("*", "?", "[")):
+            target_path = Path(target_str)
+            parent = target_path.parent
+            pattern = target_path.name
+            if parent.exists() and parent.is_dir():
+                matches = list(parent.glob(pattern))
+                if matches:
+                    matched = matches[0]
+                    p_posix = matched.as_posix()
+                    is_shared = (
+                        matched.name in _SHARED_COMPATIBILITY_NAMES
+                        or any(p_posix.endswith(suf) for suf in _SHARED_COMPATIBILITY_SUFFIXES)
+                    )
+                    state = (
+                        InstallState.COMPATIBILITY_ONLY
+                        if is_shared
+                        else (InstallState.INSTALLED if matched.is_dir() or matched.is_file() else InstallState.CONFIGURED_ONLY)
+                    )
+                    return ProbeResult(product, profile, state, (f"file:{matched}",))
+            continue
+
+        path = Path(target_str)
         if path.exists():
             # Distinguish shared/fallback paths from product-specific installation evidence
             p_posix = path.as_posix()
@@ -190,8 +229,9 @@ def detect_product(
     *,
     binary: Iterable[str] | None = None,
     version_command: Iterable[str] | None = None,
-    file_signature: Iterable[Path] | None = None,
+    file_signature: Iterable[Path | str] | None = None,
     home: Path | None = None,
+    workspace: Path | None = None,
     app_bundle_id: str | None = None,
 ) -> ProbeResult:
     """Run a small, deterministic detection probe for one product."""
@@ -202,17 +242,13 @@ def detect_product(
         if result.state is InstallState.INSTALLED:
             return result
     if file_signature:
-        candidates: list[Path] = []
-        for path in file_signature:
-            p_str = str(path)
-            if home is not None and p_str.startswith("~"):
-                rel_part = p_str.lstrip("~").lstrip("/\\")
-                candidates.append(home / rel_part)
-            elif p_str.startswith("~"):
-                candidates.append(Path(p_str).expanduser())
-            else:
-                candidates.append(Path(p_str))
-        result = probe_file_signature(product, profile, candidates)
+        result = probe_file_signature(
+            product,
+            profile,
+            file_signature,
+            workspace=workspace,
+            home=home,
+        )
         if result.state is not InstallState.NOT_DETECTED:
             return result
     if app_bundle_id:
@@ -228,18 +264,19 @@ def detect_profile(
     *,
     binaries: Iterable[str] = (),
     version_command: Iterable[str] | None = None,
-    file_signatures: Iterable[str] = (),
+    file_signatures: Iterable[str | Path] = (),
     home: Path | None = None,
+    workspace: Path | None = None,
     app_bundle_id: str | None = None,
 ) -> ProbeResult:
     """Convenience wrapper that accepts string paths and expands ``~``."""
-    sigs = [Path(p) for p in file_signatures]
     return detect_product(
         product,
         profile,
         binary=binaries,
         version_command=version_command,
-        file_signature=sigs,
+        file_signature=file_signatures,
         home=home,
+        workspace=workspace,
         app_bundle_id=app_bundle_id,
     )

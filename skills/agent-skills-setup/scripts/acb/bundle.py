@@ -28,6 +28,8 @@ import os
 import re
 import shutil
 import stat
+import tempfile
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -276,27 +278,80 @@ def sanitize_inventory_for_bundle(rows: list[dict[str, Any]]) -> list[dict[str, 
 def collect_requirements(
     inventory_rows: list[dict[str, Any]],
     plan_rows: list[dict[str, Any]],
+    objects_dir_files: dict[str, bytes] | None = None,
 ) -> dict[str, Any]:
     executables: set[str] = set()
     extensions: set[str] = set()
     packages: list[dict[str, str]] = []
     manual_installs: list[str] = []
-    for row in inventory_rows:
-        product = row.get("product")
-        if product and row.get("exists") and row.get("object_type") == "skills":
-            executables.add(product)
+
+    # 1. Inspect captured raw object files for MCP server requirements
+    if objects_dir_files:
+        for rel, data in objects_dir_files.items():
+            if rel.startswith("mcp/"):
+                try:
+                    doc = json.loads(data.decode("utf-8"))
+                    servers = doc.get("mcpServers") or doc.get("servers") or {}
+                    if isinstance(servers, dict):
+                        for _, s_cfg in servers.items():
+                            if isinstance(s_cfg, dict):
+                                cmd = s_cfg.get("command") or s_cfg.get("runner") or ""
+                                if cmd and not str(cmd).endswith(".json") and not str(cmd).startswith("~"):
+                                    executables.add(str(cmd))
+                                args = s_cfg.get("args") or []
+                                if isinstance(args, list):
+                                    for arg in args:
+                                        if isinstance(arg, str):
+                                            if arg.startswith("@") or "mcp-server" in arg:
+                                                packages.append({
+                                                    "manager": "npm" if cmd in ("npx", "npm", "node") else "auto",
+                                                    "name": arg,
+                                                })
+                                            elif arg.endswith(".py") or arg.endswith(".js"):
+                                                packages.append({"manager": "auto", "name": arg})
+                except Exception:
+                    pass
+
+    # 2. Inspect plan items to discover required tools & packages from disk sources
     for item in plan_rows:
-        if item.get("status") not in {"ready", "ready-lossy", "draft-disabled"}:
+        if item.get("status") not in {"ready", "ready-lossy", "draft-disabled", "manual-rebuild"}:
             continue
-        if item.get("object_type") == "mcp":
-            server = item.get("target") or {}
-            cmd = server.get("path") or ""
-            if cmd:
-                packages.append({"manager": "auto", "name": cmd})
+        obj_type = item.get("object_type")
+        if obj_type == "mcp":
+            src = item.get("source") or {}
+            resolved = src.get("resolved_path")
+            if resolved and Path(resolved).is_file():
+                try:
+                    raw_text = Path(resolved).read_text(encoding="utf-8")
+                    from migration_core import parse_mcp_document
+                    servers = parse_mcp_document(raw_text, src.get("source_format", "json:mcpServers"))
+                    for s in servers:
+                        if s.command and not str(s.command).endswith(".json") and not str(s.command).startswith("~"):
+                            executables.add(str(s.command))
+                        for arg in s.args:
+                            if isinstance(arg, str):
+                                if arg.startswith("@") or "mcp-server" in arg:
+                                    packages.append({
+                                        "manager": "npm" if s.command in ("npx", "npm", "node") else "auto",
+                                        "name": arg,
+                                    })
+                                elif arg.endswith(".py") or arg.endswith(".js"):
+                                    packages.append({"manager": "auto", "name": arg})
+                except Exception:
+                    pass
+
+    clean_packages = []
+    seen_pkg = set()
+    for p in packages:
+        key = (p.get("manager"), p.get("name"))
+        if key not in seen_pkg:
+            seen_pkg.add(key)
+            clean_packages.append(p)
+
     return {
         "executables": sorted(executables),
         "extensions": sorted(extensions),
-        "packages": packages,
+        "packages": clean_packages,
         "manual_installs": manual_installs,
         "platform_notes": [],
     }
@@ -347,76 +402,127 @@ def write_bundle(
     rebuild: list[dict[str, str]],
     objects_dir_files: dict[str, bytes] | None = None,
 ) -> Path:
-    """Write a fully-formed, closed-world ACB at ``bundle_root``."""
+    """Write a fully-formed, closed-world ACB at ``bundle_root`` atomically.
+
+    Staging & Atomic Swap (audit P1 & 0.8.25):
+    1. Writes all JSON payloads, object files, and checksums to a temporary staging directory
+       on the same filesystem.
+    2. Performs byte-level secret scanning and path containment checks during staging.
+    3. Runs verify_bundle() on the staged bundle.
+    4. Upon successful verification, atomically replaces staging into bundle_root.
+    5. If any error occurs during write or verification, cleans up staging without corrupting
+       any existing bundle_root.
+    """
     bundle_root = bundle_root.resolve()
-    bundle_root.mkdir(parents=True, exist_ok=True)
-    objects_root = bundle_root / ACB_OBJECTS_DIR
-    if objects_root.exists():
-        # Validate containment before removing existing objects staging directory
-        validate_path_containment(ACB_OBJECTS_DIR, bundle_root)
-        shutil.rmtree(objects_root)
-    objects_root.mkdir(parents=True)
+    parent_dir = bundle_root.parent
+    parent_dir.mkdir(parents=True, exist_ok=True)
 
-    # Sanitize inventory for portable bundle
-    portable_inventory = sanitize_inventory_for_bundle(inventory_rows)
+    staging_dir = Path(tempfile.mkdtemp(prefix=f".tmp_{bundle_root.name}_", dir=parent_dir))
+    try:
+        objects_root = staging_dir / ACB_OBJECTS_DIR
+        objects_root.mkdir(parents=True, exist_ok=True)
 
-    json_payloads: dict[str, dict[str, Any]] = {
-        ACB_MANIFEST_NAME: manifest.to_dict(),
-        ACB_INVENTORY_NAME: {"rows": portable_inventory},
-        ACB_COMPATIBILITY_NAME: compatibility,
-        ACB_REQUIREMENTS_NAME: requirements,
-        ACB_SECRETS_NAME: {"items": secrets_required},
-        ACB_REAUTH_NAME: {"items": reauth},
-        ACB_REBUILD_NAME: {"items": rebuild},
-    }
-    for name, payload in json_payloads.items():
-        assert_no_lateral_secrets(payload)
-        (bundle_root / name).write_text(
-            json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        # Sanitize inventory for portable bundle
+        portable_inventory = sanitize_inventory_for_bundle(inventory_rows)
+
+        # Build 1:1 object-to-file mapping for manifest
+        enriched_manifest_objects = []
+        for obj in manifest.objects:
+            obj_dict = dict(obj)
+            if "files" not in obj_dict:
+                obj_files = []
+                obj_type = obj_dict.get("surface") or obj_dict.get("object_type", "")
+                prod = obj_dict.get("product", "")
+                prof = obj_dict.get("profile", "")
+                scp = obj_dict.get("scope", "")
+                prefix = f"{obj_type}/{prod}/{prof}/{scp}/"
+                for rel_path, data in sorted((objects_dir_files or {}).items()):
+                    if rel_path.startswith(prefix) or (obj_type and rel_path.startswith(f"{obj_type}/")):
+                        obj_files.append({
+                            "path": f"{ACB_OBJECTS_DIR}/{Path(rel_path).as_posix()}",
+                            "sha256": hashlib.sha256(data).hexdigest(),
+                        })
+                obj_dict["files"] = obj_files
+            enriched_manifest_objects.append(obj_dict)
+
+        manifest_payload = manifest.to_dict()
+        manifest_payload["objects"] = enriched_manifest_objects
+
+        json_payloads: dict[str, dict[str, Any]] = {
+            ACB_MANIFEST_NAME: manifest_payload,
+            ACB_INVENTORY_NAME: {"rows": portable_inventory},
+            ACB_COMPATIBILITY_NAME: compatibility,
+            ACB_REQUIREMENTS_NAME: requirements,
+            ACB_SECRETS_NAME: {"items": secrets_required},
+            ACB_REAUTH_NAME: {"items": reauth},
+            ACB_REBUILD_NAME: {"items": rebuild},
+        }
+        for name, payload in json_payloads.items():
+            assert_no_lateral_secrets(payload)
+            (staging_dir / name).write_text(
+                json.dumps(payload, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+        # Verify and write raw object files with byte-level scanning
+        total_bytes = 0
+        file_count = 0
+        if objects_dir_files:
+            for relative, data in sorted(objects_dir_files.items()):
+                file_count += 1
+                total_bytes += len(data)
+                if file_count > MAX_BUNDLE_FILES:
+                    raise ACBError(f"bundle file count exceeded limit ({MAX_BUNDLE_FILES})")
+                if len(data) > MAX_FILE_SIZE:
+                    raise ACBError(f"file size exceeded limit ({MAX_FILE_SIZE} bytes): {relative}")
+                if total_bytes > MAX_TOTAL_SIZE:
+                    raise ACBError(f"bundle total size exceeded limit ({MAX_TOTAL_SIZE} bytes)")
+
+                # Strict byte-level secret and binary scan
+                scan_object_bytes(data, relative)
+
+                # Strict path containment check
+                target = validate_path_containment(relative, objects_root)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(data)
+
+        # Post-write directory-wide secret scan
+        for p in staging_dir.rglob("*"):
+            if p.is_file() and p.name != ACB_CHECKSUMS_NAME:
+                scan_object_bytes(p.read_bytes(), str(p.relative_to(staging_dir)))
+
+        # Compute checksums for all written files
+        checksums: dict[str, str] = {}
+        for name in ACB_JSON_FILES:
+            checksums[name] = sha256_file(staging_dir / name)
+        for relative_path in sorted((objects_dir_files or {}).keys()):
+            norm_path = Path(relative_path).as_posix()
+            checksums[f"{ACB_OBJECTS_DIR}/{norm_path}"] = sha256_file(
+                objects_root / norm_path
+            )
+        (staging_dir / ACB_CHECKSUMS_NAME).write_text(
+            json.dumps(checksums, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
 
-    # Verify and write raw object files with byte-level scanning
-    total_bytes = 0
-    file_count = 0
-    if objects_dir_files:
-        for relative, data in sorted(objects_dir_files.items()):
-            file_count += 1
-            total_bytes += len(data)
-            if file_count > MAX_BUNDLE_FILES:
-                raise ACBError(f"bundle file count exceeded limit ({MAX_BUNDLE_FILES})")
-            if len(data) > MAX_FILE_SIZE:
-                raise ACBError(f"file size exceeded limit ({MAX_FILE_SIZE} bytes): {relative}")
-            if total_bytes > MAX_TOTAL_SIZE:
-                raise ACBError(f"bundle total size exceeded limit ({MAX_TOTAL_SIZE} bytes)")
+        # Validate staging directory before atomic replace
+        verify_errors = verify_bundle(staging_dir)
+        if verify_errors:
+            raise ACBIntegrityError(f"staged bundle failed verification: {verify_errors}")
 
-            # Strict byte-level secret and binary scan
-            scan_object_bytes(data, relative)
+        # Atomic replace
+        if bundle_root.exists():
+            if bundle_root.is_dir():
+                shutil.rmtree(bundle_root)
+            else:
+                bundle_root.unlink()
+        staging_dir.rename(bundle_root)
+        return bundle_root
 
-            # Strict path containment check
-            target = validate_path_containment(relative, objects_root)
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(data)
-
-    # Post-write directory-wide secret scan
-    for p in bundle_root.rglob("*"):
-        if p.is_file() and p.name != ACB_CHECKSUMS_NAME:
-            scan_object_bytes(p.read_bytes(), str(p.relative_to(bundle_root)))
-
-    # Compute checksums for all written files
-    checksums: dict[str, str] = {}
-    for name in ACB_JSON_FILES:
-        checksums[name] = sha256_file(bundle_root / name)
-    for relative_path in sorted((objects_dir_files or {}).keys()):
-        norm_path = Path(relative_path).as_posix()
-        checksums[f"{ACB_OBJECTS_DIR}/{norm_path}"] = sha256_file(
-            objects_root / norm_path
-        )
-    (bundle_root / ACB_CHECKSUMS_NAME).write_text(
-        json.dumps(checksums, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    return bundle_root
+    except Exception:
+        if staging_dir.exists():
+            shutil.rmtree(staging_dir, ignore_errors=True)
+        raise
 
 
 def collect_source_objects(
@@ -433,14 +539,26 @@ def collect_source_objects(
 ) -> dict[str, bytes]:
     """Walk existing inventory rows and copy source files into stable paths under ``objects/``.
 
-    Strict Allowlist (audit P0-2):
+    Strict Allowlist (audit P0-2 & 0.8.25):
     - Refuses forbidden policies (forbidden-regenerate, never-migrate, source-only, etc.)
     - Refuses non-migratable types (generated_memory, session, chat, runtime, database, trust, etc.)
     - Only collects requested scopes and requested object types
     - Only collects objects that match the planned migration items when plan_items is provided
+    - Strictly reports subobject parse errors instead of silently swallowing them
     """
     objects: dict[str, bytes] = {}
     plan_object_types = {item.get("object_type") for item in plan_items} if plan_items else None
+    planned_sources: set[tuple[str, str, str, str]] = set()
+    if plan_items:
+        for item in plan_items:
+            s = item.get("source") or {}
+            obj_t = item.get("object_type", "")
+            prod = s.get("product", "")
+            prof = s.get("profile", "")
+            scp = s.get("scope", "")
+            if prod and scp:
+                planned_sources.add((prod, prof, obj_t, scp))
+
     for row in rows:
         if not row.get("exists"):
             continue
@@ -452,6 +570,8 @@ def collect_source_objects(
         object_type = row.get("object_type") or "unknown"
         policy = row.get("policy") or ""
         scope = row.get("scope") or "unknown"
+        product = row.get("product") or "unknown"
+        profile = row.get("profile") or "default"
 
         # P0-2: Strict snapshot allowlist
         if policy in FORBIDDEN_SNAPSHOT_POLICIES:
@@ -464,6 +584,8 @@ def collect_source_objects(
             continue
         if plan_object_types is not None and object_type not in plan_object_types:
             continue
+        if plan_items and planned_sources and (product, profile, object_type, scope) not in planned_sources:
+            continue
 
         resolved = row.get("resolved_path")
         if not isinstance(resolved, str):
@@ -472,8 +594,6 @@ def collect_source_objects(
         if not source_path.exists() or source_path.is_symlink():
             continue
 
-        product = row.get("product") or "unknown"
-        profile = row.get("profile") or "default"
         canonical = row.get("canonical_path") or source_path.name
         relative = _path_for_object(object_type, product, profile, scope, canonical)
 
@@ -492,8 +612,8 @@ def collect_source_objects(
                             servers = parse_mcp_document(raw_text, format_name)
                             emitted_text, _ = emit_mcp_document(servers, format_name)
                             objects[relative] = emitted_text.encode("utf-8")
-                        except Exception:
-                            pass
+                        except Exception as error:
+                            raise ACBError(f"failed to extract MCP subobject from {source_path}: {error}") from error
                     elif object_type == "instructions":
                         try:
                             from migration_core import parse_instruction, emit_instruction
@@ -501,8 +621,8 @@ def collect_source_objects(
                             instruction = parse_instruction(raw_text, format_name, scope, storage)
                             emitted_text, _ = emit_instruction(instruction, format_name)
                             objects[relative] = emitted_text.encode("utf-8")
-                        except Exception:
-                            pass
+                        except Exception as error:
+                            raise ACBError(f"failed to extract instruction subobject from {source_path}: {error}") from error
                     else:
                         # Refuse to copy raw host config files for unsupported subobject types
                         pass
@@ -696,6 +816,40 @@ def verify_bundle(bundle_root: Path) -> list[str]:
             errors.append(
                 f"object total size exceeded limit ({MAX_TOTAL_SIZE} bytes)"
             )
+
+    # 4. Closed-world 1:1 Manifest-to-Objects verification
+    manifest_path = bundle_root / ACB_MANIFEST_NAME
+    if manifest_path.is_file() and not manifest_path.is_symlink():
+        try:
+            manifest_data = json.loads(manifest_path.read_text(encoding="utf-8"))
+            declared_objects = manifest_data.get("objects", [])
+            manifest_files: set[str] = set()
+            for obj in declared_objects:
+                for file_entry in obj.get("files", []):
+                    rel_p = file_entry.get("path", "")
+                    if rel_p:
+                        manifest_files.add(rel_p)
+                        expected_sha = file_entry.get("sha256")
+                        disk_p = bundle_root / rel_p
+                        if not disk_p.is_file():
+                            errors.append(f"manifest declared file missing on disk: {rel_p}")
+                        elif expected_sha:
+                            actual_sha = sha256_file(disk_p)
+                            if actual_sha != expected_sha:
+                                errors.append(
+                                    f"manifest file sha256 mismatch for {rel_p}: expected {expected_sha}, got {actual_sha}"
+                                )
+
+            # If manifest declared specific object files, ensure no undeclared files exist in objects/
+            objects_root = bundle_root / ACB_OBJECTS_DIR
+            if objects_root.is_dir() and manifest_files:
+                for disk_file in sorted(objects_root.rglob("*")):
+                    if disk_file.is_file():
+                        rel = f"{ACB_OBJECTS_DIR}/{disk_file.relative_to(objects_root).as_posix()}"
+                        if rel not in manifest_files:
+                            errors.append(f"unclaimed file in objects directory not declared in manifest: {rel}")
+        except Exception as error:
+            errors.append(f"manifest verification error: {error}")
 
     return errors
 

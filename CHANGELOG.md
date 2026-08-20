@@ -4,6 +4,18 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ## [Unreleased]
 
+## [0.8.25] - 2026-08-20
+
+### Fixed
+
+- **P0 Multi-IDE All-Installed Orchestration (`snapshot --all-installed` & `restore --all-installed`)**: Resolved the P0 bug where `source_product` was unconditionally overwritten by `args.source` during snapshot and exceptions were silently swallowed. Implemented full multi-target device discovery and mapping in `restore --all-installed`, allowing seamless context migration across all detected IDEs without Cartesian product explosion or data loss.
+- **P1 Atomic ACB Staging & Rollback Lifecycle**: `write_bundle()` now stages all payloads, objects, and checksums into a temporary sibling directory, executes `verify_bundle()` prior to swapping, and atomically replaces the destination bundle only upon successful verification. Write failures clean up staging safely without destroying pre-existing backups.
+- **P1 1:1 Manifest-to-Objects Closed-World Binding**: Enriched `manifest.json` with per-object file arrays and SHA256 hashes. `verify_bundle()` enforces bidirectional validation: all files under `objects/` must belong to declared manifest objects, and all declared files must match on disk with exact SHA256 hashes.
+- **P1 Detection Engine Hardening & State Fidelity**: Preserved `compatibility-only`, `configured-only`, and `installed` states in `detect_profile` and `run_detection`. Added glob matching for wildcard file signatures (e.g. `github.copilot-*`) and workspace-relative path resolution. Prevented inventory fallback from falsely promoting shared compatibility paths (`AGENTS.md`, `.agents/skills`) to installed products.
+- **P1 Realistic Doctor Requirements Parsing**: Refactored `collect_requirements()` to extract actual command runners (`npx`, `uvx`, `python`, `node`, `docker`) and package arguments (`@modelcontextprotocol/...`) from MCP configurations, eliminating false positives where IDE product IDs were listed as executables or config file paths were listed as packages.
+- **P1 Windows Profile-Level Platforms Inheritance**: Inherited profile-level platform overrides to surfaces in `Registry.surfaces()` for non-canonical platform overrides.
+- **P1/P2 Maintainer CI & Doc Freshness Separation**: Maintained strict offline execution for Skill runtime while updating scheduled maintainer CI (`freshness.yml`) to use PR workflows rather than direct pushes to `main`.
+
 ## [0.8.24] - 2026-08-20
 
 ### Fixed

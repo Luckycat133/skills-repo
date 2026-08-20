@@ -639,6 +639,7 @@ class Registry:
 
     def surfaces(self, selector: str, object_type: str) -> list[SurfacePath]:
         product_id, profile_id, profile = self.profile(selector)
+        profile_platforms = profile.get("platforms") or profile.get("platform_paths") or {}
         entries = profile.get("surfaces", {}).get(object_type, [])
         surfaces: list[SurfacePath] = []
         for entry in entries:
@@ -647,6 +648,28 @@ class Registry:
             seen_paths: set[Path] = set()
             for precedence, candidate_path in enumerate(candidates):
                 candidate_entry = dict(entry)
+                if not candidate_entry.get("platforms") and profile_platforms:
+                    derived_platforms = {}
+                    for plat, plat_path in profile_platforms.items():
+                        if plat in ("windows", "wsl", "remote-ssh", "dev-container", "codespaces", "vscode-profile", "extension-host"):
+                            if object_type == "skills":
+                                derived_platforms[plat] = plat_path
+                            else:
+                                plat_base_str = str(plat_path).rstrip("/\\")
+                                if plat_base_str.endswith("/skills") or plat_base_str.endswith("\\skills"):
+                                    base = plat_base_str[:-7]
+                                else:
+                                    base = plat_base_str
+                                if candidate_path.startswith("~/.") or candidate_path.startswith("~/"):
+                                    rel_sub = candidate_path.split("/", 1)[-1]
+                                    if "/" in rel_sub:
+                                        sub = rel_sub.split("/", 1)[1]
+                                        derived_platforms[plat] = f"{base}/{sub}"
+                                    else:
+                                        derived_platforms[plat] = base
+                    if derived_platforms:
+                        candidate_entry["platforms"] = derived_platforms
+
                 candidate_entry["path"] = candidate_path
                 if precedence:
                     candidate_entry.pop("override_env", None)
@@ -2873,19 +2896,89 @@ def validate_plan_document(
         isinstance(item, str) for item in object_types
     ):
         raise ValueError("plan objects must be an array of strings")
-    items, losses = build_plan(
-        src_reg,
-        str(document.get("source")),
-        str(document.get("target")),
-        object_types,
-        str(document.get("scope")),
-        target_registry=registry,
-    )
+    source_sel = str(document.get("source"))
+    target_sel = str(document.get("target"))
     stored_items = document.get("items")
     if not isinstance(stored_items, list) or not all(
         isinstance(item, dict) for item in stored_items
     ):
         raise ValueError("plan items must be an array")
+
+    if source_sel in ("all-installed", "auto") or target_sel in ("all-installed", "auto"):
+        items: list[PlanItem] = []
+        for stored in stored_items:
+            src_dict = stored.get("source")
+            tgt_dict = stored.get("target")
+            src_surf = (
+                SurfacePath(
+                    product=src_dict["product"],
+                    profile=src_dict["profile"],
+                    object_type=src_dict["object_type"],
+                    scope=src_dict["scope"],
+                    storage=src_dict["storage"],
+                    path=src_dict["path"],
+                    resolved_path=Path(src_dict["resolved_path"]),
+                    boundary=Path(src_dict["boundary"]),
+                    source_format=src_dict["source_format"],
+                    policy=src_dict["policy"],
+                    location_role=src_dict.get("location_role", "canonical"),
+                    canonical_path=src_dict.get("canonical_path", src_dict["path"]),
+                    precedence=src_dict.get("precedence", 0),
+                )
+                if src_dict
+                else None
+            )
+            tgt_surf = (
+                SurfacePath(
+                    product=tgt_dict["product"],
+                    profile=tgt_dict["profile"],
+                    object_type=tgt_dict["object_type"],
+                    scope=tgt_dict["scope"],
+                    storage=tgt_dict["storage"],
+                    path=tgt_dict["path"],
+                    resolved_path=Path(tgt_dict["resolved_path"]),
+                    boundary=Path(tgt_dict["boundary"]),
+                    source_format=tgt_dict["source_format"],
+                    policy=tgt_dict["policy"],
+                    location_role=tgt_dict.get("location_role", "canonical"),
+                    canonical_path=tgt_dict.get("canonical_path", tgt_dict["path"]),
+                    precedence=tgt_dict.get("precedence", 0),
+                )
+                if tgt_dict
+                else None
+            )
+            item = PlanItem(
+                object_type=stored["object_type"],
+                status=stored["status"],
+                reason=stored["reason"],
+                source=src_surf,
+                target=tgt_surf,
+                manual_actions=stored.get("manual_actions", []),
+                object_id=stored.get("object_id", ""),
+            )
+            if item.source is not None:
+                if stored.get("source_state") != path_state(item.source.resolved_path):
+                    raise ValueError(
+                        f"source changed after plan review: {item.source.resolved_path}"
+                    )
+                item.expected_source_state = stored.get("source_state")
+            if item.target is not None:
+                if stored.get("target_state") != path_state(item.target.resolved_path):
+                    raise ValueError(
+                        f"target changed after plan review: {item.target.resolved_path}"
+                    )
+                item.expected_target_state = stored.get("target_state")
+            items.append(item)
+        return items, LossReport()
+
+    items, losses = build_plan(
+        src_reg,
+        source_sel,
+        target_sel,
+        object_types,
+        str(document.get("scope")),
+        target_registry=registry,
+    )
     if _core_plan_items(stored_items) != _core_plan_items([item.to_dict() for item in items]):
         raise ValueError("resolved plan changed after review")
     for stored, item in zip(stored_items, items):

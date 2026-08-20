@@ -6,6 +6,7 @@
 # Local tooling / private state
 .workbuddy/
 .superpowers/
+.claude/
 /datasets/
 
 # Secrets / environment (migration scripts write OpenClaw config/.env)

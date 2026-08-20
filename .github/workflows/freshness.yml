@@ -59,10 +59,11 @@ jobs:
 
   stale-demotion:
     needs: freshness-check
-    if: github.event.inputs.demote_stale == 'true' || github.event_name == 'schedule'
+    if: always() && (github.event.inputs.demote_stale == 'true' || github.event_name == 'schedule')
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # Need to push updated registry
+      contents: write
+      pull-requests: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -99,14 +100,23 @@ jobs:
             git diff skills/agent-skills-setup/references/registry-v2.json
           fi
 
-      - name: Commit and push changes
+      - name: Create Pull Request for Stale Demotions
         if: steps.changes.outputs.modified == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.github.com"
+          BRANCH="chore/demote-stale-profiles-$(date +%Y%m%d%H%M%S)"
+          git checkout -b "$BRANCH"
           git add skills/agent-skills-setup/references/registry-v2.json
-          git commit -m "chore: demote stale profiles [skip ci]"
-          git push
+          git commit -m "chore: demote stale profiles"
+          git push origin "$BRANCH"
+          gh pr create \
+            --title "chore: demote stale profiles [$(date +%Y-%m-%d)]" \
+            --body "Automated freshness check identified stale profiles and demoted them. Please review before merging." \
+            --head "$BRANCH" \
+            --base main || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload demotion report
         uses: actions/upload-artifact@v4

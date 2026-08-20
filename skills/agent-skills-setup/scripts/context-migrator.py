@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
@@ -19,6 +20,7 @@ if _SCRIPT_DIR not in sys.path:
     sys.path.insert(0, _SCRIPT_DIR)
 
 from migration_core import (
+    ADAPTER_VERSIONS,
     KNOWN_COMMANDS,
     Registry,
     apply_plan,
@@ -26,11 +28,15 @@ from migration_core import (
     build_plan,
     build_plan_document,
     choose_surface,
+    git_provenance,
+    hash_path,
+    json_sha256,
     load_plan_document,
     paths_overlap,
     rollback_manifest,
     validate_plan_document,
     verify_manifest,
+    _plan_hash_payload,
 )
 
 from acb.bundle import (
@@ -371,6 +377,14 @@ def run_detection(args: argparse.Namespace) -> int:
     for product_id, product in registry.products.items():
         for profile_id in product.get("profiles", {}):
             profiles_to_check.add((product_id, profile_id))
+
+    filter_prod = getattr(args, "product", None)
+    filter_prof = getattr(args, "profile", None)
+    if filter_prod:
+        profiles_to_check = {p for p in profiles_to_check if p[0] == filter_prod}
+    if filter_prof:
+        profiles_to_check = {p for p in profiles_to_check if p[1] == filter_prof}
+
     detections: list[dict[str, str]] = []
     for product_id, profile_id in sorted(profiles_to_check):
         product = registry.products[product_id]
@@ -391,48 +405,49 @@ def run_detection(args: argparse.Namespace) -> int:
                     product_id, profile_id, names,
                     version_command=version_command,
                 )
-                if result.state is InstallState.INSTALLED:
+                if result.state is not InstallState.NOT_DETECTED:
                     state = result.state
                     evidence.extend(result.evidence)
-                    break
+                    if result.state is InstallState.INSTALLED:
+                        break
             elif kind == "file-signature":
                 paths = probe.get("paths") or []
-                resolved_paths = []
-                for p in paths:
-                    raw = str(p)
-                    if raw.startswith("~"):
-                        resolved_paths.append(
-                            Path(str(home) + raw[1:]).expanduser()
-                        )
-                    else:
-                        resolved_paths.append(Path(raw).expanduser())
                 result = probe_file_signature(
-                    product_id, profile_id, resolved_paths,
+                    product_id, profile_id, paths,
+                    workspace=workspace, home=home,
                 )
-                if result.state is InstallState.INSTALLED:
+                if result.state is not InstallState.NOT_DETECTED:
                     state = result.state
                     evidence.extend(result.evidence)
-                    break
+                    if result.state is InstallState.INSTALLED:
+                        break
             elif kind == "app-bundle":
                 result = detect_product(
                     product_id, profile_id,
                     app_bundle_id=probe.get("darwin_bundle_id"),
                 )
-                if result.state is InstallState.INSTALLED:
+                if result.state is not InstallState.NOT_DETECTED:
                     state = result.state
                     evidence.extend(result.evidence)
-                    break
+                    if result.state is InstallState.INSTALLED:
+                        break
+
         if state is InstallState.NOT_DETECTED:
-            # Fall back to inventory ``exists`` on any surface.
+            # Fall back to inventory ``exists`` checking role
             for row in rows:
                 if (
                     row.get("product") == product_id
                     and row.get("profile") == profile_id
                     and row.get("exists")
                 ):
-                    state = InstallState.INSTALLED
+                    c_path = row.get("canonical_path", "")
+                    role = row.get("location_role", "canonical")
+                    if c_path in ("AGENTS.md", ".agents/skills", ".agents") or role != "canonical":
+                        state = InstallState.COMPATIBILITY_ONLY
+                    else:
+                        state = InstallState.INSTALLED
                     evidence.append(
-                        f"inventory:{row.get('object_type')}:{row.get('canonical_path')}"
+                        f"inventory:{row.get('object_type')}:{c_path}"
                     )
                     break
         detections.append(
@@ -491,8 +506,38 @@ def run_snapshot(args: argparse.Namespace) -> int:
 
     if all_installed:
         # Auto-orchestrate snapshot across all installed products
+        from detect.probes import detect_profile, InstallState
+        detected_prods: set[str] = set()
+        for prod_id, prod in registry.products.items():
+            for prof_id, prof in prod.get("profiles", {}).items():
+                detection = prof.get("detection", []) or []
+                for probe in detection:
+                    if isinstance(probe, dict):
+                        paths = probe.get("paths", [])
+                        binaries = probe.get("command") or probe.get("binaries") or []
+                        if isinstance(binaries, str):
+                            binaries = [binaries]
+                        res = detect_profile(
+                            prod_id,
+                            prof_id,
+                            binaries=binaries,
+                            file_signatures=paths,
+                            home=registry.home,
+                            workspace=workspace,
+                            app_bundle_id=probe.get("darwin_bundle_id"),
+                        )
+                        if res.state in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY):
+                            detected_prods.add(prod_id)
+                            break
+        for row in detect_rows:
+            if row.get("exists") and row.get("location_role", "canonical") == "canonical":
+                detected_prods.add(row["product"])
+        if not detected_prods:
+            detected_prods = {row["product"] for row in detect_rows if row.get("exists")}
+
         plan_rows = []
-        installed_prods = sorted({row["product"] for row in detect_rows if row.get("exists")})
+        failed_products = []
+        installed_prods = sorted(detected_prods)
         for prod in installed_prods:
             try:
                 doc = build_plan_document(
@@ -503,8 +548,8 @@ def run_snapshot(args: argparse.Namespace) -> int:
                     args.scope,
                 )
                 plan_rows.extend(doc.get("items", []))
-            except Exception:
-                pass
+            except Exception as error:
+                failed_products.append({"product": prod, "error": str(error)})
     else:
         document = build_plan_document(
             registry,
@@ -555,22 +600,14 @@ def run_snapshot(args: argparse.Namespace) -> int:
         inventory_summary=inventory_summary,
         objects=manifest_objects,
     )
-    compatibility = {"products": sorted(registry.products.keys())}
-    requirements = collect_requirements(inventory_rows, plan_rows)
-    reauth = collect_reauth(plan_rows)
-    rebuild = collect_rebuild(plan_rows)
-    secrets_required = [
-        {
-            "name": action.get("object_id", ""),
-            "used_by": [],
-            "recommended_storage": "environment-or-keychain",
-        }
-        for action in reauth
-    ]
-    # Copy source files under objects/ using strict allowlist (audit P0-2).
-    source_product, source_profile = (
-        args.source.split("/", 1) if "/" in args.source else (args.source, None)
-    )
+    # Copy source files under objects/ using strict allowlist (audit P0-2 & 0.8.25).
+    if not all_installed:
+        source_product, source_profile = (
+            args.source.split("/", 1) if "/" in args.source else (args.source, None)
+        )
+    else:
+        source_product, source_profile = None, None
+
     objects_dir_files = collect_source_objects(
         registry,
         inventory_rows,
@@ -582,6 +619,19 @@ def run_snapshot(args: argparse.Namespace) -> int:
         allowed_object_types=allowed_object_types,
         plan_items=plan_rows,
     )
+
+    compatibility = {"products": sorted(registry.products.keys())}
+    requirements = collect_requirements(inventory_rows, plan_rows, objects_dir_files=objects_dir_files)
+    reauth = collect_reauth(plan_rows)
+    rebuild = collect_rebuild(plan_rows)
+    secrets_required = [
+        {
+            "name": action.get("object_id", ""),
+            "used_by": [],
+            "recommended_storage": "environment-or-keychain",
+        }
+        for action in reauth
+    ]
     try:
         write_bundle(
             bundle_root=bundle_root,
@@ -655,6 +705,7 @@ def run_restore(args: argparse.Namespace) -> int:
     target_registry = Registry(args.registry, workspace)
     detected = [row for row in target_registry.inventory(None) if row.get("exists")]
 
+    all_installed = getattr(args, "all_installed", False) or args.target in ("auto", "all-installed")
     source_sel = args.source or "cline/ide"
     target_sel = args.target or "forge/cli"
     object_types = resolve_objects(getattr(args, "objects", "skills,instructions,mcp"))
@@ -695,7 +746,7 @@ def run_restore(args: argparse.Namespace) -> int:
                     parts = rel.parts
                     if len(parts) >= 5:
                         obj_t, prod, prof, scp = parts[0], parts[1], parts[2], parts[3]
-                        if (prod == source_prod or prod in source_sel) and (
+                        if (all_installed or prod == source_prod or prod in source_sel) and (
                             scp.lower() in requested_scopes
                         ):
                             target_staged = temp_source_dir / Path(*parts[4:])
@@ -709,6 +760,94 @@ def run_restore(args: argparse.Namespace) -> int:
         plan_in = getattr(args, "plan_in", None)
         if plan_in:
             document = load_plan_document(plan_in.resolve())
+            plan_items, _ = validate_plan_document(
+                document, target_registry, source_registry=source_registry
+            )
+        elif all_installed:
+            # Multi-target all-installed restore: detect installed target IDEs on Device B
+            from detect.probes import detect_profile, InstallState
+            target_detected_prods: set[str] = set()
+            for prod_id, prod in target_registry.products.items():
+                for prof_id, prof in prod.get("profiles", {}).items():
+                    detection = prof.get("detection", []) or []
+                    for probe in detection:
+                        if isinstance(probe, dict):
+                            paths = probe.get("paths", [])
+                            binaries = probe.get("command") or probe.get("binaries") or []
+                            if isinstance(binaries, str):
+                                binaries = [binaries]
+                            res = detect_profile(
+                                prod_id,
+                                prof_id,
+                                binaries=binaries,
+                                file_signatures=paths,
+                                home=target_registry.home,
+                                workspace=workspace,
+                                app_bundle_id=probe.get("darwin_bundle_id"),
+                            )
+                            if res.state in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY):
+                                target_detected_prods.add(prod_id)
+                                break
+            for row in detected:
+                if row.get("exists") and row.get("location_role", "canonical") == "canonical":
+                    target_detected_prods.add(row["product"])
+            if not target_detected_prods:
+                target_detected_prods = {row["product"] for row in detected if row.get("exists")}
+            if not target_detected_prods:
+                target_detected_prods = {"forge"}
+
+            bundle_source_prods = sorted({
+                obj.get("product") for obj in manifest.objects if obj.get("product")
+            }) or [source_sel.split("/")[0]]
+
+            all_items: list[dict[str, Any]] = []
+            seen_target_paths: set[str] = set()
+            for tgt_prod in sorted(target_detected_prods):
+                tgt_prof = target_registry.products.get(tgt_prod, {}).get("default_profile", "cli")
+                tgt_selector = f"{tgt_prod}/{tgt_prof}"
+                for src_prod in bundle_source_prods:
+                    try:
+                        doc = build_plan_document(
+                            source_registry,
+                            src_prod,
+                            tgt_selector,
+                            object_types,
+                            args.scope,
+                            target_registry=target_registry,
+                        )
+                        for item in doc.get("items", []):
+                            target_path = (item.get("target") or {}).get("resolved_path")
+                            if target_path and target_path in seen_target_paths:
+                                continue
+                            if target_path:
+                                seen_target_paths.add(target_path)
+                            all_items.append(item)
+                    except Exception:
+                        pass
+
+            document = {
+                "schema_version": 1,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "workspace": str(target_registry.workspace),
+                "source": "all-installed",
+                "source_profile": "all",
+                "source_support_level": "bidirectional-reviewed",
+                "target": "all-installed",
+                "target_profile": "all",
+                "target_support_level": "bidirectional-reviewed",
+                "scope": args.scope or "user,project",
+                "objects": object_types,
+                "registry_sha256": hash_path(target_registry.path),
+                "adapter_versions": ADAPTER_VERSIONS,
+                "git_provenance": git_provenance(target_registry.workspace),
+                "items": all_items,
+                "loss_report": {"dropped_fields": [], "warnings": []},
+                "rebuild_manifest": {
+                    "credential_policy": "references-only; never include literal credentials",
+                    "items": [],
+                },
+            }
+            document["plan_sha256"] = json_sha256(_plan_hash_payload(document))
             plan_items, _ = validate_plan_document(
                 document, target_registry, source_registry=source_registry
             )
