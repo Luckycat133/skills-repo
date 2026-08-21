@@ -505,9 +505,15 @@ def run_snapshot(args: argparse.Namespace) -> int:
     )
 
     if all_installed:
-        # Auto-orchestrate snapshot across all installed products
+        # Auto-orchestrate snapshot across all detected and installed products.
+        #
+        # Audit P0-3 (0.8.27): detection result is the SINGLE source of truth.
+        # inventory_rows.exists must NEVER be used as a fallback to claim
+        # "installed" — that previously masked failing detection probes and
+        # produced bundles that claimed to contain a product with no files.
         from detect.probes import detect_profile, InstallState
         detected_prods: set[str] = set()
+        detection_status: dict[str, str] = {}
         for prod_id, prod in registry.products.items():
             for prof_id, prof in prod.get("profiles", {}).items():
                 detection = prof.get("detection", []) or []
@@ -526,19 +532,22 @@ def run_snapshot(args: argparse.Namespace) -> int:
                             workspace=workspace,
                             app_bundle_id=probe.get("darwin_bundle_id"),
                         )
-                        if res.state in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY):
+                        # Record the FIRST probe's state per (product, profile)
+                        # — products without detection probes will retain the
+                        # default NOT_DETECTED state.
+                        detection_status.setdefault(
+                            prod_id, res.state.value
+                        )
+                        if res.state in (
+                            InstallState.INSTALLED,
+                            InstallState.CONFIGURED_ONLY,
+                        ):
                             detected_prods.add(prod_id)
-                            break
-        for row in detect_rows:
-            if row.get("exists") and row.get("location_role", "canonical") == "canonical":
-                detected_prods.add(row["product"])
-        if not detected_prods:
-            detected_prods = {row["product"] for row in detect_rows if row.get("exists")}
+                        break
 
-        plan_rows = []
-        failed_products = []
-        installed_prods = sorted(detected_prods)
-        for prod in installed_prods:
+        plan_rows: list[dict[str, Any]] = []
+        failed_products: list[dict[str, str]] = []
+        for prod in sorted(detected_prods):
             try:
                 doc = build_plan_document(
                     registry,
@@ -549,7 +558,14 @@ def run_snapshot(args: argparse.Namespace) -> int:
                 )
                 plan_rows.extend(doc.get("items", []))
             except Exception as error:
+                # Audit P1-2: never silently swallow per-product plan build
+                # failures. Capture and surface them so the snapshot summary
+                # can report parse_failed / plan_failed per product.
                 failed_products.append({"product": prod, "error": str(error)})
+                print(
+                    f"WARNING: failed to build plan for {prod}: {error}",
+                    file=sys.stderr,
+                )
     else:
         document = build_plan_document(
             registry,
@@ -560,12 +576,16 @@ def run_snapshot(args: argparse.Namespace) -> int:
         )
         plan_rows = document.get("items", [])
     inventory_summary = {
-        "installed_products": sorted(
-            {row["product"] for row in detect_rows}
+        "installed_products": (
+            sorted(detected_prods)
+            if all_installed
+            else sorted({row["product"] for row in detect_rows})
         ),
         "surface_count": sum(
             1 for row in inventory_rows if row.get("object_type")
         ),
+        "detection_status": detection_status if all_installed else {},
+        "failed_products": failed_products if all_installed else [],
     }
 
     # Only include authorized, planned objects in manifest
@@ -608,7 +628,7 @@ def run_snapshot(args: argparse.Namespace) -> int:
     else:
         source_product, source_profile = None, None
 
-    objects_dir_files = collect_source_objects(
+    objects_dir_files, collect_summary = collect_source_objects(
         registry,
         inventory_rows,
         home=registry.home,
@@ -621,7 +641,9 @@ def run_snapshot(args: argparse.Namespace) -> int:
     )
 
     compatibility = {"products": sorted(registry.products.keys())}
-    requirements = collect_requirements(inventory_rows, plan_rows, objects_dir_files=objects_dir_files)
+    requirements, requirements_summary = collect_requirements(
+        inventory_rows, plan_rows, objects_dir_files=objects_dir_files
+    )
     reauth = collect_reauth(plan_rows)
     rebuild = collect_rebuild(plan_rows)
     secrets_required = [
