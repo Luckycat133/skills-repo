@@ -640,20 +640,78 @@ def run_snapshot(args: argparse.Namespace) -> int:
         plan_items=plan_rows,
     )
 
-    compatibility = {"products": sorted(registry.products.keys())}
+    # compatibility: source_product x target_product matrix sourced from
+    # Registry v2 support_level, not just the product list. Audit P1-7:
+    # the previous "products: [...]" shape was a placeholder, not a
+    # matrix. This is conservative: only include pairs that the Registry
+    # explicitly advertises as bidirectional-reviewed (the surface
+    # support level that ACB restore will actually attempt).
+    compatibility_products = sorted(registry.products.keys())
+    compatibility_pairs: list[dict[str, str]] = []
+    for src in compatibility_products:
+        for tgt in compatibility_products:
+            if src == tgt:
+                continue
+            try:
+                src_profile = registry.profile(src, None)
+                tgt_profile = registry.profile(tgt, None)
+            except Exception:
+                continue
+            src_support = (
+                src_profile.get("support_level")
+                if isinstance(src_profile, dict)
+                else None
+            )
+            tgt_support = (
+                tgt_profile.get("support_level")
+                if isinstance(tgt_profile, dict)
+                else None
+            )
+            if src_support == "bidirectional-reviewed" and tgt_support == "bidirectional-reviewed":
+                compatibility_pairs.append({
+                    "source": src,
+                    "target": tgt,
+                    "supported": True,
+                    "evidence": src_profile.get("evidence") if isinstance(src_profile, dict) else None,
+                })
+    compatibility = {
+        "schema_version": 2,
+        "matrix_kind": "source_x_target_bidirectional_reviewed",
+        "products": compatibility_products,
+        "pairs": compatibility_pairs,
+    }
+
     requirements, requirements_summary = collect_requirements(
         inventory_rows, plan_rows, objects_dir_files=objects_dir_files
     )
     reauth = collect_reauth(plan_rows)
     rebuild = collect_rebuild(plan_rows)
-    secrets_required = [
-        {
-            "name": action.get("object_id", ""),
-            "used_by": [],
+    # secrets_required: each entry is a non-secret description of a
+    # credential the user must re-supply on the target device. The name
+    # is derived from the MCP server's command / package, not the
+    # object_id. The shape is designed so doctor / human readers can
+    # understand "what credential" without inspecting the bundle.
+    secrets_required = []
+    for action in reauth:
+        obj_id = action.get("object_id", "")
+        # Audit P1-7: surface credential names instead of object IDs.
+        # Derive a stable, human-readable name from the package/command
+        # when possible, falling back to the object_id only when no
+        # better signal is available.
+        package = (
+            action.get("source", {}).get("package")
+            or action.get("source", {}).get("command")
+            or ""
+        )
+        if package:
+            cred_name = f"{package}::credential"
+        else:
+            cred_name = obj_id or "unknown-credential"
+        secrets_required.append({
+            "name": cred_name,
+            "used_by": [obj_id] if obj_id else [],
             "recommended_storage": "environment-or-keychain",
-        }
-        for action in reauth
-    ]
+        })
     try:
         write_bundle(
             bundle_root=bundle_root,

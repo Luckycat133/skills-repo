@@ -21,9 +21,9 @@ accurate SHA256 hashes.
 
 from __future__ import annotations
 
+import base64
 import dataclasses
 import hashlib
-import hmac
 import json
 import os
 import re
@@ -1043,32 +1043,33 @@ def verify_bundle(bundle_root: Path) -> list[str]:
 
 
 # =============================================================================
-# Audit P1-5 (0.8.27): Bundle provenance signing (HMAC-SHA256 via stdlib).
+# Audit P1-5 (0.8.27): Bundle provenance signing with Ed25519.
 #
-# Why HMAC-SHA256 and not Ed25519/minisign/SSH:
-#   - cryptography and PyNaCL are not vendored and the runtime environment
-#     does not ship them.
-#   - macOS /usr/bin/ssh-keygen emits OpenSSH-format signatures whose verify
-#     against stdin-piped payloads from this Python script fails consistently
-#     ("incorrect signature") across every flag combination we tried; we
-#     decided not to ship a non-working signature path.
-#   - HMAC-SHA256 with a shared secret key file provides a working
-#     provenance gate: a bundle signed with key K can be verified by any
-#     party that also holds K, and a tampered bundle fails verification.
-#     This is symmetric (not asymmetric), so the security boundary is
-#     "self-generated, self-transferred, self-restored" — third-party ACBs
-#     still require manual review.
+# Private key format: 32-byte raw Ed25519 secret seed (no passphrase).
+# Public key format: 32-byte raw Ed25519 public key.
+# Signature: 64-byte raw Ed25519 signature over checksums.json.
+# Public key fingerprint: SHA-256(pub_seed)[:16].
 #
-# To upgrade to Ed25519 when cryptography or PyNaCL is available, replace
-# _sign_with_key / _verify_with_key with Ed25519PrivateKey.sign and
-# Ed25519PublicKey.verify, keeping the signature.json schema unchanged.
+# Usage:
+#   # generate a fresh keypair
+#   openssl genpkey -algorithm ed25519 -out priv.pem  # OR use scripts below
+#   python3 -c "from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey; from cryptography.hazmat.primitives import serialization; import pathlib; priv = Ed25519PrivateKey.generate(); pathlib.Path('priv.bin').write_bytes(priv.private_bytes(serialization.Encoding.Raw, serialization.PrivateFormat.Raw, serialization.NoEncryption()))"
+#   # sign
+#   python3 context-migrator.py snapshot --sign /path/to/priv.bin --signer "your-name"
+#   # verify
+#   python3 context-migrator.py bundle-verify <bundle> --trusted-key /path/to/pub.bin
+#
+# Third-party ACBs: ship pub.bin alongside the bundle; recipients verify
+# with bundle-verify --trusted-key pub.bin. The bundle is only accepted
+# if the public key fingerprint matches the user-trusted source.
 # =============================================================================
 
 ACB_SIGNATURE_NAME = "signature.json"
+ACB_SIGNATURE_SCHEMA_VERSION = 2
 
 
 def _read_signing_key(key_path: Path) -> bytes:
-    """Read a signing key file. Refuses world/group-readable keys."""
+    """Read a 32-byte raw Ed25519 secret key. Refuses group/world bits."""
     if not key_path.is_file():
         raise ACBError(f"signing key not found: {key_path}")
     st = key_path.stat()
@@ -1078,7 +1079,47 @@ def _read_signing_key(key_path: Path) -> bytes:
             f"signing key {key_path} is group/world accessible (mode={oct(mode)}); "
             "chmod 600 before use"
         )
-    return key_path.read_bytes()
+    raw = key_path.read_bytes()
+    if len(raw) != 32:
+        raise ACBError(
+            f"signing key must be 32 raw bytes (Ed25519 seed); got {len(raw)} bytes"
+        )
+    return raw
+
+
+def _load_public_key(key_path: Path) -> bytes:
+    """Read a 32-byte raw Ed25519 public key. Public key files do not
+    require chmod 600 since they are non-secret, but we still refuse
+    symlinks for consistency."""
+    if not key_path.is_file():
+        raise ACBError(f"public key not found: {key_path}")
+    if key_path.is_symlink():
+        raise ACBError(f"public key path is a symlink: {key_path}")
+    raw = key_path.read_bytes()
+    if len(raw) != 32:
+        raise ACBError(
+            f"public key must be 32 raw bytes (Ed25519 public); got {len(raw)} bytes"
+        )
+    return raw
+
+
+def _ensure_cryptography() -> tuple[Any, Any, Any]:
+    """Lazy-import cryptography so the rest of the module works without it.
+
+    Returns (Ed25519PrivateKey, Ed25519PublicKey, serialization).
+    """
+    try:
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+            Ed25519PrivateKey,
+            Ed25519PublicKey,
+        )
+        from cryptography.hazmat.primitives import serialization
+    except ImportError as error:
+        raise ACBError(
+            "Ed25519 signing requires the 'cryptography' package. "
+            "Install with: pip install cryptography"
+        ) from error
+    return Ed25519PrivateKey, Ed25519PublicKey, serialization
 
 
 def sign_bundle(bundle_root: Path, key_path: Path, signer: str) -> Path:
@@ -1090,32 +1131,41 @@ def sign_bundle(bundle_root: Path, key_path: Path, signer: str) -> Path:
 
     Args:
         bundle_root: directory containing a fully written ACB
-        key_path: path to a 0600 HMAC key file (raw bytes)
+        key_path: path to a 32-byte raw Ed25519 seed (chmod 600)
         signer: human-readable signer identity recorded in signature.json
 
     Returns:
         Path to the new signature.json file
 
     Raises:
-        ACBError if checksums.json is missing or the bundle is malformed
+        ACBError if checksums.json is missing, the key is malformed,
+        or the cryptography package is not installed.
     """
+    Ed25519PrivateKey, _, serialization = _ensure_cryptography()
     bundle_root = bundle_root.resolve()
     checksums_path = bundle_root / ACB_CHECKSUMS_NAME
     if not checksums_path.is_file():
         raise ACBError(f"cannot sign: {checksums_path} missing")
+    raw = _read_signing_key(key_path)
+    private_key = Ed25519PrivateKey.from_private_bytes(raw)
+    public_key = private_key.public_key()
+    public_bytes = public_key.public_bytes(
+        serialization.Encoding.Raw,
+        serialization.PublicFormat.Raw,
+    )
     payload = checksums_path.read_bytes()
     bundle_hash = sha256_bytes(payload)
-    key = _read_signing_key(key_path)
-    sig = hmac.new(key, payload, hashlib.sha256).hexdigest()
+    signature = private_key.sign(payload)
     signature_doc = {
-        "schema_version": 1,
-        "algorithm": "hmac-sha256",
+        "schema_version": ACB_SIGNATURE_SCHEMA_VERSION,
+        "algorithm": "ed25519",
         "signer": signer,
         "signed_at": datetime.now(timezone.utc).isoformat(),
         "checksum_algorithm": "sha256",
         "bundle_hash": bundle_hash,
-        "signature": sig,
-        "key_fingerprint": sha256_bytes(key)[:16],
+        "public_key": base64.b64encode(public_bytes).decode("ascii"),
+        "public_key_fingerprint": sha256_bytes(public_bytes)[:16],
+        "signature": base64.b64encode(signature).decode("ascii"),
     }
     sig_path = bundle_root / ACB_SIGNATURE_NAME
     sig_path.write_text(
@@ -1126,10 +1176,11 @@ def sign_bundle(bundle_root: Path, key_path: Path, signer: str) -> Path:
 
 
 def verify_bundle_signature(bundle_root: Path, key_path: Path) -> list[str]:
-    """Verify a bundle's signature.json against the supplied HMAC key.
+    """Verify a bundle's signature.json against the supplied Ed25519 public key.
 
     Returns a list of error strings (empty list means signature is valid).
     """
+    _, Ed25519PublicKeyClass, _ = _ensure_cryptography()
     bundle_root = bundle_root.resolve()
     sig_path = bundle_root / ACB_SIGNATURE_NAME
     checksums_path = bundle_root / ACB_CHECKSUMS_NAME
@@ -1142,10 +1193,15 @@ def verify_bundle_signature(bundle_root: Path, key_path: Path) -> list[str]:
         sig_doc = json.loads(sig_path.read_text(encoding="utf-8"))
     except Exception as error:
         return [f"corrupted signature.json: {error}"]
-    if sig_doc.get("algorithm") != "hmac-sha256":
+    if sig_doc.get("algorithm") != "ed25519":
         errors.append(
             f"unsupported signature algorithm: {sig_doc.get('algorithm')!r} "
-            "(expected 'hmac-sha256')"
+            "(expected 'ed25519')"
+        )
+    if sig_doc.get("schema_version") != ACB_SIGNATURE_SCHEMA_VERSION:
+        errors.append(
+            f"unsupported signature schema_version: {sig_doc.get('schema_version')!r} "
+            f"(expected {ACB_SIGNATURE_SCHEMA_VERSION})"
         )
     payload = checksums_path.read_bytes()
     bundle_hash = sha256_bytes(payload)
@@ -1154,13 +1210,31 @@ def verify_bundle_signature(bundle_root: Path, key_path: Path) -> list[str]:
             f"bundle_hash mismatch: signature={sig_doc.get('bundle_hash')} "
             f"actual={bundle_hash}"
         )
+    sig_b64 = sig_doc.get("signature")
+    pub_b64 = sig_doc.get("public_key")
+    if not isinstance(sig_b64, str) or not isinstance(pub_b64, str):
+        errors.append("signature.json missing signature/public_key fields")
+        return errors
     try:
-        key = _read_signing_key(key_path)
-        expected = hmac.new(key, payload, hashlib.sha256).hexdigest()
+        signature = base64.b64decode(sig_b64, validate=True)
+        pub_in_sig = base64.b64decode(pub_b64, validate=True)
+    except Exception as error:
+        errors.append(f"signature.json fields are not valid base64: {error}")
+        return errors
+    try:
+        trusted_pub = _load_public_key(key_path)
     except ACBError as error:
         return [str(error)]
-    if not hmac.compare_digest(str(sig_doc.get("signature", "")), expected):
-        errors.append("signature does not match (checksums.json or key changed)")
+    if pub_in_sig != trusted_pub:
+        errors.append(
+            "public key in signature.json does not match trusted_key "
+            f"(fingerprint mismatch: signature={sha256_bytes(pub_in_sig)[:16]} "
+            f"trusted={sha256_bytes(trusted_pub)[:16]})"
+        )
+    try:
+        Ed25519PublicKeyClass.from_public_bytes(trusted_pub).verify(signature, payload)
+    except Exception as error:
+        errors.append(f"signature verification failed: {error}")
     return errors
 
 

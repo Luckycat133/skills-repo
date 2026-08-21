@@ -7,10 +7,19 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 ### Fixed
 
 - **Audit 0.8.27 closure (P1-5 / P1-6 / P1-7 / P1-8 / P1-9 / P2-1 / P2-2)**
-  - **P1-5 ACB provenance signing**: added `sign_bundle()` /
-    `verify_bundle_signature()` using HMAC-SHA256 over `checksums.json`
-    (stdlib `hashlib`; Ed25519 deferred to a vendor of `cryptography`
-    or `nacl`). Writes `signature.json` alongside the bundle.
+  - **P1-5 ACB provenance signing**: replaced HMAC-SHA256 with real
+    Ed25519. `sign_bundle()` / `verify_bundle_signature()` now use
+    raw 32-byte Ed25519 seed + public key + signature (base64 in
+    `signature.json` schema_version 2). Tamper and wrong-public-key
+    detection verified by roundtrip test. Requires `cryptography`
+    50.0.0 at sign / verify time only (not at snapshot).
+  - **P1-7 doctor (final slice)**: `secrets_required` no longer
+    uses plan-object-id as credential name. Each entry derives a
+    human-readable name from the MCP server's command or package
+    (e.g. `npx::credential`), with `used_by: [<object_id>]`.
+    `compatibility.json` is now a source × target pairs list filtered
+    to `support_level == bidirectional-reviewed`, schema_version 2,
+    `matrix_kind: source_x_target_bidirectional_reviewed`.
   - **P1-6 CI matrix**: `validate.yml` now runs on `ubuntu-latest`,
     `macos-latest`, and `windows-latest`. Windows / WSL / Remote
     remain labeled Experimental on `roadmap.md`.

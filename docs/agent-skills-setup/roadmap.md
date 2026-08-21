@@ -57,19 +57,14 @@ production-grade cross-platform guarantees.
 
 ## Known limitations
 
-- `cryptography` / `nacl` are not vendored. Ed25519 / minisign
-  signature / SSH signature aren't usable in this runtime. ACB
-  signatures are HMAC-SHA256 only.
-- The `secrets.required.json` shape is object-id-based. It is a
-  reminder, not a credential manifest. Token introspection is out of
-  scope.
+- `cryptography` 50.0.0 is vendored at runtime via `pip install
+  cryptography` for ACB sign / verify. It is not committed to the
+  repo and the bundle path does not require it at snapshot time
+  unless `--sign` is requested.
 - `doctor` still surfaces requirements as a list of `executables` and
   `packages` parsed from MCP server configs. It does not run an
   install planner; it does not validate that the listed package
   actually exists.
-- `compatibility.json` enumerates Registry v2 products. It is **not**
-  a true compatibility matrix (no source × target transformation
-  evidence per pair).
 - The OS / profile locations wiring covers `darwin`, `linux`, and
   `windows` deeply. `wsl`, `remote-ssh`, `dev-container`,
   `codespaces`, `vscode-profile`, and `extension-host` are stored on
