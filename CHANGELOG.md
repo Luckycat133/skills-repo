@@ -4,6 +4,49 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ## [Unreleased]
 
+### Fixed
+
+- **Audit 0.8.27 closure (P1-5 / P1-6 / P1-7 / P1-8 / P1-9 / P2-1 / P2-2)**
+  - **P1-5 ACB provenance signing**: added `sign_bundle()` /
+    `verify_bundle_signature()` using HMAC-SHA256 over `checksums.json`
+    (stdlib `hashlib`; Ed25519 deferred to a vendor of `cryptography`
+    or `nacl`). Writes `signature.json` alongside the bundle.
+  - **P1-6 CI matrix**: `validate.yml` now runs on `ubuntu-latest`,
+    `macos-latest`, and `windows-latest`. Windows / WSL / Remote
+    remain labeled Experimental on `roadmap.md`.
+  - **P1-7 doctor / restore loop**: replaced the silent
+    `except Exception: pass` in `restore --all-installed` with
+    `failed_targets[]` recorded in the restore summary and a
+    stderr warning.
+  - **P1-8 automatic migration types**: `AUTOMATIC_OBJECT_TYPES` now
+    includes `prompts`, `commands`, `agents`, `hooks`. The IR
+    emitter registry already supported these; the policy was
+    previously manual.
+  - **P1-9 freshness workflow**: `candidate-discovery` job now
+    honors the registry's `online_checks_enabled` flag. When
+    `false`, the job exits early and skips the hardcoded
+    hardcoded candidate list.
+- **P0 / P1-2 follow-up (already in 0.8.27 Batch 1)**: detection is
+  the sole source of truth for `--all-installed` (no
+  `inventory.exists` fallback); `collect_source_objects` iterates
+  plan items, not inventory rows; every portable object outcome is
+  tracked with explicit status (`captured` / `manual_rebuild` /
+  `excluded_by_policy` / `parse_failed` / `secret_rejected` /
+  `conflict`).
+
+### Added
+
+- **P2-1 release closure**: `v0.8.24` is now an annotated tag on
+  `3d864ac`, closing the audit gap that the v0.8.24 release had
+  no corresponding tag. Branch protection now requires
+  `validate (ubuntu-latest)`, `validate (macos-latest)`,
+  `validate (windows-latest)`, enforces admins, and requires
+  linear history.
+- **P2-2 roadmap restructure**: `docs/agent-skills-setup/roadmap.md`
+  is reorganized into Production / Experimental / Known limitations /
+  Next milestone / Rejected / out of scope to replace the previous
+  Completed / Next / Engineering backlog layout.
+
 ## [0.8.26] - 2026-08-20
 
 ### Fixed
