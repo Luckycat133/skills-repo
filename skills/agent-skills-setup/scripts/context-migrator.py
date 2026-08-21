@@ -844,8 +844,19 @@ def run_restore(args: argparse.Namespace) -> int:
                             if target_path:
                                 seen_target_paths.add(target_path)
                             all_items.append(item)
-                    except Exception:
-                        pass
+                    except Exception as error:
+                        # Audit P1-2: never silently swallow per-product plan
+                        # build failures during all-installed restore. Surface
+                        # the failure so the restore summary can report it.
+                        failed_targets.append({
+                            "source": (source_sel or "?"),
+                            "target": str(target_registry.workspace),
+                            "error": str(error),
+                        })
+                        print(
+                            f"WARNING: restore plan build failed for source={source_sel}: {error}",
+                            file=sys.stderr,
+                        )
 
             document = {
                 "schema_version": 1,

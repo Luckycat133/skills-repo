@@ -128,6 +128,16 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'schedule'  # Only run on schedule
     steps:
+      - name: Check registry online_checks_enabled flag
+        id: gate
+        run: |
+          if python3 -c "import json,sys; r=json.load(open('skills/agent-skills-setup/references/registry-v2.json')); sys.exit(0 if r.get('online_checks_enabled', False) else 1)" ; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "registry online_checks_enabled is false; skipping candidate-discovery"
+            exit 0
+          fi
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -145,6 +155,7 @@ jobs:
 
       - name: Generate candidate discovery report
         id: candidates
+        if: steps.gate.outputs.enabled == 'true'
         run: |
           python3 << 'EOF'
           import json
@@ -205,13 +216,14 @@ jobs:
           EOF
 
       - name: Upload candidate discovery report
+        if: steps.gate.outputs.enabled == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: candidate-discovery-report
           path: candidate-discovery-report.json
 
       - name: Create issue for new candidates
-        if: always()
+        if: steps.gate.outputs.enabled == 'true'
         run: |
           if [ -f candidate-discovery-report.json ]; then
             NEW_COUNT=$(cat candidate-discovery-report.json | jq '.new_candidates | length')

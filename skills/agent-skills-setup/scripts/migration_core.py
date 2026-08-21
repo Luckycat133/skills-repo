@@ -78,7 +78,33 @@ ADAPTER_VERSIONS = {
 }
 AUTOMATIC_MIGRATION_POLICIES = {
     "bidirectional-reviewed",
+    "prompt-ir-reviewed",
+    "command-ir-reviewed",
+    "agent-ir-reviewed",
+    "hook-ir-reviewed",
 }
+AUTOMATIC_OBJECT_TYPES = frozenset({
+    "skills",
+    "instructions",
+    "mcp",
+    "prompts",
+    "commands",
+    "agents",
+    "hooks",
+})
+INVENTORY_ONLY_OBJECT_TYPES = frozenset({
+    "workflows",
+    "plugins",
+    "handoff",
+    "config",
+    "policy",
+    "trust",
+    "user_memory",
+    "automation",
+    "cron",
+    "personas",
+    "modes",
+})
 AUTOMATIC_SURFACE_POLICIES = {
     "validate-then-atomic-copy",
     "semantic-ir-with-loss-report",

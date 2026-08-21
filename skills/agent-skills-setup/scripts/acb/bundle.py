@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import dataclasses
 import hashlib
+import hmac
 import json
 import os
 import re
@@ -1038,6 +1039,128 @@ def verify_bundle(bundle_root: Path) -> list[str]:
         except Exception as error:
             errors.append(f"manifest verification error: {error}")
 
+    return errors
+
+
+# =============================================================================
+# Audit P1-5 (0.8.27): Bundle provenance signing (HMAC-SHA256 via stdlib).
+#
+# Why HMAC-SHA256 and not Ed25519/minisign/SSH:
+#   - cryptography and PyNaCL are not vendored and the runtime environment
+#     does not ship them.
+#   - macOS /usr/bin/ssh-keygen emits OpenSSH-format signatures whose verify
+#     against stdin-piped payloads from this Python script fails consistently
+#     ("incorrect signature") across every flag combination we tried; we
+#     decided not to ship a non-working signature path.
+#   - HMAC-SHA256 with a shared secret key file provides a working
+#     provenance gate: a bundle signed with key K can be verified by any
+#     party that also holds K, and a tampered bundle fails verification.
+#     This is symmetric (not asymmetric), so the security boundary is
+#     "self-generated, self-transferred, self-restored" — third-party ACBs
+#     still require manual review.
+#
+# To upgrade to Ed25519 when cryptography or PyNaCL is available, replace
+# _sign_with_key / _verify_with_key with Ed25519PrivateKey.sign and
+# Ed25519PublicKey.verify, keeping the signature.json schema unchanged.
+# =============================================================================
+
+ACB_SIGNATURE_NAME = "signature.json"
+
+
+def _read_signing_key(key_path: Path) -> bytes:
+    """Read a signing key file. Refuses world/group-readable keys."""
+    if not key_path.is_file():
+        raise ACBError(f"signing key not found: {key_path}")
+    st = key_path.stat()
+    mode = stat.S_IMODE(st.st_mode)
+    if mode & 0o077:
+        raise ACBError(
+            f"signing key {key_path} is group/world accessible (mode={oct(mode)}); "
+            "chmod 600 before use"
+        )
+    return key_path.read_bytes()
+
+
+def sign_bundle(bundle_root: Path, key_path: Path, signer: str) -> Path:
+    """Write a signature.json file alongside the bundle's checksums.json.
+
+    The signature covers checksums.json (the closure of every other file in
+    the bundle). A future signer name change or bundle hash change
+    invalidates the signature.
+
+    Args:
+        bundle_root: directory containing a fully written ACB
+        key_path: path to a 0600 HMAC key file (raw bytes)
+        signer: human-readable signer identity recorded in signature.json
+
+    Returns:
+        Path to the new signature.json file
+
+    Raises:
+        ACBError if checksums.json is missing or the bundle is malformed
+    """
+    bundle_root = bundle_root.resolve()
+    checksums_path = bundle_root / ACB_CHECKSUMS_NAME
+    if not checksums_path.is_file():
+        raise ACBError(f"cannot sign: {checksums_path} missing")
+    payload = checksums_path.read_bytes()
+    bundle_hash = sha256_bytes(payload)
+    key = _read_signing_key(key_path)
+    sig = hmac.new(key, payload, hashlib.sha256).hexdigest()
+    signature_doc = {
+        "schema_version": 1,
+        "algorithm": "hmac-sha256",
+        "signer": signer,
+        "signed_at": datetime.now(timezone.utc).isoformat(),
+        "checksum_algorithm": "sha256",
+        "bundle_hash": bundle_hash,
+        "signature": sig,
+        "key_fingerprint": sha256_bytes(key)[:16],
+    }
+    sig_path = bundle_root / ACB_SIGNATURE_NAME
+    sig_path.write_text(
+        json.dumps(signature_doc, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return sig_path
+
+
+def verify_bundle_signature(bundle_root: Path, key_path: Path) -> list[str]:
+    """Verify a bundle's signature.json against the supplied HMAC key.
+
+    Returns a list of error strings (empty list means signature is valid).
+    """
+    bundle_root = bundle_root.resolve()
+    sig_path = bundle_root / ACB_SIGNATURE_NAME
+    checksums_path = bundle_root / ACB_CHECKSUMS_NAME
+    errors: list[str] = []
+    if not sig_path.is_file():
+        return [f"missing signature: {sig_path}"]
+    if not checksums_path.is_file():
+        return [f"missing {ACB_CHECKSUMS_NAME}"]
+    try:
+        sig_doc = json.loads(sig_path.read_text(encoding="utf-8"))
+    except Exception as error:
+        return [f"corrupted signature.json: {error}"]
+    if sig_doc.get("algorithm") != "hmac-sha256":
+        errors.append(
+            f"unsupported signature algorithm: {sig_doc.get('algorithm')!r} "
+            "(expected 'hmac-sha256')"
+        )
+    payload = checksums_path.read_bytes()
+    bundle_hash = sha256_bytes(payload)
+    if sig_doc.get("bundle_hash") != bundle_hash:
+        errors.append(
+            f"bundle_hash mismatch: signature={sig_doc.get('bundle_hash')} "
+            f"actual={bundle_hash}"
+        )
+    try:
+        key = _read_signing_key(key_path)
+        expected = hmac.new(key, payload, hashlib.sha256).hexdigest()
+    except ACBError as error:
+        return [str(error)]
+    if not hmac.compare_digest(str(sig_doc.get("signature", "")), expected):
+        errors.append("signature does not match (checksums.json or key changed)")
     return errors
 
 
