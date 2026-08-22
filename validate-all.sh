@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Force CPython UTF-8 mode for every child process. Windows runners
+# default to cp1252 for both file reads (skills-ref validator) and
+# stdout writes (argparse help text containing non-ASCII arrows), which
+# aborts otherwise-passing suites.
+export PYTHONUTF8=1
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SETUP_SCRIPTS="$SCRIPT_DIR/skills/agent-skills-setup/scripts"
 
