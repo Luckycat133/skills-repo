@@ -27,6 +27,10 @@ if [[ ! -f "$SOURCE_SKILL_DIR/SKILL.md" ]]; then
 fi
 
 mkdir -p "$REPO_ROOT/skills"
-rsync -a --delete "$SOURCE_SKILL_DIR/" "$TARGET_DIR/"
+# Mirror-copy without rsync (absent on Windows Git Bash runners):
+# replace the destination tree, then copy all entries including dotfiles.
+rm -rf "$TARGET_DIR"
+mkdir -p "$TARGET_DIR"
+cp -pR "$SOURCE_SKILL_DIR/." "$TARGET_DIR/"
 
 echo "Imported $SKILL_NAME into $TARGET_DIR"
