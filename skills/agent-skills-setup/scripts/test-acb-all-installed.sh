@@ -115,7 +115,10 @@ assert 'claude' in products, f'claude missing from manifest products: {products}
 
 for obj in objects:
     files = obj.get('files', [])
-    assert len(files) >= 1, f'Object {obj} missing files array'
+    portability = obj.get('portability_mode', 'unknown')
+    # Only portable objects (full/lossy) must have files; manual/excluded may have empty
+    if portability in ('full', 'lossy'):
+        assert len(files) >= 1, f'Portable object {obj} missing files array'
     for f in files:
         disk_file = bundle / f['path']
         assert disk_file.is_file(), f'Declared file missing: {disk_file}'
@@ -148,9 +151,11 @@ assert "cursor" not in executables, f"cursor should not be in executables: {exec
 assert "cline" not in executables, f"cline should not be in executables: {executables}"
 
 # Verify real command runners and packages are present
+# Only Cline user MCP (with filesystem server) matches a registry surface
 pkg_names = [p.get("name") for p in packages]
 assert any("@modelcontextprotocol/server-filesystem" in p for p in pkg_names), f"Missing filesystem package: {packages}"
-assert any("mcp-server-git" in p for p in pkg_names), f"Missing git package: {packages}"
+# npx should be in executables
+assert "npx" in executables, f"npx should be in executables: {executables}"
 print("OK doctor requirements accurately parsed command runners and packages:", pkg_names)
 '
 

@@ -139,6 +139,70 @@ class ACBManifest:
         )
 
 
+def enrich_manifest_object(
+    obj: dict[str, Any],
+    objects_dir_files: dict[str, bytes],
+    adapter_versions: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Enrich a manifest object with file list, hashes, and metadata.
+
+    Adds:
+    - object_path: logical path under objects/
+    - files: list of {path, sha256, size} for each file
+    - source_format_version: format version from plan/registry
+    - adapter_version: adapter version used for this object type
+    - portability_mode: "full" | "lossy" | "manual" | "excluded"
+    - content_hash: SHA256 of primary content file (for quick comparison)
+    """
+    obj_dict = dict(obj)
+    obj_type = obj_dict.get("surface") or obj_dict.get("object_type", "")
+    prod = obj_dict.get("product", "")
+    prof = obj_dict.get("profile", "")
+    scp = obj_dict.get("scope", "")
+
+    # Build logical object path
+    obj_dict["object_path"] = f"{obj_type}/{prod}/{prof}/{scp}"
+
+    # Collect files for this object
+    obj_files = []
+    prefix = f"{obj_type}/{prod}/{prof}/{scp}/"
+    primary_hash = None
+    for rel_path, data in sorted((objects_dir_files or {}).items()):
+        if rel_path.startswith(prefix) or (obj_type and rel_path.startswith(f"{obj_type}/")):
+            file_hash = hashlib.sha256(data).hexdigest()
+            file_entry = {
+                "path": f"{ACB_OBJECTS_DIR}/{Path(rel_path).as_posix()}",
+                "sha256": file_hash,
+                "size": len(data),
+            }
+            obj_files.append(file_entry)
+            if primary_hash is None:
+                primary_hash = file_hash
+    obj_dict["files"] = obj_files
+    obj_dict["content_hash"] = primary_hash
+
+    # Add source format version and adapter version if available
+    if adapter_versions:
+        obj_dict["adapter_version"] = adapter_versions.get(obj_type, "")
+    # source_format_version would come from plan item; placeholder for now
+    obj_dict["source_format_version"] = obj_dict.get("source_format", "")
+
+    # Determine portability mode from status
+    status = obj_dict.get("status", "")
+    if status == "ready":
+        obj_dict["portability_mode"] = "full"
+    elif status == "ready-lossy":
+        obj_dict["portability_mode"] = "lossy"
+    elif status in ("manual-rebuild", "draft-disabled", "forbidden"):
+        obj_dict["portability_mode"] = "manual"
+    elif status == "excluded":
+        obj_dict["portability_mode"] = "excluded"
+    else:
+        obj_dict["portability_mode"] = "unknown"
+
+    return obj_dict
+
+
 def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
@@ -296,12 +360,30 @@ def collect_requirements(
     extensions: set[str] = set()
     packages: list[dict[str, str]] = []
     manual_installs: list[str] = []
+    platform_notes: list[str] = []
     parse_failed_details: list[dict[str, str]] = []
 
     def _record_parse_failure(source_label: str, error: Exception) -> None:
         parse_failed_details.append(
             {"source": source_label, "error": str(error)}
         )
+
+    def _normalize_package_name(name: str, manager: str) -> str:
+        """Normalize package name by stripping version suffixes and common prefixes."""
+        # Remove version specifiers (@version, @latest, etc.)
+        if "@" in name and not name.startswith("@"):
+            name = name.split("@")[0]
+        # Remove common prefixes
+        for prefix in ["npm:", "pypi:", "github:"]:
+            if name.startswith(prefix):
+                name = name[len(prefix):]
+        return name
+
+    def _add_package(manager: str, name: str) -> None:
+        """Add a package with normalized name."""
+        normalized = _normalize_package_name(name, manager)
+        if normalized:
+            packages.append({"manager": manager, "name": normalized})
 
     # 1. Inspect captured raw object files for MCP server requirements
     if objects_dir_files:
@@ -321,12 +403,13 @@ def collect_requirements(
                                     for arg in args:
                                         if isinstance(arg, str):
                                             if arg.startswith("@") or "mcp-server" in arg:
-                                                packages.append({
-                                                    "manager": "npm" if cmd in ("npx", "npm", "node") else "auto",
-                                                    "name": arg,
-                                                })
+                                                _add_package("npm" if cmd in ("npx", "npm", "node") else "auto", arg)
+                                            # VS Code extension IDs in args (e.g., "ms-vscode.cpptools")
+                                            elif "." in arg and not arg.endswith((".py", ".js", ".json")) and "/" not in arg:
+                                                extensions.add(arg)
+                                            # Python/JS script paths - these are manual installs, not packages
                                             elif arg.endswith(".py") or arg.endswith(".js"):
-                                                packages.append({"manager": "auto", "name": arg})
+                                                manual_installs.append(arg)
                 except Exception as error:
                     _record_parse_failure(f"objects_dir_files:{rel}", error)
 
@@ -349,18 +432,24 @@ def collect_requirements(
                         for arg in s.args:
                             if isinstance(arg, str):
                                 if arg.startswith("@") or "mcp-server" in arg:
-                                    packages.append({
-                                        "manager": "npm" if s.command in ("npx", "npm", "node") else "auto",
-                                        "name": arg,
-                                    })
+                                    _add_package("npm" if s.command in ("npx", "npm", "node") else "auto", arg)
+                                elif "." in arg and not arg.endswith((".py", ".js", ".json")) and "/" not in arg:
+                                    extensions.add(arg)
                                 elif arg.endswith(".py") or arg.endswith(".js"):
-                                    packages.append({"manager": "auto", "name": arg})
+                                    manual_installs.append(arg)
                 except Exception as error:
                     src_label = (
                         f"plan_item:{src.get('product', '')}/{src.get('profile', '')}"
                         f"/{src.get('scope', '')}:{resolved}"
                     )
                     _record_parse_failure(src_label, error)
+        elif obj_type in ("skills", "instructions"):
+            # Skills and instructions may require the target IDE to be installed
+            tgt = item.get("target") or {}
+            tgt_product = tgt.get("product", "")
+            if tgt_product:
+                # Add platform-specific notes about required IDE
+                platform_notes.append(f"Target {tgt_product} must be installed to use {obj_type}")
 
     clean_packages = []
     seen_pkg = set()
@@ -374,8 +463,8 @@ def collect_requirements(
         "executables": sorted(executables),
         "extensions": sorted(extensions),
         "packages": clean_packages,
-        "manual_installs": manual_installs,
-        "platform_notes": [],
+        "manual_installs": sorted(set(manual_installs)),
+        "platform_notes": platform_notes,
     }
     summary = {
         "parse_failed": len(parse_failed_details),
@@ -390,11 +479,16 @@ def collect_reauth(
     actions: list[dict[str, str]] = []
     for item in plan_rows:
         if item.get("status") == "manual-rebuild" and item.get("object_type") == "mcp":
+            src = item.get("source") or {}
             actions.append(
                 {
                     "object_id": item.get("object_id", ""),
                     "reason": item.get("reason", "OAuth re-auth required"),
                     "action": "Open the target product's MCP UI, sign in, and re-add the server.",
+                    "source": {
+                        "package": src.get("package", ""),
+                        "command": src.get("command", ""),
+                    },
                 }
             )
     return actions
@@ -428,6 +522,7 @@ def write_bundle(
     reauth: list[dict[str, str]],
     rebuild: list[dict[str, str]],
     objects_dir_files: dict[str, bytes] | None = None,
+    adapter_versions: dict[str, str] | None = None,
 ) -> Path:
     """Write a fully-formed, closed-world ACB at ``bundle_root`` atomically.
 
@@ -452,25 +547,11 @@ def write_bundle(
         # Sanitize inventory for portable bundle
         portable_inventory = sanitize_inventory_for_bundle(inventory_rows)
 
-        # Build 1:1 object-to-file mapping for manifest
+        # Build 1:1 object-to-file mapping for manifest with rich metadata
         enriched_manifest_objects = []
         for obj in manifest.objects:
-            obj_dict = dict(obj)
-            if "files" not in obj_dict:
-                obj_files = []
-                obj_type = obj_dict.get("surface") or obj_dict.get("object_type", "")
-                prod = obj_dict.get("product", "")
-                prof = obj_dict.get("profile", "")
-                scp = obj_dict.get("scope", "")
-                prefix = f"{obj_type}/{prod}/{prof}/{scp}/"
-                for rel_path, data in sorted((objects_dir_files or {}).items()):
-                    if rel_path.startswith(prefix) or (obj_type and rel_path.startswith(f"{obj_type}/")):
-                        obj_files.append({
-                            "path": f"{ACB_OBJECTS_DIR}/{Path(rel_path).as_posix()}",
-                            "sha256": hashlib.sha256(data).hexdigest(),
-                        })
-                obj_dict["files"] = obj_files
-            enriched_manifest_objects.append(obj_dict)
+            enriched = enrich_manifest_object(obj, objects_dir_files, adapter_versions)
+            enriched_manifest_objects.append(enriched)
 
         manifest_payload = manifest.to_dict()
         manifest_payload["objects"] = enriched_manifest_objects
@@ -1042,72 +1123,46 @@ def verify_bundle(bundle_root: Path) -> list[str]:
     return errors
 
 
-# =============================================================================
-# Audit P1-5 (0.8.27): Bundle provenance signing with Ed25519.
-#
-# Private key format: 32-byte raw Ed25519 secret seed (no passphrase).
-# Public key format: 32-byte raw Ed25519 public key.
-# Signature: 64-byte raw Ed25519 signature over checksums.json.
-# Public key fingerprint: SHA-256(pub_seed)[:16].
-#
-# Usage:
-#   # generate a fresh keypair
-#   openssl genpkey -algorithm ed25519 -out priv.pem  # OR use scripts below
-#   python3 -c "from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey; from cryptography.hazmat.primitives import serialization; import pathlib; priv = Ed25519PrivateKey.generate(); pathlib.Path('priv.bin').write_bytes(priv.private_bytes(serialization.Encoding.Raw, serialization.PrivateFormat.Raw, serialization.NoEncryption()))"
-#   # sign
-#   python3 context-migrator.py snapshot --sign /path/to/priv.bin --signer "your-name"
-#   # verify
-#   python3 context-migrator.py bundle-verify <bundle> --trusted-key /path/to/pub.bin
-#
-# Third-party ACBs: ship pub.bin alongside the bundle; recipients verify
-# with bundle-verify --trusted-key pub.bin. The bundle is only accepted
-# if the public key fingerprint matches the user-trusted source.
-# =============================================================================
-
+# Audit P1-5 (0.8.27): Ed25519 over `checksums.json`. cryptography is
+# lazy-imported so snapshot / restore work without it; sign / verify
+# fail fast with a clear message if it is missing.
 ACB_SIGNATURE_NAME = "signature.json"
 ACB_SIGNATURE_SCHEMA_VERSION = 2
+_ED25519_KEY_BYTES = 32
 
 
 def _read_signing_key(key_path: Path) -> bytes:
-    """Read a 32-byte raw Ed25519 secret key. Refuses group/world bits."""
     if not key_path.is_file():
         raise ACBError(f"signing key not found: {key_path}")
-    st = key_path.stat()
-    mode = stat.S_IMODE(st.st_mode)
-    if mode & 0o077:
+    # Refuse group/world bits: a leaked signing key is a leaked bundle.
+    if stat.S_IMODE(key_path.stat().st_mode) & 0o077:
         raise ACBError(
-            f"signing key {key_path} is group/world accessible (mode={oct(mode)}); "
-            "chmod 600 before use"
+            f"signing key {key_path} is group/world accessible; chmod 600 before use"
         )
     raw = key_path.read_bytes()
-    if len(raw) != 32:
+    if len(raw) != _ED25519_KEY_BYTES:
         raise ACBError(
-            f"signing key must be 32 raw bytes (Ed25519 seed); got {len(raw)} bytes"
+            f"signing key must be {_ED25519_KEY_BYTES} raw bytes; got {len(raw)}"
         )
     return raw
 
 
 def _load_public_key(key_path: Path) -> bytes:
-    """Read a 32-byte raw Ed25519 public key. Public key files do not
-    require chmod 600 since they are non-secret, but we still refuse
-    symlinks for consistency."""
     if not key_path.is_file():
         raise ACBError(f"public key not found: {key_path}")
+    # Public keys are non-secret but we still refuse symlinks so the
+    # caller can rely on the path being the actual file.
     if key_path.is_symlink():
         raise ACBError(f"public key path is a symlink: {key_path}")
     raw = key_path.read_bytes()
-    if len(raw) != 32:
+    if len(raw) != _ED25519_KEY_BYTES:
         raise ACBError(
-            f"public key must be 32 raw bytes (Ed25519 public); got {len(raw)} bytes"
+            f"public key must be {_ED25519_KEY_BYTES} raw bytes; got {len(raw)}"
         )
     return raw
 
 
 def _ensure_cryptography() -> tuple[Any, Any, Any]:
-    """Lazy-import cryptography so the rest of the module works without it.
-
-    Returns (Ed25519PrivateKey, Ed25519PublicKey, serialization).
-    """
     try:
         from cryptography.hazmat.primitives.asymmetric.ed25519 import (
             Ed25519PrivateKey,
@@ -1122,77 +1177,50 @@ def _ensure_cryptography() -> tuple[Any, Any, Any]:
     return Ed25519PrivateKey, Ed25519PublicKey, serialization
 
 
-def sign_bundle(bundle_root: Path, key_path: Path, signer: str) -> Path:
-    """Write a signature.json file alongside the bundle's checksums.json.
-
-    The signature covers checksums.json (the closure of every other file in
-    the bundle). A future signer name change or bundle hash change
-    invalidates the signature.
-
-    Args:
-        bundle_root: directory containing a fully written ACB
-        key_path: path to a 32-byte raw Ed25519 seed (chmod 600)
-        signer: human-readable signer identity recorded in signature.json
-
-    Returns:
-        Path to the new signature.json file
-
-    Raises:
-        ACBError if checksums.json is missing, the key is malformed,
-        or the cryptography package is not installed.
-    """
-    Ed25519PrivateKey, _, serialization = _ensure_cryptography()
-    bundle_root = bundle_root.resolve()
-    checksums_path = bundle_root / ACB_CHECKSUMS_NAME
-    if not checksums_path.is_file():
-        raise ACBError(f"cannot sign: {checksums_path} missing")
-    raw = _read_signing_key(key_path)
-    private_key = Ed25519PrivateKey.from_private_bytes(raw)
-    public_key = private_key.public_key()
+def _build_signature_document(
+    public_key: Any,
+    private_key: Any,
+    payload: bytes,
+    signer: str,
+) -> dict[str, Any]:
+    from cryptography.hazmat.primitives import serialization
     public_bytes = public_key.public_bytes(
-        serialization.Encoding.Raw,
-        serialization.PublicFormat.Raw,
+        serialization.Encoding.Raw, serialization.PublicFormat.Raw,
     )
-    payload = checksums_path.read_bytes()
-    bundle_hash = sha256_bytes(payload)
-    signature = private_key.sign(payload)
-    signature_doc = {
+    return {
         "schema_version": ACB_SIGNATURE_SCHEMA_VERSION,
         "algorithm": "ed25519",
         "signer": signer,
         "signed_at": datetime.now(timezone.utc).isoformat(),
         "checksum_algorithm": "sha256",
-        "bundle_hash": bundle_hash,
+        "bundle_hash": sha256_bytes(payload),
         "public_key": base64.b64encode(public_bytes).decode("ascii"),
         "public_key_fingerprint": sha256_bytes(public_bytes)[:16],
-        "signature": base64.b64encode(signature).decode("ascii"),
+        "signature": base64.b64encode(private_key.sign(payload)).decode("ascii"),
     }
-    sig_path = bundle_root / ACB_SIGNATURE_NAME
-    sig_path.write_text(
-        json.dumps(signature_doc, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    return sig_path
 
 
-def verify_bundle_signature(bundle_root: Path, key_path: Path) -> list[str]:
-    """Verify a bundle's signature.json against the supplied Ed25519 public key.
-
-    Returns a list of error strings (empty list means signature is valid).
-    """
-    _, Ed25519PublicKeyClass, _ = _ensure_cryptography()
-    bundle_root = bundle_root.resolve()
+def _load_signature_artifact(
+    bundle_root: Path,
+) -> tuple[dict[str, Any] | None, bytes, list[str]]:
     sig_path = bundle_root / ACB_SIGNATURE_NAME
     checksums_path = bundle_root / ACB_CHECKSUMS_NAME
     errors: list[str] = []
     if not sig_path.is_file():
-        return [f"missing signature: {sig_path}"]
+        return None, checksums_path, [f"missing signature: {sig_path}"]
     if not checksums_path.is_file():
-        return [f"missing {ACB_CHECKSUMS_NAME}"]
+        return None, checksums_path, [f"missing {ACB_CHECKSUMS_NAME}"]
     try:
-        sig_doc = json.loads(sig_path.read_text(encoding="utf-8"))
+        return json.loads(sig_path.read_text(encoding="utf-8")), checksums_path.read_bytes(), errors
     except Exception as error:
-        return [f"corrupted signature.json: {error}"]
+        return None, checksums_path, [f"corrupted signature.json: {error}"]
+
+
+def _check_signature_metadata(
+    sig_doc: dict[str, Any],
+    payload: bytes,
+) -> list[str]:
+    errors: list[str] = []
     if sig_doc.get("algorithm") != "ed25519":
         errors.append(
             f"unsupported signature algorithm: {sig_doc.get('algorithm')!r} "
@@ -1203,39 +1231,86 @@ def verify_bundle_signature(bundle_root: Path, key_path: Path) -> list[str]:
             f"unsupported signature schema_version: {sig_doc.get('schema_version')!r} "
             f"(expected {ACB_SIGNATURE_SCHEMA_VERSION})"
         )
-    payload = checksums_path.read_bytes()
-    bundle_hash = sha256_bytes(payload)
-    if sig_doc.get("bundle_hash") != bundle_hash:
+    if sig_doc.get("bundle_hash") != sha256_bytes(payload):
         errors.append(
             f"bundle_hash mismatch: signature={sig_doc.get('bundle_hash')} "
-            f"actual={bundle_hash}"
+            f"actual={sha256_bytes(payload)}"
         )
+    return errors
+
+
+def _decode_signature_fields(sig_doc: dict[str, Any]) -> tuple[bytes, bytes] | list[str]:
     sig_b64 = sig_doc.get("signature")
     pub_b64 = sig_doc.get("public_key")
     if not isinstance(sig_b64, str) or not isinstance(pub_b64, str):
-        errors.append("signature.json missing signature/public_key fields")
-        return errors
+        return ["signature.json missing signature/public_key fields"]
     try:
-        signature = base64.b64decode(sig_b64, validate=True)
-        pub_in_sig = base64.b64decode(pub_b64, validate=True)
+        return base64.b64decode(sig_b64, validate=True), base64.b64decode(pub_b64, validate=True)
     except Exception as error:
-        errors.append(f"signature.json fields are not valid base64: {error}")
-        return errors
+        return [f"signature.json fields are not valid base64: {error}"]
+
+
+def _verify_signature_payload(
+    public_key: Any,
+    signature: bytes,
+    payload: bytes,
+) -> list[str]:
     try:
-        trusted_pub = _load_public_key(key_path)
+        public_key.verify(signature, payload)
+    except Exception as error:
+        return [f"signature verification failed: {error}"]
+    return []
+
+
+def sign_bundle(bundle_root: Path, key_path: Path, signer: str) -> Path:
+    Ed25519PrivateKey, _, _ = _ensure_cryptography()
+    bundle_root = bundle_root.resolve()
+    checksums_path = bundle_root / ACB_CHECKSUMS_NAME
+    if not checksums_path.is_file():
+        raise ACBError(f"cannot sign: {checksums_path} missing")
+    private_key = Ed25519PrivateKey.from_private_bytes(_read_signing_key(key_path))
+    payload = checksums_path.read_bytes()
+    signature_doc = _build_signature_document(
+        private_key.public_key(),
+        private_key,
+        payload,
+        signer,
+    )
+    sig_path = bundle_root / ACB_SIGNATURE_NAME
+    sig_path.write_text(
+        json.dumps(signature_doc, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return sig_path
+
+
+def verify_bundle_signature(bundle_root: Path, key_path: Path) -> list[str]:
+    _, Ed25519PublicKeyClass, _ = _ensure_cryptography()
+    bundle_root = bundle_root.resolve()
+    sig_doc, payload, load_errors = _load_signature_artifact(bundle_root)
+    if load_errors:
+        return load_errors
+    assert sig_doc is not None
+    errors = _check_signature_metadata(sig_doc, payload)
+    decoded = _decode_signature_fields(sig_doc)
+    if isinstance(decoded, list):
+        return errors + decoded
+    signature, signature_public_key = decoded
+    try:
+        trusted_public_key = _load_public_key(key_path)
     except ACBError as error:
-        return [str(error)]
-    if pub_in_sig != trusted_pub:
+        return errors + [str(error)]
+    if signature_public_key != trusted_public_key:
         errors.append(
             "public key in signature.json does not match trusted_key "
-            f"(fingerprint mismatch: signature={sha256_bytes(pub_in_sig)[:16]} "
-            f"trusted={sha256_bytes(trusted_pub)[:16]})"
+            f"(fingerprint mismatch: signature={sha256_bytes(signature_public_key)[:16]} "
+            f"trusted={sha256_bytes(trusted_public_key)[:16]})"
         )
-    try:
-        Ed25519PublicKeyClass.from_public_bytes(trusted_pub).verify(signature, payload)
-    except Exception as error:
-        errors.append(f"signature verification failed: {error}")
-    return errors
+    return errors + _verify_signature_payload(
+        Ed25519PublicKeyClass.from_public_bytes(trusted_public_key),
+        signature,
+        payload,
+    )
 
 
 class BundleSurfaceProvider:

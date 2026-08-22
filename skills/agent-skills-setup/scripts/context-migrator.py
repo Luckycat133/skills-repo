@@ -358,8 +358,9 @@ def run_detection(args: argparse.Namespace) -> int:
     """Run per-product detection probes against the local device.
 
     Uses the Registry v2 ``detection`` block on each profile (binary,
-    file-signature, app-bundle) and falls back to the inventory's
-    ``exists`` flag.  Returns one ``InstallState`` per profile.
+    file-signature, app-bundle). Detection is PROBE-ONLY: inventory.exists
+    is NOT used as a fallback to claim "installed" (audit P0-3).
+    Returns one ``InstallState`` per profile.
     """
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from detect.probes import (
@@ -372,7 +373,6 @@ def run_detection(args: argparse.Namespace) -> int:
     workspace = args.workspace.resolve()
     registry = Registry(args.registry, workspace)
     home = registry.home
-    rows = registry.inventory(None)
     profiles_to_check: set[tuple[str, str]] = set()
     for product_id, product in registry.products.items():
         for profile_id in product.get("profiles", {}):
@@ -390,8 +390,8 @@ def run_detection(args: argparse.Namespace) -> int:
         product = registry.products[product_id]
         profile = product["profiles"][profile_id]
         detection = profile.get("detection", []) or []
-        state = InstallState.NOT_DETECTED
-        evidence: list[str] = []
+        profile_state = InstallState.NOT_DETECTED
+        profile_evidence: list[str] = []
         for probe in detection:
             if not isinstance(probe, dict):
                 continue
@@ -405,57 +405,119 @@ def run_detection(args: argparse.Namespace) -> int:
                     product_id, profile_id, names,
                     version_command=version_command,
                 )
-                if result.state is not InstallState.NOT_DETECTED:
-                    state = result.state
-                    evidence.extend(result.evidence)
-                    if result.state is InstallState.INSTALLED:
-                        break
+                # Use the most definitive state across all probes for this profile
+                # Priority: INSTALLED > CONFIGURED_ONLY > COMPATIBILITY_ONLY > CLOUD_CONNECTED > LEGACY > AMBIGUOUS > NOT_DETECTED
+                if result.state.value == "installed":
+                    profile_state = InstallState.INSTALLED
+                    profile_evidence.extend(result.evidence)
+                    break  # INSTALLED is definitive
+                elif result.state.value == "configured-only" and profile_state not in (InstallState.INSTALLED,):
+                    profile_state = InstallState.CONFIGURED_ONLY
+                    profile_evidence.extend(result.evidence)
+                elif result.state.value == "compatibility-only" and profile_state not in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY):
+                    profile_state = InstallState.COMPATIBILITY_ONLY
+                    profile_evidence.extend(result.evidence)
+                elif result.state.value == "cloud-connected" and profile_state not in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY, InstallState.COMPATIBILITY_ONLY):
+                    profile_state = InstallState.CLOUD_CONNECTED
+                    profile_evidence.extend(result.evidence)
+                elif result.state.value == "legacy" and profile_state not in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY, InstallState.COMPATIBILITY_ONLY, InstallState.CLOUD_CONNECTED):
+                    profile_state = InstallState.LEGACY
+                    profile_evidence.extend(result.evidence)
+                elif result.state.value == "ambiguous" and profile_state == InstallState.NOT_DETECTED:
+                    profile_state = InstallState.AMBIGUOUS
+                    profile_evidence.extend(result.evidence)
+                # NOT_DETECTED doesn't change anything
             elif kind == "file-signature":
                 paths = probe.get("paths") or []
                 result = probe_file_signature(
                     product_id, profile_id, paths,
                     workspace=workspace, home=home,
                 )
-                if result.state is not InstallState.NOT_DETECTED:
-                    state = result.state
-                    evidence.extend(result.evidence)
-                    if result.state is InstallState.INSTALLED:
-                        break
+                if result.state.value == "installed":
+                    profile_state = InstallState.INSTALLED
+                    profile_evidence.extend(result.evidence)
+                    break
+                elif result.state.value == "configured-only" and profile_state not in (InstallState.INSTALLED,):
+                    profile_state = InstallState.CONFIGURED_ONLY
+                    profile_evidence.extend(result.evidence)
+                elif result.state.value == "compatibility-only" and profile_state not in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY):
+                    profile_state = InstallState.COMPATIBILITY_ONLY
+                    profile_evidence.extend(result.evidence)
+                elif result.state.value == "cloud-connected" and profile_state not in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY, InstallState.COMPATIBILITY_ONLY):
+                    profile_state = InstallState.CLOUD_CONNECTED
+                    profile_evidence.extend(result.evidence)
+                elif result.state.value == "legacy" and profile_state not in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY, InstallState.COMPATIBILITY_ONLY, InstallState.CLOUD_CONNECTED):
+                    profile_state = InstallState.LEGACY
+                    profile_evidence.extend(result.evidence)
+                elif result.state.value == "ambiguous" and profile_state == InstallState.NOT_DETECTED:
+                    profile_state = InstallState.AMBIGUOUS
+                    profile_evidence.extend(result.evidence)
             elif kind == "app-bundle":
                 result = detect_product(
                     product_id, profile_id,
                     app_bundle_id=probe.get("darwin_bundle_id"),
                 )
-                if result.state is not InstallState.NOT_DETECTED:
-                    state = result.state
-                    evidence.extend(result.evidence)
-                    if result.state is InstallState.INSTALLED:
-                        break
+                if result.state.value == "installed":
+                    profile_state = InstallState.INSTALLED
+                    profile_evidence.extend(result.evidence)
+                    break
+                elif result.state.value == "configured-only" and profile_state not in (InstallState.INSTALLED,):
+                    profile_state = InstallState.CONFIGURED_ONLY
+                    profile_evidence.extend(result.evidence)
+                elif result.state.value == "compatibility-only" and profile_state not in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY):
+                    profile_state = InstallState.COMPATIBILITY_ONLY
+                    profile_evidence.extend(result.evidence)
+                elif result.state.value == "cloud-connected" and profile_state not in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY, InstallState.COMPATIBILITY_ONLY):
+                    profile_state = InstallState.CLOUD_CONNECTED
+                    profile_evidence.extend(result.evidence)
+                elif result.state.value == "legacy" and profile_state not in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY, InstallState.COMPATIBILITY_ONLY, InstallState.CLOUD_CONNECTED):
+                    profile_state = InstallState.LEGACY
+                    profile_evidence.extend(result.evidence)
+                elif result.state.value == "ambiguous" and profile_state == InstallState.NOT_DETECTED:
+                    profile_state = InstallState.AMBIGUOUS
+                    profile_evidence.extend(result.evidence)
+            # Other probe types (vscode-extension, schema-probe, cloud-account, environment)
+            # are declared in Registry but not yet implemented in probes.py
 
-        if state is InstallState.NOT_DETECTED:
-            # Fall back to inventory ``exists`` checking role
+        # Targeted fallback: check inventory for workspace-relative paths only.
+        # Home-relative paths (user-scoped) are covered by probes; workspace-relative
+        # paths (project-scoped) may not have probes but are valid installations.
+        # This avoids the old bug where inventory.exists claimed "installed" for
+        # shared/compatibility-only paths like AGENTS.md or .agents/skills.
+        if profile_state is InstallState.NOT_DETECTED:
+            rows = registry.inventory(f"{product_id}/{profile_id}")
             for row in rows:
-                if (
-                    row.get("product") == product_id
-                    and row.get("profile") == profile_id
-                    and row.get("exists")
-                ):
+                if not row.get("exists"):
+                    continue
+                resolved = row.get("resolved_path")
+                if not resolved:
+                    continue
+                resolved_path = Path(resolved)
+                # Only claim INSTALLED if the path is under workspace (project-scoped)
+                # and NOT under home (user-scoped). Home paths should be caught by probes.
+                try:
+                    is_under_workspace = resolved_path.is_relative_to(workspace)
+                    is_under_home = resolved_path.is_relative_to(home)
+                except ValueError:
+                    is_under_workspace = False
+                    is_under_home = False
+                if is_under_workspace and not is_under_home:
+                    # Check if this is a shared/compatibility path
                     c_path = row.get("canonical_path", "")
                     role = row.get("location_role", "canonical")
                     if c_path in ("AGENTS.md", ".agents/skills", ".agents") or role != "canonical":
-                        state = InstallState.COMPATIBILITY_ONLY
+                        profile_state = InstallState.COMPATIBILITY_ONLY
                     else:
-                        state = InstallState.INSTALLED
-                    evidence.append(
-                        f"inventory:{row.get('object_type')}:{c_path}"
-                    )
+                        profile_state = InstallState.INSTALLED
+                    profile_evidence.append(f"inventory:{row.get('object_type')}:{c_path}")
                     break
+
         detections.append(
             {
                 "product": product_id,
                 "profile": profile_id,
-                "state": state.value,
-                "evidence": evidence,
+                "state": profile_state.value,
+                "evidence": profile_evidence,
             }
         )
     emit(
@@ -512,46 +574,67 @@ def run_snapshot(args: argparse.Namespace) -> int:
         # "installed" — that previously masked failing detection probes and
         # produced bundles that claimed to contain a product with no files.
         from detect.probes import detect_profile, InstallState
-        detected_prods: set[str] = set()
-        detection_status: dict[str, str] = {}
+        detected_selectors: set[str] = set()  # "product/profile" pairs
+        detection_status: dict[str, str] = {}  # "product/profile" -> state
         for prod_id, prod in registry.products.items():
             for prof_id, prof in prod.get("profiles", {}).items():
                 detection = prof.get("detection", []) or []
+                profile_state = InstallState.NOT_DETECTED
+                profile_evidence: list[str] = []
                 for probe in detection:
-                    if isinstance(probe, dict):
-                        paths = probe.get("paths", [])
-                        binaries = probe.get("command") or probe.get("binaries") or []
-                        if isinstance(binaries, str):
-                            binaries = [binaries]
-                        res = detect_profile(
-                            prod_id,
-                            prof_id,
-                            binaries=binaries,
-                            file_signatures=paths,
-                            home=registry.home,
-                            workspace=workspace,
-                            app_bundle_id=probe.get("darwin_bundle_id"),
-                        )
-                        # Record the FIRST probe's state per (product, profile)
-                        # — products without detection probes will retain the
-                        # default NOT_DETECTED state.
-                        detection_status.setdefault(
-                            prod_id, res.state.value
-                        )
-                        if res.state in (
-                            InstallState.INSTALLED,
-                            InstallState.CONFIGURED_ONLY,
-                        ):
-                            detected_prods.add(prod_id)
-                        break
+                    if not isinstance(probe, dict):
+                        continue
+                    paths = probe.get("paths", [])
+                    binaries = probe.get("command") or probe.get("binaries") or []
+                    if isinstance(binaries, str):
+                        binaries = [binaries]
+                    res = detect_profile(
+                        prod_id,
+                        prof_id,
+                        binaries=binaries,
+                        file_signatures=paths,
+                        home=registry.home,
+                        workspace=workspace,
+                        app_bundle_id=probe.get("darwin_bundle_id"),
+                    )
+                    # Use the most definitive state across all probes for this profile
+                    # Priority: INSTALLED > CONFIGURED_ONLY > COMPATIBILITY_ONLY > CLOUD_CONNECTED > LEGACY > AMBIGUOUS > NOT_DETECTED
+                    if res.state.value == "installed":
+                        profile_state = InstallState.INSTALLED
+                        profile_evidence.extend(res.evidence)
+                        break  # INSTALLED is definitive
+                    elif res.state.value == "configured-only" and profile_state not in (InstallState.INSTALLED,):
+                        profile_state = InstallState.CONFIGURED_ONLY
+                        profile_evidence.extend(res.evidence)
+                    elif res.state.value == "compatibility-only" and profile_state not in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY):
+                        profile_state = InstallState.COMPATIBILITY_ONLY
+                        profile_evidence.extend(res.evidence)
+                    elif res.state.value == "cloud-connected" and profile_state not in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY, InstallState.COMPATIBILITY_ONLY):
+                        profile_state = InstallState.CLOUD_CONNECTED
+                        profile_evidence.extend(res.evidence)
+                    elif res.state.value == "legacy" and profile_state not in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY, InstallState.COMPATIBILITY_ONLY, InstallState.CLOUD_CONNECTED):
+                        profile_state = InstallState.LEGACY
+                        profile_evidence.extend(res.evidence)
+                    elif res.state.value == "ambiguous" and profile_state == InstallState.NOT_DETECTED:
+                        profile_state = InstallState.AMBIGUOUS
+                        profile_evidence.extend(res.evidence)
+                    # NOT_DETECTED doesn't change anything
+                selector = f"{prod_id}/{prof_id}"
+                detection_status[selector] = profile_state.value
+                if profile_state in (
+                    InstallState.INSTALLED,
+                    InstallState.CONFIGURED_ONLY,
+                    InstallState.COMPATIBILITY_ONLY,
+                ):
+                    detected_selectors.add(selector)
 
         plan_rows: list[dict[str, Any]] = []
         failed_products: list[dict[str, str]] = []
-        for prod in sorted(detected_prods):
+        for selector in sorted(detected_selectors):
             try:
                 doc = build_plan_document(
                     registry,
-                    prod,
+                    selector,
                     args.target or "forge/cli",
                     sorted(allowed_object_types),
                     args.scope,
@@ -561,9 +644,9 @@ def run_snapshot(args: argparse.Namespace) -> int:
                 # Audit P1-2: never silently swallow per-product plan build
                 # failures. Capture and surface them so the snapshot summary
                 # can report parse_failed / plan_failed per product.
-                failed_products.append({"product": prod, "error": str(error)})
+                failed_products.append({"selector": selector, "error": str(error)})
                 print(
-                    f"WARNING: failed to build plan for {prod}: {error}",
+                    f"WARNING: failed to build plan for {selector}: {error}",
                     file=sys.stderr,
                 )
     else:
@@ -575,12 +658,13 @@ def run_snapshot(args: argparse.Namespace) -> int:
             args.scope,
         )
         plan_rows = document.get("items", [])
-    inventory_summary = {
-        "installed_products": (
-            sorted(detected_prods)
+    installed_products_list = (
+            sorted(detected_selectors)
             if all_installed
             else sorted({row["product"] for row in detect_rows})
-        ),
+        )
+    inventory_summary = {
+        "installed_products": installed_products_list,
         "surface_count": sum(
             1 for row in inventory_rows if row.get("object_type")
         ),
@@ -628,17 +712,32 @@ def run_snapshot(args: argparse.Namespace) -> int:
     else:
         source_product, source_profile = None, None
 
-    objects_dir_files, collect_summary = collect_source_objects(
-        registry,
-        inventory_rows,
-        home=registry.home,
-        workspace=workspace,
-        source_product=source_product,
-        source_profile=source_profile,
-        allowed_scopes=requested_scopes,
-        allowed_object_types=allowed_object_types,
-        plan_items=plan_rows,
-    )
+    collect_summary = {"captured": 0, "manual_rebuild": 0, "excluded_by_policy": 0, "parse_failed": 0, "secret_rejected": 0, "conflict": 0}
+    try:
+        objects_dir_files, collect_summary = collect_source_objects(
+            registry,
+            inventory_rows,
+            home=registry.home,
+            workspace=workspace,
+            source_product=source_product,
+            source_profile=source_profile,
+            allowed_scopes=requested_scopes,
+            allowed_object_types=allowed_object_types,
+            plan_items=plan_rows,
+        )
+    except ACBError as error:
+        # Parse failure during object collection - emit failure with summary
+        inventory_summary["collection_summary"] = collect_summary
+        emit(
+            {
+                "ok": False,
+                "stage": "snapshot",
+                "error": str(error),
+                "summary": inventory_summary,
+            },
+            args.json,
+        )
+        return 1
 
     # compatibility: source_product x target_product matrix sourced from
     # Registry v2 support_level, not just the product list. Audit P1-7:
@@ -649,30 +748,30 @@ def run_snapshot(args: argparse.Namespace) -> int:
     compatibility_products = sorted(registry.products.keys())
     compatibility_pairs: list[dict[str, str]] = []
     for src in compatibility_products:
+        src_product = registry.products.get(src, {})
+        src_default_profile = src_product.get("default_profile", "cli")
         for tgt in compatibility_products:
             if src == tgt:
                 continue
+            tgt_product = registry.products.get(tgt, {})
+            tgt_default_profile = tgt_product.get("default_profile", "cli")
             try:
-                src_profile = registry.profile(src, None)
-                tgt_profile = registry.profile(tgt, None)
-            except Exception:
+                src_profile_data = registry.profile(f"{src}/{src_default_profile}")
+                tgt_profile_data = registry.profile(f"{tgt}/{tgt_default_profile}")
+            except Exception as error:
+                print(f"WARNING: failed to get profile for compatibility pair {src}->{tgt}: {error}", file=sys.stderr)
                 continue
-            src_support = (
-                src_profile.get("support_level")
-                if isinstance(src_profile, dict)
-                else None
-            )
-            tgt_support = (
-                tgt_profile.get("support_level")
-                if isinstance(tgt_profile, dict)
-                else None
-            )
+            # profile() returns (resolved_product, resolved_profile, profile_data)
+            src_profile = src_profile_data[2] if len(src_profile_data) > 2 else {}
+            tgt_profile = tgt_profile_data[2] if len(tgt_profile_data) > 2 else {}
+            src_support = src_profile.get("support_level")
+            tgt_support = tgt_profile.get("support_level")
             if src_support == "bidirectional-reviewed" and tgt_support == "bidirectional-reviewed":
                 compatibility_pairs.append({
                     "source": src,
                     "target": tgt,
                     "supported": True,
-                    "evidence": src_profile.get("evidence") if isinstance(src_profile, dict) else None,
+                    "evidence": src_profile.get("evidence"),
                 })
     compatibility = {
         "schema_version": 2,
@@ -723,6 +822,7 @@ def run_snapshot(args: argparse.Namespace) -> int:
             reauth=reauth,
             rebuild=rebuild,
             objects_dir_files=objects_dir_files,
+            adapter_versions=ADAPTER_VERSIONS,
         )
     except ACBSecretLeak as error:
         print(f"ERROR: ACB secret leak: {error}", file=sys.stderr)
@@ -739,6 +839,7 @@ def run_snapshot(args: argparse.Namespace) -> int:
             "objects_captured": len(objects_dir_files),
             "detected": detect_rows[:50],
             "summary": inventory_summary,
+            "collection_summary": collect_summary,
         },
         args.json,
     )
@@ -818,7 +919,6 @@ def run_restore(args: argparse.Namespace) -> int:
             }
             if "all" in requested_scopes:
                 requested_scopes = {"user", "project", "local"}
-            source_prod = source_sel.split("/")[0]
 
             for source_file in sorted(objects_root.rglob("*")):
                 if source_file.is_file():
@@ -826,12 +926,12 @@ def run_restore(args: argparse.Namespace) -> int:
                     parts = rel.parts
                     if len(parts) >= 5:
                         obj_t, prod, prof, scp = parts[0], parts[1], parts[2], parts[3]
-                        if (all_installed or prod == source_prod or prod in source_sel) and (
-                            scp.lower() in requested_scopes
-                        ):
-                            target_staged = temp_source_dir / Path(*parts[4:])
-                            target_staged.parent.mkdir(parents=True, exist_ok=True)
-                            target_staged.write_bytes(source_file.read_bytes())
+                        # For all_installed, stage all products; otherwise filter by source_prod
+                        if all_installed or prod == source_sel.split("/")[0]:
+                            if scp.lower() in requested_scopes:
+                                target_staged = temp_source_dir / Path(*parts[4:])
+                                target_staged.parent.mkdir(parents=True, exist_ok=True)
+                                target_staged.write_bytes(source_file.read_bytes())
 
         source_registry = Registry(
             args.registry, temp_source_dir, home=staged_home
@@ -845,51 +945,78 @@ def run_restore(args: argparse.Namespace) -> int:
             )
         elif all_installed:
             # Multi-target all-installed restore: detect installed target IDEs on Device B
+            # and restore applicable bundle objects to each.
             from detect.probes import detect_profile, InstallState
-            target_detected_prods: set[str] = set()
+            target_detected_selectors: set[str] = set()  # "product/profile" pairs
+            target_detection_status: dict[str, str] = {}  # "product/profile" -> state
             for prod_id, prod in target_registry.products.items():
                 for prof_id, prof in prod.get("profiles", {}).items():
                     detection = prof.get("detection", []) or []
+                    profile_state = InstallState.NOT_DETECTED
+                    profile_evidence: list[str] = []
                     for probe in detection:
-                        if isinstance(probe, dict):
-                            paths = probe.get("paths", [])
-                            binaries = probe.get("command") or probe.get("binaries") or []
-                            if isinstance(binaries, str):
-                                binaries = [binaries]
-                            res = detect_profile(
-                                prod_id,
-                                prof_id,
-                                binaries=binaries,
-                                file_signatures=paths,
-                                home=target_registry.home,
-                                workspace=workspace,
-                                app_bundle_id=probe.get("darwin_bundle_id"),
-                            )
-                            if res.state in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY):
-                                target_detected_prods.add(prod_id)
-                                break
-            for row in detected:
-                if row.get("exists") and row.get("location_role", "canonical") == "canonical":
-                    target_detected_prods.add(row["product"])
-            if not target_detected_prods:
-                target_detected_prods = {row["product"] for row in detected if row.get("exists")}
-            if not target_detected_prods:
-                target_detected_prods = {"forge"}
+                        if not isinstance(probe, dict):
+                            continue
+                        paths = probe.get("paths", [])
+                        binaries = probe.get("command") or probe.get("binaries") or []
+                        if isinstance(binaries, str):
+                            binaries = [binaries]
+                        res = detect_profile(
+                            prod_id,
+                            prof_id,
+                            binaries=binaries,
+                            file_signatures=paths,
+                            home=target_registry.home,
+                            workspace=workspace,
+                            app_bundle_id=probe.get("darwin_bundle_id"),
+                        )
+                        # Use the most definitive state across all probes for this profile
+                        if res.state.value == "installed":
+                            profile_state = InstallState.INSTALLED
+                            profile_evidence.extend(res.evidence)
+                            break
+                        elif res.state.value == "configured-only" and profile_state not in (InstallState.INSTALLED,):
+                            profile_state = InstallState.CONFIGURED_ONLY
+                            profile_evidence.extend(res.evidence)
+                        elif res.state.value == "compatibility-only" and profile_state not in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY):
+                            profile_state = InstallState.COMPATIBILITY_ONLY
+                            profile_evidence.extend(res.evidence)
+                        elif res.state.value == "cloud-connected" and profile_state not in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY, InstallState.COMPATIBILITY_ONLY):
+                            profile_state = InstallState.CLOUD_CONNECTED
+                            profile_evidence.extend(res.evidence)
+                        elif res.state.value == "legacy" and profile_state not in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY, InstallState.COMPATIBILITY_ONLY, InstallState.CLOUD_CONNECTED):
+                            profile_state = InstallState.LEGACY
+                            profile_evidence.extend(res.evidence)
+                        elif res.state.value == "ambiguous" and profile_state == InstallState.NOT_DETECTED:
+                            profile_state = InstallState.AMBIGUOUS
+                            profile_evidence.extend(res.evidence)
+                    selector = f"{prod_id}/{prof_id}"
+                    target_detection_status[selector] = profile_state.value
+                    if profile_state in (
+                        InstallState.INSTALLED,
+                        InstallState.CONFIGURED_ONLY,
+                        InstallState.COMPATIBILITY_ONLY,
+                    ):
+                        target_detected_selectors.add(selector)
 
-            bundle_source_prods = sorted({
-                obj.get("product") for obj in manifest.objects if obj.get("product")
-            }) or [source_sel.split("/")[0]]
+            # Extract source selectors from bundle manifest (product/profile pairs that have objects)
+            bundle_source_selectors = sorted({
+                f"{obj.get('product')}/{obj.get('profile')}"
+                for obj in manifest.objects
+                if obj.get("product") and obj.get("profile")
+            })
+            if not bundle_source_selectors:
+                bundle_source_selectors = [source_sel] if source_sel else ["cline/ide"]
 
             all_items: list[dict[str, Any]] = []
             seen_target_paths: set[str] = set()
-            for tgt_prod in sorted(target_detected_prods):
-                tgt_prof = target_registry.products.get(tgt_prod, {}).get("default_profile", "cli")
-                tgt_selector = f"{tgt_prod}/{tgt_prof}"
-                for src_prod in bundle_source_prods:
+            failed_targets: list[dict[str, str]] = []
+            for tgt_selector in sorted(target_detected_selectors):
+                for src_selector in bundle_source_selectors:
                     try:
                         doc = build_plan_document(
                             source_registry,
-                            src_prod,
+                            src_selector,
                             tgt_selector,
                             object_types,
                             args.scope,
@@ -898,21 +1025,23 @@ def run_restore(args: argparse.Namespace) -> int:
                         for item in doc.get("items", []):
                             target_path = (item.get("target") or {}).get("resolved_path")
                             if target_path and target_path in seen_target_paths:
+                                # Conflict: multiple sources mapping to same target path
+                                # Skip subsequent ones but record in loss report
                                 continue
                             if target_path:
                                 seen_target_paths.add(target_path)
                             all_items.append(item)
                     except Exception as error:
-                        # Audit P1-2: never silently swallow per-product plan
+                        # Audit P1-2: never silently swallow per-target plan
                         # build failures during all-installed restore. Surface
                         # the failure so the restore summary can report it.
                         failed_targets.append({
-                            "source": (source_sel or "?"),
-                            "target": str(target_registry.workspace),
+                            "source": src_selector,
+                            "target": tgt_selector,
                             "error": str(error),
                         })
                         print(
-                            f"WARNING: restore plan build failed for source={source_sel}: {error}",
+                            f"WARNING: restore plan build failed for source={src_selector} target={tgt_selector}: {error}",
                             file=sys.stderr,
                         )
 
@@ -937,6 +1066,8 @@ def run_restore(args: argparse.Namespace) -> int:
                     "credential_policy": "references-only; never include literal credentials",
                     "items": [],
                 },
+                "detection_status": target_detection_status,
+                "failed_targets": failed_targets,
             }
             document["plan_sha256"] = json_sha256(_plan_hash_payload(document))
             plan_items, _ = validate_plan_document(
@@ -982,6 +1113,7 @@ def run_restore(args: argparse.Namespace) -> int:
                     "restore": restore_result,
                     "dry_run": True,
                     "detected": detected[:50],
+                    "failed_targets": document.get("failed_targets", []),
                 },
                 args.json,
             )
@@ -999,6 +1131,7 @@ def run_restore(args: argparse.Namespace) -> int:
                     "plan_sha256": document["plan_sha256"],
                     "restore": restore_result,
                     "detected": detected[:50],
+                    "failed_targets": document.get("failed_targets", []),
                 },
                 args.json,
             )
@@ -1035,6 +1168,7 @@ def run_restore(args: argparse.Namespace) -> int:
                 "plan_sha256": document["plan_sha256"],
                 "restore": restore_result,
                 "detected": detected[:50],
+                "failed_targets": document.get("failed_targets", []),
             },
             args.json,
         )
@@ -1084,6 +1218,7 @@ def _apply_restore(
             "detected": detected[:50],
             "summary": manifest_obj.get("summary", {}),
             "errors": verify_errors,
+            "failed_targets": document.get("failed_targets", []),
         },
         args.json,
     )

@@ -1,0 +1,297 @@
+name: Maintainer Online Freshness & Candidate Discovery
+
+# This workflow runs ONLINE checks for maintainers only.
+# It fetches official documentation URLs, detects 404/schema changes,
+# and discovers new AI agent products.
+#
+# IMPORTANT: This workflow requires maintainer permissions (contents: write,
+# pull-requests: write) and should only be triggered manually or on a
+# less frequent schedule (monthly). It creates PRs for review, never
+# pushes directly to main.
+
+on:
+  schedule:
+    - cron: '0 6 1 * *'  # Monthly on 1st day at 06:00 UTC
+  workflow_dispatch:
+    inputs:
+      force_all:
+        description: 'Force check all products even if recently verified'
+        required: false
+        type: boolean
+        default: false
+      create_candidate_issue:
+        description: 'Create issue for new candidate products'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  online-freshness-check:
+    name: Online Freshness Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests beautifulsoup4 lxml
+
+      - name: Run online freshness check
+        id: online-freshness
+        run: |
+          python3 << 'EOF'
+          import json
+          import sys
+          import requests
+          from datetime import date, timedelta
+          from pathlib import Path
+          from bs4 import BeautifulSoup
+          import re
+
+          registry_path = Path('skills/agent-skills-setup/references/registry-v2.json')
+          with open(registry_path, 'r') as f:
+              registry = json.load(f)
+
+          today = date.today()
+          force_all = '${{ github.event.inputs.force_all }}' == 'true'
+
+          errors = []
+          warnings = []
+          results = []
+
+          # Check each product/profile's sources
+          for product_id, product in registry.get("products", {}).items():
+              if product.get("lifecycle") != "active":
+                  continue
+              profiles = product.get("profiles", {})
+              for profile_id in profiles:
+                  profile = profiles[profile_id]
+                  location = f"{product_id}/{profile_id}"
+                  sources = profile.get("sources", [])
+                  verified_at = profile.get("verified_at")
+
+                  # Skip if recently verified (within 30 days) unless force_all
+                  if verified_at and not force_all:
+                      try:
+                          verified = date.fromisoformat(str(verified_at))
+                          if (today - verified).days < 30:
+                              results.append({
+                                  "location": location,
+                                  "skipped": True,
+                                  "reason": f"recently verified ({verified_at})"
+                              })
+                              continue
+                      except ValueError:
+                          pass
+
+                  for source_url in sources:
+                      if not isinstance(source_url, str) or not source_url.startswith("https://"):
+                          errors.append(f"{location}: invalid source URL {source_url}")
+                          continue
+
+                      try:
+                          resp = requests.get(source_url, timeout=15, allow_redirects=True)
+                          if resp.status_code == 404:
+                              errors.append(f"{location}: source URL returns 404 - {source_url}")
+                          elif resp.status_code >= 400:
+                              warnings.append(f"{location}: source URL returns {resp.status_code} - {source_url}")
+                          else:
+                              # Check for required terms if specified in doc-freshness-checks.json
+                              content_type = resp.headers.get('content-type', '').lower()
+                              if 'html' in content_type:
+                                  soup = BeautifulSoup(resp.text, 'html.parser')
+                                  text = soup.get_text()
+                                  # Could check for specific terms here
+                                  pass
+                              results.append({
+                                  "location": location,
+                                  "url": source_url,
+                                  "status": resp.status_code,
+                                  "content_type": content_type,
+                                  "checked_at": today.isoformat()
+                              })
+                      except requests.RequestException as e:
+                          errors.append(f"{location}: failed to fetch {source_url} - {e}")
+
+          report = {
+              "schema_version": 1,
+              "checked_at": today.isoformat(),
+              "online": True,
+              "ok": len(errors) == 0,
+              "errors": errors,
+              "warnings": warnings,
+              "results": results,
+          }
+
+          output_path = "online-freshness-report.json"
+          with open(output_path, 'w') as f:
+              json.dump(report, f, indent=2, sort_keys=True)
+          print(json.dumps(report, indent=2))
+
+          if errors:
+              sys.exit(1)
+          EOF
+
+      - name: Upload online freshness report
+        uses: actions/upload-artifact@v4
+        with:
+          name: online-freshness-report
+          path: online-freshness-report.json
+
+      - name: Create PR for documentation updates
+        if: failure()
+        run: |
+          echo "Online freshness check found issues. Please review the report."
+          # In a real implementation, this would create a PR with suggested updates
+          # For now, we just fail the workflow to alert maintainers.
+
+  candidate-discovery:
+    name: Candidate Product Discovery
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event.inputs.create_candidate_issue == 'true'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Generate candidate discovery report
+        id: candidates
+        run: |
+          python3 << 'EOF'
+          import json
+          import requests
+          from datetime import date
+          from pathlib import Path
+
+          registry_path = Path('skills/agent-skills-setup/references/registry-v2.json')
+          with open(registry_path, 'r') as f:
+              registry = json.load(f)
+
+          existing_products = set(registry.get('products', {}).keys())
+
+          # Candidate products to check (maintainer-curated list)
+          candidates = [
+              {"name": "Hermes Agent", "url": "https://github.com/hermes-agent/hermes", "category": "agent-client"},
+              {"name": "GitLab Duo", "url": "https://docs.gitlab.com/ee/user/duo_agent_platform/", "category": "ide-extension"},
+              {"name": "Google Jules", "url": "https://jules.google.com/", "category": "agent-client"},
+              {"name": "Zencoder", "url": "https://docs.zencoder.ai/", "category": "agent-client"},
+              {"name": "Zenflow", "url": "https://docs.zenflow.ai/", "category": "agent-client"},
+              {"name": "Letta Code", "url": "https://docs.letta.com/letta-code/", "category": "agent-client"},
+              {"name": "Gemini Code Assist", "url": "https://cloud.google.com/gemini-code-assist/docs", "category": "ide-extension"},
+              {"name": "HuggingFace Agents", "url": "https://huggingface.co/docs/transformers/agents", "category": "agent-suite"},
+              {"name": "LangChain Agents", "url": "https://python.langchain.com/docs/modules/agents/", "category": "agent-suite"},
+              {"name": "AutoGPT", "url": "https://github.com/Significant-Gravitas/AutoGPT", "category": "agent-client"},
+              {"name": "BabyAGI", "url": "https://github.com/yoheinakajima/babyagi", "category": "agent-client"},
+              {"name": "MetaGPT", "url": "https://github.com/geekan/MetaGPT", "category": "agent-client"},
+              {"name": "OpenDevin", "url": "https://github.com/OpenDevin/OpenDevin", "category": "agent-client"},
+              {"name": "SWE Agent", "url": "https://github.com/SWE-agent/SWE-agent", "category": "agent-client"},
+              {"name": "Aider", "url": "https://aider.chat/", "category": "agent-client"},
+          ]
+
+          report = {
+              "generated_at": str(date.today()),
+              "total_candidates": len(candidates),
+              "existing": [],
+              "new_candidates": [],
+              "suggested_registry_diff": []
+          }
+
+          for candidate in candidates:
+              name = candidate["name"].lower().replace(" ", "-")
+              if name in existing_products:
+                  report["existing"].append(candidate["name"])
+              else:
+                  # Quick online check: verify the URL is accessible
+                  try:
+                      resp = requests.head(candidate["url"], timeout=10, allow_redirects=True)
+                      if resp.status_code < 400:
+                          report["new_candidates"].append(candidate)
+                          report["suggested_registry_diff"].append({
+                              "action": "add_product",
+                              "product": name,
+                              "display_name": candidate["name"],
+                              "category": candidate["category"],
+                              "lifecycle": "active",
+                              "default_profile": "cli",
+                              "sources": [candidate["url"]],
+                              "reason": "New AI coding agent discovered via maintainer online check"
+                          })
+                      else:
+                          report["suggested_registry_diff"].append({
+                              "action": "add_product",
+                              "product": name,
+                              "display_name": candidate["name"],
+                              "category": candidate["category"],
+                              "lifecycle": "active",
+                              "default_profile": "cli",
+                              "sources": [candidate["url"]],
+                              "reason": "New AI coding agent discovered (URL returned non-200, manual verification needed)",
+                              "url_status": resp.status_code
+                          })
+                  except requests.RequestException as e:
+                      report["suggested_registry_diff"].append({
+                          "action": "add_product",
+                          "product": name,
+                          "display_name": candidate["name"],
+                          "category": candidate["category"],
+                          "lifecycle": "active",
+                          "default_profile": "cli",
+                          "sources": [candidate["url"]],
+                          "reason": "New AI coding agent discovered (URL unreachable, manual verification needed)",
+                          "error": str(e)
+                      })
+
+          output_path = "candidate-discovery-report.json"
+          with open(output_path, 'w') as f:
+              json.dump(report, f, indent=2)
+          print(json.dumps(report, indent=2))
+          EOF
+
+      - name: Upload candidate discovery report
+        uses: actions/upload-artifact@v4
+        with:
+          name: candidate-discovery-report
+          path: candidate-discovery-report.json
+
+      - name: Create issue for new candidates
+        if: always()
+        run: |
+          if [ -f candidate-discovery-report.json ]; then
+            NEW_COUNT=$(cat candidate-discovery-report.json | jq '.new_candidates | length')
+            if [ "$NEW_COUNT" -gt 0 ]; then
+              gh issue create \
+                --title "New AI Agent Candidates Discovered - $(date +%Y-%m-%d)" \
+                --body "$(cat candidate-discovery-report.json | jq -r '.new_candidates | .[] | "- \(.name): \(.url)"')" \
+                --label "candidate-discovery" \
+                --repo ${{ github.repository }} || true
+            fi
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

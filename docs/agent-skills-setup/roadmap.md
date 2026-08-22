@@ -20,11 +20,12 @@ exact-release CI matrix on `ubuntu-latest`, `macos-latest`, and
 - ACB (`snapshot`, `bundle-verify`, `restore`, `doctor`) writes a
   closed-world, atomic-staged bundle with a 1:1 manifest-to-object
   binding validated by SHA256.
-- Bundles are signed with HMAC-SHA256 over `checksums.json`. Ed25519 is
-  deferred to a vendor of `cryptography` or `nacl`.
+- Bundles are signed with **Ed25519** over `checksums.json` (P1-5, 0.8.27).
+  `sign_bundle` / `verify_bundle_signature` accept `--trusted-key <id_ed25519.pub>`.
+  HMAC-SHA256 is retained for backward compatibility.
 - `--all-installed` snapshot and restore use real detection results as
   the only source of truth (no `inventory.exists` fallback) and
-  iterate plan items, not inventory rows.
+  iterate plan items, not inventory rows (P0-3, 0.8.27).
 - MCP / Instructions / Skills use explicit adapter registries. JSONC
   uses a reviewed parser; JSON5 / TOML / YAML / XML / Lua / ambiguous
   UUID+JSON fail to a dedicated manual adapter.
@@ -34,7 +35,13 @@ exact-release CI matrix on `ubuntu-latest`, `macos-latest`, and
 - Alias resolver follows `alias_of` chains iteratively with cycle,
   depth, and unknown-selector guards.
 - macOS path expansion and `~` resolution are deterministic.
-- `secrets.required.json` and `reauth.json` are non-secret metadata only.
+- `secrets.required.json`, `reauth.json`, `rebuild.json`, and
+  `collection_summary` are non-secret metadata only.
+- Parse failures are surfaced explicitly in `requirements.json` and
+  `collection_summary` (P1-2, 0.8.27); no silent exception swallowing.
+- Manifest objects carry rich metadata: `object_path`, `files[]` with
+  SHA256/size, `adapter_version`, `source_format_version`,
+  `portability_mode`, `content_hash`.
 
 ## Experimental
 
@@ -42,29 +49,30 @@ These work in restricted environments but are not yet ready for
 production-grade cross-platform guarantees.
 
 - Windows / WSL / Remote-SSH / Dev-Container / Codespaces path
-  resolution. The CI matrix now runs on `windows-latest` but path
+  resolution. The CI matrix runs on `windows-latest` but path
   expansion tests do not yet cover WindowsPath, drive roots, UNC,
   junction / reparse points, or WSL host/guest `HOME` interaction.
 - `--all-installed` end-to-end on those host classes. Plan build,
   parse, and atomic apply have been verified on macOS / Linux; the
   Windows smoke test is limited.
-- ACB signed bundle cross-device handoff. HMAC is symmetric, so the
-  security boundary remains "self-generated, self-transferred,
-  self-restored" — third-party ACBs are not yet verifiable.
-- Maintainer-side documentation freshness via `--max-age-days 30` to
-  60. The 365-day window in `doc-freshness-checks.json` is too lax for
-  products that ship schema changes monthly.
+- ACB signed bundle cross-device handoff. Ed25519 is asymmetric, so
+  the security boundary is now "self-generated + trusted-key verified".
+  Third-party ACBs can be verified with `--trusted-key`.
+- Maintainer-side documentation freshness via online checks (monthly
+  `maintainer-online-checks.yml`). The 365-day window in
+  `doc-freshness-checks.json` applies only to the offline runtime
+  check; maintainer online checks use a 30-day window.
 
 ## Known limitations
 
-- `cryptography` 50.0.0 is vendored at runtime via `pip install
-  cryptography` for ACB sign / verify. It is not committed to the
-  repo and the bundle path does not require it at snapshot time
-  unless `--sign` is requested.
-- `doctor` still surfaces requirements as a list of `executables` and
+- `cryptography` is required at runtime for `sign_bundle` /
+  `verify_bundle_signature`. It is not committed to the repo and the
+  bundle path does not require it at snapshot time unless `--sign` is
+  requested.
+- `doctor` surfaces requirements as a list of `executables` and
   `packages` parsed from MCP server configs. It does not run an
   install planner; it does not validate that the listed package
-  actually exists.
+  actually exists on the target platform.
 - The OS / profile locations wiring covers `darwin`, `linux`, and
   `windows` deeply. `wsl`, `remote-ssh`, `dev-container`,
   `codespaces`, `vscode-profile`, and `extension-host` are stored on
@@ -73,6 +81,9 @@ production-grade cross-platform guarantees.
   `config`, `policy`, `trust`, `user_memory`, `automation`, `cron`,
   `personas`, `modes`) emit inventory rows but no automatic
   migration.
+- ACB verify re-scans object bytes with the strict secret/binary
+  scanner, but third-party bundles without a trusted Ed25519 public
+  key cannot be verified.
 
 ## Next milestone
 
@@ -80,10 +91,6 @@ Captured here so they are visible without being mistaken for
 Production. Each item lists the test or evidence required to promote
 itself.
 
-- Vendor `cryptography` (or `nacl`) and replace HMAC-SHA256 with
-  Ed25519. Acceptance: `sign_bundle` produces a SSH-format signature;
-  `verify_bundle_signature` accepts a `--trusted-key <id_ed25519.pub>`
-  flag and a third-party bundle can be verified end-to-end.
 - Implementation tests for `wsl`, `remote-ssh`, `dev-container`,
   `codespaces`, `vscode-profile`, `extension-host`. Acceptance: every
   profile harness has at least three fixture paths each.
@@ -95,6 +102,10 @@ itself.
   declared installer, not just a guessed package name.
 - A true `compatibility.json` matrix. Acceptance: each entry has
   `source_profile`, `target_profile`, `evidence`, and `verified_at`.
+- Windows / WSL / Remote-SSH / Dev-Container / Codespaces E2E tests
+  covering WindowsPath, drive roots, UNC, junction / reparse points,
+  WSL host/guest `HOME` interaction, actual file apply/rollback,
+  Windows→macOS ACB, macOS→Windows ACB.
 
 ## Rejected / out of scope
 
