@@ -2,41 +2,17 @@
 
 This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.8.27] - 2026-08-22
+## [0.8.28] - 2026-08-22
 
 ### Fixed
 
-- **Audit 0.8.27 closure (P1-5 / P1-6 / P1-7 / P1-8 / P1-9)** — earlier batches:
-  - **P1-5 ACB provenance signing**: replaced HMAC-SHA256 with real
-    Ed25519. `sign_bundle()` / `verify_bundle_signature()` now use
-    raw 32-byte Ed25519 seed + public key + signature (base64 in
-    `signature.json` schema_version 2). Tamper and wrong-public-key
-    detection verified by roundtrip test. Requires `cryptography`
-    at sign / verify time only (not at snapshot).
-  - **P1-6 CI matrix**: `validate.yml` now runs on `ubuntu-latest`,
-    `macos-latest`, and `windows-latest`. Windows / WSL / Remote
-    remain labeled Experimental on `roadmap.md`.
-  - **P1-7 doctor**: `secrets_required` no longer uses plan-object-id
-    as credential name; each entry derives a human-readable name from
-    the MCP server's command or package (e.g. `npx::credential`),
-    with `used_by: [<object_id>]`. `compatibility.json` is now a
-    source × target pairs list filtered to
-    `support_level == bidirectional-reviewed`, schema_version 2.
-  - **P1-7 restore loop**: replaced the silent `except Exception: pass`
-    in `restore --all-installed` with `failed_targets[]` recorded in
-    the restore summary and a stderr warning.
-  - **P1-8 automatic migration types**: `AUTOMATIC_OBJECT_TYPES` now
-    includes `prompts`, `commands`, `agents`, `hooks`.
-  - **P1-9 freshness workflow**: `candidate-discovery` job honors the
-    registry's `online_checks_enabled` flag and exits early when false.
-- **all-installed detection fidelity** — final batch: `snapshot
-  --all-installed`, `restore --all-installed`, and `detect` resolve
-  detection per profile selector (`product/profile`) with an explicit
-  state priority (INSTALLED > CONFIGURED_ONLY > COMPATIBILITY_ONLY >
-  CLOUD_CONNECTED > LEGACY > AMBIGUOUS), instead of recording only the
-  first probe's state per product. `build_plan_document` receives full
-  selectors, so plans cover every detected profile rather than only the
-  default one.
+- **all-installed detection fidelity**: `snapshot --all-installed`,
+  `restore --all-installed`, and `detect` resolve detection per
+  profile selector (`product/profile`) with an explicit state priority
+  (INSTALLED > CONFIGURED_ONLY > COMPATIBILITY_ONLY > CLOUD_CONNECTED >
+  LEGACY > AMBIGUOUS), instead of recording only the first probe's state
+  per product. `build_plan_document` receives full selectors, so plans
+  cover every detected profile rather than only the default one.
 - **restore --all-installed is now real**: target detection collects
   `product/profile` selectors, source selectors are derived from bundle
   manifest objects, and the plan document records `detection_status`
@@ -61,10 +37,6 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
   land in `manual_installs` instead of masquerading as packages;
   `collect_reauth` carries the MCP server's command/package so
   credential names stay human-readable.
-- **P0 / P1-2 follow-up (Batch 1)**: detection is the sole source of
-  truth for `--all-installed` (no `inventory.exists` fallback);
-  `collect_source_objects` iterates plan items, not inventory rows;
-  every portable object outcome is tracked with explicit status.
 
 ### Added
 
@@ -74,18 +46,43 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
   `portability_mode` (`full` / `lossy` / `manual` / `excluded`), and
   `content_hash`; closed-world verify cross-checks these bindings
   both directions.
+
+## [0.8.27] - 2026-08-22
+
+### Fixed
+
+- **Audit 0.8.27 closure (P1-5 / P1-6 / P1-7 / P1-8 / P1-9)**:
+  - **P1-5 ACB provenance signing**: replaced HMAC-SHA256 with real
+    Ed25519. `sign_bundle()` / `verify_bundle_signature()` use raw
+    32-byte Ed25519 seed + public key + signature (base64 in
+    `signature.json` schema_version 2). Requires `cryptography` at
+    sign / verify time only (not at snapshot).
+  - **P1-6 CI matrix**: `validate.yml` runs on `ubuntu-latest`,
+    `macos-latest`, and `windows-latest`.
+  - **P1-7 doctor**: `secrets_required` derives human-readable
+    credential names from the MCP server's command or package, with
+    `used_by: [<object_id>]`. `compatibility.json` is a source ×
+    target pairs list filtered to bidirectional-reviewed support,
+    schema_version 2.
+  - **P1-7 restore loop**: replaced silent `except Exception: pass`
+    with `failed_targets[]` recorded in the restore summary.
+  - **P1-8 automatic migration types**: `AUTOMATIC_OBJECT_TYPES` now
+    includes `prompts`, `commands`, `agents`, `hooks`.
+  - **P1-9 freshness workflow**: `candidate-discovery` job honors the
+    registry's `online_checks_enabled` flag.
+
+### Added
+
 - **Maintainer online checks split from offline runtime**
-  (`maintainer-online-checks.yml`): monthly job actually fetches
-  official doc URLs (404 / status-code checks) and creates candidate
-  discovery issues; it never pushes main. `freshness.yml` is now
-  explicitly offline-only, and stale demotion runs on manual dispatch
-  only (PR-based, no direct push).
-- **P2-1 release closure**: `v0.8.24` is an annotated tag on
-  `3d864ac`; branch protection requires the three platform `validate`
-  jobs, enforces admins, and requires linear history.
-- **P2-2 roadmap restructure**: `docs/agent-skills-setup/roadmap.md`
-  is organized into Production / Experimental / Known limitations /
-  Next milestone / Rejected / out of scope.
+  (`maintainer-online-checks.yml`): monthly job fetches official doc
+  URLs (404 / status-code checks) and creates candidate discovery
+  issues; it never pushes main. `freshness.yml` is explicitly
+  offline-only; stale demotion runs on manual dispatch only.
+- **P2-1 release closure**: `v0.8.24` annotated tag on `3d864ac`;
+  branch protection requires the three platform `validate` jobs,
+  enforces admins, requires linear history.
+- **P2-2 roadmap restructure**: Production / Experimental /
+  Known limitations / Next milestone / Rejected layout.
 
 ### Changed
 

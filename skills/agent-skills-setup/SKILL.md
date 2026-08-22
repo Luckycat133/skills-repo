@@ -3,7 +3,7 @@ name: agent-skills-setup
 license: MIT
 compatibility: Requires local Bash, Python 3, environment lookup, and filesystem reads. Writes only approved migration targets; no network access.
 metadata:
-  version: "0.8.27"
+  version: "0.8.28"
 description: >
   Use when a user names two supported IDEs or agent products to plan, migrate,
   or inspect specific skills, instructions, and MCP. The skill inventories local
@@ -35,7 +35,7 @@ description: >
 
 - High-level: `bash scripts/smart-ide-migration.sh migrate --source <src> --target <dst> --workspace . --objects all-portable --yes`
 - Step-by-step: `plan --output <plan.json>` -> `apply <plan.json> --manifest <manifest.json> --yes` -> `verify --manifest <manifest.json>` -> `rollback --manifest <manifest.json> --yes`.
-- Device handoff (ACB, **version 0.8.27**):
+- Device handoff (ACB, **version 0.8.28**):
   - `snapshot --output <b.acb> [--scope <scope>] [--all-installed]`: captures portable skills, instructions, and MCP under strict allowlists, plan item precision, atomic staging (`.tmp_*`), and 1:1 manifest file bindings (`config-subobject` extracts only authorized sections like `mcpServers`, never leaking sibling settings or host configurations).
   - `bundle-verify <b.acb>`: verifies closed-world SHA256 checksums, 1:1 manifest-to-disk bindings, and re-scans objects for secrets and binary safety.
   - `restore <b.acb> [--plan-only] [--plan-out <plan.json>]`: builds and reviews the dual-side migration plan without writing.
