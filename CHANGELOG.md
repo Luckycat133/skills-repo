@@ -2,59 +2,96 @@
 
 This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.8.27] - 2026-08-22
 
 ### Fixed
 
-- **Audit 0.8.27 closure (P1-5 / P1-6 / P1-7 / P1-8 / P1-9 / P2-1 / P2-2)**
+- **Audit 0.8.27 closure (P1-5 / P1-6 / P1-7 / P1-8 / P1-9)** — earlier batches:
   - **P1-5 ACB provenance signing**: replaced HMAC-SHA256 with real
     Ed25519. `sign_bundle()` / `verify_bundle_signature()` now use
     raw 32-byte Ed25519 seed + public key + signature (base64 in
     `signature.json` schema_version 2). Tamper and wrong-public-key
     detection verified by roundtrip test. Requires `cryptography`
-    50.0.0 at sign / verify time only (not at snapshot).
-  - **P1-7 doctor (final slice)**: `secrets_required` no longer
-    uses plan-object-id as credential name. Each entry derives a
-    human-readable name from the MCP server's command or package
-    (e.g. `npx::credential`), with `used_by: [<object_id>]`.
-    `compatibility.json` is now a source × target pairs list filtered
-    to `support_level == bidirectional-reviewed`, schema_version 2,
-    `matrix_kind: source_x_target_bidirectional_reviewed`.
+    at sign / verify time only (not at snapshot).
   - **P1-6 CI matrix**: `validate.yml` now runs on `ubuntu-latest`,
     `macos-latest`, and `windows-latest`. Windows / WSL / Remote
     remain labeled Experimental on `roadmap.md`.
-  - **P1-7 doctor / restore loop**: replaced the silent
-    `except Exception: pass` in `restore --all-installed` with
-    `failed_targets[]` recorded in the restore summary and a
-    stderr warning.
+  - **P1-7 doctor**: `secrets_required` no longer uses plan-object-id
+    as credential name; each entry derives a human-readable name from
+    the MCP server's command or package (e.g. `npx::credential`),
+    with `used_by: [<object_id>]`. `compatibility.json` is now a
+    source × target pairs list filtered to
+    `support_level == bidirectional-reviewed`, schema_version 2.
+  - **P1-7 restore loop**: replaced the silent `except Exception: pass`
+    in `restore --all-installed` with `failed_targets[]` recorded in
+    the restore summary and a stderr warning.
   - **P1-8 automatic migration types**: `AUTOMATIC_OBJECT_TYPES` now
-    includes `prompts`, `commands`, `agents`, `hooks`. The IR
-    emitter registry already supported these; the policy was
-    previously manual.
-  - **P1-9 freshness workflow**: `candidate-discovery` job now
-    honors the registry's `online_checks_enabled` flag. When
-    `false`, the job exits early and skips the hardcoded
-    hardcoded candidate list.
-- **P0 / P1-2 follow-up (already in 0.8.27 Batch 1)**: detection is
-  the sole source of truth for `--all-installed` (no
-  `inventory.exists` fallback); `collect_source_objects` iterates
-  plan items, not inventory rows; every portable object outcome is
-  tracked with explicit status (`captured` / `manual_rebuild` /
+    includes `prompts`, `commands`, `agents`, `hooks`.
+  - **P1-9 freshness workflow**: `candidate-discovery` job honors the
+    registry's `online_checks_enabled` flag and exits early when false.
+- **all-installed detection fidelity** — final batch: `snapshot
+  --all-installed`, `restore --all-installed`, and `detect` resolve
+  detection per profile selector (`product/profile`) with an explicit
+  state priority (INSTALLED > CONFIGURED_ONLY > COMPATIBILITY_ONLY >
+  CLOUD_CONNECTED > LEGACY > AMBIGUOUS), instead of recording only the
+  first probe's state per product. `build_plan_document` receives full
+  selectors, so plans cover every detected profile rather than only the
+  default one.
+- **restore --all-installed is now real**: target detection collects
+  `product/profile` selectors, source selectors are derived from bundle
+  manifest objects, and the plan document records `detection_status`
+  and `failed_targets[]`. Fixed the undefined `failed_targets`
+  NameError and the duplicated plan-document construction in the
+  all-installed branch; staging copies objects from every bundled
+  product when `--all-installed` is set.
+- **run_detection probe-only with targeted fallback**: removed the
+  unconditional `inventory.exists -> installed` fallback. A narrow
+  fallback remains for workspace-relative (project-scoped) paths that
+  lack probes; shared paths (`AGENTS.md`, `.agents/skills`) still
+  classify as `compatibility-only`.
+- **No silent failures in snapshot**: the compatibility-matrix builder
+  logs profile-resolution warnings instead of silently continuing;
+  `collect_source_objects` ACB errors now emit a failure response
+  carrying `collection_summary` (`captured` / `manual_rebuild` /
   `excluded_by_policy` / `parse_failed` / `secret_rejected` /
-  `conflict`).
+  `conflict`) and exit non-zero.
+- **doctor requirements accuracy**: package names are normalized
+  (version suffixes and `npm:`/`pypi:` prefixes stripped); VS Code
+  extension IDs land in `extensions`; script paths (`.py`/`.js`)
+  land in `manual_installs` instead of masquerading as packages;
+  `collect_reauth` carries the MCP server's command/package so
+  credential names stay human-readable.
+- **P0 / P1-2 follow-up (Batch 1)**: detection is the sole source of
+  truth for `--all-installed` (no `inventory.exists` fallback);
+  `collect_source_objects` iterates plan items, not inventory rows;
+  every portable object outcome is tracked with explicit status.
 
 ### Added
 
-- **P2-1 release closure**: `v0.8.24` is now an annotated tag on
-  `3d864ac`, closing the audit gap that the v0.8.24 release had
-  no corresponding tag. Branch protection now requires
-  `validate (ubuntu-latest)`, `validate (macos-latest)`,
-  `validate (windows-latest)`, enforces admins, and requires
-  linear history.
+- **Manifest object enrichment** (`enrich_manifest_object`): every
+  manifest object now carries `object_path`, `files[]` with per-file
+  SHA256 + size, `adapter_version`, `source_format_version`,
+  `portability_mode` (`full` / `lossy` / `manual` / `excluded`), and
+  `content_hash`; closed-world verify cross-checks these bindings
+  both directions.
+- **Maintainer online checks split from offline runtime**
+  (`maintainer-online-checks.yml`): monthly job actually fetches
+  official doc URLs (404 / status-code checks) and creates candidate
+  discovery issues; it never pushes main. `freshness.yml` is now
+  explicitly offline-only, and stale demotion runs on manual dispatch
+  only (PR-based, no direct push).
+- **P2-1 release closure**: `v0.8.24` is an annotated tag on
+  `3d864ac`; branch protection requires the three platform `validate`
+  jobs, enforces admins, and requires linear history.
 - **P2-2 roadmap restructure**: `docs/agent-skills-setup/roadmap.md`
-  is reorganized into Production / Experimental / Known limitations /
-  Next milestone / Rejected / out of scope to replace the previous
-  Completed / Next / Engineering backlog layout.
+  is organized into Production / Experimental / Known limitations /
+  Next milestone / Rejected / out of scope.
+
+### Changed
+
+- **v0.8.27 tag & strict branch protection**: `main` requires all
+  three platform `validate` jobs to pass before merge (`strict:
+  true`, admins included); release tags are cut from validated commits.
 
 ## [0.8.26] - 2026-08-20
 
