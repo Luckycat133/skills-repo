@@ -111,7 +111,7 @@ def create_parser() -> argparse.ArgumentParser:
 
     migrate = subparsers.add_parser(
         "migrate",
-        help="One-sentence migration: detect → inventory → plan → apply → verify.",
+        help="One-sentence migration: detect -> inventory -> plan -> apply -> verify.",
     )
     common_workspace(migrate)
     migrate.add_argument("--source", required=True, help="<product>/<profile>")
