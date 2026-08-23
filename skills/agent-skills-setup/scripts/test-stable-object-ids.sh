@@ -61,6 +61,10 @@ print("OK canonical_relative_path normalizes")
 # resolved source surface.
 ws = Path(tempfile.mkdtemp(prefix="oid-test-ws-"))
 home = Path(tempfile.mkdtemp(prefix="oid-test-home-"))
+# Pin the POSIX layout the fixtures create; on win32 the registry would
+# otherwise resolve cline surfaces to %APPDATA% and miss the tree.
+import os as _os
+_os.environ.setdefault("AGENT_SKILLS_PLATFORM", "linux")
 (ws / ".cline/skills/test-skill").mkdir(parents=True)
 (ws / ".cline/skills/test-skill/SKILL.md").write_text(
     "---\nname: test-skill\ndescription: d.\nmetadata:\n  version: '1'\n---\n",
