@@ -512,8 +512,15 @@ EOF
 S20_ORIG="$(cat "$S20")"
 
 set +e
-run bash "$MIG" --source cursor --target opencode --workspace "$W20" \
-    --objects project-mcp --source-mcp-file "$S20" --dry-run
+# Native Windows Python treats MSYS-style values as relative paths, so the
+# explicit file/workspace arguments must cross into the engine natively.
+if command -v cygpath >/dev/null 2>&1; then
+    W20_ARG="$(cygpath -w "$W20")"; S20_ARG="$(cygpath -w "$S20")"
+else
+    W20_ARG="$W20"; S20_ARG="$S20"
+fi
+run bash "$MIG" --source cursor --target opencode --workspace "$W20_ARG" \
+    --objects project-mcp --source-mcp-file "$S20_ARG" --dry-run
 set -e
 if [[ $LAST_RC -eq 0 ]]; then check_pass "20a: custom-source dry-run exits 0"; else check_fail "20a: custom-source dry-run exits rc=$LAST_RC"; fi
 # The engine echoes the source path in its native view; under MSYS that is
@@ -534,8 +541,8 @@ else
 fi
 if [[ ! -e "$W20/opencode.json" ]]; then check_pass "20a: dry-run leaves target absent"; else check_fail "20a: dry-run wrote target config"; fi
 
-run bash "$MIG" --source cursor --target opencode --workspace "$W20" \
-    --objects project-mcp --source-mcp-file "$S20" --strategy overwrite --yes
+run bash "$MIG" --source cursor --target opencode --workspace "$(cygpath -w "$W20" 2>/dev/null || printf '%s' "$W20")" \
+    --objects project-mcp --source-mcp-file "$(cygpath -w "$S20" 2>/dev/null || printf '%s' "$S20")" --strategy overwrite --yes
 D20="$W20/opencode.json"
 if [[ $LAST_RC -eq 0 ]]; then check_pass "20b: custom-source apply exits 0"; else check_fail "20b: custom-source apply exits rc=$LAST_RC"; fi
 if [[ ! -e "$D20" ]]; then
