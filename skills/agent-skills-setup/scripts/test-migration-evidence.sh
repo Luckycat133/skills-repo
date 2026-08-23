@@ -63,6 +63,8 @@ assert evidence["target_path"] == target
 assert evidence["source_unchanged"] is True
 assert evidence["target_exists"] is False
 assert evidence["target_validation"] == "absent"
+if len(evidence["source_sha256_before"]) != 64:
+    raise SystemExit(f"unexpected evidence record: {json.dumps(evidence)}")
 assert len(evidence["source_sha256_before"]) == 64
 if evidence["source_sha256_before"] != evidence["source_sha256_after"]:
     raise SystemExit(
