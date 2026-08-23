@@ -120,10 +120,12 @@ if [[ "$HAVE_SYMLINKS" == "1" ]]; then
         exit 1
     }
 fi
-[[ -f "$TARGET_ROOT/unreadable-skill/sentinel.txt" ]] || {
-    echo "FAIL: an unreadable source subtree was not rejected before overwrite" >&2
-    exit 1
-}
+if [[ "$HAVE_PERMS" == "1" ]]; then
+    [[ -f "$TARGET_ROOT/unreadable-skill/sentinel.txt" ]] || {
+        echo "FAIL: an unreadable source subtree was not rejected before overwrite" >&2
+        exit 1
+    }
+fi
 grep -Fq 'source credential preflight failed' "$TMP_ROOT/migration.log" || {
     echo "FAIL: rejected Skills were not reported" >&2
     exit 1
