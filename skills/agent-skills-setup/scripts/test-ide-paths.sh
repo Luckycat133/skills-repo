@@ -42,6 +42,9 @@ dump_registry_rows() {
 import json
 import sys
 
+# Native Windows Python translates \n to \r\n on a text-mode stdout,
+# leaving a stray \r on the last TSV field consumed by `read`.
+sys.stdout.reconfigure(newline="")
 data = json.load(open(sys.argv[1]))
 for ide in sys.argv[2:]:
     for key, value in data[ide].items():
