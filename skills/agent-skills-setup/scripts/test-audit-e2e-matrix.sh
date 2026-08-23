@@ -39,7 +39,14 @@ for src, dst in e2e_pairs:
         # Locate the fixture through the Registry's own platform-aware
         # resolution so the created tree matches what build_plan will
         # resolve (windows hosts map some surfaces to %APPDATA% etc.).
-        surface = reg.surfaces(src, "skills")[0]
+        # Glob compatibility paths (github.copilot-*) cannot host a
+        # literal fixture directory on Windows; use a concrete surface.
+        glob_chars = ("*", "?", "[")
+        surface = next(
+            s
+            for s in reg.surfaces(src, "skills")
+            if not any(c in str(s.resolved_path) for c in glob_chars)
+        )
         skill_dir = Path(surface.resolved_path) / "demo-skill"
         skill_dir.mkdir(parents=True)
         (skill_dir / "SKILL.md").write_text(
