@@ -4,6 +4,17 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Native Windows Python ignores MSYS-style env values; convert HOME
+# fixtures so $HOME resolution sees a real directory on every platform.
+
+# Pin surface resolution to the POSIX layout the fixtures create;
+# otherwise windows-latest would resolve $APPDATA-style overrides.
+export AGENT_SKILLS_PLATFORM=linux
+
+native_path() {
+    if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
+}
 MIGRATION_SCRIPT="${SCRIPT_DIR}/legacy-smart-ide-migration.sh"
 export AGENT_SKILLS_SETUP_INTERNAL_LEGACY=1
 TMP_ROOT="$(mktemp -d /tmp/copilot-mapping-test.XXXXXX)"
@@ -20,7 +31,7 @@ assert_path() {
     local expected="$2"
     local actual
 
-    actual="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" --print-path copilot "$object")"
+    actual="$(HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" --print-path copilot "$object")"
     if [[ "$actual" != "$expected" ]]; then
         echo "FAIL: copilot/${object} expected '${expected}', got '${actual}'" >&2
         exit 1
@@ -46,7 +57,7 @@ JSON
 
 OUTPUT="$TMP_ROOT/output.txt"
 set +e
-HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
     --source cursor \
     --target copilot \
     --workspace "$WORKSPACE" \
@@ -79,7 +90,7 @@ cat > "$CURSOR_MCP" <<'JSON'
 }
 JSON
 
-HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
     --source cursor \
     --target copilot \
     --workspace "$WORKSPACE" \

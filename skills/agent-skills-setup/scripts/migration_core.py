@@ -78,7 +78,33 @@ ADAPTER_VERSIONS = {
 }
 AUTOMATIC_MIGRATION_POLICIES = {
     "bidirectional-reviewed",
+    "prompt-ir-reviewed",
+    "command-ir-reviewed",
+    "agent-ir-reviewed",
+    "hook-ir-reviewed",
 }
+AUTOMATIC_OBJECT_TYPES = frozenset({
+    "skills",
+    "instructions",
+    "mcp",
+    "prompts",
+    "commands",
+    "agents",
+    "hooks",
+})
+INVENTORY_ONLY_OBJECT_TYPES = frozenset({
+    "workflows",
+    "plugins",
+    "handoff",
+    "config",
+    "policy",
+    "trust",
+    "user_memory",
+    "automation",
+    "cron",
+    "personas",
+    "modes",
+})
 AUTOMATIC_SURFACE_POLICIES = {
     "validate-then-atomic-copy",
     "semantic-ir-with-loss-report",
@@ -426,7 +452,20 @@ class Registry:
     def __init__(self, path: Path, workspace: Path, home: Path | None = None) -> None:
         self.path = path
         self.workspace = workspace.resolve()
-        self.home = (home or Path.home()).resolve()
+        # Honor $HOME when it points at a real directory: Path.home() on
+        # native Windows Python reads USERPROFILE only, which silently
+        # ignored HOME-injected test fixtures and cross-device restores.
+        if home is not None:
+            resolved_home = home
+        else:
+            env_home = os.environ.get("HOME")
+            env_candidate = Path(env_home) if env_home else None
+            resolved_home = (
+                env_candidate
+                if env_candidate is not None and env_candidate.is_dir()
+                else Path.home()
+            )
+        self.home = resolved_home.resolve()
         self.data = json.loads(path.read_text(encoding="utf-8"))
         if self.data.get("schema_version") not in (2, 2.1):
             raise ValueError("registry schema_version must be 2 or 2.1")
@@ -617,7 +656,12 @@ class Registry:
                 env_platform = "linux"
 
         if platforms and env_platform in platforms:
-            raw_path = str(platforms[env_platform])
+            candidate = str(platforms[env_platform])
+            # Glob overrides (github.copilot-*) express a *probe* location,
+            # not a deterministic read/write target; applying to them would
+            # either match nothing or fail on literal '*' (WinError 123).
+            if not any(ch in candidate for ch in "*?["):
+                raw_path = candidate
 
         expanded_str = _expand_path_vars(raw_path, self.home)
 

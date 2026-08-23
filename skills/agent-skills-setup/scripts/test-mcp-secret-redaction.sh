@@ -371,17 +371,29 @@ D16_DIR=$(mktemp -d "$TMP_ROOT/failclosed.XXXXXX")
 D16="$D16_DIR/copy.json"
 printf '{"apiKey": "FAILCLOSED_SECRET"}\n' > "$D16"
 chmod 000 "$D16"
-set +e
-D16_OUT=$(bash -c '
-    eval "$(sed -n "/^REDACTOR_PY=/,/^}/p" "$1")"
-    eval "$(sed -n "/^redact_secrets_in_file()/,/^}/p" "$1")"
-    redact_secrets_in_file "$2"
-' _ "$LEGACY_MIG" "$D16" 2>/dev/null)
-D16_RC=$?
-set -e
-if [[ $D16_RC -ne 0 ]]; then check_pass "16: fail-closed returns non-zero rc"; else check_fail "16: fail-closed returned rc=0"; fi
-if [[ "$D16_OUT" == "-1" ]]; then check_pass "16: fail-closed emits -1 sentinel"; else check_fail "16: fail-closed emitted '$D16_OUT' (expected -1)"; fi
-if [[ ! -e "$D16" ]]; then check_pass "16: secret-bearing copy deleted (fail closed)"; else check_fail "16: secret-bearing copy left on disk"; chmod 644 "$D16" 2>/dev/null || true; fi
+if [[ -r "$D16" ]]; then
+    # Windows without POSIX semantics ignores permission bits; the
+    # unreadable-input fail-closed path cannot be exercised here.
+    echo "SKIP: 16 (permission bits not enforced on this host)"
+    D16_SKIPPED=1
+else
+    D16_SKIPPED=0
+fi
+if [[ "$D16_SKIPPED" == "1" ]]; then
+    chmod 644 "$D16" 2>/dev/null || true
+else
+    set +e
+    D16_OUT=$(bash -c '
+        eval "$(sed -n "/^REDACTOR_PY=/,/^}/p" "$1")"
+        eval "$(sed -n "/^redact_secrets_in_file()/,/^}/p" "$1")"
+        redact_secrets_in_file "$2"
+    ' _ "$LEGACY_MIG" "$D16" 2>/dev/null)
+    D16_RC=$?
+    set -e
+    if [[ $D16_RC -ne 0 ]]; then check_pass "16: fail-closed returns non-zero rc"; else check_fail "16: fail-closed returned rc=0"; fi
+    if [[ "$D16_OUT" == "-1" ]]; then check_pass "16: fail-closed emits -1 sentinel"; else check_fail "16: fail-closed emitted '$D16_OUT' (expected -1)"; fi
+    if [[ ! -e "$D16" ]]; then check_pass "16: secret-bearing copy deleted (fail closed)"; else check_fail "16: secret-bearing copy left on disk"; chmod 644 "$D16" 2>/dev/null || true; fi
+fi
 
 echo ""
 echo "== 17. CR-001: provider-key VALUE formats redacted under non-secret key names =="
@@ -512,21 +524,51 @@ EOF
 S20_ORIG="$(cat "$S20")"
 
 set +e
-run bash "$MIG" --source cursor --target opencode --workspace "$W20" \
-    --objects project-mcp --source-mcp-file "$S20" --dry-run
+# Native Windows Python treats MSYS-style values as relative paths, so the
+# explicit file/workspace arguments must cross into the engine natively.
+if command -v cygpath >/dev/null 2>&1; then
+    W20_ARG="$(cygpath -w "$W20")"; S20_ARG="$(cygpath -w "$S20")"
+else
+    W20_ARG="$W20"; S20_ARG="$S20"
+fi
+run bash "$MIG" --source cursor --target opencode --workspace "$W20_ARG" \
+    --objects project-mcp --source-mcp-file "$S20_ARG" --dry-run
 set -e
 if [[ $LAST_RC -eq 0 ]]; then check_pass "20a: custom-source dry-run exits 0"; else check_fail "20a: custom-source dry-run exits rc=$LAST_RC"; fi
-if grep -Fq "source: $S20_RESOLVED" "$OUT_FILE" && grep -Fq "validated MCP source" "$OUT_FILE"; then
-    check_pass "20a: dry-run reads and validates the selected source file"
+# The engine echoes the source path in its native view; under MSYS that is
+# a drive-qualified Windows path while S20_RESOLVED is the POSIX view. The
+# engine may print either separator, so accept all three spellings.
+if command -v cygpath >/dev/null 2>&1; then
+    S20_RESOLVED_MIXED="$(cygpath -m "$S20_RESOLVED")"
+    S20_RESOLVED_WIN="$(cygpath -w "$S20_RESOLVED")"
+else
+    S20_RESOLVED_MIXED="$S20_RESOLVED"
+    S20_RESOLVED_WIN="$S20_RESOLVED"
+fi
+if grep -Fq "source: $S20_RESOLVED" "$OUT_FILE" \
+    || grep -Fq "source: $S20_RESOLVED_MIXED" "$OUT_FILE" \
+    || grep -Fq "source: $S20_RESOLVED_WIN" "$OUT_FILE"; then
+    if grep -Fq "validated MCP source" "$OUT_FILE"; then
+        check_pass "20a: dry-run reads and validates the selected source file"
+    else
+        check_fail "20a: dry-run did not validate the selected source file"
+    fi
 else
     check_fail "20a: dry-run did not consume the selected source file"
 fi
 if [[ ! -e "$W20/opencode.json" ]]; then check_pass "20a: dry-run leaves target absent"; else check_fail "20a: dry-run wrote target config"; fi
 
-run bash "$MIG" --source cursor --target opencode --workspace "$W20" \
-    --objects project-mcp --source-mcp-file "$S20" --strategy overwrite --yes
+run bash "$MIG" --source cursor --target opencode --workspace "$(cygpath -w "$W20" 2>/dev/null || printf '%s' "$W20")" \
+    --objects project-mcp --source-mcp-file "$(cygpath -w "$S20" 2>/dev/null || printf '%s' "$S20")" --strategy overwrite --yes
 D20="$W20/opencode.json"
 if [[ $LAST_RC -eq 0 ]]; then check_pass "20b: custom-source apply exits 0"; else check_fail "20b: custom-source apply exits rc=$LAST_RC"; fi
+if [[ ! -e "$D20" ]]; then
+    # Diagnostic evidence for host-specific target resolution failures.
+    echo "DIAG 20b: workspace contents:" >&2
+    ls -la "$W20" >&2 || true
+    echo "DIAG 20b: engine output tail:" >&2
+    tail -5 "$OUT_FILE" >&2 || true
+fi
 assert_valid_json "$D20" "20b: custom-source destination is valid JSON"
 S20_CHECK=$(python3 - "$D20" <<'PY'
 import json, sys
@@ -637,11 +679,15 @@ cat > "$D22_LINK" <<'EOF'
 EOF
 S22_LINK="$S20_DIR/link-to-target.json"
 ln -s "$D22_LINK" "$S22_LINK"
-D22_ORIG="$(cat "$D22_LINK")"
-run bash "$MIG" --source cursor --target opencode --workspace "$W22_LINK" \
-    --objects project-mcp --source-mcp-file "$S22_LINK" --strategy overwrite --yes
-if grep -Fq "source and target resolve to the same file" "$OUT_FILE"; then check_pass "22b: symlinked self-target is refused"; else check_fail "22b: symlinked self-target was not detected"; fi
-if [[ "$(cat "$D22_LINK")" == "$D22_ORIG" ]]; then check_pass "22b: symlink identity guard preserves the only copy"; else check_fail "22b: symlink identity guard allowed mutation"; fi
+if [[ ! -L "$S22_LINK" ]]; then
+    echo "SKIP: 22b (symlinks unavailable on this host)"
+else
+    D22_ORIG="$(cat "$D22_LINK")"
+    run bash "$MIG" --source cursor --target opencode --workspace "$W22_LINK" \
+        --objects project-mcp --source-mcp-file "$S22_LINK" --strategy overwrite --yes
+    if grep -Fq "source and target resolve to the same file" "$OUT_FILE"; then check_pass "22b: symlinked self-target is refused"; else check_fail "22b: symlinked self-target was not detected"; fi
+    if [[ "$(cat "$D22_LINK")" == "$D22_ORIG" ]]; then check_pass "22b: symlink identity guard preserves the only copy"; else check_fail "22b: symlink identity guard allowed mutation"; fi
+fi
 
 echo ""
 echo "== 23. Safe-reference URLs cannot hide a second literal credential =="
@@ -693,20 +739,29 @@ cat > "$D24_REAL" <<'EOF'
 { "sentinel": "must remain unchanged" }
 EOF
 ln -s "$D24_REAL" "$W24/opencode.json"
-D24_ORIG="$(cat "$D24_REAL")"
-set +e
-run bash "$MIG" --source cursor --target opencode --workspace "$W24" \
-    --objects project-mcp --source-mcp-file "$S24" --strategy overwrite --yes
-set -e
-if [[ $LAST_RC -ne 0 ]] && grep -Fq "target is a symbolic link" "$OUT_FILE"; then
-    check_pass "24: symlinked MCP target is rejected"
+if [[ ! -L "$W24/opencode.json" ]]; then
+    # Windows without Developer Mode silently degrades ln -s to a copy;
+    # the symlink-rejection guarantee is untestable on such hosts.
+    echo "SKIP: 24 (symlinks unavailable on this host)"
+    rm -f "$W24/opencode.json"
 else
-    check_fail "24: symlinked MCP target was accepted"
+    D24_ORIG="$(cat "$D24_REAL")"
+    set +e
+    run bash "$MIG" --source cursor --target opencode --workspace "$W24" \
+        --objects project-mcp --source-mcp-file "$S24" --strategy overwrite --yes
+    set -e
 fi
-if [[ -L "$W24/opencode.json" && "$(cat "$D24_REAL")" == "$D24_ORIG" ]]; then
-    check_pass "24: rejected symlink target and referent remain unchanged"
-else
-    check_fail "24: symlink target rejection allowed mutation"
+if [[ -L "$W24/opencode.json" ]]; then
+    if [[ $LAST_RC -ne 0 ]] && grep -Fq "target is a symbolic link" "$OUT_FILE"; then
+        check_pass "24: symlinked MCP target is rejected"
+    else
+        check_fail "24: symlinked MCP target was accepted"
+    fi
+    if [[ "$(cat "$D24_REAL")" == "$D24_ORIG" ]]; then
+        check_pass "24: rejected symlink target and referent remain unchanged"
+    else
+        check_fail "24: symlink target rejection allowed mutation"
+    fi
 fi
 
 echo ""

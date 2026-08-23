@@ -3,6 +3,17 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Native Windows Python ignores MSYS-style env values; convert HOME
+# fixtures so $HOME resolution sees a real directory on every platform.
+
+# Pin surface resolution to the POSIX layout the fixtures create;
+# otherwise windows-latest would resolve $APPDATA-style overrides.
+export AGENT_SKILLS_PLATFORM=linux
+
+native_path() {
+    if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
+}
 MIGRATION_SCRIPT="$SCRIPT_DIR/legacy-smart-ide-migration.sh"
 export AGENT_SKILLS_SETUP_INTERNAL_LEGACY=1
 TMP_ROOT="$(mktemp -d /tmp/agent-skills-remaining-ide-test.XXXXXX)"
@@ -18,7 +29,7 @@ assert_path() {
     local object="$2"
     local expected="$3"
     local actual
-    actual="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" --print-path "$ide" "$object" 2>/dev/null || true)"
+    actual="$(HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" --print-path "$ide" "$object" 2>/dev/null || true)"
     [[ "$actual" == "$expected" ]] || {
         echo "FAIL: ${ide}/${object} expected '${expected}', got '${actual}'" >&2
         exit 1
@@ -106,7 +117,7 @@ assert_path void-editor mcp "~/.void-editor/mcp.json"
 assert_path void-editor project-mcp ".vscode/mcp.json"
 assert_path void-editor config ""
 
-VOID_SKILLS_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+VOID_SKILLS_OUTPUT="$(HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
     --source void-editor --target claude --workspace "$PROJECT" \
     --objects skills --dry-run 2>&1)"
 grep -Fq 'Void: `.voidrules` is a rules file, not Agent Skills' <<< "$VOID_SKILLS_OUTPUT"
@@ -168,7 +179,7 @@ run_mcp() {
     else
         write_claude_fixture
     fi
-    HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+    HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
         --source claude --target "$target" --workspace "$PROJECT" \
         --objects mcp --yes --strategy overwrite > "$OUTPUT" 2>&1
     assert_contains "$OUTPUT" "MCP config"
@@ -188,14 +199,14 @@ for target in opencode kilocode kimiai jetbrains workbuddy void-editor kiro augm
 done
 
 printf '%s\n' '{"mcpServers":{"roo-project":{"command":"node","args":["server.js"],"env":{"API_KEY":"__roo_project_inert_fixture__"}}}}' > "$PROJECT/.mcp.json"
-HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
     --source claude --target roo-code --workspace "$PROJECT" \
     --scope project --objects mcp --yes --strategy overwrite > "$OUTPUT" 2>&1
 assert_contains "$OUTPUT" "MCP config"
 python3 -m json.tool "$PROJECT/.roo/mcp.json" >/dev/null
 assert_contains "$PROJECT/.roo/mcp.json" '"roo-project"'
 assert_not_contains "$PROJECT/.roo/mcp.json" "__roo_project_inert_fixture__"
-ROO_GLOBAL_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+ROO_GLOBAL_OUTPUT="$(HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
     --source claude --target roo-code --objects mcp --dry-run 2>&1)"
 grep -Fq 'Roo Code global MCP is extension-storage/UI managed' <<< "$ROO_GLOBAL_OUTPUT"
 
@@ -219,7 +230,7 @@ assert_contains "$(mcp_target_path tencent-codebuddy)" '"mcpServers"'
 
 rm -f "$(mcp_target_path workbuddy)"
 printf '%s\n' '{"mcpServers":{"remote":{"type":"sse","url":"https://example.invalid/mcp","headers":{"Authorization":"Bearer __workbuddy_inert_fixture__"}}}}' > "$TEST_HOME/.claude.json"
-HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
     --source claude --target workbuddy --workspace "$PROJECT" \
     --objects mcp --yes --strategy overwrite > "$OUTPUT" 2>&1
 assert_contains "$OUTPUT" "WorkBuddy desktop MCP schema"
@@ -230,7 +241,7 @@ assert_contains "$OUTPUT" "WorkBuddy desktop MCP schema"
 
 rm -f "$(mcp_target_path void-editor)"
 printf '%s\n' '{"mcpServers":{"remote":{"url":"https://example.invalid/mcp","headers":{"Authorization":"Bearer __void_inert_fixture__"}}}}' > "$TEST_HOME/.claude.json"
-HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
     --source claude --target void-editor --workspace "$PROJECT" \
     --objects mcp --yes --strategy overwrite > "$OUTPUT" 2>&1
 assert_contains "$OUTPUT" "Void MCP schema"
@@ -240,7 +251,7 @@ assert_contains "$OUTPUT" "Void MCP schema"
 }
 
 printf '%s\n' '{"mcpServers":{"remote":{"url":"https://example.invalid/mcp"}}}' > "$TEST_HOME/.claude.json"
-HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
     --source claude --target void-editor --workspace "$PROJECT" \
     --objects mcp --yes --strategy overwrite > "$OUTPUT" 2>&1
 python3 -m json.tool "$(mcp_target_path void-editor)" >/dev/null
@@ -248,7 +259,7 @@ assert_contains "$(mcp_target_path void-editor)" '"url": "https://example.invali
 
 rm -f "$(mcp_target_path jetbrains)"
 printf '%s\n' '{"mcpServers":{"remote":{"type":"sse","url":"https://example.invalid/mcp","headers":{"Authorization":"Bearer __junie_inert_fixture__"}}}}' > "$TEST_HOME/.claude.json"
-HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
     --source claude --target jetbrains --workspace "$PROJECT" \
     --objects mcp --yes --strategy overwrite > "$OUTPUT" 2>&1
 assert_contains "$OUTPUT" "Junie MCP schema"
@@ -258,7 +269,7 @@ assert_contains "$OUTPUT" "Junie MCP schema"
 }
 
 printf '%s\n' '{"mcpServers":{"local":{"type":"stdio","command":"node","args":["server.js"],"env":{"API_KEY":"__comate_inert_fixture__"}},"remote":{"type":"sse","url":"https://example.invalid/mcp","headers":{"Authorization":"Bearer __comate_inert_fixture__"}}}}' > "$TEST_HOME/.claude.json"
-HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
     --source claude --target baidu-comate --workspace "$PROJECT" \
     --objects mcp --yes --strategy overwrite > "$OUTPUT" 2>&1
 python3 -m json.tool "$TEST_HOME/.comate/mcp.json" >/dev/null
@@ -268,7 +279,7 @@ assert_not_contains "$TEST_HOME/.comate/mcp.json" "__comate_inert_fixture__"
 
 mkdir -p "$TEST_HOME/.config/kilo"
 printf '%s\n' '// Kilo JSONC fixture' '{' '  "mcp": {' '    "fixture": {' '      "type": "local",' '      "command": ["node", "server.js"],' '      "environment": {"API_KEY": ""},' '    },' '  },' '}' > "$TEST_HOME/.config/kilo/kilo.jsonc"
-HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
     --source kilocode --target opencode --workspace "$PROJECT" \
     --objects mcp --yes --strategy overwrite > "$OUTPUT" 2>&1
 python3 -m json.tool "$TEST_HOME/.config/opencode/opencode.json" >/dev/null
@@ -277,7 +288,7 @@ assert_contains "$TEST_HOME/.config/opencode/opencode.json" '"fixture"'
 COMATE_BEFORE="$TMP_ROOT/comate-before.json"
 cp "$TEST_HOME/.comate/mcp.json" "$COMATE_BEFORE"
 printf '%s\n' '{"mcpServers":{"ambiguous":{"command":"node"}}}' > "$TEST_HOME/.claude.json"
-HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
     --source claude --target baidu-comate --workspace "$PROJECT" \
     --objects mcp --yes --strategy overwrite > "$OUTPUT" 2>&1 || true
 assert_contains "$OUTPUT" 'Comate MCP schema is invalid'
@@ -289,7 +300,7 @@ cmp -s "$COMATE_BEFORE" "$TEST_HOME/.comate/mcp.json" || {
 ZCODE_BEFORE="$TMP_ROOT/zcode-before.json"
 cp "$TEST_HOME/.zcode/cli/config.json" "$ZCODE_BEFORE"
 printf '%s\n' '{"mcpServers":{"ambiguous":{"command":["node","server.js"],"args":"not-an-array"}}}' > "$TEST_HOME/.claude.json"
-HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
     --source claude --target zcode --workspace "$PROJECT" \
     --objects mcp --yes --strategy overwrite > "$OUTPUT" 2>&1 || true
 assert_contains "$OUTPUT" 'MCP mcpServers/schema is invalid'
@@ -301,7 +312,7 @@ cmp -s "$ZCODE_BEFORE" "$TEST_HOME/.zcode/cli/config.json" || {
 mkdir -p "$TEST_HOME/.claude/skills/code-review/scripts"
 printf '%s\n' '---' 'name: code-review' 'description: Review code' '---' 'Review the code.' > "$TEST_HOME/.claude/skills/code-review/SKILL.md"
 printf '%s\n' '#!/usr/bin/env bash' 'echo review' > "$TEST_HOME/.claude/skills/code-review/scripts/review.sh"
-HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
     --source claude --target tencent-codebuddy --workspace "$PROJECT" \
     --objects skills --yes --strategy overwrite > "$OUTPUT" 2>&1
 [[ -f "$TEST_HOME/.codebuddy/skills/code-review/SKILL.md" ]] || {
@@ -314,13 +325,13 @@ HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
 }
 
 printf '%s\n' 'Junie project instruction' > "$PROJECT/CLAUDE.md"
-HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
     --source claude --target jetbrains --workspace "$PROJECT" \
     --objects rules --yes --strategy overwrite > "$OUTPUT" 2>&1
 assert_contains "$PROJECT/.junie/AGENTS.md" "Junie project instruction"
 
 rm -rf "$TEST_HOME/.workbuddy/skills"
-HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
     --source claude --target workbuddy --workspace "$PROJECT" \
     --objects skills --yes --strategy overwrite > "$OUTPUT" 2>&1
 assert_contains "$OUTPUT" "WorkBuddy"
@@ -330,13 +341,13 @@ assert_contains "$OUTPUT" "WorkBuddy"
 }
 
 printf '%s\n' 'Void workspace instruction' > "$PROJECT/CLAUDE.md"
-HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
     --source claude --target void-editor --workspace "$PROJECT" \
     --objects rules --yes --strategy overwrite > "$OUTPUT" 2>&1
 assert_contains "$PROJECT/.voidrules" "Void workspace instruction"
 
 for source in roo-code void-editor trae trae-cn jetbrains opencode kilocode kimiai workbuddy kiro augment-code baidu-comate tencent-codebuddy zcode; do
-    PROJECT_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+    PROJECT_OUTPUT="$(HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
         --source "$source" --target claude --workspace "$PROJECT" \
         --objects project --dry-run 2>&1)"
     grep -Fq 'automatic whole-project configuration migration is unsupported' <<< "$PROJECT_OUTPUT"

@@ -3,6 +3,17 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Native Windows Python ignores MSYS-style env values; convert HOME
+# fixtures so $HOME resolution sees a real directory on every platform.
+
+# Pin surface resolution to the POSIX layout the fixtures create;
+# otherwise windows-latest would resolve $APPDATA-style overrides.
+export AGENT_SKILLS_PLATFORM=linux
+
+native_path() {
+    if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
+}
 WRAPPER="${SCRIPT_DIR}/smart-ide-migration.sh"
 
 WS="$(mktemp -d /tmp/migrate-cmd-ws.XXXXXX)"
@@ -38,7 +49,7 @@ cat > "$HOME_DIR/.cline/mcp.json" <<'MCP'
 MCP
 
 # --plan-only writes the plan but does NOT touch the target tree.
-HOME="$HOME_DIR" "${WRAPPER}" migrate \
+HOME="$(native_path "$HOME_DIR")" "${WRAPPER}" migrate \
     --source cline/ide \
     --target forge/cli \
     --workspace "$WS" \
@@ -68,7 +79,7 @@ PLAN_OBJECTS="$(python3 -c "import json,sys; print(','.join(json.load(open(sys.a
 echo "OK plan objects: $PLAN_OBJECTS"
 
 # Full pipeline (plan + apply + verify).
-OUT="$(HOME="$HOME_DIR" "${WRAPPER}" migrate \
+OUT="$(HOME="$(native_path "$HOME_DIR")" "${WRAPPER}" migrate \
     --source cline/ide \
     --target forge/cli \
     --workspace "$WS" \
@@ -82,9 +93,9 @@ if [[ $MIGRATE_RC -ne 0 ]]; then
     exit 1
 fi
 echo "$OUT" > "$WS/migrate-out.json"
-python3 -c "
-import json, re
-text = open('$WS/migrate-out.json').read()
+python3 - "$(native_path "$WS/migrate-out.json")" <<'PY'
+import json, re, sys
+text = open(sys.argv[1]).read()
 m = re.search(r'\{.*\}', text, re.DOTALL)
 if not m:
     print('FAIL: no JSON in migrate output:', text[:200])
@@ -97,7 +108,7 @@ assert 'verify' in out and out['verify'].endswith('migrate-verify.json'), out
 assert out['summary'], out['summary']
 assert out['summary'].get('applied', 0) >= 1, out['summary']
 print('OK full migrate pipeline summary:', out['summary'])
-"
+PY
 
 # Verify the ready Skill landed on the forge target tree.
 SKILL_DST="$HOME_DIR/forge/skills/fixture-skill"
@@ -113,7 +124,7 @@ VERIFY_OK="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['ok
 echo "OK verify artifact reports ok=true"
 
 # Re-run should be idempotent at the target tree level.
-HOME="$HOME_DIR" "${WRAPPER}" migrate \
+HOME="$(native_path "$HOME_DIR")" "${WRAPPER}" migrate \
     --source cline/ide \
     --target forge/cli \
     --workspace "$WS" \
@@ -124,7 +135,7 @@ echo "OK second migrate invocation completed (idempotency not strictly asserted 
 
 # --strict with mixed-status plan should fail.
 set +e
-HOME="$HOME_DIR" "${WRAPPER}" migrate \
+HOME="$(native_path "$HOME_DIR")" "${WRAPPER}" migrate \
     --source cline/ide \
     --target forge/cli \
     --workspace "$WS" \

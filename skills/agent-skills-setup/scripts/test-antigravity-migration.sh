@@ -3,6 +3,17 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Native Windows Python ignores MSYS-style env values; convert HOME
+# fixtures so $HOME resolution sees a real directory on every platform.
+
+# Pin surface resolution to the POSIX layout the fixtures create;
+# otherwise windows-latest would resolve $APPDATA-style overrides.
+export AGENT_SKILLS_PLATFORM=linux
+
+native_path() {
+    if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
+}
 TMP_ROOT="$(mktemp -d /tmp/agent-skills-antigravity-test.XXXXXX)"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 
@@ -16,7 +27,7 @@ assert_path() {
     local expected="$2"
     local actual
 
-    actual="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" legacy --print-path antigravity "$object")"
+    actual="$(HOME="$(native_path "$TEST_HOME")" bash "$SCRIPT_DIR/smart-ide-migration.sh" legacy --print-path antigravity "$object")"
     [[ "$actual" == "$expected" ]]
 }
 
@@ -28,20 +39,20 @@ assert_path mcp "~/.gemini/config/mcp_config.json"
 
 LEGACY_HOME="$TMP_ROOT/legacy-home"
 mkdir -p "$LEGACY_HOME/.gemini/antigravity/skills"
-LEGACY_SKILLS_PATH="$(HOME="$LEGACY_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" legacy --print-path antigravity global)"
+LEGACY_SKILLS_PATH="$(HOME="$(native_path "$LEGACY_HOME")" bash "$SCRIPT_DIR/smart-ide-migration.sh" legacy --print-path antigravity global)"
 [[ "$LEGACY_SKILLS_PATH" == "~/.gemini/antigravity/skills" ]] || {
     echo "FAIL: Antigravity legacy Skills tree was not preserved" >&2
     exit 1
 }
 
-if HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" legacy --print-path antigravity config >/dev/null 2>&1; then
+if HOME="$(native_path "$TEST_HOME")" bash "$SCRIPT_DIR/smart-ide-migration.sh" legacy --print-path antigravity config >/dev/null 2>&1; then
     echo "FAIL: Antigravity IDE unexpectedly exposes a standalone config migration target" >&2
     exit 1
 fi
 
 mkdir -p "$WORKSPACE/.agents/rules"
 printf '%s\n' 'Use the documented workspace rules directory.' > "$WORKSPACE/.agents/rules/style.md"
-RULES_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" legacy \
+RULES_OUTPUT="$(HOME="$(native_path "$TEST_HOME")" bash "$SCRIPT_DIR/smart-ide-migration.sh" legacy \
     --source antigravity \
     --target cursor \
     --workspace "$WORKSPACE" \
@@ -49,7 +60,7 @@ RULES_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" lega
     --dry-run 2>&1)"
 grep -Fq "Antigravity IDE rules use a directory; manual migration required" <<< "$RULES_OUTPUT"
 
-PROJECT_OUTPUT="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" legacy \
+PROJECT_OUTPUT="$(HOME="$(native_path "$TEST_HOME")" bash "$SCRIPT_DIR/smart-ide-migration.sh" legacy \
     --source antigravity \
     --target cursor \
     --workspace "$WORKSPACE" \
@@ -65,7 +76,7 @@ printf '%s\n' \
     '  }' \
     '}' > "$CURSOR_MCP"
 
-if HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" legacy \
+if HOME="$(native_path "$TEST_HOME")" bash "$SCRIPT_DIR/smart-ide-migration.sh" legacy \
     --source cursor \
     --target antigravity \
     --objects mcp \
@@ -81,7 +92,7 @@ grep -Fq "legacy writes are disabled" "$TMP_ROOT/canonical.err"
 }
 
 # Exercise the retained converter only as an explicitly internal compatibility test.
-AGENT_SKILLS_SETUP_INTERNAL_LEGACY=1 HOME="$TEST_HOME" \
+AGENT_SKILLS_SETUP_INTERNAL_LEGACY=1 HOME="$(native_path "$TEST_HOME")" \
     bash "$SCRIPT_DIR/legacy-smart-ide-migration.sh" \
         --source cursor \
         --target antigravity \

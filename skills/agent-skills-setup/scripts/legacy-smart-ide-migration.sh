@@ -537,7 +537,7 @@ list_available_objects() {
 
     local mcp_path
     mcp_path=$(get_mcp_path "$source_ide")
-    if [[ -n "$mcp_path" && "$mcp_path" != /* ]]; then
+    if [[ -n "$mcp_path" && "$mcp_path" != /* && "$mcp_path" != [A-Za-z]:* && "$mcp_path" != "\\"* ]]; then
         mcp_path="$WORKSPACE_ROOT/$mcp_path"
     fi
     if [[ -n "$mcp_path" ]] && [[ -e "$mcp_path" ]]; then
@@ -618,15 +618,19 @@ get_manual_steps() {
 sha256_file() {
     local file="$1"
     [[ -f "$file" ]] || return 1
+    local digest=""
     if command -v shasum >/dev/null 2>&1; then
-        shasum -a 256 "$file" | awk '{print $1}'
+        digest="$(shasum -a 256 "$file" | awk '{print $1}')"
     elif command -v sha256sum >/dev/null 2>&1; then
-        sha256sum "$file" | awk '{print $1}'
+        digest="$(sha256sum "$file" | awk '{print $1}')"
     elif command -v python3 >/dev/null 2>&1; then
-        python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "$file"
+        digest="$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "$file")"
     else
         return 1
     fi
+    # Some hosts prefix tool output (e.g. an MSYS marker before the hex
+    # digest); keep only the 64-digit hash itself.
+    printf '%s\n' "$(printf '%s' "$digest" | grep -Eo '[0-9a-fA-F]{64}' | head -n1)"
 }
 
 validate_evidence_target() {
@@ -3354,10 +3358,10 @@ migrate_mcp() {
         target_mcp="$WORKSPACE_ROOT/.vscode/mcp.json"
     fi
 
-    if [[ -n "$source_mcp" && "$source_mcp" != /* ]]; then
+    if [[ -n "$source_mcp" && "$source_mcp" != /* && "$source_mcp" != [A-Za-z]:* && "$source_mcp" != "\\"* ]]; then
         source_mcp="$WORKSPACE_ROOT/$source_mcp"
     fi
-    if [[ -n "$target_mcp" && "$target_mcp" != /* ]]; then
+    if [[ -n "$target_mcp" && "$target_mcp" != /* && "$target_mcp" != [A-Za-z]:* && "$target_mcp" != "\\"* ]]; then
         target_mcp="$WORKSPACE_ROOT/$target_mcp"
     fi
 
@@ -3723,7 +3727,11 @@ generate_report() {
     if [[ "${MIGRATE_JSON:-}" == "1" ]]; then
         _emit_json_report "$source_ide" "$target_ide"
     else
-        printf '%b' "$report"
+        # '%b' would reinterpret escape sequences embedded in content — on
+        # Windows hosts report lines contain drive-letter paths whose back-
+        # slash sequences (e.g. a capital U after a separator) abort bash
+        # printf. Expand only the literal "\n" separators.
+        printf '%s' "${report//\\n/$'\n'}"
     fi
 }
 

@@ -219,7 +219,11 @@ def resolve_home(home: Path | None) -> Path:
         return home.resolve()
     env_home = os.environ.get("HOME")
     if env_home:
-        return Path(env_home).resolve()
+        # Guard against stale or foreign-format values (e.g. an MSYS-style
+        # path leaking into native Windows Python, where it cannot exist).
+        candidate = Path(env_home)
+        if candidate.is_dir():
+            return candidate.resolve()
     return Path.home().resolve()
 
 

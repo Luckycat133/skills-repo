@@ -1,4 +1,11 @@
-name: Freshness Check
+name: Offline Freshness Check (Runtime Safe)
+
+# This workflow runs STRICTLY OFFLINE checks suitable for Skill runtime.
+# It validates verified_at dates, HTTPS source URLs, and schema consistency.
+# It does NOT make any network requests.
+#
+# For online checks (fetching docs, detecting 404/schema changes), see
+# maintainer-online-checks.yml which runs separately with maintainer permissions.
 
 on:
   schedule:
@@ -6,7 +13,7 @@ on:
   workflow_dispatch:
     inputs:
       demote_stale:
-        description: 'Demote stale profiles in registry'
+        description: 'Demote stale profiles in registry (creates PR for review)'
         required: false
         type: boolean
         default: false
@@ -21,7 +28,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Need full history for git operations
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -31,9 +38,8 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install requests
 
-      - name: Run freshness check
+      - name: Run offline freshness check
         id: freshness
         run: |
           python3 skills/agent-skills-setup/scripts/check-doc-freshness.py \
@@ -50,7 +56,7 @@ jobs:
           name: freshness-report
           path: freshness-report.json
 
-      - name: Check for stale profiles
+      - name: Report stale profiles
         if: always()
         run: |
           if [ -f freshness-report.json ]; then
@@ -58,8 +64,10 @@ jobs:
           fi
 
   stale-demotion:
+    # Only run on manual dispatch with demote_stale=true.
+    # Do NOT run on schedule to avoid creating PRs automatically.
     needs: freshness-check
-    if: always() && (github.event.inputs.demote_stale == 'true' || github.event_name == 'schedule')
+    if: github.event.inputs.demote_stale == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -78,7 +86,6 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install requests
 
       - name: Run freshness check with demote-stale
         id: demote
@@ -124,104 +131,6 @@ jobs:
           name: demote-report
           path: demote-report.json
 
-  candidate-discovery:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'schedule'  # Only run on schedule
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install requests
-
-      - name: Generate candidate discovery report
-        id: candidates
-        run: |
-          python3 << 'EOF'
-          import json
-          import subprocess
-          from datetime import date
-
-          # Known candidate products to check
-          candidates = [
-              {"name": "Hermes Agent", "url": "https://github.com/hermes-agent/hermes"},
-              {"name": "GitLab Duo", "url": "https://docs.gitlab.com/ee/user/duo_agent_platform/"},
-              {"name": "Google Jules", "url": "https://jules.google.com/"},
-              {"name": "Zencoder", "url": "https://docs.zencoder.ai/"},
-              {"name": "Zenflow", "url": "https://docs.zenflow.ai/"},
-              {"name": "Letta Code", "url": "https://docs.letta.com/letta-code/"},
-              {"name": "Gemini Code Assist", "url": "https://cloud.google.com/gemini-code-assist/docs"},
-              {"name": "HuggingFace Agents", "url": "https://huggingface.co/docs/transformers/agents"},
-              {"name": "LangChain Agents", "url": "https://python.langchain.com/docs/modules/agents/"},
-              {"name": "AutoGPT", "url": "https://github.com/Significant-Gravitas/AutoGPT"},
-              {"name": "BabyAGI", "url": "https://github.com/yoheinakajima/babyagi"},
-              {"name": "MetaGPT", "url": "https://github.com/geekan/MetaGPT"},
-            ]
-
-          # Check if products already exist in registry
-          with open('skills/agent-skills-setup/references/registry-v2.json', 'r') as f:
-              registry = json.load(f)
-          existing_products = set(registry.get('products', {}).keys())
-
-          report = {
-              "generated_at": str(date.today()),
-              "total_candidates": len(candidates),
-              "existing": [],
-              "new_candidates": [],
-              "suggested_registry_diff": []
-          }
-
-          for candidate in candidates:
-              name = candidate["name"].lower().replace(" ", "-")
-              if name in existing_products:
-                  report["existing"].append(candidate["name"])
-              else:
-                  report["new_candidates"].append(candidate)
-                  report["suggested_registry_diff"].append({
-                      "action": "add_product",
-                      "product": name,
-                      "display_name": candidate["name"],
-                      "category": "agent-client",
-                      "lifecycle": "active",
-                      "default_profile": "cli",
-                      "sources": [candidate["url"]],
-                      "reason": "New AI coding agent discovered"
-                  })
-
-          output_path = "candidate-discovery-report.json"
-          with open(output_path, 'w') as f:
-              json.dump(report, f, indent=2)
-          print(f"Candidate discovery report written to {output_path}")
-          print(f"Total: {report['total_candidates']}, Existing: {len(report['existing'])}, New: {len(report['new_candidates'])}")
-          EOF
-
-      - name: Upload candidate discovery report
-        uses: actions/upload-artifact@v4
-        with:
-          name: candidate-discovery-report
-          path: candidate-discovery-report.json
-
-      - name: Create issue for new candidates
-        if: always()
-        run: |
-          if [ -f candidate-discovery-report.json ]; then
-            NEW_COUNT=$(cat candidate-discovery-report.json | jq '.new_candidates | length')
-            if [ "$NEW_COUNT" -gt 0 ]; then
-              gh issue create \
-                --title "New AI Agent Candidates Discovered - $(date +%Y-%m-%d)" \
-                --body "$(cat candidate-discovery-report.json | jq -r '.new_candidates | .[] | "- \(.name): \(.url)"')" \
-                --label "candidate-discovery" \
-                --repo Luckycat133/skills-repo || true
-            fi
-          fi
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  # candidate-discovery is DISABLED in offline mode.
+  # Online candidate discovery runs in maintainer-online-checks.yml
+  # when registry.online_checks_enabled is true.

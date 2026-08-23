@@ -3,6 +3,17 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Native Windows Python ignores MSYS-style env values; convert HOME
+# fixtures so $HOME resolution sees a real directory on every platform.
+
+# Pin surface resolution to the POSIX layout the fixtures create;
+# otherwise windows-latest would resolve $APPDATA-style overrides.
+export AGENT_SKILLS_PLATFORM=linux
+
+native_path() {
+    if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
+}
 TMP_ROOT="$(mktemp -d /tmp/codex-migration-test.XXXXXX)"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 
@@ -19,7 +30,7 @@ assert_path() {
     local expected="$2"
     local actual
 
-    actual="$(HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" legacy --print-path codex "$object")"
+    actual="$(HOME="$(native_path "$TEST_HOME")" bash "$SCRIPT_DIR/smart-ide-migration.sh" legacy --print-path codex "$object")"
     [[ "$actual" == "$expected" ]] || {
         echo "FAIL: codex/${object} expected '${expected}', got '${actual}'" >&2
         exit 1
@@ -41,7 +52,7 @@ printf '%s\n' \
     '  }' \
     '}' > "$SOURCE_MCP"
 
-if HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" legacy \
+if HOME="$(native_path "$TEST_HOME")" bash "$SCRIPT_DIR/smart-ide-migration.sh" legacy \
     --source claude \
     --target codex \
     --objects mcp \
@@ -66,7 +77,7 @@ printf '%s\n' \
     '[hooks]' \
     'enabled = true' > "$SOURCE_CONFIG"
 
-if HOME="$TEST_HOME" bash "$SCRIPT_DIR/smart-ide-migration.sh" legacy \
+if HOME="$(native_path "$TEST_HOME")" bash "$SCRIPT_DIR/smart-ide-migration.sh" legacy \
     --source codex \
     --target openclaw \
     --objects config \

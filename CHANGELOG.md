@@ -2,7 +2,93 @@
 
 This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.8.28] - 2026-08-22
+
+### Fixed
+
+- **all-installed detection fidelity**: `snapshot --all-installed`,
+  `restore --all-installed`, and `detect` resolve detection per
+  profile selector (`product/profile`) with an explicit state priority
+  (INSTALLED > CONFIGURED_ONLY > COMPATIBILITY_ONLY > CLOUD_CONNECTED >
+  LEGACY > AMBIGUOUS), instead of recording only the first probe's state
+  per product. `build_plan_document` receives full selectors, so plans
+  cover every detected profile rather than only the default one.
+- **restore --all-installed is now real**: target detection collects
+  `product/profile` selectors, source selectors are derived from bundle
+  manifest objects, and the plan document records `detection_status`
+  and `failed_targets[]`. Fixed the undefined `failed_targets`
+  NameError and the duplicated plan-document construction in the
+  all-installed branch; staging copies objects from every bundled
+  product when `--all-installed` is set.
+- **run_detection probe-only with targeted fallback**: removed the
+  unconditional `inventory.exists -> installed` fallback. A narrow
+  fallback remains for workspace-relative (project-scoped) paths that
+  lack probes; shared paths (`AGENTS.md`, `.agents/skills`) still
+  classify as `compatibility-only`.
+- **No silent failures in snapshot**: the compatibility-matrix builder
+  logs profile-resolution warnings instead of silently continuing;
+  `collect_source_objects` ACB errors now emit a failure response
+  carrying `collection_summary` (`captured` / `manual_rebuild` /
+  `excluded_by_policy` / `parse_failed` / `secret_rejected` /
+  `conflict`) and exit non-zero.
+- **doctor requirements accuracy**: package names are normalized
+  (version suffixes and `npm:`/`pypi:` prefixes stripped); VS Code
+  extension IDs land in `extensions`; script paths (`.py`/`.js`)
+  land in `manual_installs` instead of masquerading as packages;
+  `collect_reauth` carries the MCP server's command/package so
+  credential names stay human-readable.
+
+### Added
+
+- **Manifest object enrichment** (`enrich_manifest_object`): every
+  manifest object now carries `object_path`, `files[]` with per-file
+  SHA256 + size, `adapter_version`, `source_format_version`,
+  `portability_mode` (`full` / `lossy` / `manual` / `excluded`), and
+  `content_hash`; closed-world verify cross-checks these bindings
+  both directions.
+
+## [0.8.27] - 2026-08-22
+
+### Fixed
+
+- **Audit 0.8.27 closure (P1-5 / P1-6 / P1-7 / P1-8 / P1-9)**:
+  - **P1-5 ACB provenance signing**: replaced HMAC-SHA256 with real
+    Ed25519. `sign_bundle()` / `verify_bundle_signature()` use raw
+    32-byte Ed25519 seed + public key + signature (base64 in
+    `signature.json` schema_version 2). Requires `cryptography` at
+    sign / verify time only (not at snapshot).
+  - **P1-6 CI matrix**: `validate.yml` runs on `ubuntu-latest`,
+    `macos-latest`, and `windows-latest`.
+  - **P1-7 doctor**: `secrets_required` derives human-readable
+    credential names from the MCP server's command or package, with
+    `used_by: [<object_id>]`. `compatibility.json` is a source ×
+    target pairs list filtered to bidirectional-reviewed support,
+    schema_version 2.
+  - **P1-7 restore loop**: replaced silent `except Exception: pass`
+    with `failed_targets[]` recorded in the restore summary.
+  - **P1-8 automatic migration types**: `AUTOMATIC_OBJECT_TYPES` now
+    includes `prompts`, `commands`, `agents`, `hooks`.
+  - **P1-9 freshness workflow**: `candidate-discovery` job honors the
+    registry's `online_checks_enabled` flag.
+
+### Added
+
+- **Maintainer online checks split from offline runtime**
+  (`maintainer-online-checks.yml`): monthly job fetches official doc
+  URLs (404 / status-code checks) and creates candidate discovery
+  issues; it never pushes main. `freshness.yml` is explicitly
+  offline-only; stale demotion runs on manual dispatch only.
+- **P2-1 release closure**: `v0.8.24` annotated tag on `3d864ac`;
+  branch protection requires the three platform `validate` jobs,
+  enforces admins, requires linear history.
+- **P2-2 roadmap restructure**: Production / Experimental /
+  Known limitations / Next milestone / Rejected layout.
+
+### Changed
+
+- **v0.8.27 tag & strict branch protection**: `main` requires all
+  three platform `validate` jobs to pass before merge (`strict:
+  true`, admins included); release tags are cut from validated commits.
 
 ## [0.8.26] - 2026-08-20
 

@@ -3,6 +3,17 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Native Windows Python ignores MSYS-style env values; convert HOME
+# fixtures so $HOME resolution sees a real directory on every platform.
+
+# Pin surface resolution to the POSIX layout the fixtures create;
+# otherwise windows-latest would resolve $APPDATA-style overrides.
+export AGENT_SKILLS_PLATFORM=linux
+
+native_path() {
+    if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
+}
 MIGRATION_SCRIPT="${SCRIPT_DIR}/smart-ide-migration.sh"
 PATHS_FILE="${SCRIPT_DIR}/../references/ide-paths.json"
 IDE_REFERENCE="${SCRIPT_DIR}/../references/ides/claude.md"
@@ -80,7 +91,7 @@ mkdir -p "$FIXTURE_HOME/.cursor" "$FIXTURE_HOME/Library/Application Support/Curs
 printf '%s\n' '{"mcpServers":{"fixture":{"command":"echo"}}}' > "$FIXTURE_HOME/.cursor/mcp.json"
 printf '%s\n' '{"editor.fontSize":14}' > "$FIXTURE_HOME/Library/Application Support/Cursor/User/settings.json"
 
-MCP_SCOPE_OUTPUT="$(HOME="$FIXTURE_HOME" bash "$MIGRATION_SCRIPT" legacy --source cursor --target claude --workspace "$FIXTURE_WORKSPACE" --objects mcp --dry-run 2>&1)"
+MCP_SCOPE_OUTPUT="$(HOME="$(native_path "$FIXTURE_HOME")" bash "$MIGRATION_SCRIPT" legacy --source cursor --target claude --workspace "$FIXTURE_WORKSPACE" --objects mcp --dry-run 2>&1)"
 if grep -Fq 'selected global/user scope' <<< "$MCP_SCOPE_OUTPUT" && grep -Fq 'project .mcp.json' <<< "$MCP_SCOPE_OUTPUT"; then
     echo "PASS: Claude MCP fixture preserves project and local scopes for manual review"
 else
@@ -88,7 +99,7 @@ else
     failures=$((failures + 1))
 fi
 
-CONFIG_SCOPE_OUTPUT="$(HOME="$FIXTURE_HOME" bash "$MIGRATION_SCRIPT" legacy --source cursor --target claude --workspace "$FIXTURE_WORKSPACE" --objects config --dry-run 2>&1)"
+CONFIG_SCOPE_OUTPUT="$(HOME="$(native_path "$FIXTURE_HOME")" bash "$MIGRATION_SCRIPT" legacy --source cursor --target claude --workspace "$FIXTURE_WORKSPACE" --objects config --dry-run 2>&1)"
 if grep -Fq 'automatic whole-IDE config migration is unsupported' <<< "$CONFIG_SCOPE_OUTPUT"; then
     echo "PASS: Claude settings fixture preserves project/local scopes for manual review"
 else

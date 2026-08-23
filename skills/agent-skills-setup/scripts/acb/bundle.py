@@ -21,6 +21,7 @@ accurate SHA256 hashes.
 
 from __future__ import annotations
 
+import base64
 import dataclasses
 import hashlib
 import json
@@ -136,6 +137,70 @@ class ACBManifest:
             inventory_summary=dict(payload.get("inventory_summary", {})),
             objects=list(payload.get("objects", [])),
         )
+
+
+def enrich_manifest_object(
+    obj: dict[str, Any],
+    objects_dir_files: dict[str, bytes],
+    adapter_versions: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Enrich a manifest object with file list, hashes, and metadata.
+
+    Adds:
+    - object_path: logical path under objects/
+    - files: list of {path, sha256, size} for each file
+    - source_format_version: format version from plan/registry
+    - adapter_version: adapter version used for this object type
+    - portability_mode: "full" | "lossy" | "manual" | "excluded"
+    - content_hash: SHA256 of primary content file (for quick comparison)
+    """
+    obj_dict = dict(obj)
+    obj_type = obj_dict.get("surface") or obj_dict.get("object_type", "")
+    prod = obj_dict.get("product", "")
+    prof = obj_dict.get("profile", "")
+    scp = obj_dict.get("scope", "")
+
+    # Build logical object path
+    obj_dict["object_path"] = f"{obj_type}/{prod}/{prof}/{scp}"
+
+    # Collect files for this object
+    obj_files = []
+    prefix = f"{obj_type}/{prod}/{prof}/{scp}/"
+    primary_hash = None
+    for rel_path, data in sorted((objects_dir_files or {}).items()):
+        if rel_path.startswith(prefix) or (obj_type and rel_path.startswith(f"{obj_type}/")):
+            file_hash = hashlib.sha256(data).hexdigest()
+            file_entry = {
+                "path": f"{ACB_OBJECTS_DIR}/{Path(rel_path).as_posix()}",
+                "sha256": file_hash,
+                "size": len(data),
+            }
+            obj_files.append(file_entry)
+            if primary_hash is None:
+                primary_hash = file_hash
+    obj_dict["files"] = obj_files
+    obj_dict["content_hash"] = primary_hash
+
+    # Add source format version and adapter version if available
+    if adapter_versions:
+        obj_dict["adapter_version"] = adapter_versions.get(obj_type, "")
+    # source_format_version would come from plan item; placeholder for now
+    obj_dict["source_format_version"] = obj_dict.get("source_format", "")
+
+    # Determine portability mode from status
+    status = obj_dict.get("status", "")
+    if status == "ready":
+        obj_dict["portability_mode"] = "full"
+    elif status == "ready-lossy":
+        obj_dict["portability_mode"] = "lossy"
+    elif status in ("manual-rebuild", "draft-disabled", "forbidden"):
+        obj_dict["portability_mode"] = "manual"
+    elif status == "excluded":
+        obj_dict["portability_mode"] = "excluded"
+    else:
+        obj_dict["portability_mode"] = "unknown"
+
+    return obj_dict
 
 
 def sha256_text(text: str) -> str:
@@ -279,11 +344,46 @@ def collect_requirements(
     inventory_rows: list[dict[str, Any]],
     plan_rows: list[dict[str, Any]],
     objects_dir_files: dict[str, bytes] | None = None,
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], dict[str, int]]:
+    """Compute bundle-level prerequisites and surface parse failures.
+
+    Audit P1-2 (0.8.27): never silently swallow MCP parse failures. If a
+    Gemini / Augment / VS Code / Qoder settings.json changes shape and we
+    cannot extract its MCP servers, we record the failure in ``summary``
+    rather than emitting a "successful" bundle with missing data.
+
+    Returns ``(requirements, summary)`` where summary contains:
+    - parse_failed: count of MCP sources we could not parse
+    - parse_failed_details: list[dict] with per-source error context
+    """
     executables: set[str] = set()
     extensions: set[str] = set()
     packages: list[dict[str, str]] = []
     manual_installs: list[str] = []
+    platform_notes: list[str] = []
+    parse_failed_details: list[dict[str, str]] = []
+
+    def _record_parse_failure(source_label: str, error: Exception) -> None:
+        parse_failed_details.append(
+            {"source": source_label, "error": str(error)}
+        )
+
+    def _normalize_package_name(name: str, manager: str) -> str:
+        """Normalize package name by stripping version suffixes and common prefixes."""
+        # Remove version specifiers (@version, @latest, etc.)
+        if "@" in name and not name.startswith("@"):
+            name = name.split("@")[0]
+        # Remove common prefixes
+        for prefix in ["npm:", "pypi:", "github:"]:
+            if name.startswith(prefix):
+                name = name[len(prefix):]
+        return name
+
+    def _add_package(manager: str, name: str) -> None:
+        """Add a package with normalized name."""
+        normalized = _normalize_package_name(name, manager)
+        if normalized:
+            packages.append({"manager": manager, "name": normalized})
 
     # 1. Inspect captured raw object files for MCP server requirements
     if objects_dir_files:
@@ -303,14 +403,15 @@ def collect_requirements(
                                     for arg in args:
                                         if isinstance(arg, str):
                                             if arg.startswith("@") or "mcp-server" in arg:
-                                                packages.append({
-                                                    "manager": "npm" if cmd in ("npx", "npm", "node") else "auto",
-                                                    "name": arg,
-                                                })
+                                                _add_package("npm" if cmd in ("npx", "npm", "node") else "auto", arg)
+                                            # VS Code extension IDs in args (e.g., "ms-vscode.cpptools")
+                                            elif "." in arg and not arg.endswith((".py", ".js", ".json")) and "/" not in arg:
+                                                extensions.add(arg)
+                                            # Python/JS script paths - these are manual installs, not packages
                                             elif arg.endswith(".py") or arg.endswith(".js"):
-                                                packages.append({"manager": "auto", "name": arg})
-                except Exception:
-                    pass
+                                                manual_installs.append(arg)
+                except Exception as error:
+                    _record_parse_failure(f"objects_dir_files:{rel}", error)
 
     # 2. Inspect plan items to discover required tools & packages from disk sources
     for item in plan_rows:
@@ -331,14 +432,24 @@ def collect_requirements(
                         for arg in s.args:
                             if isinstance(arg, str):
                                 if arg.startswith("@") or "mcp-server" in arg:
-                                    packages.append({
-                                        "manager": "npm" if s.command in ("npx", "npm", "node") else "auto",
-                                        "name": arg,
-                                    })
+                                    _add_package("npm" if s.command in ("npx", "npm", "node") else "auto", arg)
+                                elif "." in arg and not arg.endswith((".py", ".js", ".json")) and "/" not in arg:
+                                    extensions.add(arg)
                                 elif arg.endswith(".py") or arg.endswith(".js"):
-                                    packages.append({"manager": "auto", "name": arg})
-                except Exception:
-                    pass
+                                    manual_installs.append(arg)
+                except Exception as error:
+                    src_label = (
+                        f"plan_item:{src.get('product', '')}/{src.get('profile', '')}"
+                        f"/{src.get('scope', '')}:{resolved}"
+                    )
+                    _record_parse_failure(src_label, error)
+        elif obj_type in ("skills", "instructions"):
+            # Skills and instructions may require the target IDE to be installed
+            tgt = item.get("target") or {}
+            tgt_product = tgt.get("product", "")
+            if tgt_product:
+                # Add platform-specific notes about required IDE
+                platform_notes.append(f"Target {tgt_product} must be installed to use {obj_type}")
 
     clean_packages = []
     seen_pkg = set()
@@ -348,13 +459,18 @@ def collect_requirements(
             seen_pkg.add(key)
             clean_packages.append(p)
 
-    return {
+    requirements = {
         "executables": sorted(executables),
         "extensions": sorted(extensions),
         "packages": clean_packages,
-        "manual_installs": manual_installs,
-        "platform_notes": [],
+        "manual_installs": sorted(set(manual_installs)),
+        "platform_notes": platform_notes,
     }
+    summary = {
+        "parse_failed": len(parse_failed_details),
+        "parse_failed_details": parse_failed_details,
+    }
+    return requirements, summary
 
 
 def collect_reauth(
@@ -363,11 +479,16 @@ def collect_reauth(
     actions: list[dict[str, str]] = []
     for item in plan_rows:
         if item.get("status") == "manual-rebuild" and item.get("object_type") == "mcp":
+            src = item.get("source") or {}
             actions.append(
                 {
                     "object_id": item.get("object_id", ""),
                     "reason": item.get("reason", "OAuth re-auth required"),
                     "action": "Open the target product's MCP UI, sign in, and re-add the server.",
+                    "source": {
+                        "package": src.get("package", ""),
+                        "command": src.get("command", ""),
+                    },
                 }
             )
     return actions
@@ -401,6 +522,7 @@ def write_bundle(
     reauth: list[dict[str, str]],
     rebuild: list[dict[str, str]],
     objects_dir_files: dict[str, bytes] | None = None,
+    adapter_versions: dict[str, str] | None = None,
 ) -> Path:
     """Write a fully-formed, closed-world ACB at ``bundle_root`` atomically.
 
@@ -425,25 +547,11 @@ def write_bundle(
         # Sanitize inventory for portable bundle
         portable_inventory = sanitize_inventory_for_bundle(inventory_rows)
 
-        # Build 1:1 object-to-file mapping for manifest
+        # Build 1:1 object-to-file mapping for manifest with rich metadata
         enriched_manifest_objects = []
         for obj in manifest.objects:
-            obj_dict = dict(obj)
-            if "files" not in obj_dict:
-                obj_files = []
-                obj_type = obj_dict.get("surface") or obj_dict.get("object_type", "")
-                prod = obj_dict.get("product", "")
-                prof = obj_dict.get("profile", "")
-                scp = obj_dict.get("scope", "")
-                prefix = f"{obj_type}/{prod}/{prof}/{scp}/"
-                for rel_path, data in sorted((objects_dir_files or {}).items()):
-                    if rel_path.startswith(prefix) or (obj_type and rel_path.startswith(f"{obj_type}/")):
-                        obj_files.append({
-                            "path": f"{ACB_OBJECTS_DIR}/{Path(rel_path).as_posix()}",
-                            "sha256": hashlib.sha256(data).hexdigest(),
-                        })
-                obj_dict["files"] = obj_files
-            enriched_manifest_objects.append(obj_dict)
+            enriched = enrich_manifest_object(obj, objects_dir_files, adapter_versions)
+            enriched_manifest_objects.append(enriched)
 
         manifest_payload = manifest.to_dict()
         manifest_payload["objects"] = enriched_manifest_objects
@@ -536,63 +644,210 @@ def collect_source_objects(
     allowed_scopes: set[str] | None = None,
     allowed_object_types: set[str] | None = None,
     plan_items: list[dict[str, Any]] | None = None,
-) -> dict[str, bytes]:
-    """Walk existing inventory rows and copy source files into stable paths under ``objects/``.
+) -> tuple[dict[str, bytes], dict[str, int]]:
+    """Walk plan items and copy source files into stable paths under ``objects/``.
+
+    Audit P1-1 (0.8.27): primary iteration is over plan_items. Each
+    selected PlanItem is processed by reading ``item.source.resolved_path``
+    directly; inventory rows are consulted only as a metadata lookup for
+    fields plan_items do not carry (canonical_path, source_format, storage,
+    policy). This eliminates the previous "row-driven" path that silently
+    widened a single Instructions plan item to every Instructions row in
+    the same profile/scope, and that overwrote canonical/compatibility
+    conflicts at the same bundle-relative path.
+
+    Audit P1-2 (0.8.27): each portable object outcome is tracked in
+    ``summary`` with explicit statuses:
+    - captured           - bytes written under objects/
+    - manual_rebuild     - plan status=manual-rebuild (no source to extract)
+    - excluded_by_policy - forbidden policy, scope, or object type
+    - parse_failed       - source path missing, unreadable, or parse error
+    - secret_rejected    - sensitive filename or secret scan hit
+    - conflict           - same bundle-relative path mapped from multiple sources
 
     Strict Allowlist (audit P0-2 & 0.8.25):
     - Refuses forbidden policies (forbidden-regenerate, never-migrate, source-only, etc.)
     - Refuses non-migratable types (generated_memory, session, chat, runtime, database, trust, etc.)
     - Only collects requested scopes and requested object types
-    - Only collects objects that match the planned migration items when plan_items is provided
-    - Strictly reports subobject parse errors instead of silently swallowing them
+
+    Returns ``(objects, summary)``. When ``plan_items`` is None the legacy
+    inventory-row iteration is preserved for backwards compatibility, but
+    it still emits summary statuses.
     """
     objects: dict[str, bytes] = {}
-    plan_object_types = {item.get("object_type") for item in plan_items} if plan_items else None
-    planned_sources: set[tuple[str, str, str, str]] = set()
-    if plan_items:
-        for item in plan_items:
-            s = item.get("source") or {}
-            obj_t = item.get("object_type", "")
-            prod = s.get("product", "")
-            prof = s.get("profile", "")
-            scp = s.get("scope", "")
-            if prod and scp:
-                planned_sources.add((prod, prof, obj_t, scp))
+    summary: dict[str, int] = {
+        "captured": 0,
+        "manual_rebuild": 0,
+        "excluded_by_policy": 0,
+        "parse_failed": 0,
+        "secret_rejected": 0,
+        "conflict": 0,
+    }
+    # Audit P1-1: detect alias / canonical-vs-compatibility conflicts where
+    # two distinct sources collapse to the same bundle-relative path.
+    seen_relative_sources: dict[str, set[str]] = {}
 
+    def _record(status: str) -> None:
+        summary[status] = summary.get(status, 0) + 1
+
+    # Build (product, profile, object_type, scope) -> inventory row index.
+    # Plan items don't carry storage/format/policy, so rows remain the
+    # canonical metadata source for those fields.
+    row_index: dict[tuple[str, str, str, str], dict[str, Any]] = {}
     for row in rows:
-        if not row.get("exists"):
-            continue
-        if source_product and row.get("product") != source_product:
-            continue
-        if source_profile and row.get("profile") != source_profile:
-            continue
+        key = (
+            row.get("product", ""),
+            row.get("profile", ""),
+            row.get("object_type", ""),
+            row.get("scope", ""),
+        )
+        row_index.setdefault(key, row)
 
-        object_type = row.get("object_type") or "unknown"
+    def _process_plan_item(item: dict[str, Any]) -> None:
+        src = item.get("source") or {}
+        obj_type = item.get("object_type") or ""
+        prod = src.get("product") or ""
+        prof = src.get("profile") or ""
+        scope = src.get("scope") or ""
+        resolved_path = src.get("resolved_path")
+        item_status = item.get("status") or ""
+
+        # source_product / source_profile are passed only in single-source
+        # mode. In all-installed mode they are None, so this is a no-op.
+        if source_product and prod != source_product:
+            return
+        if source_profile and prof != source_profile:
+            return
+
+        if allowed_object_types is not None and obj_type not in allowed_object_types:
+            _record("excluded_by_policy")
+            return
+        if allowed_scopes is not None and scope not in allowed_scopes:
+            _record("excluded_by_policy")
+            return
+        if item_status == "manual-rebuild":
+            _record("manual_rebuild")
+            return
+
+        row = row_index.get((prod, prof, obj_type, scope)) or {}
+        policy = row.get("policy") or ""
+        if policy in FORBIDDEN_SNAPSHOT_POLICIES:
+            _record("excluded_by_policy")
+            return
+        if obj_type in FORBIDDEN_SNAPSHOT_OBJECT_TYPES:
+            _record("excluded_by_policy")
+            return
+
+        if not resolved_path:
+            _record("parse_failed")
+            return
+        source_path = Path(resolved_path)
+        if not source_path.exists() or source_path.is_symlink():
+            _record("parse_failed")
+            return
+
+        canonical = row.get("canonical_path") or source_path.name
+        relative = _path_for_object(obj_type, prod, prof, scope, canonical)
+
+        storage = row.get("storage") or ""
+        format_name = row.get("source_format") or row.get("format") or ""
+
+        # Conflict detection (audit P1-1): two distinct sources collapsing
+        # to the same bundle-relative path is recorded as a conflict rather
+        # than silently overwriting the first write.
+        source_id = f"{prod}/{prof}/{obj_type}/{scope}@{resolved_path}"
+        seen = seen_relative_sources.setdefault(relative, set())
+        if seen and source_id not in seen:
+            _record("conflict")
+            return
+        seen.add(source_id)
+
+        if _SENSITIVE_FILENAME_HINT.search(source_path.name):
+            _record("secret_rejected")
+            return
+
+        try:
+            if source_path.is_file():
+                if storage == "config-subobject":
+                    if obj_type == "mcp":
+                        from migration_core import parse_mcp_document, emit_mcp_document
+                        raw_text = source_path.read_text(encoding="utf-8")
+                        servers = parse_mcp_document(raw_text, format_name)
+                        emitted_text, _ = emit_mcp_document(servers, format_name)
+                        objects[relative] = emitted_text.encode("utf-8")
+                    elif obj_type == "instructions":
+                        from migration_core import parse_instruction, emit_instruction
+                        raw_text = source_path.read_text(encoding="utf-8")
+                        instruction = parse_instruction(raw_text, format_name, scope, storage)
+                        emitted_text, _ = emit_instruction(instruction, format_name)
+                        objects[relative] = emitted_text.encode("utf-8")
+                    else:
+                        # Refuse to copy raw host config files for unsupported
+                        # subobject types. Audit P1-2: this is an explicit
+                        # policy exclusion, not a silent skip.
+                        _record("excluded_by_policy")
+                        return
+                else:
+                    objects[relative] = source_path.read_bytes()
+            elif source_path.is_dir():
+                _collect_tree(source_path, relative, objects, depth=0)
+            else:
+                _record("parse_failed")
+                return
+        except ACBSecretLeak:
+            _record("secret_rejected")
+            return
+        except Exception as error:
+            # Audit P1-2: surface parse failures; do not silently skip a
+            # requested portable object. The summary records parse_failed, and
+            # we re-raise so run_snapshot can decide whether to fail the
+            # snapshot rather than emit a "successful" bundle with missing
+            # data.
+            _record("parse_failed")
+            raise ACBError(
+                f"snapshot parse failed for portable object {relative}: {error}"
+            ) from error
+
+        _record("captured")
+
+    def _process_inventory_row(row: dict[str, Any]) -> None:
+        """Legacy path used only when plan_items is None (single-source mode)."""
+        if not row.get("exists"):
+            return
+        if source_product and row.get("product") != source_product:
+            return
+        if source_profile and row.get("profile") != source_profile:
+            return
+
+        object_type = row.get("object_type") or ""
+        if not object_type:
+            return
         policy = row.get("policy") or ""
         scope = row.get("scope") or "unknown"
-        product = row.get("product") or "unknown"
+        product = row.get("product") or ""
         profile = row.get("profile") or "default"
 
-        # P0-2: Strict snapshot allowlist
         if policy in FORBIDDEN_SNAPSHOT_POLICIES:
-            continue
+            _record("excluded_by_policy")
+            return
         if object_type in FORBIDDEN_SNAPSHOT_OBJECT_TYPES:
-            continue
+            _record("excluded_by_policy")
+            return
         if allowed_scopes is not None and scope not in allowed_scopes:
-            continue
+            _record("excluded_by_policy")
+            return
         if allowed_object_types is not None and object_type not in allowed_object_types:
-            continue
-        if plan_object_types is not None and object_type not in plan_object_types:
-            continue
-        if plan_items and planned_sources and (product, profile, object_type, scope) not in planned_sources:
-            continue
+            _record("excluded_by_policy")
+            return
 
         resolved = row.get("resolved_path")
         if not isinstance(resolved, str):
-            continue
+            _record("parse_failed")
+            return
         source_path = Path(resolved)
         if not source_path.exists() or source_path.is_symlink():
-            continue
+            _record("parse_failed")
+            return
 
         canonical = row.get("canonical_path") or source_path.name
         relative = _path_for_object(object_type, product, profile, scope, canonical)
@@ -600,38 +855,52 @@ def collect_source_objects(
         storage = row.get("storage") or ""
         format_name = row.get("source_format") or row.get("format") or ""
 
-        if source_path.is_file():
-            if not _SENSITIVE_FILENAME_HINT.search(source_path.name):
+        try:
+            if source_path.is_file():
+                if _SENSITIVE_FILENAME_HINT.search(source_path.name):
+                    _record("secret_rejected")
+                    return
                 if storage == "config-subobject":
-                    # Strict field-level whitelist for config subobjects (audit P0):
-                    # Never copy the entire host config file (e.g. settings.json with sibling tokens/telemetry/keys).
                     if object_type == "mcp":
-                        try:
-                            from migration_core import parse_mcp_document, emit_mcp_document
-                            raw_text = source_path.read_text(encoding="utf-8")
-                            servers = parse_mcp_document(raw_text, format_name)
-                            emitted_text, _ = emit_mcp_document(servers, format_name)
-                            objects[relative] = emitted_text.encode("utf-8")
-                        except Exception as error:
-                            raise ACBError(f"failed to extract MCP subobject from {source_path}: {error}") from error
+                        from migration_core import parse_mcp_document, emit_mcp_document
+                        raw_text = source_path.read_text(encoding="utf-8")
+                        servers = parse_mcp_document(raw_text, format_name)
+                        emitted_text, _ = emit_mcp_document(servers, format_name)
+                        objects[relative] = emitted_text.encode("utf-8")
                     elif object_type == "instructions":
-                        try:
-                            from migration_core import parse_instruction, emit_instruction
-                            raw_text = source_path.read_text(encoding="utf-8")
-                            instruction = parse_instruction(raw_text, format_name, scope, storage)
-                            emitted_text, _ = emit_instruction(instruction, format_name)
-                            objects[relative] = emitted_text.encode("utf-8")
-                        except Exception as error:
-                            raise ACBError(f"failed to extract instruction subobject from {source_path}: {error}") from error
+                        from migration_core import parse_instruction, emit_instruction
+                        raw_text = source_path.read_text(encoding="utf-8")
+                        instruction = parse_instruction(raw_text, format_name, scope, storage)
+                        emitted_text, _ = emit_instruction(instruction, format_name)
+                        objects[relative] = emitted_text.encode("utf-8")
                     else:
-                        # Refuse to copy raw host config files for unsupported subobject types
-                        pass
+                        _record("excluded_by_policy")
+                        return
                 else:
                     objects[relative] = source_path.read_bytes()
-        elif source_path.is_dir():
-            # Deep recursive collection up to MAX_DIR_DEPTH
-            _collect_tree(source_path, relative, objects, depth=0)
-    return objects
+            elif source_path.is_dir():
+                _collect_tree(source_path, relative, objects, depth=0)
+            else:
+                _record("parse_failed")
+                return
+        except ACBSecretLeak:
+            _record("secret_rejected")
+            return
+        except Exception as error:
+            _record("parse_failed")
+            raise ACBError(
+                f"snapshot parse failed for {relative}: {error}"
+            ) from error
+        _record("captured")
+
+    if plan_items:
+        for item in plan_items:
+            _process_plan_item(item)
+    else:
+        for row in rows:
+            _process_inventory_row(row)
+
+    return objects, summary
 
 
 def _collect_tree(dir_path: Path, prefix: str, out: dict[str, bytes], depth: int = 0) -> None:
@@ -852,6 +1121,196 @@ def verify_bundle(bundle_root: Path) -> list[str]:
             errors.append(f"manifest verification error: {error}")
 
     return errors
+
+
+# Audit P1-5 (0.8.27): Ed25519 over `checksums.json`. cryptography is
+# lazy-imported so snapshot / restore work without it; sign / verify
+# fail fast with a clear message if it is missing.
+ACB_SIGNATURE_NAME = "signature.json"
+ACB_SIGNATURE_SCHEMA_VERSION = 2
+_ED25519_KEY_BYTES = 32
+
+
+def _read_signing_key(key_path: Path) -> bytes:
+    if not key_path.is_file():
+        raise ACBError(f"signing key not found: {key_path}")
+    # Refuse group/world bits: a leaked signing key is a leaked bundle.
+    if stat.S_IMODE(key_path.stat().st_mode) & 0o077:
+        raise ACBError(
+            f"signing key {key_path} is group/world accessible; chmod 600 before use"
+        )
+    raw = key_path.read_bytes()
+    if len(raw) != _ED25519_KEY_BYTES:
+        raise ACBError(
+            f"signing key must be {_ED25519_KEY_BYTES} raw bytes; got {len(raw)}"
+        )
+    return raw
+
+
+def _load_public_key(key_path: Path) -> bytes:
+    if not key_path.is_file():
+        raise ACBError(f"public key not found: {key_path}")
+    # Public keys are non-secret but we still refuse symlinks so the
+    # caller can rely on the path being the actual file.
+    if key_path.is_symlink():
+        raise ACBError(f"public key path is a symlink: {key_path}")
+    raw = key_path.read_bytes()
+    if len(raw) != _ED25519_KEY_BYTES:
+        raise ACBError(
+            f"public key must be {_ED25519_KEY_BYTES} raw bytes; got {len(raw)}"
+        )
+    return raw
+
+
+def _ensure_cryptography() -> tuple[Any, Any, Any]:
+    try:
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+            Ed25519PrivateKey,
+            Ed25519PublicKey,
+        )
+        from cryptography.hazmat.primitives import serialization
+    except ImportError as error:
+        raise ACBError(
+            "Ed25519 signing requires the 'cryptography' package. "
+            "Install with: pip install cryptography"
+        ) from error
+    return Ed25519PrivateKey, Ed25519PublicKey, serialization
+
+
+def _build_signature_document(
+    public_key: Any,
+    private_key: Any,
+    payload: bytes,
+    signer: str,
+) -> dict[str, Any]:
+    from cryptography.hazmat.primitives import serialization
+    public_bytes = public_key.public_bytes(
+        serialization.Encoding.Raw, serialization.PublicFormat.Raw,
+    )
+    return {
+        "schema_version": ACB_SIGNATURE_SCHEMA_VERSION,
+        "algorithm": "ed25519",
+        "signer": signer,
+        "signed_at": datetime.now(timezone.utc).isoformat(),
+        "checksum_algorithm": "sha256",
+        "bundle_hash": sha256_bytes(payload),
+        "public_key": base64.b64encode(public_bytes).decode("ascii"),
+        "public_key_fingerprint": sha256_bytes(public_bytes)[:16],
+        "signature": base64.b64encode(private_key.sign(payload)).decode("ascii"),
+    }
+
+
+def _load_signature_artifact(
+    bundle_root: Path,
+) -> tuple[dict[str, Any] | None, bytes, list[str]]:
+    sig_path = bundle_root / ACB_SIGNATURE_NAME
+    checksums_path = bundle_root / ACB_CHECKSUMS_NAME
+    errors: list[str] = []
+    if not sig_path.is_file():
+        return None, checksums_path, [f"missing signature: {sig_path}"]
+    if not checksums_path.is_file():
+        return None, checksums_path, [f"missing {ACB_CHECKSUMS_NAME}"]
+    try:
+        return json.loads(sig_path.read_text(encoding="utf-8")), checksums_path.read_bytes(), errors
+    except Exception as error:
+        return None, checksums_path, [f"corrupted signature.json: {error}"]
+
+
+def _check_signature_metadata(
+    sig_doc: dict[str, Any],
+    payload: bytes,
+) -> list[str]:
+    errors: list[str] = []
+    if sig_doc.get("algorithm") != "ed25519":
+        errors.append(
+            f"unsupported signature algorithm: {sig_doc.get('algorithm')!r} "
+            "(expected 'ed25519')"
+        )
+    if sig_doc.get("schema_version") != ACB_SIGNATURE_SCHEMA_VERSION:
+        errors.append(
+            f"unsupported signature schema_version: {sig_doc.get('schema_version')!r} "
+            f"(expected {ACB_SIGNATURE_SCHEMA_VERSION})"
+        )
+    if sig_doc.get("bundle_hash") != sha256_bytes(payload):
+        errors.append(
+            f"bundle_hash mismatch: signature={sig_doc.get('bundle_hash')} "
+            f"actual={sha256_bytes(payload)}"
+        )
+    return errors
+
+
+def _decode_signature_fields(sig_doc: dict[str, Any]) -> tuple[bytes, bytes] | list[str]:
+    sig_b64 = sig_doc.get("signature")
+    pub_b64 = sig_doc.get("public_key")
+    if not isinstance(sig_b64, str) or not isinstance(pub_b64, str):
+        return ["signature.json missing signature/public_key fields"]
+    try:
+        return base64.b64decode(sig_b64, validate=True), base64.b64decode(pub_b64, validate=True)
+    except Exception as error:
+        return [f"signature.json fields are not valid base64: {error}"]
+
+
+def _verify_signature_payload(
+    public_key: Any,
+    signature: bytes,
+    payload: bytes,
+) -> list[str]:
+    try:
+        public_key.verify(signature, payload)
+    except Exception as error:
+        return [f"signature verification failed: {error}"]
+    return []
+
+
+def sign_bundle(bundle_root: Path, key_path: Path, signer: str) -> Path:
+    Ed25519PrivateKey, _, _ = _ensure_cryptography()
+    bundle_root = bundle_root.resolve()
+    checksums_path = bundle_root / ACB_CHECKSUMS_NAME
+    if not checksums_path.is_file():
+        raise ACBError(f"cannot sign: {checksums_path} missing")
+    private_key = Ed25519PrivateKey.from_private_bytes(_read_signing_key(key_path))
+    payload = checksums_path.read_bytes()
+    signature_doc = _build_signature_document(
+        private_key.public_key(),
+        private_key,
+        payload,
+        signer,
+    )
+    sig_path = bundle_root / ACB_SIGNATURE_NAME
+    sig_path.write_text(
+        json.dumps(signature_doc, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return sig_path
+
+
+def verify_bundle_signature(bundle_root: Path, key_path: Path) -> list[str]:
+    _, Ed25519PublicKeyClass, _ = _ensure_cryptography()
+    bundle_root = bundle_root.resolve()
+    sig_doc, payload, load_errors = _load_signature_artifact(bundle_root)
+    if load_errors:
+        return load_errors
+    assert sig_doc is not None
+    errors = _check_signature_metadata(sig_doc, payload)
+    decoded = _decode_signature_fields(sig_doc)
+    if isinstance(decoded, list):
+        return errors + decoded
+    signature, signature_public_key = decoded
+    try:
+        trusted_public_key = _load_public_key(key_path)
+    except ACBError as error:
+        return errors + [str(error)]
+    if signature_public_key != trusted_public_key:
+        errors.append(
+            "public key in signature.json does not match trusted_key "
+            f"(fingerprint mismatch: signature={sha256_bytes(signature_public_key)[:16]} "
+            f"trusted={sha256_bytes(trusted_public_key)[:16]})"
+        )
+    return errors + _verify_signature_payload(
+        Ed25519PublicKeyClass.from_public_bytes(trusted_public_key),
+        signature,
+        payload,
+    )
 
 
 class BundleSurfaceProvider:

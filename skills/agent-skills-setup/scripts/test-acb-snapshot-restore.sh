@@ -3,6 +3,17 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Native Windows Python ignores MSYS-style env values; convert HOME
+# fixtures so $HOME resolution sees a real directory on every platform.
+
+# Pin surface resolution to the POSIX layout the fixtures create;
+# otherwise windows-latest would resolve $APPDATA-style overrides.
+export AGENT_SKILLS_PLATFORM=linux
+
+native_path() {
+    if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
+}
 WRAPPER="${SCRIPT_DIR}/smart-ide-migration.sh"
 
 WS_OLD="$(mktemp -d /tmp/acb-old.XXXXXX)"
@@ -31,7 +42,7 @@ mkdir -p "$HOME_NEW/.cline/skills/fixture-skill"
 cp "$HOME_OLD/.cline/skills/fixture-skill/SKILL.md" "$HOME_NEW/.cline/skills/fixture-skill/"
 
 # --- snapshot ----------------------------------------------------------
-SNAPSHOT_OUT="$(HOME="$HOME_OLD" "$WRAPPER" snapshot \
+SNAPSHOT_OUT="$(HOME="$(native_path "$HOME_OLD")" "$WRAPPER" snapshot \
     --workspace "$WS_OLD" \
     --source cline/ide --target forge/cli \
     --scope user \
@@ -126,7 +137,7 @@ else:
 PY
 
 # --- restore -----------------------------------------------------------
-RESTORE_OUT="$(HOME="$HOME_NEW" "$WRAPPER" restore \
+RESTORE_OUT="$(HOME="$(native_path "$HOME_NEW")" "$WRAPPER" restore \
     "$BUNDLE" \
     --workspace "$WS_NEW" \
     --source cline/ide --target forge/cli \

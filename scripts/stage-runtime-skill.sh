@@ -11,8 +11,6 @@ SOURCE_SKILL_DIR="$1"
 PACKAGE_DIR="$2"
 VERSION="$3"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SOURCE_SKILL_DIR_ABS="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$SOURCE_SKILL_DIR")"
-PACKAGE_DIR_ABS="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$PACKAGE_DIR")"
 
 [[ -f "$SOURCE_SKILL_DIR/SKILL.md" ]] || {
     echo "ERROR: missing $SOURCE_SKILL_DIR/SKILL.md" >&2
@@ -22,12 +20,23 @@ PACKAGE_DIR_ABS="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]
     echo "ERROR: package directory already exists: $PACKAGE_DIR" >&2
     exit 1
 }
-case "$PACKAGE_DIR_ABS/" in
-    "$SOURCE_SKILL_DIR_ABS/"*)
-        echo "ERROR: package directory must be outside the source Skill: $PACKAGE_DIR" >&2
-        exit 1
-        ;;
-esac
+# Containment check in Python: bash case-glob matching is unreliable on
+# Windows, where native realpath() returns backslash paths and the drive
+# letter case varies. Python handles separators and case-insensitivity.
+if python3 -c '
+import os, sys
+src = os.path.realpath(sys.argv[1])
+pkg = os.path.realpath(sys.argv[2])
+if os.name == "nt":
+    src, pkg = src.lower(), pkg.lower()
+src = src.rstrip(os.sep) + os.sep
+sys.exit(0 if not pkg.startswith(src) else 1)
+' "$SOURCE_SKILL_DIR" "$PACKAGE_DIR"; then
+    : # outside the source Skill — proceed
+else
+    echo "ERROR: package directory must be outside the source Skill: $PACKAGE_DIR" >&2
+    exit 1
+fi
 
 mkdir -p "$PACKAGE_DIR"
 python3 "$SCRIPT_DIR/build-clawhub-skill.py" \

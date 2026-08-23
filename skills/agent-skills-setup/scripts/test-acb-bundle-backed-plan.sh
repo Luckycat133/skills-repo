@@ -12,6 +12,17 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Native Windows Python ignores MSYS-style env values; convert HOME
+# fixtures so $HOME resolution sees a real directory on every platform.
+
+# Pin surface resolution to the POSIX layout the fixtures create;
+# otherwise windows-latest would resolve $APPDATA-style overrides.
+export AGENT_SKILLS_PLATFORM=linux
+
+native_path() {
+    if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
+}
 WRAPPER="${SCRIPT_DIR}/smart-ide-migration.sh"
 
 TMP_ROOT="$(mktemp -d /tmp/acb-bundle-backed.XXXXXX)"
@@ -38,16 +49,30 @@ metadata:
 EOF
 
 # 1. Snapshot on Device A
-HOME="$HOME_A" "$WRAPPER" snapshot \
+if ! HOME="$(native_path "$HOME_A")" "$WRAPPER" snapshot \
     --workspace "$WS_A" \
     --source cline/ide --target forge/cli \
     --scope user \
     --output "$BUNDLE" \
-    --json >/dev/null
-echo "OK Device A snapshot generated"
+    --json >"$TMP_ROOT/snapshot.json"; then
+    echo "FAIL: snapshot exited non-zero; captured output:" >&2
+    cat "$TMP_ROOT/snapshot.json" >&2 || true
+    exit 1
+fi
+python3 - "$TMP_ROOT/snapshot.json" <<'PY'
+import json, sys
+out = json.load(open(sys.argv[1]))
+assert out.get("ok") is True, out
+captured = out.get("objects_captured", 0)
+assert captured >= 1, (
+    f"snapshot captured {captured} objects; summary={json.dumps(out.get('summary', {}))} "
+    f"collection={json.dumps(out.get('collection_summary', {}))}"
+)
+print(f"OK Device A snapshot generated ({captured} objects)")
+PY
 
 # 2. Restore on clean Device B with a reviewed plan, but WITHOUT --restore-root.
-HOME="$HOME_B" "$WRAPPER" restore \
+if ! HOME="$(native_path "$HOME_B")" "$WRAPPER" restore \
     "$BUNDLE" \
     --workspace "$WS_B" \
     --source cline/ide --target forge/cli \
@@ -55,7 +80,13 @@ HOME="$HOME_B" "$WRAPPER" restore \
     --plan-out "$PLAN" \
     --apply-safe \
     --yes \
-    --json >"$TMP_ROOT/restore.json"
+    --json >"$TMP_ROOT/restore.json"; then
+    echo "FAIL: restore exited non-zero; captured output:" >&2
+    cat "$TMP_ROOT/restore.json" >&2 || true
+    echo "--- bundle manifest ---" >&2
+    cat "$BUNDLE/manifest.json" >&2 || true
+    exit 1
+fi
 
 # Extract the JSON object from the (possibly noisy) output.
 RESTORE_JSON="$(python3 - "$TMP_ROOT/restore.json" <<'PY'
@@ -148,7 +179,7 @@ fi
 echo "OK #4 no .acb-restored created without --restore-root (opt-in)"
 
 # 6. #4: WITH --restore-root, extraction does happen.
-HOME="$HOME_B" "$WRAPPER" restore \
+HOME="$(native_path "$HOME_B")" "$WRAPPER" restore \
     "$BUNDLE" \
     --workspace "$WS_B" \
     --source cline/ide --target forge/cli \

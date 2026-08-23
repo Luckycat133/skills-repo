@@ -8,6 +8,17 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Native Windows Python ignores MSYS-style env values; convert HOME
+# fixtures so $HOME resolution sees a real directory on every platform.
+
+# Pin surface resolution to the POSIX layout the fixtures create;
+# otherwise windows-latest would resolve $APPDATA-style overrides.
+export AGENT_SKILLS_PLATFORM=linux
+
+native_path() {
+    if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
+}
 WRAPPER="${SCRIPT_DIR}/smart-ide-migration.sh"
 
 TMP_ROOT="$(mktemp -d /tmp/acb-multiscope.XXXXXX)"
@@ -44,7 +55,7 @@ metadata:
 EOF
 
 # 1. Snapshot BOTH scopes.
-HOME="$HOME_A" "$WRAPPER" snapshot \
+HOME="$(native_path "$HOME_A")" "$WRAPPER" snapshot \
     --workspace "$WS_A" \
     --source cline/ide --target forge/cli \
     --scope user,project \
@@ -53,7 +64,7 @@ HOME="$HOME_A" "$WRAPPER" snapshot \
 echo "OK Device A multi-scope snapshot generated"
 
 # 2. Restore on clean Device B across both scopes.
-HOME="$HOME_B" "$WRAPPER" restore \
+HOME="$(native_path "$HOME_B")" "$WRAPPER" restore \
     "$BUNDLE" \
     --workspace "$WS_B" \
     --source cline/ide --target forge/cli \

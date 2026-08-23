@@ -13,6 +13,17 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Native Windows Python ignores MSYS-style env values; convert HOME
+# fixtures so $HOME resolution sees a real directory on every platform.
+
+# Pin surface resolution to the POSIX layout the fixtures create;
+# otherwise windows-latest would resolve $APPDATA-style overrides.
+export AGENT_SKILLS_PLATFORM=linux
+
+native_path() {
+    if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
+}
 WRAPPER="${SCRIPT_DIR}/smart-ide-migration.sh"
 
 TMP_ROOT="$(mktemp -d /tmp/acb-p0-regressions.XXXXXX)"
@@ -55,7 +66,7 @@ cat > "$WS_A/.clinerules" <<'EOF'
 EOF
 
 # Snapshot with scope=user (should include portable-skill, but exclude .cline/data and project rules)
-HOME="$HOME_A" "$WRAPPER" snapshot \
+HOME="$(native_path "$HOME_A")" "$WRAPPER" snapshot \
     --workspace "$WS_A" \
     --source cline/ide --target forge/cli \
     --scope user \
@@ -100,7 +111,7 @@ metadata:
 EOF
 
 PLAN_OUT="$TMP_ROOT/restore-plan.json"
-HOME="$HOME_B" "$WRAPPER" restore \
+HOME="$(native_path "$HOME_B")" "$WRAPPER" restore \
     "$BUNDLE" \
     --workspace "$WS_B" \
     --source cline/ide --target forge/cli \
@@ -124,7 +135,7 @@ echo "OK P0-3: bundle content won over Device B local source"
 echo "=== Test 3: P0-1 Pre-existing target shown as replace and plan target matches ==="
 # Now run restore again when the target ALREADY exists on Device B
 PLAN_OUT_2="$TMP_ROOT/restore-plan-replace.json"
-HOME="$HOME_B" "$WRAPPER" restore \
+HOME="$(native_path "$HOME_B")" "$WRAPPER" restore \
     "$BUNDLE" \
     --workspace "$WS_B" \
     --source cline/ide --target forge/cli \
@@ -207,7 +218,7 @@ PY
 # -----------------------------------------------------------------------------
 echo "=== Test 5: Replayable Restore Plan with --plan-in and TOCTOU state guard ==="
 SAVED_PLAN="$TMP_ROOT/reviewed-replayable-plan.json"
-HOME="$HOME_B" "$WRAPPER" restore \
+HOME="$(native_path "$HOME_B")" "$WRAPPER" restore \
     "$BUNDLE" \
     --workspace "$WS_B" \
     --source cline/ide --target forge/cli \
@@ -219,7 +230,7 @@ HOME="$HOME_B" "$WRAPPER" restore \
 [ -f "$SAVED_PLAN" ] || { echo "FAIL: plan-out did not create plan file"; exit 1; }
 
 # Replay the exact reviewed plan with --plan-in and --yes
-HOME="$HOME_B" "$WRAPPER" restore \
+HOME="$(native_path "$HOME_B")" "$WRAPPER" restore \
     "$BUNDLE" \
     --workspace "$WS_B" \
     --plan-in "$SAVED_PLAN" \
@@ -236,7 +247,7 @@ echo "OK Test 5a: reviewed plan successfully replayed via --plan-in"
 
 # Test TOCTOU state guard: modify destination file so expected_target_state mismatches
 echo "tampered content" > "$HOME_B/forge/skills/portable-skill/SKILL.md"
-if HOME="$HOME_B" "$WRAPPER" restore \
+if HOME="$(native_path "$HOME_B")" "$WRAPPER" restore \
     "$BUNDLE" \
     --workspace "$WS_B" \
     --plan-in "$SAVED_PLAN" \
@@ -276,7 +287,7 @@ cat > "$HOME_MCP_A/.augment/settings.json" <<'EOF'
 }
 EOF
 
-HOME="$HOME_MCP_A" "$WRAPPER" snapshot \
+HOME="$(native_path "$HOME_MCP_A")" "$WRAPPER" snapshot \
     --workspace "$WS_MCP_A" \
     --source augment-code/cli-ide --target cline/ide \
     --scope user \
@@ -313,6 +324,7 @@ PY
 # -----------------------------------------------------------------------------
 echo "=== Test 7: Cross-Platform and Windows Path Resolver ==="
 python3 - <<'PY'
+import os
 import sys
 from pathlib import Path
 
@@ -320,16 +332,37 @@ sys.path.insert(0, str(Path("skills/agent-skills-setup/scripts").resolve()))
 from migration_core import Registry, _expand_path_vars
 
 fake_home = Path("/fake/home")
-# Test %APPDATA% and %USERPROFILE% expansion
-appdata_res = _expand_path_vars("%APPDATA%/Code/User/settings.json", fake_home)
-assert "/fake/home/AppData/Roaming/Code/User/settings.json" in appdata_res, f"unexpected APPDATA: {appdata_res}"
+saved_env = {}
+for var in ("APPDATA", "LOCALAPPDATA", "USERPROFILE", "HOMEPATH"):
+    saved_env[var] = os.environ.pop(var, None)
 
-userprofile_res = _expand_path_vars("%USERPROFILE%/.cursor/skills", fake_home)
-assert "/fake/home/.cursor/skills" in userprofile_res, f"unexpected USERPROFILE: {userprofile_res}"
+def _assert_tail(res, tail):
+    # Separator- and drive-agnostic: on native Windows the fake home
+    # resolves against the current drive (C:/fake/home) with backslashes.
+    res_posix = Path(res).as_posix().lower()
+    assert res_posix.endswith(tail), f"unexpected expansion: {res}"
 
-# Test $APPDATA and $LOCALAPPDATA expansion
-posix_appdata = _expand_path_vars("$APPDATA/app/config.json", fake_home)
-assert "/fake/home/AppData/Roaming/app/config.json" in posix_appdata, f"unexpected $APPDATA: {posix_appdata}"
+try:
+    # With no environment overrides the vars fall back to the given home.
+    appdata_res = _expand_path_vars("%APPDATA%/Code/User/settings.json", fake_home)
+    _assert_tail(appdata_res, "fake/home/appdata/roaming/code/user/settings.json")
+
+    userprofile_res = _expand_path_vars("%USERPROFILE%/.cursor/skills", fake_home)
+    _assert_tail(userprofile_res, "fake/home/.cursor/skills")
+
+    posix_appdata = _expand_path_vars("$APPDATA/app/config.json", fake_home)
+    _assert_tail(posix_appdata, "fake/home/appdata/roaming/app/config.json")
+finally:
+    for var, value in saved_env.items():
+        if value is not None:
+            os.environ[var] = value
+
+# When the environment defines APPDATA it wins over the home fallback.
+if os.environ.get("APPDATA"):
+    env_res = _expand_path_vars("%APPDATA%/x.json", fake_home)
+    assert Path(env_res).as_posix().startswith(
+        Path(os.environ["APPDATA"]).as_posix()
+    ), f"expected real APPDATA to win: {env_res}"
 
 print("OK Test 7: %APPDATA%, %USERPROFILE%, and $APPDATA correctly expanded across platforms")
 PY
