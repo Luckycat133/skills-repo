@@ -44,13 +44,27 @@ metadata:
 EOF
 
 # 1. Snapshot on Device A
-HOME="$(native_path "$HOME_A")" "$WRAPPER" snapshot \
+if ! HOME="$(native_path "$HOME_A")" "$WRAPPER" snapshot \
     --workspace "$WS_A" \
     --source cline/ide --target forge/cli \
     --scope user \
     --output "$BUNDLE" \
-    --json >/dev/null
-echo "OK Device A snapshot generated"
+    --json >"$TMP_ROOT/snapshot.json"; then
+    echo "FAIL: snapshot exited non-zero; captured output:" >&2
+    cat "$TMP_ROOT/snapshot.json" >&2 || true
+    exit 1
+fi
+python3 - "$TMP_ROOT/snapshot.json" <<'PY'
+import json, sys
+out = json.load(open(sys.argv[1]))
+assert out.get("ok") is True, out
+captured = out.get("objects_captured", 0)
+assert captured >= 1, (
+    f"snapshot captured {captured} objects; summary={json.dumps(out.get('summary', {}))} "
+    f"collection={json.dumps(out.get('collection_summary', {}))}"
+)
+print(f"OK Device A snapshot generated ({captured} objects)")
+PY
 
 # 2. Restore on clean Device B with a reviewed plan, but WITHOUT --restore-root.
 if ! HOME="$(native_path "$HOME_B")" "$WRAPPER" restore \

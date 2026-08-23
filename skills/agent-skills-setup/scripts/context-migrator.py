@@ -691,6 +691,7 @@ def run_snapshot(args: argparse.Namespace) -> int:
                 "surface": surface_type,
                 "scope": item_scope,
                 "status": item.get("status", ""),
+                "reason": item.get("reason", ""),
                 "secret_status": "clean",
             }
         )
