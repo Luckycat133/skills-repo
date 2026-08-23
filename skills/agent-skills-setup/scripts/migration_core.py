@@ -656,7 +656,12 @@ class Registry:
                 env_platform = "linux"
 
         if platforms and env_platform in platforms:
-            raw_path = str(platforms[env_platform])
+            candidate = str(platforms[env_platform])
+            # Glob overrides (github.copilot-*) express a *probe* location,
+            # not a deterministic read/write target; applying to them would
+            # either match nothing or fail on literal '*' (WinError 123).
+            if not any(ch in candidate for ch in "*?["):
+                raw_path = candidate
 
         expanded_str = _expand_path_vars(raw_path, self.home)
 
