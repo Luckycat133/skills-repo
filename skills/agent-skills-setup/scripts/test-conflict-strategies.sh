@@ -14,6 +14,18 @@ export AGENT_SKILLS_PLATFORM=linux
 native_path() {
     if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
 }
+
+# shasum(1) is macOS-only; Git Bash ships sha256sum, and python3 is the
+# portable last resort.
+sha256_file() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$1" | awk '{print $1}'
+    elif command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$1" | awk '{print $1}'
+    else
+        python3 -c 'import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$1"
+    fi
+}
 # Conflict-strategy mechanics belong to the retained compatibility engine. The
 # public entry point is covered separately by test-legacy-registry-gate.sh.
 MIGRATION_SCRIPT="$SCRIPT_DIR/legacy-smart-ide-migration.sh"
@@ -32,7 +44,7 @@ TARGET_SKILL="$TEST_HOME/.claude/skills/demo"
 mkdir -p "$SOURCE_SKILL" "$TARGET_SKILL"
 printf '%s\n' 'source skill' > "$SOURCE_SKILL/SKILL.md"
 printf '%s\n' 'existing target skill' > "$TARGET_SKILL/SKILL.md"
-TARGET_HASH_BEFORE="$(shasum -a 256 "$TARGET_SKILL/SKILL.md" | awk '{print $1}')"
+TARGET_HASH_BEFORE="$(sha256_file "$TARGET_SKILL/SKILL.md")"
 
 set +e
 HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
@@ -46,7 +58,7 @@ if [[ $INVALID_STRATEGY_RC -eq 0 ]]; then
     exit 1
 fi
 
-TARGET_HASH_AFTER="$(shasum -a 256 "$TARGET_SKILL/SKILL.md" | awk '{print $1}')"
+TARGET_HASH_AFTER="$(sha256_file "$TARGET_SKILL/SKILL.md")"
 if [[ "$TARGET_HASH_AFTER" != "$TARGET_HASH_BEFORE" ]]; then
     echo "FAIL: unknown strategy modified the existing target" >&2
     exit 1
