@@ -516,8 +516,19 @@ run bash "$MIG" --source cursor --target opencode --workspace "$W20" \
     --objects project-mcp --source-mcp-file "$S20" --dry-run
 set -e
 if [[ $LAST_RC -eq 0 ]]; then check_pass "20a: custom-source dry-run exits 0"; else check_fail "20a: custom-source dry-run exits rc=$LAST_RC"; fi
-if grep -Fq "source: $S20_RESOLVED" "$OUT_FILE" && grep -Fq "validated MCP source" "$OUT_FILE"; then
-    check_pass "20a: dry-run reads and validates the selected source file"
+# The engine echoes the source path in its native view; under MSYS that is
+# a drive-qualified Windows path while S20_RESOLVED is the POSIX view.
+if command -v cygpath >/dev/null 2>&1; then
+    S20_RESOLVED_NATIVE="$(cygpath -m "$S20_RESOLVED")"
+else
+    S20_RESOLVED_NATIVE="$S20_RESOLVED"
+fi
+if grep -Fq "source: $S20_RESOLVED" "$OUT_FILE" || grep -Fq "source: $S20_RESOLVED_NATIVE" "$OUT_FILE"; then
+    if grep -Fq "validated MCP source" "$OUT_FILE"; then
+        check_pass "20a: dry-run reads and validates the selected source file"
+    else
+        check_fail "20a: dry-run did not validate the selected source file"
+    fi
 else
     check_fail "20a: dry-run did not consume the selected source file"
 fi
@@ -527,6 +538,13 @@ run bash "$MIG" --source cursor --target opencode --workspace "$W20" \
     --objects project-mcp --source-mcp-file "$S20" --strategy overwrite --yes
 D20="$W20/opencode.json"
 if [[ $LAST_RC -eq 0 ]]; then check_pass "20b: custom-source apply exits 0"; else check_fail "20b: custom-source apply exits rc=$LAST_RC"; fi
+if [[ ! -e "$D20" ]]; then
+    # Diagnostic evidence for host-specific target resolution failures.
+    echo "DIAG 20b: workspace contents:" >&2
+    ls -la "$W20" >&2 || true
+    echo "DIAG 20b: engine output tail:" >&2
+    tail -5 "$OUT_FILE" >&2 || true
+fi
 assert_valid_json "$D20" "20b: custom-source destination is valid JSON"
 S20_CHECK=$(python3 - "$D20" <<'PY'
 import json, sys
