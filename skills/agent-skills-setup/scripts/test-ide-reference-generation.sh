@@ -29,6 +29,11 @@ fi
 TMP_HOME="$(mktemp -d /tmp/ide-path-resolver-test.XXXXXX)"
 trap 'rm -rf "$TMP_HOME"' EXIT
 ACTUAL_PATH="$(HOME="$(native_path "$TMP_HOME")" bash -c 'source "$1"; get_global_path gemini-cli' _ "$SCRIPT_DIR/legacy-smart-ide-migration.sh")"
+# The engine echoes $HOME verbatim (a native Windows path under MSYS);
+# map it back to the POSIX view before comparing with TMP_HOME.
+if command -v cygpath >/dev/null 2>&1; then
+    ACTUAL_PATH="$(cygpath -u "$ACTUAL_PATH")"
+fi
 [[ "$ACTUAL_PATH" == "$TMP_HOME/.gemini/skills" ]] || {
     echo "FAIL: generated resolver did not expand ~/ against HOME" >&2
     exit 1
