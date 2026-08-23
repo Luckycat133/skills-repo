@@ -537,7 +537,7 @@ list_available_objects() {
 
     local mcp_path
     mcp_path=$(get_mcp_path "$source_ide")
-    if [[ -n "$mcp_path" && "$mcp_path" != /* ]]; then
+    if [[ -n "$mcp_path" && "$mcp_path" != /* && "$mcp_path" != [A-Za-z]:* && "$mcp_path" != "\\"* ]]; then
         mcp_path="$WORKSPACE_ROOT/$mcp_path"
     fi
     if [[ -n "$mcp_path" ]] && [[ -e "$mcp_path" ]]; then
@@ -3354,10 +3354,10 @@ migrate_mcp() {
         target_mcp="$WORKSPACE_ROOT/.vscode/mcp.json"
     fi
 
-    if [[ -n "$source_mcp" && "$source_mcp" != /* ]]; then
+    if [[ -n "$source_mcp" && "$source_mcp" != /* && "$source_mcp" != [A-Za-z]:* && "$source_mcp" != "\\"* ]]; then
         source_mcp="$WORKSPACE_ROOT/$source_mcp"
     fi
-    if [[ -n "$target_mcp" && "$target_mcp" != /* ]]; then
+    if [[ -n "$target_mcp" && "$target_mcp" != /* && "$target_mcp" != [A-Za-z]:* && "$target_mcp" != "\\"* ]]; then
         target_mcp="$WORKSPACE_ROOT/$target_mcp"
     fi
 
