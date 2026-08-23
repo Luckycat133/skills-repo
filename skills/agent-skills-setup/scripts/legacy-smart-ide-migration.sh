@@ -3724,8 +3724,9 @@ generate_report() {
         _emit_json_report "$source_ide" "$target_ide"
     else
         # '%b' would reinterpret escape sequences embedded in content — on
-        # Windows hosts report lines contain paths like C:\Users\..., whose
-        # \U aborts bash printf. Expand only the literal "\n" separators.
+        # Windows hosts report lines contain drive-letter paths whose back-
+        # slash sequences (e.g. a capital U after a separator) abort bash
+        # printf. Expand only the literal "\n" separators.
         printf '%s' "${report//\\n/$'\n'}"
     fi
 }
