@@ -28,9 +28,17 @@ mkdir -p "$TEST_HOME" "$WORKSPACE"
 
 printf '%s\n' '{"mcpServers":{"fixture":{"command":"node","args":["server.js"]}}}' > "$SOURCE_FILE"
 
+# Explicit file/workspace arguments must cross into the engine natively;
+# MSYS does not translate values after unknown options.
+if command -v cygpath >/dev/null 2>&1; then
+    WS_ARG="$(cygpath -w "$WORKSPACE")"; SRC_ARG="$(cygpath -w "$SOURCE_FILE")"
+else
+    WS_ARG="$WORKSPACE"; SRC_ARG="$SOURCE_FILE"
+fi
+
 HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
-    --source cursor --target opencode --workspace "$WORKSPACE" \
-    --objects project-mcp --source-mcp-file "$SOURCE_FILE" \
+    --source cursor --target opencode --workspace "$WS_ARG" \
+    --objects project-mcp --source-mcp-file "$SRC_ARG" \
     --strategy backup --dry-run --json > "$DRY_REPORT" 2>/dev/null
 
 python3 - "$DRY_REPORT" "$SOURCE_FILE" "$WORKSPACE/opencode.json" <<'PYEOF'
@@ -56,8 +64,8 @@ assert evidence["source_sha256_before"] == evidence["source_sha256_after"]
 PYEOF
 
 HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
-    --source cursor --target opencode --workspace "$WORKSPACE" \
-    --objects project-mcp --source-mcp-file "$SOURCE_FILE" \
+    --source cursor --target opencode --workspace "$WS_ARG" \
+    --objects project-mcp --source-mcp-file "$SRC_ARG" \
     --strategy backup --yes --json > "$APPLY_REPORT" 2>/dev/null
 
 python3 - "$APPLY_REPORT" <<'PYEOF'
