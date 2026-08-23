@@ -718,20 +718,29 @@ cat > "$D24_REAL" <<'EOF'
 { "sentinel": "must remain unchanged" }
 EOF
 ln -s "$D24_REAL" "$W24/opencode.json"
-D24_ORIG="$(cat "$D24_REAL")"
-set +e
-run bash "$MIG" --source cursor --target opencode --workspace "$W24" \
-    --objects project-mcp --source-mcp-file "$S24" --strategy overwrite --yes
-set -e
-if [[ $LAST_RC -ne 0 ]] && grep -Fq "target is a symbolic link" "$OUT_FILE"; then
-    check_pass "24: symlinked MCP target is rejected"
+if [[ ! -L "$W24/opencode.json" ]]; then
+    # Windows without Developer Mode silently degrades ln -s to a copy;
+    # the symlink-rejection guarantee is untestable on such hosts.
+    echo "SKIP: 24 (symlinks unavailable on this host)"
+    rm -f "$W24/opencode.json"
 else
-    check_fail "24: symlinked MCP target was accepted"
+    D24_ORIG="$(cat "$D24_REAL")"
+    set +e
+    run bash "$MIG" --source cursor --target opencode --workspace "$W24" \
+        --objects project-mcp --source-mcp-file "$S24" --strategy overwrite --yes
+    set -e
 fi
-if [[ -L "$W24/opencode.json" && "$(cat "$D24_REAL")" == "$D24_ORIG" ]]; then
-    check_pass "24: rejected symlink target and referent remain unchanged"
-else
-    check_fail "24: symlink target rejection allowed mutation"
+if [[ -L "$W24/opencode.json" ]]; then
+    if [[ $LAST_RC -ne 0 ]] && grep -Fq "target is a symbolic link" "$OUT_FILE"; then
+        check_pass "24: symlinked MCP target is rejected"
+    else
+        check_fail "24: symlinked MCP target was accepted"
+    fi
+    if [[ "$(cat "$D24_REAL")" == "$D24_ORIG" ]]; then
+        check_pass "24: rejected symlink target and referent remain unchanged"
+    else
+        check_fail "24: symlink target rejection allowed mutation"
+    fi
 fi
 
 echo ""
