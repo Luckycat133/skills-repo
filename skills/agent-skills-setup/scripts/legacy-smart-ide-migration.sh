@@ -3723,7 +3723,10 @@ generate_report() {
     if [[ "${MIGRATE_JSON:-}" == "1" ]]; then
         _emit_json_report "$source_ide" "$target_ide"
     else
-        printf '%b' "$report"
+        # '%b' would reinterpret escape sequences embedded in content — on
+        # Windows hosts report lines contain paths like C:\Users\..., whose
+        # \U aborts bash printf. Expand only the literal "\n" separators.
+        printf '%s' "${report//\\n/$'\n'}"
     fi
 }
 
