@@ -351,6 +351,15 @@ plan, _ = build_plan(
     "project",
 )
 assert plan[0].status == "ready"
+# Arming the race requires real symlink privileges; unprivileged Windows
+# hosts reject symlink_to() outright, so skip instead of erroring.
+_probe = source_skill / ".symlink-probe"
+try:
+    _probe.symlink_to(external)
+    _probe.unlink()
+except OSError:
+    print("SKIP: symlink race case (symlinks unavailable on this host)")
+    raise SystemExit(0)
 original_copytree = shutil.copytree
 
 
@@ -379,14 +388,18 @@ mv "$WORKSPACE/.forge/skills/symlink-race" \
 
 mkdir -p "$TMP_ROOT/external-qwen"
 ln -s "$TMP_ROOT/external-qwen" "$WORKSPACE/.qwen"
-HOME="$(native_path "$TEST_HOME")" bash "$CLI" plan \
-    --workspace "$WORKSPACE" \
-    --source cline/ide \
-    --target qwen-code/cli \
-    --objects skills \
-    --scope project \
-    --json > "$TMP_ROOT/symlink-plan.json"
-python3 - "$TMP_ROOT/symlink-plan.json" <<'PY'
+if [[ ! -L "$WORKSPACE/.qwen" ]]; then
+    echo "SKIP: qwen symlink-boundary case (symlinks unavailable on this host)"
+    rm -f "$WORKSPACE/.qwen"
+else
+    HOME="$(native_path "$TEST_HOME")" bash "$CLI" plan \
+        --workspace "$WORKSPACE" \
+        --source cline/ide \
+        --target qwen-code/cli \
+        --objects skills \
+        --scope project \
+        --json > "$TMP_ROOT/symlink-plan.json"
+    python3 - "$TMP_ROOT/symlink-plan.json" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -395,6 +408,8 @@ plan = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 assert plan["items"][0]["status"] == "invalid"
 assert "symbolic links are not allowed" in plan["items"][0]["reason"]
 PY
+    rm -f "$WORKSPACE/.qwen"
+fi
 
 HOME="$(native_path "$TEST_HOME")" bash "$CLI" plan \
     --workspace "$WORKSPACE" \
