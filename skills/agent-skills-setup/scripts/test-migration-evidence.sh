@@ -64,7 +64,12 @@ assert evidence["source_unchanged"] is True
 assert evidence["target_exists"] is False
 assert evidence["target_validation"] == "absent"
 assert len(evidence["source_sha256_before"]) == 64
-assert evidence["source_sha256_before"] == evidence["source_sha256_after"]
+if evidence["source_sha256_before"] != evidence["source_sha256_after"]:
+    raise SystemExit(
+        f"source hash drifted: before={evidence['source_sha256_before']!r} "
+        f"after={evidence['source_sha256_after']!r} "
+        f"unchanged_flag={evidence.get('source_unchanged')!r}"
+    )
 PYEOF
 
 HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
