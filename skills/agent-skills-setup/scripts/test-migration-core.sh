@@ -69,8 +69,13 @@ import sys
 from pathlib import Path
 
 rows = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-assert any(row.get("object_type") == "mcp" and row["exists"] for row in rows)
-assert any(row.get("object_type") == "skills" and row["exists"] for row in rows)
+def _hit(t):
+    hits = [r.get("resolved_path") for r in rows if r.get("object_type") == t and r["exists"]]
+    assert hits, f"no existing {t} rows: " + json.dumps(
+        [(r.get("object_type"), r.get("scope"), r.get("resolved_path")) for r in rows][:12]
+    )
+_hit("mcp")
+_hit("skills")
 PY
 
 HOME="$(native_path "$TEST_HOME")" bash "$CLI" detect \
