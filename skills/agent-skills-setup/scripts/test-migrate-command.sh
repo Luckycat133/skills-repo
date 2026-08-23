@@ -93,9 +93,9 @@ if [[ $MIGRATE_RC -ne 0 ]]; then
     exit 1
 fi
 echo "$OUT" > "$WS/migrate-out.json"
-python3 -c "
-import json, re
-text = open('$WS/migrate-out.json').read()
+python3 - "$(native_path "$WS/migrate-out.json")" <<'PY'
+import json, re, sys
+text = open(sys.argv[1]).read()
 m = re.search(r'\{.*\}', text, re.DOTALL)
 if not m:
     print('FAIL: no JSON in migrate output:', text[:200])
@@ -108,7 +108,7 @@ assert 'verify' in out and out['verify'].endswith('migrate-verify.json'), out
 assert out['summary'], out['summary']
 assert out['summary'].get('applied', 0) >= 1, out['summary']
 print('OK full migrate pipeline summary:', out['summary'])
-"
+PY
 
 # Verify the ready Skill landed on the forge target tree.
 SKILL_DST="$HOME_DIR/forge/skills/fixture-skill"
