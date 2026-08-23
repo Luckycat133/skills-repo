@@ -324,6 +324,7 @@ PY
 # -----------------------------------------------------------------------------
 echo "=== Test 7: Cross-Platform and Windows Path Resolver ==="
 python3 - <<'PY'
+import os
 import sys
 from pathlib import Path
 
@@ -331,6 +332,9 @@ sys.path.insert(0, str(Path("skills/agent-skills-setup/scripts").resolve()))
 from migration_core import Registry, _expand_path_vars
 
 fake_home = Path("/fake/home")
+saved_env = {}
+for var in ("APPDATA", "LOCALAPPDATA", "USERPROFILE", "HOMEPATH"):
+    saved_env[var] = os.environ.pop(var, None)
 
 def _assert_tail(res, tail):
     # Separator- and drive-agnostic: on native Windows the fake home
@@ -338,16 +342,27 @@ def _assert_tail(res, tail):
     res_posix = Path(res).as_posix().lower()
     assert res_posix.endswith(tail), f"unexpected expansion: {res}"
 
-# Test %APPDATA% and %USERPROFILE% expansion
-appdata_res = _expand_path_vars("%APPDATA%/Code/User/settings.json", fake_home)
-_assert_tail(appdata_res, "fake/home/appdata/roaming/code/user/settings.json")
+try:
+    # With no environment overrides the vars fall back to the given home.
+    appdata_res = _expand_path_vars("%APPDATA%/Code/User/settings.json", fake_home)
+    _assert_tail(appdata_res, "fake/home/appdata/roaming/code/user/settings.json")
 
-userprofile_res = _expand_path_vars("%USERPROFILE%/.cursor/skills", fake_home)
-_assert_tail(userprofile_res, "fake/home/.cursor/skills")
+    userprofile_res = _expand_path_vars("%USERPROFILE%/.cursor/skills", fake_home)
+    _assert_tail(userprofile_res, "fake/home/.cursor/skills")
 
-# Test $APPDATA and $LOCALAPPDATA expansion
-posix_appdata = _expand_path_vars("$APPDATA/app/config.json", fake_home)
-_assert_tail(posix_appdata, "fake/home/appdata/roaming/app/config.json")
+    posix_appdata = _expand_path_vars("$APPDATA/app/config.json", fake_home)
+    _assert_tail(posix_appdata, "fake/home/appdata/roaming/app/config.json")
+finally:
+    for var, value in saved_env.items():
+        if value is not None:
+            os.environ[var] = value
+
+# When the environment defines APPDATA it wins over the home fallback.
+if os.environ.get("APPDATA"):
+    env_res = _expand_path_vars("%APPDATA%/x.json", fake_home)
+    assert Path(env_res).as_posix().startswith(
+        Path(os.environ["APPDATA"]).as_posix()
+    ), f"expected real APPDATA to win: {env_res}"
 
 print("OK Test 7: %APPDATA%, %USERPROFILE%, and $APPDATA correctly expanded across platforms")
 PY
