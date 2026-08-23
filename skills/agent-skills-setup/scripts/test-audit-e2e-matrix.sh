@@ -36,11 +36,11 @@ for src, dst in e2e_pairs:
         home.mkdir()
 
         reg = Registry(reg_path, ws, home)
-        _, _, src_profile = reg.profile(src)
-        skills_surfaces = src_profile.get("surfaces", {}).get("skills", [])
-        src_rel_path = skills_surfaces[0]["path"] if skills_surfaces else ".skills"
-
-        skill_dir = (ws / src_rel_path / "demo-skill") if not src_rel_path.startswith("~") else (home / src_rel_path.replace("~/", "") / "demo-skill")
+        # Locate the fixture through the Registry's own platform-aware
+        # resolution so the created tree matches what build_plan will
+        # resolve (windows hosts map some surfaces to %APPDATA% etc.).
+        surface = reg.surfaces(src, "skills")[0]
+        skill_dir = Path(surface.resolved_path) / "demo-skill"
         skill_dir.mkdir(parents=True)
         (skill_dir / "SKILL.md").write_text(
             '---\nname: demo-skill\ndescription: Demo fixture.\nmetadata:\n  version: "1"\n---\n# Demo\n',
@@ -52,7 +52,7 @@ for src, dst in e2e_pairs:
             src,
             dst,
             ["skills"],
-            "project" if not src_rel_path.startswith("~") else "user",
+            surface.scope,
         )
         assert len(plan) == 1
         assert plan[0].status == "ready", f"{src} -> {dst} plan item status was {plan[0].status}: {plan[0].reason}"
