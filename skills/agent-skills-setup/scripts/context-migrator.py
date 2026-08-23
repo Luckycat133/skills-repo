@@ -1398,8 +1398,20 @@ def run_legacy_cli(argv: list[str]) -> int:
     reject_legacy_write(argv)
     environment = dict(os.environ)
     environment["AGENT_SKILLS_SETUP_INTERNAL_LEGACY"] = "1"
+    bash_exe = "bash"
+    if os.name == "nt":
+        # On Windows hosts PATH can resolve bare "bash" to the System32
+        # WSL launcher, which is not an MSYS shell: its output carries
+        # NUL bytes and its lookups return nothing. Prefer Git Bash.
+        for candidate in (
+            Path(os.environ.get("PROGRAMW6432", r"C:\Program Files")) / "Git" / "bin" / "bash.exe",
+            Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "Git" / "usr" / "bin" / "bash.exe",
+        ):
+            if candidate.is_file():
+                bash_exe = str(candidate)
+                break
     completed = subprocess.run(
-        ["bash", str(LEGACY_SCRIPT), *argv],
+        [bash_exe, str(LEGACY_SCRIPT), *argv],
         check=False,
         env=environment,
     )
