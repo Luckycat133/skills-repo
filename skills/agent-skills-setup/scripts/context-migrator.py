@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
+import io
 import json
 import os
 import shutil
@@ -756,8 +758,13 @@ def run_snapshot(args: argparse.Namespace) -> int:
             tgt_product = registry.products.get(tgt, {})
             tgt_default_profile = tgt_product.get("default_profile", "cli")
             try:
-                src_profile_data = registry.profile(f"{src}/{src_default_profile}")
-                tgt_profile_data = registry.profile(f"{tgt}/{tgt_default_profile}")
+                # Silently resolve: the matrix walks every product pair, and
+                # Registry._log_resolution would otherwise spam one alias line
+                # per call (O(N^2) stderr noise during snapshot).
+                buffer = io.StringIO()
+                with contextlib.redirect_stderr(buffer):
+                    src_profile_data = registry.profile(f"{src}/{src_default_profile}")
+                    tgt_profile_data = registry.profile(f"{tgt}/{tgt_default_profile}")
             except Exception as error:
                 print(f"WARNING: failed to get profile for compatibility pair {src}->{tgt}: {error}", file=sys.stderr)
                 continue

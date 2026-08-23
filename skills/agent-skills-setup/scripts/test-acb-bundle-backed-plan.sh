@@ -53,7 +53,7 @@ HOME="$(native_path "$HOME_A")" "$WRAPPER" snapshot \
 echo "OK Device A snapshot generated"
 
 # 2. Restore on clean Device B with a reviewed plan, but WITHOUT --restore-root.
-HOME="$(native_path "$HOME_B")" "$WRAPPER" restore \
+if ! HOME="$(native_path "$HOME_B")" "$WRAPPER" restore \
     "$BUNDLE" \
     --workspace "$WS_B" \
     --source cline/ide --target forge/cli \
@@ -61,7 +61,13 @@ HOME="$(native_path "$HOME_B")" "$WRAPPER" restore \
     --plan-out "$PLAN" \
     --apply-safe \
     --yes \
-    --json >"$TMP_ROOT/restore.json"
+    --json >"$TMP_ROOT/restore.json"; then
+    echo "FAIL: restore exited non-zero; captured output:" >&2
+    cat "$TMP_ROOT/restore.json" >&2 || true
+    echo "--- bundle manifest ---" >&2
+    cat "$BUNDLE/manifest.json" >&2 || true
+    exit 1
+fi
 
 # Extract the JSON object from the (possibly noisy) output.
 RESTORE_JSON="$(python3 - "$TMP_ROOT/restore.json" <<'PY'
