@@ -618,15 +618,19 @@ get_manual_steps() {
 sha256_file() {
     local file="$1"
     [[ -f "$file" ]] || return 1
+    local digest=""
     if command -v shasum >/dev/null 2>&1; then
-        shasum -a 256 "$file" | awk '{print $1}'
+        digest="$(shasum -a 256 "$file" | awk '{print $1}')"
     elif command -v sha256sum >/dev/null 2>&1; then
-        sha256sum "$file" | awk '{print $1}'
+        digest="$(sha256sum "$file" | awk '{print $1}')"
     elif command -v python3 >/dev/null 2>&1; then
-        python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "$file"
+        digest="$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "$file")"
     else
         return 1
     fi
+    # Some hosts prefix tool output (e.g. an MSYS marker before the hex
+    # digest); keep only the 64-digit hash itself.
+    printf '%s\n' "$(printf '%s' "$digest" | grep -Eo '[0-9a-fA-F]{64}' | head -n1)"
 }
 
 validate_evidence_target() {
