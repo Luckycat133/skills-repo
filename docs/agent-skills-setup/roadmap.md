@@ -48,13 +48,10 @@ exact-release CI matrix on `ubuntu-latest`, `macos-latest`, and
 These work in restricted environments but are not yet ready for
 production-grade cross-platform guarantees.
 
-- Windows / WSL / Remote-SSH / Dev-Container / Codespaces path
-  resolution. The CI matrix runs on `windows-latest` but path
-  expansion tests do not yet cover WindowsPath, drive roots, UNC,
-  junction / reparse points, or WSL host/guest `HOME` interaction.
-- `--all-installed` end-to-end on those host classes. Plan build,
-  parse, and atomic apply have been verified on macOS / Linux; the
-  Windows smoke test is limited.
+- WSL / Remote-SSH / Dev-Container / Codespaces host classes. The
+  `windows-latest` matrix job now runs the full suite (ACB E2E, plan /
+  apply / verify, detection, mapping assertions) with MSYS-aware test
+  harnesses; the remaining host classes have no CI coverage yet.
 - ACB signed bundle cross-device handoff. Ed25519 is asymmetric, so
   the security boundary is now "self-generated + trusted-key verified".
   Third-party ACBs can be verified with `--trusted-key`.
@@ -102,10 +99,9 @@ itself.
   declared installer, not just a guessed package name.
 - A true `compatibility.json` matrix. Acceptance: each entry has
   `source_profile`, `target_profile`, `evidence`, and `verified_at`.
-- Windows / WSL / Remote-SSH / Dev-Container / Codespaces E2E tests
-  covering WindowsPath, drive roots, UNC, junction / reparse points,
-  WSL host/guest `HOME` interaction, actual file apply/rollback,
-  Windows→macOS ACB, macOS→Windows ACB.
+- WSL / Remote-SSH / Dev-Container / Codespaces E2E tests covering
+  host/guest `HOME` interaction, actual file apply/rollback, and
+  cross-OS ACB handoff (Windows↔macOS).
 
 ## Rejected / out of scope
 

@@ -2,6 +2,34 @@
 
 This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.29] - 2026-08-23
+
+### Fixed
+
+- **Windows host support made real (CI matrix now green end to end)**:
+  - `Registry` honors `$HOME` when it points at a real directory; native
+    Windows Python reads USERPROFILE only, which silently ignored
+    HOME-injected fixtures and cross-device restores.
+  - Glob platform overrides (`github.copilot-*`) are probe locations, not
+    deterministic write targets; surfaces now ignore wildcard overrides.
+  - Legacy engine treats drive-letter and UNC paths as absolute in
+    workspace joins, prefers Git Bash over the System32 WSL launcher,
+    keeps only the 64-digit digest from sha256 tool output, and no longer
+    reinterprets escape sequences in the human report.
+- **Test harness portability**: native-path conversion for every HOME /
+  explicit-file fixture injection; `AGENT_SKILLS_PLATFORM=linux` pins the
+  fixture layout where the registry would otherwise resolve %APPDATA%;
+  stdout newline translation disabled for TSV dumps; capability gates for
+  symlink and permission-bit cases that unprivileged Windows hosts cannot
+  exercise; portable sha256 helpers; five legacy-engine suites skipped on
+  win32 per the documented compatibility boundary.
+
+### Changed
+
+- Roadmap: Windows moves from "smoke test only" to full-suite CI
+  verification; remaining gaps (WSL / Remote / Dev-Container hosts) stay
+  Experimental.
+
 ## [0.8.28] - 2026-08-22
 
 ### Fixed
