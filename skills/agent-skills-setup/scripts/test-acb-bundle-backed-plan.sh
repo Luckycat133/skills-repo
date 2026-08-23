@@ -12,6 +12,12 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Native Windows Python ignores MSYS-style env values; convert HOME
+# fixtures so $HOME resolution sees a real directory on every platform.
+native_path() {
+    if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
+}
 WRAPPER="${SCRIPT_DIR}/smart-ide-migration.sh"
 
 TMP_ROOT="$(mktemp -d /tmp/acb-bundle-backed.XXXXXX)"
@@ -38,7 +44,7 @@ metadata:
 EOF
 
 # 1. Snapshot on Device A
-HOME="$HOME_A" "$WRAPPER" snapshot \
+HOME="$(native_path "$HOME_A")" "$WRAPPER" snapshot \
     --workspace "$WS_A" \
     --source cline/ide --target forge/cli \
     --scope user \
@@ -47,7 +53,7 @@ HOME="$HOME_A" "$WRAPPER" snapshot \
 echo "OK Device A snapshot generated"
 
 # 2. Restore on clean Device B with a reviewed plan, but WITHOUT --restore-root.
-HOME="$HOME_B" "$WRAPPER" restore \
+HOME="$(native_path "$HOME_B")" "$WRAPPER" restore \
     "$BUNDLE" \
     --workspace "$WS_B" \
     --source cline/ide --target forge/cli \
@@ -148,7 +154,7 @@ fi
 echo "OK #4 no .acb-restored created without --restore-root (opt-in)"
 
 # 6. #4: WITH --restore-root, extraction does happen.
-HOME="$HOME_B" "$WRAPPER" restore \
+HOME="$(native_path "$HOME_B")" "$WRAPPER" restore \
     "$BUNDLE" \
     --workspace "$WS_B" \
     --source cline/ide --target forge/cli \

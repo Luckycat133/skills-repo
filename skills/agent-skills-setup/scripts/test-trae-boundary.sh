@@ -4,6 +4,12 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Native Windows Python ignores MSYS-style env values; convert HOME
+# fixtures so $HOME resolution sees a real directory on every platform.
+native_path() {
+    if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
+}
 TRAE_REFERENCE="$SCRIPT_DIR/../references/ides/trae.md"
 TRAE_CN_REFERENCE="$SCRIPT_DIR/../references/ides/trae-cn.md"
 MIGRATION="$SCRIPT_DIR/smart-ide-migration.sh"
@@ -40,7 +46,7 @@ grep -Eq 'trae-agent|trae-cli|trae_agent' "$MIGRATION" \
 
 mkdir -p "$WORKSPACE/.claude/skills/demo"
 printf '%s\n' '---' 'name: demo' 'description: demo' '---' '# demo' > "$WORKSPACE/.claude/skills/demo/SKILL.md"
-OUTPUT="$(HOME="$WORKSPACE" bash "$MIGRATION" \
+OUTPUT="$(HOME="$(native_path "$WORKSPACE")" bash "$MIGRATION" \
     legacy --source claude --target trae-cli --workspace "$WORKSPACE" \
     --objects skills --dry-run 2>&1 || true)"
 if grep -Eq 'manual|unsupported|not +(a |an )(supported|registered)|unknown +target|invalid +target' <<< "$OUTPUT"; then
@@ -49,7 +55,7 @@ else
     fail "trae-cli target output did not emit a manual/unsupported marker; got: $OUTPUT"
 fi
 
-OUTPUT2="$(HOME="$WORKSPACE" bash "$MIGRATION" \
+OUTPUT2="$(HOME="$(native_path "$WORKSPACE")" bash "$MIGRATION" \
     legacy --source claude --target trae --workspace "$WORKSPACE" \
     --print-path trae config 2>/dev/null || true)"
 if [[ -z "$OUTPUT2" ]]; then

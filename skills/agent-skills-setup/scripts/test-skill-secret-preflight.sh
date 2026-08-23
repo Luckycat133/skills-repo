@@ -3,6 +3,12 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Native Windows Python ignores MSYS-style env values; convert HOME
+# fixtures so $HOME resolution sees a real directory on every platform.
+native_path() {
+    if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
+}
 MIGRATION_SCRIPT="$SCRIPT_DIR/legacy-smart-ide-migration.sh"
 export AGENT_SKILLS_SETUP_INTERNAL_LEGACY=1
 TMP_ROOT="$(mktemp -d /tmp/agent-skills-secret-preflight.XXXXXX)"
@@ -68,7 +74,7 @@ mkdir -p "$TARGET_ROOT/unreadable-skill"
 printf '%s\n' 'preserve unreadable target' \
     > "$TARGET_ROOT/unreadable-skill/sentinel.txt"
 
-HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
     --source claude --target codex --objects skills \
     --strategy overwrite --yes > "$TMP_ROOT/migration.log" 2>&1
 

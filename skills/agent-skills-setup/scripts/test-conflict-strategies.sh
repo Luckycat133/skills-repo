@@ -3,6 +3,12 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Native Windows Python ignores MSYS-style env values; convert HOME
+# fixtures so $HOME resolution sees a real directory on every platform.
+native_path() {
+    if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
+}
 # Conflict-strategy mechanics belong to the retained compatibility engine. The
 # public entry point is covered separately by test-legacy-registry-gate.sh.
 MIGRATION_SCRIPT="$SCRIPT_DIR/legacy-smart-ide-migration.sh"
@@ -24,7 +30,7 @@ printf '%s\n' 'existing target skill' > "$TARGET_SKILL/SKILL.md"
 TARGET_HASH_BEFORE="$(shasum -a 256 "$TARGET_SKILL/SKILL.md" | awk '{print $1}')"
 
 set +e
-HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
     --source cursor --target claude --objects skills \
     --strategy typo --yes >"$TMP_ROOT/invalid-strategy.log" 2>&1
 INVALID_STRATEGY_RC=$?
@@ -60,7 +66,7 @@ printf '%s\n' 'existing target rule' > "$WORKSPACE/AGENTS.md"
 printf '%s\n' 'source prompt' > "$WORKSPACE/.claude/commands/demo.md"
 printf '%s\n' 'existing target prompt' > "$WORKSPACE/.opencode/commands/demo.md"
 
-HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
     --source claude --target opencode --workspace "$WORKSPACE" \
     --objects rules,prompts --strategy backup --yes >"$TMP_ROOT/rules-prompts-backup.log" 2>&1
 
@@ -99,7 +105,7 @@ write_existing_target() {
 }
 
 write_existing_target
-HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
     --source cursor --target opencode --objects mcp \
     --source-mcp-file "$SOURCE_FILE" --strategy backup --yes >/dev/null
 
@@ -125,7 +131,7 @@ PYEOF
 
 rm -f "$TEST_HOME/.config/opencode"/opencode.json.bak.*
 write_existing_target
-HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
     --source cursor --target opencode --objects mcp \
     --source-mcp-file "$SOURCE_FILE" --strategy overwrite --yes >/dev/null
 

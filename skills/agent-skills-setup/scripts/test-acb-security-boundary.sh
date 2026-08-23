@@ -3,6 +3,12 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Native Windows Python ignores MSYS-style env values; convert HOME
+# fixtures so $HOME resolution sees a real directory on every platform.
+native_path() {
+    if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
+}
 WRAPPER="${SCRIPT_DIR}/smart-ide-migration.sh"
 
 TMP_ROOT="$(mktemp -d /tmp/acb-security-test.XXXXXX)"
@@ -24,7 +30,7 @@ metadata:
 EOF
 
 # 1. Snapshot a clean bundle
-HOME="$HOME_DIR" "$WRAPPER" snapshot \
+HOME="$(native_path "$HOME_DIR")" "$WRAPPER" snapshot \
     --workspace "$WS_DIR" \
     --source cline/ide --target forge/cli \
     --scope user \

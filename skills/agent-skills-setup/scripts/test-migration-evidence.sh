@@ -3,6 +3,12 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Native Windows Python ignores MSYS-style env values; convert HOME
+# fixtures so $HOME resolution sees a real directory on every platform.
+native_path() {
+    if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
+}
 MIGRATION_SCRIPT="$SCRIPT_DIR/legacy-smart-ide-migration.sh"
 export AGENT_SKILLS_SETUP_INTERNAL_LEGACY=1
 TMP_ROOT="$(mktemp -d /tmp/migration-evidence-test.XXXXXX)"
@@ -17,7 +23,7 @@ mkdir -p "$TEST_HOME" "$WORKSPACE"
 
 printf '%s\n' '{"mcpServers":{"fixture":{"command":"node","args":["server.js"]}}}' > "$SOURCE_FILE"
 
-HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
     --source cursor --target opencode --workspace "$WORKSPACE" \
     --objects project-mcp --source-mcp-file "$SOURCE_FILE" \
     --strategy backup --dry-run --json > "$DRY_REPORT" 2>/dev/null
@@ -44,7 +50,7 @@ assert len(evidence["source_sha256_before"]) == 64
 assert evidence["source_sha256_before"] == evidence["source_sha256_after"]
 PYEOF
 
-HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
     --source cursor --target opencode --workspace "$WORKSPACE" \
     --objects project-mcp --source-mcp-file "$SOURCE_FILE" \
     --strategy backup --yes --json > "$APPLY_REPORT" 2>/dev/null

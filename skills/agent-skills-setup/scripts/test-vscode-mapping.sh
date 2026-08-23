@@ -4,6 +4,12 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Native Windows Python ignores MSYS-style env values; convert HOME
+# fixtures so $HOME resolution sees a real directory on every platform.
+native_path() {
+    if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
+}
 MIGRATION_SCRIPT="$SCRIPT_DIR/legacy-smart-ide-migration.sh"
 export AGENT_SKILLS_SETUP_INTERNAL_LEGACY=1
 TMP_ROOT="$(mktemp -d /tmp/vscode-mapping-test.XXXXXX)"
@@ -35,7 +41,7 @@ printf '%s\n' '{"mcpServers":{"fixture":{"command":"node","args":["server.js"]}}
 OUTPUT="$TMP_ROOT/migration.txt"
 mkdir -p "$TMP_ROOT/workspace"
 cp "$TEST_HOME/.claude.json" "$TMP_ROOT/workspace/.mcp.json"
-HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
     --source claude --target vscode --objects mcp --scope project --yes --strategy backup \
     --workspace "$TMP_ROOT/workspace" > "$OUTPUT" 2>&1
 
@@ -48,7 +54,7 @@ PYEOF
 
 printf '%s\n' '{"mcpServers":{"ambiguous":{"url":"https://example.invalid/mcp"}}}' > "$TEST_HOME/.claude.json"
 cp "$TEST_HOME/.claude.json" "$TMP_ROOT/workspace/.mcp.json"
-HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
     --source claude --target vscode --objects mcp --scope project --yes --strategy backup \
     --workspace "$TMP_ROOT/workspace" > "$TMP_ROOT/ambiguous.txt" 2>&1
 grep -Fq 'GitHub Copilot IDE MCP schema/transport is ambiguous or unsupported' "$TMP_ROOT/ambiguous.txt"
@@ -63,7 +69,7 @@ PYEOF
 INVALID_WORKSPACE="$TMP_ROOT/invalid-workspace"
 mkdir -p "$INVALID_WORKSPACE"
 printf '%s' 'not-json' > "$INVALID_WORKSPACE/.mcp.json"
-HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
     --source claude --target vscode --objects mcp --scope project --yes --strategy overwrite \
     --workspace "$INVALID_WORKSPACE" > "$TMP_ROOT/invalid-source.txt" 2>&1 || true
 grep -Fq 'VS Code MCP requires a JSON `servers` conversion' "$TMP_ROOT/invalid-source.txt"
@@ -76,7 +82,7 @@ PROMPT_WORKSPACE="$TMP_ROOT/prompt-workspace"
 mkdir -p "$PROMPT_WORKSPACE/.github/prompts"
 printf '%s\n' '---' 'description: valid prompt' '---' 'Use the fixture.' > "$PROMPT_WORKSPACE/.github/prompts/valid.prompt.md"
 printf '%s' '# not a VS Code prompt file' > "$PROMPT_WORKSPACE/.github/prompts/ignored.md"
-HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
     --source vscode --target claude --workspace "$PROMPT_WORKSPACE" \
     --objects prompts --yes --strategy overwrite > "$TMP_ROOT/prompts.txt" 2>&1
 [[ -f "$PROMPT_WORKSPACE/.claude/commands/valid.prompt.md" ]] || {
@@ -93,7 +99,7 @@ mkdir -p "$SKILL_WORKSPACE/.cursor/skills/demo-skill/scripts" "$SKILL_WORKSPACE/
 printf '%s\n' '---' 'name: demo-skill' 'description: project fixture' '---' 'Use the fixture.' > "$SKILL_WORKSPACE/.cursor/skills/demo-skill/SKILL.md"
 printf '%s\n' '#!/usr/bin/env bash' 'exit 0' > "$SKILL_WORKSPACE/.cursor/skills/demo-skill/scripts/check.sh"
 printf '%s\n' 'supporting reference' > "$SKILL_WORKSPACE/.cursor/skills/demo-skill/references/README.md"
-HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
     --source cursor --target vscode --workspace "$SKILL_WORKSPACE" \
     --objects skills --scope project --yes --strategy overwrite > "$TMP_ROOT/project-skills.txt" 2>&1
 [[ -f "$SKILL_WORKSPACE/.github/skills/demo-skill/SKILL.md" ]] || {
@@ -113,7 +119,7 @@ HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
 PROJECT_MCP_WORKSPACE="$TMP_ROOT/project-mcp-workspace"
 mkdir -p "$PROJECT_MCP_WORKSPACE"
 printf '%s\n' '{"mcpServers":{"project-fixture":{"command":"node","args":["server.js"]}}}' > "$PROJECT_MCP_WORKSPACE/.mcp.json"
-HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
     --source claude --target cursor --workspace "$PROJECT_MCP_WORKSPACE" \
     --objects project-mcp --yes --strategy overwrite > "$TMP_ROOT/project-mcp.txt" 2>&1
 python3 - "$PROJECT_MCP_WORKSPACE/.cursor/mcp.json" <<'PYEOF'
@@ -126,7 +132,7 @@ PYEOF
     exit 1
 }
 
-MANUAL_OUTPUT="$(HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+MANUAL_OUTPUT="$(HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
     --source cursor --target vscode --workspace "$TMP_ROOT/manual-workspace" \
     --objects agents,hooks,memory --dry-run 2>&1)"
 grep -Fq 'agents: Agents/Subagents' <<< "$MANUAL_OUTPUT"
@@ -137,7 +143,7 @@ grep -Fq 'memory: Memory' <<< "$MANUAL_OUTPUT"
     exit 1
 }
 
-INVALID_SCOPE_OUTPUT="$({ HOME="$TEST_HOME" bash "$MIGRATION_SCRIPT" \
+INVALID_SCOPE_OUTPUT="$({ HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
     --source cursor --target vscode --objects skills --scope unsupported --dry-run; } 2>&1 || true)"
 grep -Fq 'invalid scope' <<< "$INVALID_SCOPE_OUTPUT"
 

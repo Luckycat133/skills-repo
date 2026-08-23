@@ -13,6 +13,12 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Native Windows Python ignores MSYS-style env values; convert HOME
+# fixtures so $HOME resolution sees a real directory on every platform.
+native_path() {
+    if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
+}
 WRAPPER="${SCRIPT_DIR}/smart-ide-migration.sh"
 
 TMP_ROOT="$(mktemp -d /tmp/acb-p0-regressions.XXXXXX)"
@@ -55,7 +61,7 @@ cat > "$WS_A/.clinerules" <<'EOF'
 EOF
 
 # Snapshot with scope=user (should include portable-skill, but exclude .cline/data and project rules)
-HOME="$HOME_A" "$WRAPPER" snapshot \
+HOME="$(native_path "$HOME_A")" "$WRAPPER" snapshot \
     --workspace "$WS_A" \
     --source cline/ide --target forge/cli \
     --scope user \
@@ -100,7 +106,7 @@ metadata:
 EOF
 
 PLAN_OUT="$TMP_ROOT/restore-plan.json"
-HOME="$HOME_B" "$WRAPPER" restore \
+HOME="$(native_path "$HOME_B")" "$WRAPPER" restore \
     "$BUNDLE" \
     --workspace "$WS_B" \
     --source cline/ide --target forge/cli \
@@ -124,7 +130,7 @@ echo "OK P0-3: bundle content won over Device B local source"
 echo "=== Test 3: P0-1 Pre-existing target shown as replace and plan target matches ==="
 # Now run restore again when the target ALREADY exists on Device B
 PLAN_OUT_2="$TMP_ROOT/restore-plan-replace.json"
-HOME="$HOME_B" "$WRAPPER" restore \
+HOME="$(native_path "$HOME_B")" "$WRAPPER" restore \
     "$BUNDLE" \
     --workspace "$WS_B" \
     --source cline/ide --target forge/cli \
@@ -207,7 +213,7 @@ PY
 # -----------------------------------------------------------------------------
 echo "=== Test 5: Replayable Restore Plan with --plan-in and TOCTOU state guard ==="
 SAVED_PLAN="$TMP_ROOT/reviewed-replayable-plan.json"
-HOME="$HOME_B" "$WRAPPER" restore \
+HOME="$(native_path "$HOME_B")" "$WRAPPER" restore \
     "$BUNDLE" \
     --workspace "$WS_B" \
     --source cline/ide --target forge/cli \
@@ -219,7 +225,7 @@ HOME="$HOME_B" "$WRAPPER" restore \
 [ -f "$SAVED_PLAN" ] || { echo "FAIL: plan-out did not create plan file"; exit 1; }
 
 # Replay the exact reviewed plan with --plan-in and --yes
-HOME="$HOME_B" "$WRAPPER" restore \
+HOME="$(native_path "$HOME_B")" "$WRAPPER" restore \
     "$BUNDLE" \
     --workspace "$WS_B" \
     --plan-in "$SAVED_PLAN" \
@@ -236,7 +242,7 @@ echo "OK Test 5a: reviewed plan successfully replayed via --plan-in"
 
 # Test TOCTOU state guard: modify destination file so expected_target_state mismatches
 echo "tampered content" > "$HOME_B/forge/skills/portable-skill/SKILL.md"
-if HOME="$HOME_B" "$WRAPPER" restore \
+if HOME="$(native_path "$HOME_B")" "$WRAPPER" restore \
     "$BUNDLE" \
     --workspace "$WS_B" \
     --plan-in "$SAVED_PLAN" \
@@ -276,7 +282,7 @@ cat > "$HOME_MCP_A/.augment/settings.json" <<'EOF'
 }
 EOF
 
-HOME="$HOME_MCP_A" "$WRAPPER" snapshot \
+HOME="$(native_path "$HOME_MCP_A")" "$WRAPPER" snapshot \
     --workspace "$WS_MCP_A" \
     --source augment-code/cli-ide --target cline/ide \
     --scope user \
