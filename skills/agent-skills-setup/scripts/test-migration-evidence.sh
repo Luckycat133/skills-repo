@@ -54,7 +54,11 @@ assert report["scope"] == "project"
 assert report["objects"] == ["project-mcp"]
 evidence = report["evidence"]["mcp"][0]
 assert evidence["scope"] == "project"
-assert evidence["source_path"] == source
+if evidence["source_path"] != source:
+    raise SystemExit(
+        f"source_path mismatch:\n  evidence={evidence['source_path']!r}\n"
+        f"  expected={source!r}\n  target={target!r} evidence_target={evidence.get('target_path')!r}"
+    )
 assert evidence["target_path"] == target
 assert evidence["source_unchanged"] is True
 assert evidence["target_exists"] is False
