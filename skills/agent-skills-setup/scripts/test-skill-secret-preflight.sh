@@ -66,12 +66,23 @@ make_skill external-link-secret
 printf '%s\n' 'external private material' > "$TMP_ROOT/private-credentials"
 ln -s "$TMP_ROOT/private-credentials" \
     "$SOURCE_ROOT/external-link-secret/credentials-link"
+if [[ -L "$SOURCE_ROOT/external-link-secret/credentials-link" ]]; then
+    HAVE_SYMLINKS=1
+else
+    # Windows without Developer Mode silently copies instead of linking.
+    HAVE_SYMLINKS=0
+fi
 
 make_skill unreadable-skill
 mkdir -p "$SOURCE_ROOT/unreadable-skill/private"
 printf '%s\n' 'unreadable material' \
     > "$SOURCE_ROOT/unreadable-skill/private/credentials"
 chmod 000 "$SOURCE_ROOT/unreadable-skill/private"
+if [[ -r "$SOURCE_ROOT/unreadable-skill/private/credentials" ]]; then
+    HAVE_PERMS=0
+else
+    HAVE_PERMS=1
+fi
 
 mkdir -p "$TARGET_ROOT/markdown-secret"
 printf '%s\n' 'preserve existing target' > "$TARGET_ROOT/markdown-secret/sentinel.txt"
@@ -103,10 +114,12 @@ HOME="$(native_path "$TEST_HOME")" bash "$MIGRATION_SCRIPT" \
     echo "FAIL: extensionless private key reached the target" >&2
     exit 1
 }
-[[ ! -e "$TARGET_ROOT/external-link-secret" ]] || {
-    echo "FAIL: a Skill containing an external symbolic link reached the target" >&2
-    exit 1
-}
+if [[ "$HAVE_SYMLINKS" == "1" ]]; then
+    [[ ! -e "$TARGET_ROOT/external-link-secret" ]] || {
+        echo "FAIL: a Skill containing an external symbolic link reached the target" >&2
+        exit 1
+    }
+fi
 [[ -f "$TARGET_ROOT/unreadable-skill/sentinel.txt" ]] || {
     echo "FAIL: an unreadable source subtree was not rejected before overwrite" >&2
     exit 1
