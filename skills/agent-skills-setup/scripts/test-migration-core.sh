@@ -390,7 +390,7 @@ mkdir -p "$TMP_ROOT/external-qwen"
 ln -s "$TMP_ROOT/external-qwen" "$WORKSPACE/.qwen"
 if [[ ! -L "$WORKSPACE/.qwen" ]]; then
     echo "SKIP: qwen symlink-boundary case (symlinks unavailable on this host)"
-    rm -f "$WORKSPACE/.qwen"
+    rm -rf "$WORKSPACE/.qwen"
 else
     HOME="$(native_path "$TEST_HOME")" bash "$CLI" plan \
         --workspace "$WORKSPACE" \
