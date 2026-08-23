@@ -331,16 +331,23 @@ sys.path.insert(0, str(Path("skills/agent-skills-setup/scripts").resolve()))
 from migration_core import Registry, _expand_path_vars
 
 fake_home = Path("/fake/home")
+
+def _assert_tail(res, tail):
+    # Separator- and drive-agnostic: on native Windows the fake home
+    # resolves against the current drive (C:/fake/home) with backslashes.
+    res_posix = Path(res).as_posix().lower()
+    assert res_posix.endswith(tail), f"unexpected expansion: {res}"
+
 # Test %APPDATA% and %USERPROFILE% expansion
 appdata_res = _expand_path_vars("%APPDATA%/Code/User/settings.json", fake_home)
-assert "/fake/home/AppData/Roaming/Code/User/settings.json" in appdata_res, f"unexpected APPDATA: {appdata_res}"
+_assert_tail(appdata_res, "fake/home/appdata/roaming/code/user/settings.json")
 
 userprofile_res = _expand_path_vars("%USERPROFILE%/.cursor/skills", fake_home)
-assert "/fake/home/.cursor/skills" in userprofile_res, f"unexpected USERPROFILE: {userprofile_res}"
+_assert_tail(userprofile_res, "fake/home/.cursor/skills")
 
 # Test $APPDATA and $LOCALAPPDATA expansion
 posix_appdata = _expand_path_vars("$APPDATA/app/config.json", fake_home)
-assert "/fake/home/AppData/Roaming/app/config.json" in posix_appdata, f"unexpected $APPDATA: {posix_appdata}"
+_assert_tail(posix_appdata, "fake/home/appdata/roaming/app/config.json")
 
 print("OK Test 7: %APPDATA%, %USERPROFILE%, and $APPDATA correctly expanded across platforms")
 PY
