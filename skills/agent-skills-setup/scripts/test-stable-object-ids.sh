@@ -96,7 +96,19 @@ summary = manifest["summary"]
 assert summary.get("applied", 0) >= 1
 # Skill write should land at forge/skills/test-skill (preserves basename).
 skill_dst = ws / ".forge" / "skills" / "test-skill" / "SKILL.md"
-assert skill_dst.exists(), f"skill did not land at {skill_dst}"
+if not skill_dst.exists():
+    tgt = [
+        (
+            i.object_type,
+            i.status,
+            str(i.target.resolved_path) if i.target else None,
+        )
+        for i in plan_a
+    ]
+    landed = [str(p) for p in ws.rglob("SKILL.md")]
+    raise SystemExit(
+        f"skill did not land at {skill_dst}; plan={tgt}; landed={landed}; summary={summary}"
+    )
 print("OK apply preserves source basename on the target tree")
 
 # Same-name collision: stage two instructions with the same basename
