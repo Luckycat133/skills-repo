@@ -6,6 +6,12 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Native Windows Python ignores MSYS-style env values; convert HOME
+# fixtures so Path.home()/os.environ["HOME"] resolution sees a real dir.
+native_path() {
+    if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
+}
 WORKSPACE="$(mktemp -d /tmp/acb-all-inst-XXXXXX)"
 HOME_SRC="$WORKSPACE/home_src"
 WS_SRC="$WORKSPACE/ws_src"
@@ -83,7 +89,7 @@ echo "OK source fixtures initialized"
 
 echo "=== Test 2: snapshot --all-installed ==="
 BUNDLE="$WORKSPACE/multi-device.acb"
-SNAPSHOT_OUT="$(HOME="$HOME_SRC" $MIGRATOR snapshot \
+SNAPSHOT_OUT="$(HOME="$(native_path "$HOME_SRC")" $MIGRATOR snapshot \
   --registry "$REGISTRY" \
   --workspace "$WS_SRC" \
   --output "$BUNDLE" \
@@ -163,7 +169,7 @@ echo "=== Test 5: restore --all-installed onto Device B ==="
 # Setup Device B with simulated installed IDEs: Windsurf and Forge
 mkdir -p "$HOME_DST/.codeium/windsurf/skills" "$HOME_DST/forge/skills" "$WS_DST/.cursor/rules"
 
-RESTORE_OUT="$(HOME="$HOME_DST" $MIGRATOR restore \
+RESTORE_OUT="$(HOME="$(native_path "$HOME_DST")" $MIGRATOR restore \
   "$BUNDLE" \
   --registry "$REGISTRY" \
   --workspace "$WS_DST" \
@@ -199,7 +205,7 @@ print('OK restored skills found on Device B:', [str(s.relative_to(home_dst)) for
 echo "=== Test 7: Atomic bundle creation rollback on failure ==="
 # Create a valid pre-existing bundle
 EXISTING_BUNDLE="$WORKSPACE/existing.acb"
-HOME="$HOME_SRC" $MIGRATOR snapshot \
+HOME="$(native_path "$HOME_SRC")" $MIGRATOR snapshot \
   --registry "$REGISTRY" \
   --workspace "$WS_SRC" \
   --source cline/ide \

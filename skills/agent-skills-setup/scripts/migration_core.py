@@ -452,7 +452,20 @@ class Registry:
     def __init__(self, path: Path, workspace: Path, home: Path | None = None) -> None:
         self.path = path
         self.workspace = workspace.resolve()
-        self.home = (home or Path.home()).resolve()
+        # Honor $HOME when it points at a real directory: Path.home() on
+        # native Windows Python reads USERPROFILE only, which silently
+        # ignored HOME-injected test fixtures and cross-device restores.
+        if home is not None:
+            resolved_home = home
+        else:
+            env_home = os.environ.get("HOME")
+            env_candidate = Path(env_home) if env_home else None
+            resolved_home = (
+                env_candidate
+                if env_candidate is not None and env_candidate.is_dir()
+                else Path.home()
+            )
+        self.home = resolved_home.resolve()
         self.data = json.loads(path.read_text(encoding="utf-8"))
         if self.data.get("schema_version") not in (2, 2.1):
             raise ValueError("registry schema_version must be 2 or 2.1")

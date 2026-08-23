@@ -3,6 +3,12 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Native Windows Python ignores MSYS-style env values; convert HOME
+# fixtures so Path.home()/os.environ["HOME"] resolution sees a real dir.
+native_path() {
+    if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
+}
 SKILL_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 CLI="$SCRIPT_DIR/smart-ide-migration.sh"
 TMP_ROOT="$(mktemp -d)"
@@ -36,7 +42,7 @@ printf '%s\n' \
     '}' > "$WORKSPACE/.cline/mcp.json"
 
 cp "$WORKSPACE/.cline/mcp.json" "$TMP_ROOT/mcp-before-plan-overlap.json"
-if HOME="$TEST_HOME" bash "$CLI" plan \
+if HOME="$(native_path "$TEST_HOME")" bash "$CLI" plan \
     --workspace "$WORKSPACE" \
     --source cline/ide \
     --target forge/cli \
@@ -50,7 +56,7 @@ fi
 grep -Fq 'plan output overlaps' "$TMP_ROOT/plan-overlap.log"
 cmp "$TMP_ROOT/mcp-before-plan-overlap.json" "$WORKSPACE/.cline/mcp.json"
 
-HOME="$TEST_HOME" bash "$CLI" inventory \
+HOME="$(native_path "$TEST_HOME")" bash "$CLI" inventory \
     --workspace "$WORKSPACE" --product cline --json > "$TMP_ROOT/inventory.json"
 python3 - "$TMP_ROOT/inventory.json" <<'PY'
 import json
@@ -62,7 +68,7 @@ assert any(row.get("object_type") == "mcp" and row["exists"] for row in rows)
 assert any(row.get("object_type") == "skills" and row["exists"] for row in rows)
 PY
 
-HOME="$TEST_HOME" bash "$CLI" detect \
+HOME="$(native_path "$TEST_HOME")" bash "$CLI" detect \
     --workspace "$WORKSPACE" --product cline --json > "$TMP_ROOT/detect.json"
 python3 - "$TMP_ROOT/detect.json" <<'PY'
 import json
@@ -75,7 +81,7 @@ assert any(r.get("product") == "cline" and r.get("state") == "installed" for r i
 PY
 
 PLAN_FILE="$TMP_ROOT/plan.json"
-HOME="$TEST_HOME" bash "$CLI" plan \
+HOME="$(native_path "$TEST_HOME")" bash "$CLI" plan \
     --workspace "$WORKSPACE" \
     --source cline/ide \
     --target forge/cli \
@@ -103,13 +109,13 @@ if grep -E 'literal-(secret|arg-secret)|sk-ant-abcdefghijklmnopqrstuvw|nested:pa
     exit 1
 fi
 
-if HOME="$TEST_HOME" bash "$CLI" apply "$PLAN_FILE" \
+if HOME="$(native_path "$TEST_HOME")" bash "$CLI" apply "$PLAN_FILE" \
     > "$TMP_ROOT/no-confirm.log" 2>&1; then
     echo "FAIL: apply succeeded without --yes" >&2
     exit 1
 fi
 
-if HOME="$TEST_HOME" bash "$CLI" apply "$PLAN_FILE" \
+if HOME="$(native_path "$TEST_HOME")" bash "$CLI" apply "$PLAN_FILE" \
     --manifest "$WORKSPACE/AGENTS.md" \
     --yes > "$TMP_ROOT/manifest-overlap.log" 2>&1; then
     echo "FAIL: manifest path overlapped a migration surface" >&2
@@ -121,7 +127,7 @@ grep -Fq 'manifest path overlaps' "$TMP_ROOT/manifest-overlap.log"
 [[ ! -e "$WORKSPACE/.mcp.json" ]]
 
 MANIFEST="$TMP_ROOT/manifest.json"
-HOME="$TEST_HOME" bash "$CLI" apply \
+HOME="$(native_path "$TEST_HOME")" bash "$CLI" apply \
     "$PLAN_FILE" \
     --manifest "$MANIFEST" \
     --yes \
@@ -176,7 +182,7 @@ cp "$SCRIPT_DIR/test-migration-core.sh" \
 printf '%s\n' 'preserve-existing-target' \
     > "$WORKSPACE/.forge/skills/leaky/sentinel.txt"
 
-HOME="$TEST_HOME" bash "$CLI" plan \
+HOME="$(native_path "$TEST_HOME")" bash "$CLI" plan \
     --workspace "$WORKSPACE" \
     --source cline/ide \
     --target forge/cli \
@@ -230,7 +236,7 @@ else:
     raise AssertionError("apply did not rescan a changed Skill source")
 PY
 
-HOME="$TEST_HOME" bash "$CLI" plan \
+HOME="$(native_path "$TEST_HOME")" bash "$CLI" plan \
     --workspace "$WORKSPACE" \
     --source cline/ide \
     --target forge/cli \
@@ -238,7 +244,7 @@ HOME="$TEST_HOME" bash "$CLI" plan \
     --scope project \
     --output "$TMP_ROOT/blocked-plan.json" \
     --json >/dev/null
-if HOME="$TEST_HOME" bash "$CLI" apply "$TMP_ROOT/blocked-plan.json" \
+if HOME="$(native_path "$TEST_HOME")" bash "$CLI" apply "$TMP_ROOT/blocked-plan.json" \
     --strict --yes > "$TMP_ROOT/secret-preflight-apply.log" 2>&1; then
     echo "FAIL: profile-aware apply copied a Skill with a literal credential" >&2
     exit 1
@@ -252,7 +258,7 @@ mv "$WORKSPACE/.forge/skills/leaky" "$TMP_ROOT/leaky-target"
 mkdir -p "$WORKSPACE/.cline/skills/drift"
 printf '%s\n' '---' 'name: drift' 'description: Drift fixture.' '---' '# Before' \
     > "$WORKSPACE/.cline/skills/drift/SKILL.md"
-HOME="$TEST_HOME" bash "$CLI" plan \
+HOME="$(native_path "$TEST_HOME")" bash "$CLI" plan \
     --workspace "$WORKSPACE" \
     --source cline/ide \
     --target forge/cli \
@@ -261,7 +267,7 @@ HOME="$TEST_HOME" bash "$CLI" plan \
     --output "$TMP_ROOT/drift-plan.json" \
     --json >/dev/null
 printf '%s\n' '# Changed after review' >> "$WORKSPACE/.cline/skills/drift/SKILL.md"
-if HOME="$TEST_HOME" bash "$CLI" apply "$TMP_ROOT/drift-plan.json" --yes \
+if HOME="$(native_path "$TEST_HOME")" bash "$CLI" apply "$TMP_ROOT/drift-plan.json" --yes \
     > "$TMP_ROOT/drift-apply.log" 2>&1; then
     echo "FAIL: apply accepted a source changed after plan review" >&2
     exit 1
@@ -279,7 +285,7 @@ git -C "$GIT_WORKSPACE" config user.name 'Migration Test'
 git -C "$GIT_WORKSPACE" config user.email 'migration-test@example.invalid'
 git -C "$GIT_WORKSPACE" add .
 git -C "$GIT_WORKSPACE" commit -qm 'fixture: initial state'
-HOME="$TEST_HOME" bash "$CLI" plan \
+HOME="$(native_path "$TEST_HOME")" bash "$CLI" plan \
     --workspace "$GIT_WORKSPACE" \
     --source cline/ide \
     --target forge/cli \
@@ -290,7 +296,7 @@ HOME="$TEST_HOME" bash "$CLI" plan \
 printf '%s\n' '# unrelated reviewed-context change' > "$GIT_WORKSPACE/README.md"
 git -C "$GIT_WORKSPACE" add README.md
 git -C "$GIT_WORKSPACE" commit -qm 'fixture: advance head'
-if HOME="$TEST_HOME" bash "$CLI" apply "$TMP_ROOT/git-drift-plan.json" --yes \
+if HOME="$(native_path "$TEST_HOME")" bash "$CLI" apply "$TMP_ROOT/git-drift-plan.json" --yes \
     > "$TMP_ROOT/git-drift-apply.log" 2>&1; then
     echo "FAIL: apply accepted a changed Git HEAD after plan review" >&2
     exit 1
@@ -363,7 +369,7 @@ mv "$WORKSPACE/.forge/skills/symlink-race" \
 
 mkdir -p "$TMP_ROOT/external-qwen"
 ln -s "$TMP_ROOT/external-qwen" "$WORKSPACE/.qwen"
-HOME="$TEST_HOME" bash "$CLI" plan \
+HOME="$(native_path "$TEST_HOME")" bash "$CLI" plan \
     --workspace "$WORKSPACE" \
     --source cline/ide \
     --target qwen-code/cli \
@@ -380,7 +386,7 @@ assert plan["items"][0]["status"] == "invalid"
 assert "symbolic links are not allowed" in plan["items"][0]["reason"]
 PY
 
-HOME="$TEST_HOME" bash "$CLI" plan \
+HOME="$(native_path "$TEST_HOME")" bash "$CLI" plan \
     --workspace "$WORKSPACE" \
     --source cline/ide \
     --target firebase-studio/legacy-workspace \
@@ -397,7 +403,7 @@ assert plan["items"][0]["status"] == "invalid"
 assert "source-only" in plan["items"][0]["reason"]
 PY
 
-HOME="$TEST_HOME" bash "$CLI" legacy --print-path cline mcp \
+HOME="$(native_path "$TEST_HOME")" bash "$CLI" legacy --print-path cline mcp \
     | grep -F '~/.cline/data/settings/cline_mcp_settings.json' >/dev/null
 
 python3 - "$SCRIPT_DIR" "$SKILL_DIR/evals/files" <<'PY'
@@ -434,7 +440,7 @@ INSTRUCTION_SECRET_WORKSPACE="$TMP_ROOT/instruction-secret-workspace"
 mkdir -p "$INSTRUCTION_SECRET_WORKSPACE/.cline/rules"
 printf '%s%s\n' 'token=fixtureliteral' 'value12345' \
     > "$INSTRUCTION_SECRET_WORKSPACE/.cline/rules/leak.md"
-HOME="$TEST_HOME" bash "$CLI" plan \
+HOME="$(native_path "$TEST_HOME")" bash "$CLI" plan \
     --workspace "$INSTRUCTION_SECRET_WORKSPACE" \
     --source cline/ide \
     --target forge/cli \
@@ -456,11 +462,11 @@ ALIAS_WORKSPACE="$TMP_ROOT/alias-workspace"
 mkdir -p "$ALIAS_WORKSPACE/.cline/rules"
 printf '%s\n' '# Canonical' > "$ALIAS_WORKSPACE/.cline/rules/rule.md"
 printf '%s\n' '# Compatibility' > "$ALIAS_WORKSPACE/.clinerules"
-HOME="$TEST_HOME" bash "$CLI" inventory \
+HOME="$(native_path "$TEST_HOME")" bash "$CLI" inventory \
     --workspace "$ALIAS_WORKSPACE" \
     --product cline/ide \
     --json > "$TMP_ROOT/alias-inventory.json"
-HOME="$TEST_HOME" bash "$CLI" plan \
+HOME="$(native_path "$TEST_HOME")" bash "$CLI" plan \
     --workspace "$ALIAS_WORKSPACE" \
     --source cline/ide \
     --target forge/cli \
