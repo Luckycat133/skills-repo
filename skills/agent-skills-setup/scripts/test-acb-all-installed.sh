@@ -109,7 +109,7 @@ print("OK snapshot --all-installed captured objects:", data["objects_captured"])
 python3 -c "
 import json
 from pathlib import Path
-bundle = Path('$BUNDLE')
+bundle = Path(r'''$(native_path "$BUNDLE")''')
 manifest = json.loads((bundle / 'manifest.json').read_text())
 objects = manifest.get('objects', [])
 assert len(objects) >= 3, f'Expected >= 3 manifest objects, got {len(objects)}'
@@ -144,11 +144,13 @@ print("OK bundle-verify clean for multi-product bundle")
 
 echo "=== Test 4: doctor requirements inspection ==="
 DOCTOR_OUT="$($MIGRATOR doctor "$BUNDLE" --json)"
-echo "$DOCTOR_OUT" | python3 -c '
-import json, sys
-data = json.load(sys.stdin)
+ACB_BUNDLE="$(native_path "$BUNDLE")" python3 - "$DOCTOR_OUT" <<'PY'
+import json, os, sys
+from pathlib import Path
+data = json.loads(sys.argv[1])
 assert data.get("ok") is True, data
-reqs = json.loads(open("'"$BUNDLE"'/requirements.json").read())
+bundle = Path(os.environ["ACB_BUNDLE"])
+reqs = json.loads((bundle / 'requirements.json').read_text())
 executables = reqs.get("executables", [])
 packages = reqs.get("packages", [])
 
@@ -163,7 +165,7 @@ assert any("@modelcontextprotocol/server-filesystem" in p for p in pkg_names), f
 # npx should be in executables
 assert "npx" in executables, f"npx should be in executables: {executables}"
 print("OK doctor requirements accurately parsed command runners and packages:", pkg_names)
-'
+PY
 
 echo "=== Test 5: restore --all-installed onto Device B ==="
 # Setup Device B with simulated installed IDEs: Windsurf and Forge
@@ -193,8 +195,8 @@ echo "=== Test 6: Verify restored files on Device B ==="
 find "$HOME_DST" -type f | sort
 python3 -c "
 from pathlib import Path
-home_dst = Path('$HOME_DST')
-ws_dst = Path('$WS_DST')
+home_dst = Path(r'''$(native_path "$HOME_DST")''')
+ws_dst = Path(r'''$(native_path "$WS_DST")''')
 
 # Check skill restoration
 found_skills = list(home_dst.rglob('SKILL.md'))
@@ -218,7 +220,7 @@ PRE_MTIME=$(stat -f %m "$EXISTING_BUNDLE/manifest.json" 2>/dev/null || stat -c %
 python3 -c "
 import sys
 from pathlib import Path
-sys.path.insert(0, '$SCRIPT_DIR')
+sys.path.insert(0, r'''$(native_path "$SCRIPT_DIR")''')
 from acb.bundle import write_bundle, ACBManifest, ACBSecretLeak, make_bundle_id
 
 manifest = ACBManifest(
@@ -234,7 +236,7 @@ manifest = ACBManifest(
 leak_objects = {'skills/cline/ide/user/key.pem': b'-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA0...'}
 try:
     write_bundle(
-        bundle_root=Path('$EXISTING_BUNDLE'),
+        bundle_root=Path(r'''$(native_path "$EXISTING_BUNDLE")'''),
         manifest=manifest,
         inventory_rows=[],
         compatibility={},
