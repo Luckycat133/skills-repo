@@ -59,7 +59,7 @@ if [[ -d "$SETUP_SCRIPTS" ]]; then
   # The zero-write legacy bash engine has never been supported on
   # Windows hosts (roadmap: Experimental); its lookup tests emit NUL
   # bytes through MSYS command substitution. Skip them on win32.
-  WINDOWS_SKIPPED="test-antigravity-migration.sh,test-conflict-strategies.sh,test-copilot-mapping.sh"
+  WINDOWS_SKIPPED="test-antigravity-migration.sh,test-conflict-strategies.sh,test-copilot-mapping.sh,test-ide-paths.sh"
   while IFS= read -r test_script; do
     base="$(basename "$test_script")"
     if [[ "$(uname -s)" == MINGW* || "$(uname -s)" == MSYS* || "$(uname -s)" == CYGWIN* ]] \
