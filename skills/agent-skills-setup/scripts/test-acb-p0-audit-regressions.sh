@@ -320,6 +320,59 @@ print("OK Test 6: config-subobject exported ONLY mcpServers slice without siblin
 PY
 
 # -----------------------------------------------------------------------------
+# Test 6b: Shared-settings MCP files are subobject-extracted even when the
+# registry marks them storage=file (clawscan 0.8.30: "may copy more of a
+# local settings file than the skill promises").
+# -----------------------------------------------------------------------------
+echo "=== Test 6b: storage=file shared settings get subobject extraction ==="
+HOME_GEMINI="$TMP_ROOT/home_gemini"
+WS_GEMINI="$TMP_ROOT/ws_gemini"
+BUNDLE_GEMINI="$TMP_ROOT/gemini-subobject.acb"
+mkdir -p "$HOME_GEMINI/.gemini" "$WS_GEMINI"
+
+cat > "$HOME_GEMINI/.gemini/settings.json" <<'EOF'
+{
+  "model": "gemini-2.5-pro",
+  "theme": "auto",
+  "telemetry": {"enabled": true},
+  "organization_internal_flag": "do-not-leak",
+  "mcpServers": {
+    "fixture-server": {
+      "command": "python3",
+      "args": ["-m", "fixture_mcp"]
+    }
+  }
+}
+EOF
+
+HOME="$(native_path "$HOME_GEMINI")" "$WRAPPER" snapshot \
+    --workspace "$WS_GEMINI" \
+    --source gemini-cli/cli --target cline/ide \
+    --scope user \
+    --output "$BUNDLE_GEMINI" \
+    --json >/dev/null
+
+python3 - "$BUNDLE_GEMINI" <<'PY'
+import json, sys
+from pathlib import Path
+
+bundle_root = Path(sys.argv[1])
+objects_dir = bundle_root / "objects"
+
+mcp_files = list(objects_dir.rglob("*.json"))
+assert mcp_files, f"no MCP object exported from gemini settings: {list(objects_dir.rglob('*'))}"
+parsed = json.loads(mcp_files[0].read_text(encoding="utf-8"))
+
+for sibling in ("model", "theme", "telemetry", "organization_internal_flag"):
+    assert sibling not in parsed, f"leaked sibling key {sibling!r} from shared settings file"
+
+assert "mcpServers" in parsed or "servers" in parsed, f"MCP servers missing: {parsed}"
+servers = parsed.get("mcpServers") or parsed.get("servers")
+assert "fixture-server" in servers, f"fixture-server missing: {servers}"
+print("OK Test 6b: storage=file gemini settings.json exported ONLY its mcpServers slice")
+PY
+
+# -----------------------------------------------------------------------------
 # Test 7: Cross-Platform & Windows Path Resolver
 # -----------------------------------------------------------------------------
 echo "=== Test 7: Cross-Platform and Windows Path Resolver ==="

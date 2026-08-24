@@ -27,3 +27,4 @@ node_modules/
 dist/
 build/
 *.log
+clawhub-scan-*.zip

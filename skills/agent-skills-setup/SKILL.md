@@ -3,7 +3,7 @@ name: agent-skills-setup
 license: MIT
 compatibility: Requires local Bash, Python 3, environment lookup, and filesystem reads. Writes only approved migration targets; no network access.
 metadata:
-  version: "0.8.30"
+  version: "0.8.31"
   permissions.shell: "bundled offline Bash/Python scripts in scripts/ only"
   permissions.env: "read environment variables to resolve product paths"
   permissions.file_read: "named source products, workspace tree, bundled references"

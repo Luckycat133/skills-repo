@@ -2,6 +2,25 @@
 
 This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.31] - 2026-08-24
+
+### Fixed
+
+- **ACB snapshot: shared-settings MCP files are now subobject-extracted**
+  (clawscan 0.8.30 verdict "suspicious": "may copy more of a local
+  settings file than the skill promises"). Surfaces registered with
+  `storage: file` that point at shared host settings — notably
+  `~/.gemini/settings.json` and `~/.claude.json` — were raw-copied byte
+  for byte into bundles, carrying sibling state (model, theme,
+  telemetry, internal flags) the skill promises never to copy. MCP
+  objects are now ALWAYS reduced to their authorized servers subobject
+  at collection time, in both the plan-item and inventory-row paths;
+  an undecodable document is a recorded `excluded_by_policy`, never a
+  raw-copy fallback.
+- Regression `Test 6b` in `test-acb-p0-audit-regressions.sh`: snapshots
+  a gemini-cli settings file containing sibling keys and asserts only
+  the `mcpServers` slice reaches the bundle.
+
 ## [0.8.30] - 2026-08-24
 
 ### Fixed
