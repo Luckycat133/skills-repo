@@ -3,7 +3,12 @@ name: agent-skills-setup
 license: MIT
 compatibility: Requires local Bash, Python 3, environment lookup, and filesystem reads. Writes only approved migration targets; no network access.
 metadata:
-  version: "0.8.29"
+  version: "0.8.30"
+  permissions.shell: "bundled offline Bash/Python scripts in scripts/ only"
+  permissions.env: "read environment variables to resolve product paths"
+  permissions.file_read: "named source products, workspace tree, bundled references"
+  permissions.file_write: "reviewed plan targets after explicit --yes consent"
+  permissions.network: "denied"
 description: >
   Use when a user names two supported IDEs or agent products to plan, migrate,
   or inspect specific skills, instructions, and MCP. The skill inventories local
@@ -13,6 +18,14 @@ description: >
 ---
 
 # AI IDE Context Migration
+
+## Permissions
+
+- `shell`: bundled offline Bash/Python scripts only; no other binary is invoked.
+- `env`: path resolution only; credential-looking values are redacted, never copied or printed.
+- `file_read`: named source products, workspace tree, bundled `references/`; no startup sniffing of unlisted products.
+- `file_write`: reviewed plan targets after `--yes` consent; backups/manifests/rollback state under `<workspace>/.agent-context-migration/`.
+- `network`: denied. Every subcommand is offline; no downloads, telemetry, or remote calls.
 
 ## Capabilities and authorization
 
@@ -35,16 +48,13 @@ description: >
 
 - High-level: `bash scripts/smart-ide-migration.sh migrate --source <src> --target <dst> --workspace . --objects all-portable --yes`
 - Step-by-step: `plan --output <plan.json>` -> `apply <plan.json> --manifest <manifest.json> --yes` -> `verify --manifest <manifest.json>` -> `rollback --manifest <manifest.json> --yes`.
-- Device handoff (ACB, **version 0.8.29**):
-  - `snapshot --output <b.acb> [--scope <scope>] [--all-installed]`: captures portable skills, instructions, and MCP under strict allowlists, plan item precision, atomic staging (`.tmp_*`), and 1:1 manifest file bindings (`config-subobject` extracts only authorized sections like `mcpServers`, never leaking sibling settings or host configurations).
-  - `bundle-verify <b.acb>`: verifies closed-world SHA256 checksums, 1:1 manifest-to-disk bindings, and re-scans objects for secrets and binary safety.
-  - `restore <b.acb> [--plan-only] [--plan-out <plan.json>]`: builds and reviews the dual-side migration plan without writing.
-  - `restore <b.acb> --plan-in <plan.json> --yes`: re-verifies bundle and plan integrity, locks expected source/target states (TOCTOU guard), and executes the reviewed exact plan.
-  - `restore <b.acb> --yes [--restore-root <dir>]`: applies the reviewed plan to the target IDE on the current device (the verified bundle is always the authoritative source). `--restore-root <dir>` opts into extracting a separate review tree of raw `objects/`.
-  - Multi-IDE orchestration: `--all-installed` in snapshot and restore automatically scans, detects, and migrates installed configurations across multiple IDEs on the device.
-- Cross-platform & Windows support: full environment variable resolution (`%APPDATA%`, `%USERPROFILE%`, `%LOCALAPPDATA%`, `$APPDATA`), automatic platform detection, and surface-specific platform path isolation (Windows and remote extension hosts remain experimental).
-- Diagnostics: `detect` / `doctor` inspect local probes and installation states offline with refined state fidelity (`installed`, `configured-only`, `compatibility-only`) and realistic tool/package dependency extraction.
-- Surface scope: skills, instructions, MCP, prompts, commands, workflows, agents/droids, and hooks (executable agents/hooks default to `draft-disabled`). Agents/Hooks/Plugins "native conversion" is experimental (tracked for a later release).
-- Plugins & extensions: opaque binaries/plugins are non-executable and marked manual-rebuild.
+- Device handoff (ACB): `snapshot` captures portable skills/instructions/MCP with atomic staging and 1:1 manifest bindings (subobject extraction only); `bundle-verify` re-checks checksums, bindings, secrets; `restore [--plan-only | --plan-in <plan> --yes]` reviews then executes the exact dual-side plan; `--all-installed` scans/detects/migrates every installed IDE on the device.
+- Cross-platform: `%APPDATA%` / `%USERPROFILE%` / `$APPDATA` resolution, platform detection, per-surface path isolation (remote extension hosts experimental). `detect` / `doctor` report offline installation-state fidelity.
+- Object-type scope (exhaustive — apply writes nothing outside it):
+  - Auto-migratable (`ready`): `skills`, `instructions`, `mcp`.
+  - Opaque package copy where both profiles declare it: `plugins`.
+  - Draft-only, never auto-written: `prompts`, `commands`, `agents`, `hooks`, `workflows`. Executable surfaces have no staging writer; replayed plans that mark them eligible fail closed.
+  - Opt-in session transfer: `handoff` needs `--objects handoff` AND `--include-session`; only the reviewed summary, git branch, relative selected files, and an explicitly provided patch travel. Raw conversation, tokens, session/OAuth state, machine paths, and logs are discarded.
+  - Never migrated: trust state, generated memory, cloud knowledge, approvals, chat history.
+- Sensitive configs (`~/.codex/config.toml`, `~/.gemini/settings.json`): read only for the named migration's authorized MCP subobject; trust sections (`never-migrate`) and sibling settings never enter plans or bundles; strict secret redaction before output. See [references/mcp-migration.md](references/mcp-migration.md).
 - Claude Desktop app MCP in **Settings → Extensions** and **Settings → Connectors** is UI-managed; do not infer or rewrite it from legacy JSON.
-- Never move secrets, OAuth/session state, runtime metadata, approval grants, chat history, or generated memory.

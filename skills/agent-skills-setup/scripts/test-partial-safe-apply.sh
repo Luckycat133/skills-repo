@@ -343,6 +343,103 @@ manifest3, _ = apply_plan(
 assert manifest3["summary"]
 print("OK strict=False accepts mixed plan")
 
+# Audit SDI-4 regression: an executable surface (hooks) that somehow
+# arrives eligible must fail closed — no write to the live product path
+# and no "applied" manifest entry.
+hook_src = home / ".cline" / "hooks" / "pre.json"
+hook_src.parent.mkdir(parents=True, exist_ok=True)
+hook_src.write_text('{"event": "PreToolUse", "command": "echo hi"}\n', encoding="utf-8")
+hooks_ready = PlanItem(
+    object_type="hooks",
+    status=ItemStatus.READY.value,
+    reason="replayed-plan fixture for SDI-4",
+    source=SurfacePath(
+        product="cline",
+        profile="ide",
+        object_type="hooks",
+        scope="user",
+        storage="directory",
+        path="~/.cline/hooks/pre.json",
+        resolved_path=hook_src,
+        boundary=home,
+        source_format="cline-hook",
+        policy="validate-then-atomic-copy",
+        location_role="canonical",
+        canonical_path="~/.cline/hooks/pre.json",
+        precedence=0,
+    ),
+    target=SurfacePath(
+        product="cursor",
+        profile="ide",
+        object_type="hooks",
+        scope="user",
+        storage="directory",
+        path="~/.cursor/hooks/pre.json",
+        resolved_path=home / ".cursor" / "hooks" / "pre.json",
+        boundary=home,
+        source_format="cursor-hook",
+        policy="disabled-draft-only",
+        location_role="canonical",
+        canonical_path="~/.cursor/hooks/pre.json",
+        precedence=0,
+    ),
+)
+try:
+    apply_plan([hooks_ready], workspace, workspace / "manifest-hooks.json")
+except ValueError as exc:
+    assert "no automatic writer" in str(exc), exc
+    print(f"OK eligible hooks item fails closed: {exc}")
+else:
+    raise AssertionError("apply_plan wrote an executable hook surface")
+assert not (home / ".cursor" / "hooks" / "pre.json").exists(), (
+    "hook file reached the live target path"
+)
+
+# Same fail-closed contract for agents (never had a writer; previously a
+# silent applied-with-no-writes gap).
+agents_ready = PlanItem(
+    object_type="agents",
+    status=ItemStatus.READY.value,
+    reason="replayed-plan fixture for SDI-1",
+    source=SurfacePath(
+        product="cline",
+        profile="ide",
+        object_type="agents",
+        scope="user",
+        storage="directory",
+        path="~/.cline/agents",
+        resolved_path=home / ".cline" / "agents",
+        boundary=home,
+        source_format="cline-agent",
+        policy="manual-template",
+        location_role="canonical",
+        canonical_path="~/.cline/agents",
+        precedence=0,
+    ),
+    target=SurfacePath(
+        product="cursor",
+        profile="ide",
+        object_type="agents",
+        scope="user",
+        storage="directory",
+        path="~/.cursor/agents",
+        resolved_path=home / ".cursor" / "agents",
+        boundary=home,
+        source_format="cursor-agent",
+        policy="manual-template",
+        location_role="canonical",
+        canonical_path="~/.cursor/agents",
+        precedence=0,
+    ),
+)
+try:
+    apply_plan([agents_ready], workspace, workspace / "manifest-agents.json")
+except ValueError as exc:
+    assert "no automatic writer" in str(exc), exc
+    print(f"OK eligible agents item fails closed: {exc}")
+else:
+    raise AssertionError("apply_plan silently accepted an unwritable agent surface")
+
 print()
 print("Partial safe apply tests passed")
 PYEOF

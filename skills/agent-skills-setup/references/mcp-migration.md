@@ -11,6 +11,26 @@ Use for the profile-aware `mcp` object. The automatic core accepts the reviewed 
 
 Validate command/args/env or URL/headers, apply [migration-safety.md](migration-safety.md), convert only target-supported fields, preserve unrelated settings, parse the target, and emit a credential-free diff. Ambiguous transport, OAuth/session state, unknown schema, and non-automatic adapters remain manual.
 
+## Sensitive configuration handling
+
+User-level agent config files are treated as sensitive inputs:
+
+- **Subobject extraction only.** For `config-subobject` storage (e.g. Codex
+  `~/.codex/config.toml`), the adapter parses and re-emits only the authorized
+  MCP servers section. Sibling settings — model choice, approval policy,
+  sandbox, profile state — are never read into plans, bundles, or reports.
+- **Trust sections are hard-denied.** Surfaces registered with the
+  `never-migrate` policy (e.g. the trust block of `~/.codex/config.toml`) are
+  excluded before disk collection; no code path can inventory or copy them.
+- **Least-privilege reads.** A config file is opened only when its product is
+  an explicitly named migration source or target. There is no startup scan of
+  installed products.
+- **Secret preflight and redaction.** Every collected object passes the strict
+  secret scanner before output; credential-looking values in `env`, `args`,
+  and URLs are dropped to the loss report instead of being migrated.
+- **No network.** MCP migration never contacts servers, registries, or update
+  endpoints; remote-transport entries always produce a manual rebuild.
+
 ~~~bash
 bash scripts/smart-ide-migration.sh plan \
   --source cline/ide --target forge/cli --workspace /path/to/project \

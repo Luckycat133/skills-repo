@@ -28,12 +28,29 @@ allowed = {
 unknown = top_level - allowed
 if unknown:
     raise SystemExit(f"FAIL: unknown Agent Skills fields: {sorted(unknown)}")
-if "permissions" in frontmatter:
-    raise SystemExit("FAIL: non-standard permissions metadata must not be declared")
+# A top-level ``permissions:`` field is not part of the Agent Skills spec;
+# capability declarations belong under the free-form ``metadata`` map (as
+# dotted ``permissions.*`` keys) or in a body section.
+if re.search(r"(?m)^permissions:", frontmatter):
+    raise SystemExit("FAIL: non-standard permissions frontmatter field must not be declared")
+permissions_keys = re.findall(r"(?m)^  (permissions\.[a-z_]+):\s*.+$", frontmatter)
+for required_key in (
+    "permissions.shell",
+    "permissions.env",
+    "permissions.file_read",
+    "permissions.file_write",
+    "permissions.network",
+):
+    if required_key not in permissions_keys:
+        raise SystemExit(f"FAIL: metadata is missing explicit permission key: {required_key}")
+if not re.search(r'(?m)^  permissions\.network:\s*"denied"\s*$', frontmatter):
+    raise SystemExit('FAIL: permissions.network must be quoted "denied"')
+if "## Permissions" not in skill:
+    raise SystemExit("FAIL: body must carry an explicit ## Permissions section")
 
 version = re.search(r'(?m)^  version:\s*"([^"]+)"\s*$', frontmatter)
-if version is None or version.group(1) != "0.8.29":
-    raise SystemExit("FAIL: metadata.version must be the quoted release version (0.8.29)")
+if version is None or version.group(1) != "0.8.30":
+    raise SystemExit("FAIL: metadata.version must be the quoted release version (0.8.30)")
 
 compatibility = re.search(r"(?m)^compatibility:\s*(.*)$", frontmatter)
 if compatibility is None:

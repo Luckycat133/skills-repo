@@ -92,6 +92,12 @@ AUTOMATIC_OBJECT_TYPES = frozenset({
     "agents",
     "hooks",
 })
+# Object types apply_plan knows how to stage atomically.  Executable
+# surfaces (hooks, agents) and session-derived artifacts (handoff) have
+# NO automatic writer: if one somehow arrives eligible (e.g. from a
+# replayed plan), the apply fails closed instead of writing to a live
+# product path or recording an applied item with no writes (audit SDI-4).
+AUTO_WRITABLE_OBJECT_TYPES = frozenset({"skills", "instructions", "mcp", "plugins"})
 INVENTORY_ONLY_OBJECT_TYPES = frozenset({
     "workflows",
     "plugins",
@@ -3279,6 +3285,7 @@ def apply_plan(
     include_lossy: bool = False,
     accept_loss_ids: set[str] | None = None,
     strict: bool = False,
+    allow_session_handoff: bool = False,
 ) -> tuple[dict[str, Any], Path]:
     """Apply a plan with the partial safe flow.
 
@@ -3293,6 +3300,12 @@ def apply_plan(
     * ``manual-rebuild`` / ``forbidden``: recorded only.
     * ``conflict`` / ``invalid``: block only their own ``target_group``;
       other groups proceed.
+
+    Only object types in ``AUTO_WRITABLE_OBJECT_TYPES`` have a staging
+    writer.  Hooks and other executable surfaces are never written to
+    live product paths (audit SDI-4); handoff/session artifacts require
+    the explicit ``allow_session_handoff=True`` opt-in, which the CLI
+    exposes as ``--include-session`` (audit SDI-2).
 
     When ``strict`` is set, any non-``ready`` item aborts the whole plan
     (legacy behavior preserved for callers that want it).
@@ -3433,6 +3446,21 @@ def apply_plan(
             assert item.source is not None and item.target is not None
             source = item.source
             target = item.target
+            if item.object_type == "handoff":
+                if not allow_session_handoff:
+                    raise ValueError(
+                        "handoff/session transfer requires explicit opt-in "
+                        "(--include-session); refusing to apply item: "
+                        f"{item.object_type}"
+                    )
+            elif item.object_type not in AUTO_WRITABLE_OBJECT_TYPES:
+                # Fail closed (audit SDI-4): executable surfaces such as
+                # hooks and agents have no staging writer, so an eligible
+                # item of that kind must never be recorded as applied.
+                raise ValueError(
+                    "object type has no automatic writer and must be "
+                    f"rebuilt manually: {item.object_type}"
+                )
             ensure_no_symlink_components(source.resolved_path, source.boundary)
             ensure_no_symlink_components(target.resolved_path, target.boundary)
             ensure_no_symlinks(source.resolved_path)
@@ -3539,28 +3567,6 @@ def apply_plan(
                         "boundary": target.boundary,
                     }
                 )
-            elif item.object_type == "hooks":
-                # Hooks are always staged as disabled drafts per safety policy
-                source_text = source.resolved_path.read_text(encoding="utf-8")
-                hook_data = json.loads(source_text)
-                # Add disabled flag
-                if isinstance(hook_data, dict):
-                    hook_data["enabled"] = False
-                elif isinstance(hook_data, list):
-                    for h in hook_data:
-                        if isinstance(h, dict):
-                            h["enabled"] = False
-                rendered = json.dumps(hook_data, indent=2, sort_keys=True) + "\n"
-                staged = stage_root / f"{len(operations):04d}-hook"
-                atomic_write(staged, rendered)
-                operations.append(
-                    {
-                        "kind": "file",
-                        "staged": staged,
-                        "destination": target.resolved_path,
-                        "boundary": target.boundary,
-                    }
-                )
             elif item.object_type == "plugins":
                 # Plugin packages: copy entire .factory-plugin/ directory structure
                 # preserving all subdirectories (commands/, skills/, droids/, hooks/, mcp.json, plugin.json)
@@ -3594,6 +3600,8 @@ def apply_plan(
                             }
                         )
             elif item.object_type == "handoff":
+                # Session-derived transfer reached here only with the
+                # explicit --include-session opt-in (audit SDI-2).
                 # Strict whitelist serialization (P0-4): only transfer reviewed_summary,
                 # git_branch, selected_files, patch. Discard all raw conversation, logs,
                 # tokens, machine paths, cwd, git_root, oauth/session state.
