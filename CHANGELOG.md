@@ -2,6 +2,32 @@
 
 This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.33] - 2026-08-24
+
+### Changed
+
+- **Restored capabilities removed in 0.8.32** (publisher decision —
+  0.8.32 had removed them unilaterally while chasing a scanner score):
+  - `serialize_portable_handoff` and the `apply_plan` handoff branch
+    are back, gated behind the explicit `allow_session_handoff=True`
+    API parameter / `--include-session` CLI flag; the whitelisted
+    field set (reviewed summary, git branch, selected files, patch)
+    is unchanged and regression-tested both ways.
+  - Plugin package copy is back in `apply_plan`
+    (`AUTO_WRITABLE_OBJECT_TYPES` includes `plugins` again), and
+    `adapt_plugin_package` is restored.
+  - `AUTOMATIC_OBJECT_TYPES` is back to the eight declared types
+    (`skills`, `instructions`, `mcp`, `prompts`, `commands`,
+    `agents`, `hooks`); hooks/agents still have no staging writer.
+- Kept from 0.8.30–0.8.32: MCP subobject extraction at ACB collection
+  time, structural hooks/agents fail-closed, read-only legacy wrapper
+  enforcement (`--print-path` / `--dry-run` / `--help` only), explicit
+  Permissions section, sensitive-path literals kept out of SKILL.md.
+- Note: SkillSpector findings on ClawHub are advisories that do not
+  block publication; restoring these capabilities will likely return
+  its "suspicious" label. clawscan/static-analysis behavior is
+  unaffected (the shared-settings subobject fix stays).
+
 ## [0.8.32] - 2026-08-24
 
 ### Fixed

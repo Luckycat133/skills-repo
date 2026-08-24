@@ -32,12 +32,12 @@ exact-release CI matrix on `ubuntu-latest`, `macos-latest`, and
 - Apply uses a seven-status partial safe flow (`ready`, `ready-lossy`,
   `draft-disabled`, `manual-rebuild`, `forbidden`, `conflict`,
   `invalid`).
-- Apply writes only the declared portable trio
-  (`skills` / `instructions` / `mcp`). Executable surfaces, plugin
-  packages, and session artifacts have no staging writer at all — a
-  replayed plan marking them eligible fails closed, and the legacy
-  wrapper admits only read-only `--print-path` / `--dry-run`
-  invocations (0.8.32).
+- Apply stages `skills` / `instructions` / `mcp` plus opaque plugin
+  package copies; session `handoff` transfer exists behind the explicit
+  `--include-session` opt-in with a field whitelist. Executable
+  surfaces (hooks, agents) have no staging writer — a replayed plan
+  marking them eligible fails closed, and the legacy wrapper admits
+  only read-only `--print-path` / `--dry-run` invocations (0.8.33).
 - Alias resolver follows `alias_of` chains iteratively with cycle,
   depth, and unknown-selector guards.
 - macOS path expansion and `~` resolution are deterministic.
