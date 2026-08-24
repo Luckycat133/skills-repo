@@ -171,27 +171,46 @@ print("OK P0-1: existing target correctly evaluated as replace in reviewed plan"
 PY
 
 # -----------------------------------------------------------------------------
-# Test 4: Session/handoff artifacts have NO write path at all (audit SDI-2:
-# the serializer and apply branch were removed; inventory rows remain).
+# Test 4: P0-4 Strict handoff whitelist serialization
 # -----------------------------------------------------------------------------
-echo "=== Test 4: handoff/session writes are structurally impossible ==="
+echo "=== Test 4: P0-4 Strict handoff whitelist ==="
 python3 - <<'PY'
 import sys
 from pathlib import Path
 
+# Add scripts directory
 sys.path.insert(0, str(Path("skills/agent-skills-setup/scripts").resolve()))
-import migration_core
+from migration_core import serialize_portable_handoff
 
-# The portable session serializer no longer exists in the module surface.
-assert not hasattr(migration_core, "serialize_portable_handoff"), (
-    "serialize_portable_handoff must stay removed (SDI-2)"
-)
-assert "handoff" not in migration_core.AUTO_WRITABLE_OBJECT_TYPES
-assert migration_core.AUTO_WRITABLE_OBJECT_TYPES == {"skills", "instructions", "mcp"}, (
-    "the automatic write contract is exactly the portable trio"
-)
+dirty_session = {
+    "summary": "Implement feature X",
+    "raw": "SECRET_RAW_LOGS",
+    "messages": [{"role": "user", "content": "hello"}],
+    "history": [{"role": "system", "text": "system log"}],
+    "conversation": "raw conversation text",
+    "tool_calls": [{"name": "bash", "command": "rm -rf /"}],
+    "oauth_state": {"token": "ya29.secret_token"},
+    "tokens": 15000,
+    "cwd": "/Users/victim/secret/project",
+    "git_root": "/Users/victim/secret",
+    "approval_state": {"approved": True},
+    "session_state": {"active": True},
+    "environment": {"AWS_SECRET_KEY": "AKIAEXAMPLE"},
+    "selected_files": ["src/main.py", "README.md", "/etc/passwd", "../traversal.py"],
+    "patch": "diff --git a/src/main.py b/src/main.py\n..."
+}
 
-print("OK P0-4: no session serialization or write path remains in the module")
+clean = serialize_portable_handoff(dirty_session, workspace=None)
+
+# Whitelist verification: only reviewed_summary, git_branch, selected_files, patch
+allowed_keys = {"reviewed_summary", "git_branch", "selected_files", "patch"}
+assert set(clean.keys()) == allowed_keys, f"unexpected keys in handoff: {set(clean.keys()) - allowed_keys}"
+assert clean["reviewed_summary"] == "Implement feature X"
+assert clean["patch"] is not None
+# Absolute paths and traversal filtered from selected_files
+assert clean["selected_files"] == ["README.md", "src/main.py"], f"file sanitization failed: {clean['selected_files']}"
+
+print("OK P0-4: strict handoff whitelist successfully dropped all unsafe session fields")
 PY
 
 # -----------------------------------------------------------------------------

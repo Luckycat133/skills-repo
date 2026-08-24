@@ -156,6 +156,16 @@ def create_parser() -> argparse.ArgumentParser:
         help="Reject plans containing any non-ready item.",
     )
 
+    migrate.add_argument(
+        "--include-session",
+        dest="include_session",
+        action="store_true",
+        help=(
+            "Explicitly opt in to handoff/session transfer "
+            "(whitelisted fields only: reviewed summary, git branch, "
+            "selected file list, reviewed patch)."
+        ),
+    )
     apply = subparsers.add_parser("apply")
     apply.add_argument("plan", type=Path)
     apply.add_argument("--registry", type=Path, default=REGISTRY_PATH)
@@ -198,6 +208,15 @@ def create_parser() -> argparse.ArgumentParser:
         help="Reject any plan containing a non-ready item (legacy semantics).",
     )
 
+    apply.add_argument(
+        "--include-session",
+        dest="include_session",
+        action="store_true",
+        help=(
+            "Explicitly opt in to handoff/session transfer for replayed "
+            "plans (whitelisted fields only)."
+        ),
+    )
     verify = subparsers.add_parser("verify")
     verify.add_argument("--manifest", type=Path, required=True)
     verify.add_argument("--json", action="store_true")
@@ -1368,6 +1387,7 @@ def run_migrate(args: argparse.Namespace) -> int:
         include_lossy=(args.include_lossy == "lossy"),
         accept_loss_ids=accept_loss_ids,
         strict=args.strict,
+        allow_session_handoff=bool(getattr(args, "include_session", False)),
     )
 
     # 7. verify
@@ -1510,6 +1530,7 @@ def run_new_cli(argv: list[str]) -> int:
                 include_lossy=(args.include_lossy == "lossy"),
                 accept_loss_ids=accept_loss_ids,
                 strict=args.strict,
+                allow_session_handoff=bool(getattr(args, "include_session", False)),
             )
             emit(
                 {
