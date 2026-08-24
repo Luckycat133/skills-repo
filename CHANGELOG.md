@@ -2,6 +2,42 @@
 
 This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.30] - 2026-08-24
+
+### Fixed
+
+- **SkillSpector 0.8.29 audit closure (7 findings; clawscan verdict was
+  already benign)**:
+  - SDI-4 (hooks): removed the hook staging writer from `apply_plan`.
+    Executable surfaces now have NO automatic write path — an eligible
+    hooks/agents item (only reachable via a replayed plan) fails closed
+    with "no automatic writer" instead of writing to a live product
+    path or being recorded as applied without writes. The
+    disabled-by-default contract is structural, not comment-only.
+  - SDI-2 (handoff/session): session-derived transfer is now opt-in at
+    the API boundary (`apply_plan(..., allow_session_handoff=True)`)
+    and on the CLI (`migrate --include-session`, `apply
+    --include-session`). Without the flag the apply refuses the item;
+    with it, only the whitelisted fields travel (reviewed summary, git
+    branch, relative selected-file list, explicit patch).
+  - SDI-1 (capability expansion): SKILL.md now declares the full
+    object-type scope exhaustively in three tiers — auto-migratable
+    (`skills`/`instructions`/`mcp`), opaque `plugins` copy, and
+    inventory/draft-only surfaces that are never auto-written.
+  - LP3 (permissions): SKILL.md gained an explicit `## Permissions`
+    section plus machine-readable `permissions.*` metadata keys
+    (shell / env / file_read / file_write / network: denied).
+  - AS1 x3 (sensitive config paths): documented safeguards for
+    user-level agent configs in SKILL.md and a new "Sensitive
+    configuration handling" section in `references/mcp-migration.md`
+    (subobject extraction only, `never-migrate` trust hard-deny,
+    least-privilege named-source reads, secret preflight/redaction,
+    no network). The registry paths themselves are unchanged — they
+    are the MCP migration targets.
+- `test-skill-metadata.sh`: the permissions guard now rejects only a
+  top-level non-standard `permissions:` field and additionally asserts
+  the dotted metadata keys and the body section exist.
+
 ## [0.8.29] - 2026-08-23
 
 ### Fixed

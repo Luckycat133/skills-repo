@@ -70,7 +70,22 @@ item = PlanItem(
     target=make_surface(dest, workspace),
 )
 
-manifest, _ = apply_plan([item], workspace, workspace / "manifest.json")
+# Audit SDI-2: session transfer is opt-in; the default apply must refuse.
+try:
+    apply_plan([item], workspace, workspace / "manifest-refused.json")
+except ValueError as exc:
+    assert "--include-session" in str(exc), exc
+    print(f"OK default apply refuses handoff without opt-in: {exc}")
+else:
+    raise AssertionError("apply_plan accepted a handoff item without opt-in")
+assert not dest.exists()
+
+manifest, _ = apply_plan(
+    [item],
+    workspace,
+    workspace / "manifest.json",
+    allow_session_handoff=True,
+)
 
 assert manifest["summary"].get("applied", 0) >= 1, manifest["summary"]
 assert dest.is_file(), f"handoff not written to {dest}"

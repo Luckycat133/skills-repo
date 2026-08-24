@@ -151,6 +151,16 @@ def create_parser() -> argparse.ArgumentParser:
         help="Comma-separated plan indices to apply as lossy.",
     )
     migrate.add_argument(
+        "--include-session",
+        dest="include_session",
+        action="store_true",
+        help=(
+            "Explicitly opt in to handoff/session transfer "
+            "(whitelisted fields only: reviewed summary, git branch, "
+            "selected file list, reviewed patch)."
+        ),
+    )
+    migrate.add_argument(
         "--strict",
         action="store_true",
         help="Reject plans containing any non-ready item.",
@@ -191,6 +201,15 @@ def create_parser() -> argparse.ArgumentParser:
         dest="accept_loss",
         default="",
         help="Comma-separated plan indices to apply as lossy even without --include lossy.",
+    )
+    apply.add_argument(
+        "--include-session",
+        dest="include_session",
+        action="store_true",
+        help=(
+            "Explicitly opt in to handoff/session transfer for replayed "
+            "plans (whitelisted fields only)."
+        ),
     )
     apply.add_argument(
         "--strict",
@@ -1353,6 +1372,7 @@ def run_migrate(args: argparse.Namespace) -> int:
         include_lossy=(args.include_lossy == "lossy"),
         accept_loss_ids=accept_loss_ids,
         strict=args.strict,
+        allow_session_handoff=bool(getattr(args, "include_session", False)),
     )
 
     # 7. verify
@@ -1495,6 +1515,7 @@ def run_new_cli(argv: list[str]) -> int:
                 include_lossy=(args.include_lossy == "lossy"),
                 accept_loss_ids=accept_loss_ids,
                 strict=args.strict,
+                allow_session_handoff=bool(getattr(args, "include_session", False)),
             )
             emit(
                 {

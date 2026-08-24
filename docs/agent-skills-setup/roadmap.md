@@ -32,6 +32,12 @@ exact-release CI matrix on `ubuntu-latest`, `macos-latest`, and
 - Apply uses a seven-status partial safe flow (`ready`, `ready-lossy`,
   `draft-disabled`, `manual-rebuild`, `forbidden`, `conflict`,
   `invalid`).
+- Apply has no automatic writer outside
+  `skills` / `instructions` / `mcp` / `plugins`. Executable surfaces
+  (hooks, agents) fail closed even when a replayed plan marks them
+  eligible, and session-derived `handoff` transfer requires the
+  explicit `--include-session` opt-in (0.8.30, SkillSpector SDI-2 /
+  SDI-4).
 - Alias resolver follows `alias_of` chains iteratively with cycle,
   depth, and unknown-selector guards.
 - macOS path expansion and `~` resolution are deterministic.
