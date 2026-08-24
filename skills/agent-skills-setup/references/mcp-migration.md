@@ -15,12 +15,14 @@ Validate command/args/env or URL/headers, apply [migration-safety.md](migration-
 
 User-level agent config files are treated as sensitive inputs:
 
-- **Subobject extraction only.** For `config-subobject` storage (e.g. Codex
-  `~/.codex/config.toml`), the adapter parses and re-emits only the authorized
-  MCP servers section. Sibling settings — model choice, approval policy,
-  sandbox, profile state — are never read into plans, bundles, or reports.
+- **Subobject extraction only.** For `config-subobject` storage — and for
+  every MCP object at ACB collection time, including shared host settings
+  files registered with plain `file` storage — the adapter parses and
+  re-emits only the authorized MCP servers section. Sibling settings —
+  model choice, approval policy, sandbox, profile state, telemetry — are
+  never read into plans, bundles, or reports.
 - **Trust sections are hard-denied.** Surfaces registered with the
-  `never-migrate` policy (e.g. the trust block of `~/.codex/config.toml`) are
+  `never-migrate` policy (e.g. the trust block of a host config file) are
   excluded before disk collection; no code path can inventory or copy them.
 - **Least-privilege reads.** A config file is opened only when its product is
   an explicitly named migration source or target. There is no startup scan of

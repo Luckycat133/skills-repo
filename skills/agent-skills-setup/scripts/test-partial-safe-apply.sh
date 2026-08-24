@@ -397,6 +397,7 @@ assert not (home / ".cursor" / "hooks" / "pre.json").exists(), (
 
 # Same fail-closed contract for agents (never had a writer; previously a
 # silent applied-with-no-writes gap).
+(home / ".cline" / "agents").mkdir(parents=True, exist_ok=True)
 agents_ready = PlanItem(
     object_type="agents",
     status=ItemStatus.READY.value,

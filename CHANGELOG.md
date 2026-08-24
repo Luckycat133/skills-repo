@@ -2,6 +2,40 @@
 
 This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.32] - 2026-08-24
+
+### Fixed
+
+- **SkillSpector 0.8.31 audit closure (10 findings; clawscan was already
+  clean after the shared-settings fix)**:
+  - **SDI-2 (session artifacts) — removed entirely**: the portable
+    handoff serializer, the `apply_plan` handoff branch, the
+    `allow_session_handoff` parameter, and the CLI
+    `--include-session` flag are gone. Session/handoff content has no
+    write path at all now; even a replayed plan marking such an item
+    eligible fails closed with "no automatic writer". Inventory rows
+    for handoff surfaces remain read-only metadata.
+  - **SDI-1 (scope convergence)**: `AUTOMATIC_OBJECT_TYPES` and
+    `AUTO_WRITABLE_OBJECT_TYPES` are exactly the declared portable trio
+    (`skills`, `instructions`, `mcp`). Plugin package staging was
+    removed from apply; `adapt_plugin_package` (dead code) is deleted.
+    Plugin packages stay inventory / manual-rebuild.
+  - **AST4 + SDI-4 (legacy wrapper)**: the `legacy` subcommand now
+    enforces read-only structurally — only `--print-path` and
+    `--dry-run` invocations pass through to the legacy engine; any
+    other invocation is refused by the Python wrapper regardless of
+    flags.
+  - **AS1 (sensitive path literals)**: SKILL.md no longer names
+    concrete user config paths in its always-loaded text; safeguards
+    are described generically with details in
+    [references/mcp-migration.md](skills/agent-skills-setup/references/mcp-migration.md).
+  - **--all-installed consent**: documented as a bulk operation whose
+    detection table must be reviewed; all writes still require plan
+    review plus `--yes`.
+- Tests: `test-migration-handoff-branch.sh` rewritten as an
+  unconditional-refusal regression; P0-4 test asserts the serializer
+  stays removed; partial-safe-apply covers hooks/agents fail-closed.
+
 ## [0.8.31] - 2026-08-24
 
 ### Fixed

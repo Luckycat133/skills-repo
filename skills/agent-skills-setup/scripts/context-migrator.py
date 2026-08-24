@@ -151,16 +151,6 @@ def create_parser() -> argparse.ArgumentParser:
         help="Comma-separated plan indices to apply as lossy.",
     )
     migrate.add_argument(
-        "--include-session",
-        dest="include_session",
-        action="store_true",
-        help=(
-            "Explicitly opt in to handoff/session transfer "
-            "(whitelisted fields only: reviewed summary, git branch, "
-            "selected file list, reviewed patch)."
-        ),
-    )
-    migrate.add_argument(
         "--strict",
         action="store_true",
         help="Reject plans containing any non-ready item.",
@@ -201,15 +191,6 @@ def create_parser() -> argparse.ArgumentParser:
         dest="accept_loss",
         default="",
         help="Comma-separated plan indices to apply as lossy even without --include lossy.",
-    )
-    apply.add_argument(
-        "--include-session",
-        dest="include_session",
-        action="store_true",
-        help=(
-            "Explicitly opt in to handoff/session transfer for replayed "
-            "plans (whitelisted fields only)."
-        ),
     )
     apply.add_argument(
         "--strict",
@@ -324,12 +305,27 @@ def selector(product: str | None, profile: str | None) -> str | None:
 
 
 def reject_legacy_write(argv: list[str]) -> None:
-    if "--yes" not in argv and "-y" not in argv:
+    """Enforce the legacy subcommand as strictly read-only.
+
+    The guarantee is structural, not flag filtering (audit SDI-4 /
+    AST4): only the documented read-only modes --print-path and
+    --dry-run are allowed through to the legacy engine at all.  Any
+    other invocation — with or without --yes — is refused here.
+    """
+    if "--yes" in argv or "-y" in argv:
+        raise ValueError(
+            "legacy writes are disabled; create a saved plan with 'plan --output', "
+            "then apply that exact plan file"
+        )
+    if not argv or "--help" in argv or "-h" in argv:
         return
-    raise ValueError(
-        "legacy writes are disabled; create a saved plan with 'plan --output', "
-        "then apply that exact plan file"
-    )
+    readonly = "--print-path" in argv or "--dry-run" in argv
+    if not readonly:
+        raise ValueError(
+            "legacy subcommand is read-only lookup compatibility only: "
+            "pass --print-path <ide> <object> or --dry-run. "
+            "Use 'plan' / 'apply' for migrations."
+        )
 
 
 AUTOMATIC_OBJECT_TYPES = {"skills", "instructions", "mcp"}
@@ -1372,7 +1368,6 @@ def run_migrate(args: argparse.Namespace) -> int:
         include_lossy=(args.include_lossy == "lossy"),
         accept_loss_ids=accept_loss_ids,
         strict=args.strict,
-        allow_session_handoff=bool(getattr(args, "include_session", False)),
     )
 
     # 7. verify
@@ -1515,7 +1510,6 @@ def run_new_cli(argv: list[str]) -> int:
                 include_lossy=(args.include_lossy == "lossy"),
                 accept_loss_ids=accept_loss_ids,
                 strict=args.strict,
-                allow_session_handoff=bool(getattr(args, "include_session", False)),
             )
             emit(
                 {

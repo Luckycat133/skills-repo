@@ -83,21 +83,16 @@ AUTOMATIC_MIGRATION_POLICIES = {
     "agent-ir-reviewed",
     "hook-ir-reviewed",
 }
-AUTOMATIC_OBJECT_TYPES = frozenset({
-    "skills",
-    "instructions",
-    "mcp",
-    "prompts",
-    "commands",
-    "agents",
-    "hooks",
-})
-# Object types apply_plan knows how to stage atomically.  Executable
-# surfaces (hooks, agents) and session-derived artifacts (handoff) have
-# NO automatic writer: if one somehow arrives eligible (e.g. from a
-# replayed plan), the apply fails closed instead of writing to a live
-# product path or recording an applied item with no writes (audit SDI-4).
-AUTO_WRITABLE_OBJECT_TYPES = frozenset({"skills", "instructions", "mcp", "plugins"})
+# The declared automatic surface is exactly the portable trio (audit
+# SDI-1): every other object type is inventory / manual-rebuild only.
+AUTOMATIC_OBJECT_TYPES = frozenset({"skills", "instructions", "mcp"})
+# Object types apply_plan knows how to stage atomically: exactly the
+# declared portable trio.  Executable surfaces (hooks, agents), opaque
+# plugin packages, and session-derived artifacts have NO automatic
+# writer: if one somehow arrives eligible (e.g. from a replayed plan),
+# the apply fails closed instead of writing to a live product path or
+# recording an applied item with no writes (audits SDI-4 / SDI-1).
+AUTO_WRITABLE_OBJECT_TYPES = frozenset({"skills", "instructions", "mcp"})
 INVENTORY_ONLY_OBJECT_TYPES = frozenset({
     "workflows",
     "plugins",
@@ -1927,56 +1922,6 @@ def scope_matches(surface_scope: str, requested_scope: str) -> bool:
     return False
 
 
-def adapt_plugin_package(
-    source_path: Path,
-    target_format: str,
-) -> tuple[str, LossReport]:
-    """Adapt a plugin package from source format to target format.
-
-    Currently supports:
-    - factory-plugin: preserves .factory-plugin/ structure with commands/,
-      skills/, droids/, hooks/, mcp.json
-    - copilot-plugin: VS Code extension package format
-    - claude-plugin: Claude Code plugin format
-
-    Returns rendered manifest/content and loss report.
-    """
-    report = LossReport()
-    if target_format == "factory-plugin":
-        # Preserve the entire .factory-plugin/ directory structure
-        # Copy the entire .factory-plugin/ directory to target
-        source_plugin_dir = (source_path / ".factory-plugin").resolve()
-        if not source_plugin_dir.exists() or not source_plugin_dir.is_dir():
-            report.add("plugin", ".factory-plugin", "missing .factory-plugin/ directory", None)
-            return "", report
-
-        ensure_no_symlinks(source_plugin_dir)
-        files = []
-        for f in sorted(source_plugin_dir.rglob("*")):
-            if f.is_file() and not f.is_symlink():
-                rel = f.relative_to(source_plugin_dir)
-                if ".." not in str(rel) and not str(rel).startswith("/"):
-                    files.append(str(rel))
-
-        manifest = {
-            "plugin_package": ".factory-plugin",
-            "files": sorted(files),
-            "preserved": True
-        }
-        return json.dumps(manifest, indent=2), report
-    if target_format == "preserve-package":
-        resolved_source = source_path.resolve()
-        ensure_no_symlinks(resolved_source)
-        files = []
-        for f in sorted(resolved_source.rglob("*")):
-            if f.is_file() and not f.is_symlink():
-                rel = f.relative_to(resolved_source)
-                if ".." not in str(rel) and not str(rel).startswith("/"):
-                    files.append(str(rel))
-        return json.dumps({"files": sorted(files)}, indent=2), report
-    raise ValueError(f"unsupported plugin target format: {target_format}")
-
-
 def choose_surface(
     surfaces: list[SurfacePath],
     scope: str,
@@ -2125,47 +2070,6 @@ def rebuild_actions(
     if sources:
         actions.insert(0, f"Review current target documentation: {sources[0]}")
     return actions
-
-
-def serialize_portable_handoff(
-    raw_data: Any,
-    workspace: Path | None = None,
-) -> dict[str, Any]:
-    """Serialize ONLY strictly allowed portable handoff fields.
-
-    Any un-whitelisted fields (history, conversation, events, tool_calls,
-    oauth_state, tokens, cwd, git_root, approval_state, session_state,
-    environment, machine paths, raw logs) are completely discarded (audit P0-4).
-    """
-    summary = ""
-    selected_files: list[str] = []
-    patch: str | None = None
-
-    if isinstance(raw_data, dict):
-        raw_summary = raw_data.get("reviewed_summary") or raw_data.get("summary") or ""
-        if isinstance(raw_summary, str):
-            summary = raw_summary.strip()
-        raw_files = raw_data.get("selected_files")
-        if isinstance(raw_files, list):
-            for f in raw_files:
-                if isinstance(f, str) and not f.startswith("/") and ".." not in f:
-                    selected_files.append(f)
-        raw_patch = raw_data.get("patch")
-        if isinstance(raw_patch, str):
-            patch = raw_patch
-
-    git_branch: str | None = None
-    if workspace is not None:
-        git_info = git_provenance(workspace)
-        if git_info and git_info.get("branch"):
-            git_branch = str(git_info["branch"])
-
-    return {
-        "reviewed_summary": summary or "Reviewed handoff snapshot",
-        "git_branch": git_branch,
-        "selected_files": sorted(set(selected_files)),
-        "patch": patch,
-    }
 
 
 def _build_plan_for_scope(
@@ -3285,7 +3189,6 @@ def apply_plan(
     include_lossy: bool = False,
     accept_loss_ids: set[str] | None = None,
     strict: bool = False,
-    allow_session_handoff: bool = False,
 ) -> tuple[dict[str, Any], Path]:
     """Apply a plan with the partial safe flow.
 
@@ -3301,11 +3204,11 @@ def apply_plan(
     * ``conflict`` / ``invalid``: block only their own ``target_group``;
       other groups proceed.
 
-    Only object types in ``AUTO_WRITABLE_OBJECT_TYPES`` have a staging
-    writer.  Hooks and other executable surfaces are never written to
-    live product paths (audit SDI-4); handoff/session artifacts require
-    the explicit ``allow_session_handoff=True`` opt-in, which the CLI
-    exposes as ``--include-session`` (audit SDI-2).
+    Only object types in ``AUTO_WRITABLE_OBJECT_TYPES`` (the portable
+    trio: skills, instructions, mcp) have a staging writer.  Executable
+    surfaces, plugin packages, and handoff/session artifacts are never
+    written to live product paths — an eligible item of any other type
+    fails closed (audits SDI-4 / SDI-1 / SDI-2).
 
     When ``strict`` is set, any non-``ready`` item aborts the whole plan
     (legacy behavior preserved for callers that want it).
@@ -3446,21 +3349,6 @@ def apply_plan(
             assert item.source is not None and item.target is not None
             source = item.source
             target = item.target
-            if item.object_type == "handoff":
-                if not allow_session_handoff:
-                    raise ValueError(
-                        "handoff/session transfer requires explicit opt-in "
-                        "(--include-session); refusing to apply item: "
-                        f"{item.object_type}"
-                    )
-            elif item.object_type not in AUTO_WRITABLE_OBJECT_TYPES:
-                # Fail closed (audit SDI-4): executable surfaces such as
-                # hooks and agents have no staging writer, so an eligible
-                # item of that kind must never be recorded as applied.
-                raise ValueError(
-                    "object type has no automatic writer and must be "
-                    f"rebuilt manually: {item.object_type}"
-                )
             ensure_no_symlink_components(source.resolved_path, source.boundary)
             ensure_no_symlink_components(target.resolved_path, target.boundary)
             ensure_no_symlinks(source.resolved_path)
@@ -3567,82 +3455,16 @@ def apply_plan(
                         "boundary": target.boundary,
                     }
                 )
-            elif item.object_type == "plugins":
-                # Plugin packages: copy entire .factory-plugin/ directory structure
-                # preserving all subdirectories (commands/, skills/, droids/, hooks/, mcp.json, plugin.json)
-                if not source.resolved_path.is_dir():
-                    raise ValueError("plugins source must be a directory")
-                ensure_no_symlinks(source.resolved_path)
-                for child in sorted(source.resolved_path.iterdir()):
-                    if child.is_symlink():
-                        continue
-                    if child.is_file():
-                        staged = stage_root / f"{len(operations):04d}-{child.name}"
-                        shutil.copy2(child, staged)
-                        operations.append(
-                            {
-                                "kind": "file",
-                                "staged": staged,
-                                "destination": target.resolved_path / child.name,
-                                "boundary": target.boundary,
-                            }
-                        )
-                    elif child.is_dir():
-                        ensure_no_symlinks(child)
-                        staged_dir = stage_root / f"{len(operations):04d}-{child.name}"
-                        shutil.copytree(child, staged_dir)
-                        operations.append(
-                            {
-                                "kind": "directory",
-                                "staged": staged_dir,
-                                "destination": target.resolved_path / child.name,
-                                "boundary": target.boundary,
-                            }
-                        )
-            elif item.object_type == "handoff":
-                # Session-derived transfer reached here only with the
-                # explicit --include-session opt-in (audit SDI-2).
-                # Strict whitelist serialization (P0-4): only transfer reviewed_summary,
-                # git_branch, selected_files, patch. Discard all raw conversation, logs,
-                # tokens, machine paths, cwd, git_root, oauth/session state.
-                if source.resolved_path.is_file():
-                    source_text = source.resolved_path.read_text(encoding="utf-8")
-                    try:
-                        session_raw = json.loads(source_text)
-                    except json.JSONDecodeError:
-                        session_raw = {"reviewed_summary": "Reviewed handoff snapshot"}
-                    portable_data = serialize_portable_handoff(session_raw, workspace)
-                    rendered = json.dumps(portable_data, indent=2, sort_keys=True) + "\n"
-                    staged = stage_root / f"{len(operations):04d}-handoff"
-                    atomic_write(staged, rendered)
-                    operations.append(
-                        {
-                            "kind": "file",
-                            "staged": staged,
-                            "destination": target.resolved_path,
-                            "boundary": target.boundary,
-                        }
-                    )
-                elif source.resolved_path.is_dir():
-                    for session_file in sorted(source.resolved_path.iterdir()):
-                        if session_file.is_file():
-                            session_text = session_file.read_text(encoding="utf-8")
-                            try:
-                                session_raw = json.loads(session_text)
-                            except json.JSONDecodeError:
-                                session_raw = {"reviewed_summary": "Reviewed handoff snapshot"}
-                            portable_data = serialize_portable_handoff(session_raw, workspace)
-                            rendered = json.dumps(portable_data, indent=2, sort_keys=True) + "\n"
-                            staged = stage_root / f"{len(operations):04d}-{session_file.name}"
-                            atomic_write(staged, rendered)
-                            operations.append(
-                                {
-                                    "kind": "file",
-                                    "staged": staged,
-                                    "destination": target.resolved_path / session_file.name,
-                                    "boundary": target.boundary,
-                                }
-                            )
+            else:
+                # Fail closed (audits SDI-4 / SDI-1 / SDI-2): executable
+                # surfaces, opaque plugin packages, and handoff/session
+                # artifacts have no staging writer.  An eligible item of
+                # any other object type is a contract violation, never a
+                # silent write or an applied-without-writes entry.
+                raise ValueError(
+                    "object type has no automatic writer and must be "
+                    f"rebuilt manually: {item.object_type}"
+                )
 
         destinations = [operation["destination"] for operation in operations]
         if len(destinations) != len(set(destinations)):
