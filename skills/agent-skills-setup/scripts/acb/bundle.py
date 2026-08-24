@@ -768,11 +768,22 @@ def collect_source_objects(
 
         try:
             if source_path.is_file():
-                if storage == "config-subobject":
+                if obj_type == "mcp" or storage == "config-subobject":
                     if obj_type == "mcp":
+                        # MCP objects never travel as raw bytes (clawscan
+                        # 0.8.30): shared host settings files such as
+                        # ~/.gemini/settings.json or ~/.claude.json carry
+                        # sibling state the skill promises not to copy.
+                        # Extract only the authorized servers subobject;
+                        # an undecodable document is a policy exclusion,
+                        # never a raw-copy fallback.
                         from migration_core import parse_mcp_document, emit_mcp_document
-                        raw_text = source_path.read_text(encoding="utf-8")
-                        servers = parse_mcp_document(raw_text, format_name)
+                        try:
+                            raw_text = source_path.read_text(encoding="utf-8")
+                            servers = parse_mcp_document(raw_text, format_name)
+                        except ValueError:
+                            _record("excluded_by_policy")
+                            return
                         emitted_text, _ = emit_mcp_document(servers, format_name)
                         objects[relative] = emitted_text.encode("utf-8")
                     elif obj_type == "instructions":
@@ -860,11 +871,18 @@ def collect_source_objects(
                 if _SENSITIVE_FILENAME_HINT.search(source_path.name):
                     _record("secret_rejected")
                     return
-                if storage == "config-subobject":
+                if object_type == "mcp" or storage == "config-subobject":
                     if object_type == "mcp":
+                        # Same subobject-only contract as the plan-item
+                        # path: shared host settings files must never be
+                        # bundled as raw bytes.
                         from migration_core import parse_mcp_document, emit_mcp_document
-                        raw_text = source_path.read_text(encoding="utf-8")
-                        servers = parse_mcp_document(raw_text, format_name)
+                        try:
+                            raw_text = source_path.read_text(encoding="utf-8")
+                            servers = parse_mcp_document(raw_text, format_name)
+                        except ValueError:
+                            _record("excluded_by_policy")
+                            return
                         emitted_text, _ = emit_mcp_document(servers, format_name)
                         objects[relative] = emitted_text.encode("utf-8")
                     elif object_type == "instructions":
