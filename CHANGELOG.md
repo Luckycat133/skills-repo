@@ -2,6 +2,37 @@
 
 This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-08-25
+
+### Fixed
+
+- **P0-1 (Restore --all-installed object-level conflict handling)**:
+  - Replaced surface-level target deduplication in `restore --all-installed` with fine-grained object-level deduplication.
+  - Multi-source restores (e.g. Cline, Cursor, Claude Code into a single target IDE) now restore all non-conflicting skills and configurations instead of silently skipping subsequent sources.
+  - Conflicting skills/instructions are explicitly tagged with `status: conflict` and recorded in `loss_report`.
+- **P0-2 (ACB Manifest strict 1:1 object-to-file binding)**:
+  - `collect_source_objects()` now returns explicit `object_file_map` mapping each object to its exact files.
+  - Removed broad prefix fallback matching in `enrich_manifest_object()`.
+  - `verify_bundle()` strictly rejects bundles where any file is claimed by multiple manifest objects, and ensures every portable object claims at least one file.
+- **P1-1 (Capability registry unification)**:
+  - Unified `AUTOMATIC_OBJECT_TYPES` (`skills`, `instructions`, `mcp`), `OPT_IN_WRITABLE_OBJECT_TYPES` (`plugins`, `handoff`), and `INVENTORY_ONLY_OBJECT_TYPES` across `migration_core.py` and `context-migrator.py`.
+- **P1-2 (Compatibility matrix non-empty fix)**:
+  - Corrected `compatibility.json` generation to check `migration_policy in AUTOMATIC_MIGRATION_POLICIES` instead of `support_level`, generating full bidirectional matrix pairs.
+- **P1-3 (All-installed target filtering)**:
+  - `restore --all-installed` defaults strictly to `INSTALLED` and `CONFIGURED_ONLY` targets; `COMPATIBILITY_ONLY` targets now require `--include-compatibility`.
+- **P1-5 (Permissions clarification)**:
+  - Updated permissions description to explicitly declare local read-only detection commands (`git`, `--version`, `mdfind`) without binary downloads or installations.
+- **P1-6 (Ed25519 CLI commands)**:
+  - Wired `bundle-keygen`, `bundle-sign`, and `bundle-verify --trusted-key` / `restore --trusted-key` into `context-migrator.py` CLI.
+- **P1-7 (Atomic bundle replacement with rollback)**:
+  - `write_bundle()` now backs up pre-existing bundles during atomic staging and restores automatically if file replacement encounters an error.
+
+### Added
+
+- **Repo positioning and sponsorship**:
+  - Repositioned as **Agent Context Migrator** across documentation and README.
+  - Added `.github/FUNDING.yml` for GitHub Sponsors and custom sponsor links.
+
 ## [0.8.33] - 2026-08-24
 
 ### Changed

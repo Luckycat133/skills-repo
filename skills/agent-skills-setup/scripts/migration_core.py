@@ -56,6 +56,8 @@ KNOWN_COMMANDS = {
     "migrate",
     "snapshot",
     "bundle-verify",
+    "bundle-sign",
+    "bundle-keygen",
     "restore",
     "doctor",
 }
@@ -83,35 +85,40 @@ AUTOMATIC_MIGRATION_POLICIES = {
     "agent-ir-reviewed",
     "hook-ir-reviewed",
 }
-# The declared automatic surface is exactly the portable trio (audit
+# The declared automatic surface is the portable trio:
 AUTOMATIC_OBJECT_TYPES = frozenset({
     "skills",
     "instructions",
     "mcp",
-    "prompts",
-    "commands",
+})
+# Explicit opt-in transfer types
+OPT_IN_WRITABLE_OBJECT_TYPES = frozenset({"plugins", "handoff"})
+# Object types apply_plan knows how to stage atomically.
+AUTO_WRITABLE_OBJECT_TYPES = frozenset({"skills", "instructions", "mcp", "plugins"})
+MANUAL_TEMPLATE_OBJECT_TYPES = frozenset({"prompts", "commands"})
+DRAFT_ONLY_OBJECT_TYPES = frozenset({
     "agents",
     "hooks",
-})
-# Object types apply_plan knows how to stage atomically.  Executable
-# surfaces (hooks, agents) and session-derived artifacts (handoff) have
-# NO automatic writer: if one somehow arrives eligible (e.g. from a
-# replayed plan), the apply fails closed instead of writing to a live
-# product path or recording an applied item with no writes (audit SDI-4).
-AUTO_WRITABLE_OBJECT_TYPES = frozenset({"skills", "instructions", "mcp", "plugins"})
-INVENTORY_ONLY_OBJECT_TYPES = frozenset({
     "workflows",
-    "plugins",
-    "handoff",
-    "config",
-    "policy",
-    "trust",
-    "user_memory",
     "automation",
     "cron",
     "personas",
     "modes",
 })
+FORBIDDEN_OBJECT_TYPES = frozenset({
+    "config",
+    "policy",
+    "trust",
+    "user_memory",
+    "generated_memory",
+    "cloud_knowledge",
+})
+INVENTORY_ONLY_OBJECT_TYPES = (
+    MANUAL_TEMPLATE_OBJECT_TYPES
+    | DRAFT_ONLY_OBJECT_TYPES
+    | FORBIDDEN_OBJECT_TYPES
+    | {"handoff", "plugins"}
+)
 AUTOMATIC_SURFACE_POLICIES = {
     "validate-then-atomic-copy",
     "semantic-ir-with-loss-report",
@@ -2140,6 +2147,17 @@ def preflight_plan_skill_sources(plan: list[PlanItem]) -> None:
             preflight_skill_source(skill_dir)
 
 
+def preflight_plugin_source(plugin_dir: Path) -> None:
+    """Fail closed before copying a plugin package that may contain literal credentials or sensitive files."""
+    ensure_no_symlinks(plugin_dir)
+    findings = scan_skill_source_tree(plugin_dir)
+    if findings:
+        details = "; ".join(f"{path}: {reason}" for path, reason in findings)
+        raise ValueError(
+            f"plugin package credential preflight failed for {plugin_dir.name}: {details}"
+        )
+
+
 def preflight_instruction_source(path: Path) -> None:
     try:
         data = path.read_bytes()
@@ -3559,6 +3577,7 @@ def apply_plan(
                 if not source.resolved_path.is_dir():
                     raise ValueError("plugins source must be a directory")
                 ensure_no_symlinks(source.resolved_path)
+                preflight_plugin_source(source.resolved_path)
                 for child in sorted(source.resolved_path.iterdir()):
                     if child.is_symlink():
                         continue
