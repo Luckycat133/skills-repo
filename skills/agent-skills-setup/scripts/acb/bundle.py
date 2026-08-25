@@ -1068,7 +1068,7 @@ def verify_bundle(bundle_root: Path) -> list[str]:
             continue
         if path.is_file():
             rel_posix = path.relative_to(bundle_root).as_posix()
-            if rel_posix != ACB_CHECKSUMS_NAME:
+            if rel_posix not in (ACB_CHECKSUMS_NAME, ACB_SIGNATURE_NAME):
                 actual_files.add(rel_posix)
 
     extra_files = actual_files - expected_files
