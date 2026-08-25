@@ -18,14 +18,14 @@ exact-release CI matrix on `ubuntu-latest`, `macos-latest`, and
 - Plan / apply / verify / rollback are profile-aware, replayable, and
   checksummed. Every plan item carries a stable `object_id`.
 - ACB (`snapshot`, `bundle-verify`, `restore`, `doctor`) writes a
-  closed-world, atomic-staged bundle with a 1:1 manifest-to-object
-  binding validated by SHA256.
+  closed-world, atomic-staged bundle with a strict 1:1 manifest-to-object
+  binding validated by SHA256 (0.9.0).
 - Bundles are signed with **Ed25519** over `checksums.json` (P1-5, 0.8.27).
-  `sign_bundle` / `verify_bundle_signature` accept `--trusted-key <id_ed25519.pub>`.
+  `bundle-keygen`, `bundle-sign`, and `bundle-verify` / `restore` accept `--trusted-key <id_ed25519.pub>` (0.9.0).
   HMAC-SHA256 is retained for backward compatibility.
 - `--all-installed` snapshot and restore use real detection results as
   the only source of truth (no `inventory.exists` fallback) and
-  iterate plan items, not inventory rows (P0-3, 0.8.27).
+  iterate plan items with object-level conflict handling (0.9.0).
 - MCP / Instructions / Skills use explicit adapter registries. JSONC
   uses a reviewed parser; JSON5 / TOML / YAML / XML / Lua / ambiguous
   UUID+JSON fail to a dedicated manual adapter.

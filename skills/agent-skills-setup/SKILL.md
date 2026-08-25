@@ -3,8 +3,8 @@ name: agent-skills-setup
 license: MIT
 compatibility: Requires local Bash, Python 3, environment lookup, and filesystem reads. Writes only approved migration targets; no network access.
 metadata:
-  version: "0.8.33"
-  permissions.shell: "bundled offline Bash/Python scripts in scripts/ only"
+  version: "0.9.0"
+  permissions.shell: "bundled offline Bash/Python scripts plus local read-only detection commands"
   permissions.env: "read environment variables to resolve product paths"
   permissions.file_read: "named source products, workspace tree, bundled references"
   permissions.file_write: "reviewed plan targets after explicit --yes consent"
@@ -21,17 +21,17 @@ description: >
 
 ## Permissions
 
-- `shell`: bundled offline Bash/Python scripts only; no other binary is invoked.
+- `shell`: bundled offline scripts plus local read-only detection commands (git, version, mdfind). No downloads or binary installations.
 - `env`: path resolution only; credential-looking values are redacted, never copied or printed.
-- `file_read`: named source products, workspace tree, bundled `references/`; no startup sniffing of unlisted products.
-- `file_write`: reviewed plan targets after `--yes` consent; backups/manifests/rollback state under `<workspace>/.agent-context-migration/`.
+- `file_read`: named source products, workspace tree, bundled `references/`; no probing of unlisted products.
+- `file_write`: reviewed plan targets after `--yes` consent; state under `<workspace>/.agent-context-migration/`.
 - `network`: denied. Every subcommand is offline; no downloads, telemetry, or remote calls.
 
 ## Capabilities and authorization
 
 - `detect`, `doctor`, `inventory`, `plan`, `snapshot`, and `bundle-verify` read only named products and workspace; network access is forbidden.
 - A generic migration request authorizes planning only; separate explicit user approval (`--yes`) or explicit action verbs (apply, restore, 迁到) under `--apply-safe` authorize write.
-- Save the plan, review its diff/rebuild manifest, and apply that exact file. ACB `restore` constructs a dual-side plan binding bundle source directly to real destination targets, supporting replayable plans (`--plan-in`) with strict TOCTOU state lock enforcement.
+- Save the plan, review its diff/rebuild manifest, and apply that exact file. ACB `restore` constructs a dual-side plan binding bundle sources to destination targets, supporting replayable plans (`--plan-in`) with strict TOCTOU state guards.
 
 ## Route
 
@@ -47,7 +47,7 @@ description: >
 
 - High-level: `bash scripts/smart-ide-migration.sh migrate --source <src> --target <dst> --workspace . --objects all-portable --yes`
 - Step-by-step: `plan --output <plan.json>` -> `apply <plan.json> --manifest <manifest.json> --yes` -> `verify --manifest <manifest.json>` -> `rollback --manifest <manifest.json> --yes`.
-- Device handoff (ACB): `snapshot` captures portable skills/instructions/MCP with atomic staging and 1:1 manifest bindings (subobject extraction only); `bundle-verify` re-checks checksums, bindings, secrets; `restore [--plan-only | --plan-in <plan> --yes]` reviews then executes the exact dual-side plan. `--all-installed` is a bulk operation — review its printed detection table before proceeding; all writes still require plan review plus `--yes`.
+- Device handoff (ACB): `snapshot` captures portable skills/instructions/MCP with atomic staging and 1:1 manifest bindings; `bundle-verify` re-checks checksums, bindings, secrets, and signatures; `restore [--plan-only | --plan-in <plan> --yes]` reviews then executes the dual-side plan. `--all-installed` bulk mode requires review and `--yes`.
 - Cross-platform: `%APPDATA%` / `%USERPROFILE%` / `$APPDATA` resolution, platform detection, per-surface path isolation (remote hosts experimental). `detect` / `doctor` inspect installation state offline.
 - The explicit `legacy` subcommand is read-only lookup compatibility (`--print-path`, `--dry-run`); legacy writes are disabled and enforced by the Python wrapper.
 - Object-type scope (exhaustive — apply writes nothing outside it):

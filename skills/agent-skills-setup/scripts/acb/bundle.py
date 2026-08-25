@@ -143,6 +143,7 @@ def enrich_manifest_object(
     obj: dict[str, Any],
     objects_dir_files: dict[str, bytes],
     adapter_versions: dict[str, str] | None = None,
+    object_file_map: dict[str, list[str]] | None = None,
 ) -> dict[str, Any]:
     """Enrich a manifest object with file list, hashes, and metadata.
 
@@ -161,23 +162,33 @@ def enrich_manifest_object(
     scp = obj_dict.get("scope", "")
 
     # Build logical object path
-    obj_dict["object_path"] = f"{obj_type}/{prod}/{prof}/{scp}"
+    obj_key = f"{obj_type}/{prod}/{prof}/{scp}"
+    obj_dict["object_path"] = obj_key
 
     # Collect files for this object
     obj_files = []
-    prefix = f"{obj_type}/{prod}/{prof}/{scp}/"
+    prefix = f"{obj_key}/"
     primary_hash = None
-    for rel_path, data in sorted((objects_dir_files or {}).items()):
-        if rel_path.startswith(prefix) or (obj_type and rel_path.startswith(f"{obj_type}/")):
-            file_hash = hashlib.sha256(data).hexdigest()
-            file_entry = {
-                "path": f"{ACB_OBJECTS_DIR}/{Path(rel_path).as_posix()}",
-                "sha256": file_hash,
-                "size": len(data),
-            }
-            obj_files.append(file_entry)
-            if primary_hash is None:
-                primary_hash = file_hash
+
+    if object_file_map is not None and obj_key in object_file_map:
+        file_paths = sorted(set(object_file_map[obj_key]))
+    else:
+        file_paths = sorted([
+            rel_path for rel_path in (objects_dir_files or {}).keys()
+            if rel_path.startswith(prefix)
+        ])
+
+    for rel_path in file_paths:
+        data = (objects_dir_files or {}).get(rel_path, b"")
+        file_hash = hashlib.sha256(data).hexdigest()
+        file_entry = {
+            "path": f"{ACB_OBJECTS_DIR}/{Path(rel_path).as_posix()}",
+            "sha256": file_hash,
+            "size": len(data),
+        }
+        obj_files.append(file_entry)
+        if primary_hash is None:
+            primary_hash = file_hash
     obj_dict["files"] = obj_files
     obj_dict["content_hash"] = primary_hash
 
@@ -523,23 +534,24 @@ def write_bundle(
     rebuild: list[dict[str, str]],
     objects_dir_files: dict[str, bytes] | None = None,
     adapter_versions: dict[str, str] | None = None,
+    object_file_map: dict[str, list[str]] | None = None,
 ) -> Path:
     """Write a fully-formed, closed-world ACB at ``bundle_root`` atomically.
 
-    Staging & Atomic Swap (audit P1 & 0.8.25):
+    Staging & Atomic Swap with Rollback Protection (audit P1-7):
     1. Writes all JSON payloads, object files, and checksums to a temporary staging directory
        on the same filesystem.
     2. Performs byte-level secret scanning and path containment checks during staging.
     3. Runs verify_bundle() on the staged bundle.
-    4. Upon successful verification, atomically replaces staging into bundle_root.
-    5. If any error occurs during write or verification, cleans up staging without corrupting
-       any existing bundle_root.
+    4. Upon successful verification, atomically replaces staging into bundle_root via backup/rename.
+    5. If any error occurs during write, verification, or replace, rolls back cleanly.
     """
     bundle_root = bundle_root.resolve()
     parent_dir = bundle_root.parent
     parent_dir.mkdir(parents=True, exist_ok=True)
 
     staging_dir = Path(tempfile.mkdtemp(prefix=f".tmp_{bundle_root.name}_", dir=parent_dir))
+    backup_dir: Path | None = None
     try:
         objects_root = staging_dir / ACB_OBJECTS_DIR
         objects_root.mkdir(parents=True, exist_ok=True)
@@ -550,7 +562,9 @@ def write_bundle(
         # Build 1:1 object-to-file mapping for manifest with rich metadata
         enriched_manifest_objects = []
         for obj in manifest.objects:
-            enriched = enrich_manifest_object(obj, objects_dir_files, adapter_versions)
+            enriched = enrich_manifest_object(
+                obj, objects_dir_files, adapter_versions, object_file_map
+            )
             enriched_manifest_objects.append(enriched)
 
         manifest_payload = manifest.to_dict()
@@ -618,13 +632,23 @@ def write_bundle(
         if verify_errors:
             raise ACBIntegrityError(f"staged bundle failed verification: {verify_errors}")
 
-        # Atomic replace
+        # Atomic replace with rollback protection (audit P1-7)
         if bundle_root.exists():
-            if bundle_root.is_dir():
-                shutil.rmtree(bundle_root)
-            else:
-                bundle_root.unlink()
-        staging_dir.rename(bundle_root)
+            backup_dir = Path(tempfile.mkdtemp(prefix=f".bak_{bundle_root.name}_", dir=parent_dir))
+            backup_target = backup_dir / "old_bundle"
+            bundle_root.rename(backup_target)
+
+        try:
+            staging_dir.rename(bundle_root)
+            if backup_dir and backup_dir.exists():
+                shutil.rmtree(backup_dir, ignore_errors=True)
+        except Exception:
+            # If staging rename failed, restore the previous bundle from backup
+            if backup_dir and (backup_dir / "old_bundle").exists() and not bundle_root.exists():
+                (backup_dir / "old_bundle").rename(bundle_root)
+                shutil.rmtree(backup_dir, ignore_errors=True)
+            raise
+
         return bundle_root
 
     except Exception:
@@ -644,7 +668,7 @@ def collect_source_objects(
     allowed_scopes: set[str] | None = None,
     allowed_object_types: set[str] | None = None,
     plan_items: list[dict[str, Any]] | None = None,
-) -> tuple[dict[str, bytes], dict[str, int]]:
+) -> tuple[dict[str, bytes], dict[str, int], dict[str, list[str]]]:
     """Walk plan items and copy source files into stable paths under ``objects/``.
 
     Audit P1-1 (0.8.27): primary iteration is over plan_items. Each
@@ -665,16 +689,18 @@ def collect_source_objects(
     - secret_rejected    - sensitive filename or secret scan hit
     - conflict           - same bundle-relative path mapped from multiple sources
 
+    Audit P0-2: returns explicit 1:1 ``object_file_map`` tracking which
+    files under ``objects/`` belong to each (object_type, product, profile, scope).
+
     Strict Allowlist (audit P0-2 & 0.8.25):
     - Refuses forbidden policies (forbidden-regenerate, never-migrate, source-only, etc.)
     - Refuses non-migratable types (generated_memory, session, chat, runtime, database, trust, etc.)
     - Only collects requested scopes and requested object types
 
-    Returns ``(objects, summary)``. When ``plan_items`` is None the legacy
-    inventory-row iteration is preserved for backwards compatibility, but
-    it still emits summary statuses.
+    Returns ``(objects, summary, object_file_map)``.
     """
     objects: dict[str, bytes] = {}
+    object_file_map: dict[str, list[str]] = {}
     summary: dict[str, int] = {
         "captured": 0,
         "manual_rebuild": 0,
@@ -711,6 +737,8 @@ def collect_source_objects(
         scope = src.get("scope") or ""
         resolved_path = src.get("resolved_path")
         item_status = item.get("status") or ""
+
+        obj_key = f"{obj_type}/{prod}/{prof}/{scope}"
 
         # source_product / source_profile are passed only in single-source
         # mode. In all-installed mode they are None, so this is a no-op.
@@ -786,12 +814,14 @@ def collect_source_objects(
                             return
                         emitted_text, _ = emit_mcp_document(servers, format_name)
                         objects[relative] = emitted_text.encode("utf-8")
+                        object_file_map.setdefault(obj_key, []).append(relative)
                     elif obj_type == "instructions":
                         from migration_core import parse_instruction, emit_instruction
                         raw_text = source_path.read_text(encoding="utf-8")
                         instruction = parse_instruction(raw_text, format_name, scope, storage)
                         emitted_text, _ = emit_instruction(instruction, format_name)
                         objects[relative] = emitted_text.encode("utf-8")
+                        object_file_map.setdefault(obj_key, []).append(relative)
                     else:
                         # Refuse to copy raw host config files for unsupported
                         # subobject types. Audit P1-2: this is an explicit
@@ -800,8 +830,12 @@ def collect_source_objects(
                         return
                 else:
                     objects[relative] = source_path.read_bytes()
+                    object_file_map.setdefault(obj_key, []).append(relative)
             elif source_path.is_dir():
+                start_keys = set(objects.keys())
                 _collect_tree(source_path, relative, objects, depth=0)
+                new_keys = set(objects.keys()) - start_keys
+                object_file_map.setdefault(obj_key, []).extend(sorted(new_keys))
             else:
                 _record("parse_failed")
                 return
@@ -837,6 +871,8 @@ def collect_source_objects(
         scope = row.get("scope") or "unknown"
         product = row.get("product") or ""
         profile = row.get("profile") or "default"
+
+        obj_key = f"{object_type}/{product}/{profile}/{scope}"
 
         if policy in FORBIDDEN_SNAPSHOT_POLICIES:
             _record("excluded_by_policy")
@@ -885,19 +921,25 @@ def collect_source_objects(
                             return
                         emitted_text, _ = emit_mcp_document(servers, format_name)
                         objects[relative] = emitted_text.encode("utf-8")
+                        object_file_map.setdefault(obj_key, []).append(relative)
                     elif object_type == "instructions":
                         from migration_core import parse_instruction, emit_instruction
                         raw_text = source_path.read_text(encoding="utf-8")
                         instruction = parse_instruction(raw_text, format_name, scope, storage)
                         emitted_text, _ = emit_instruction(instruction, format_name)
                         objects[relative] = emitted_text.encode("utf-8")
+                        object_file_map.setdefault(obj_key, []).append(relative)
                     else:
                         _record("excluded_by_policy")
                         return
                 else:
                     objects[relative] = source_path.read_bytes()
+                    object_file_map.setdefault(obj_key, []).append(relative)
             elif source_path.is_dir():
+                start_keys = set(objects.keys())
                 _collect_tree(source_path, relative, objects, depth=0)
+                new_keys = set(objects.keys()) - start_keys
+                object_file_map.setdefault(obj_key, []).extend(sorted(new_keys))
             else:
                 _record("parse_failed")
                 return
@@ -918,7 +960,7 @@ def collect_source_objects(
         for row in rows:
             _process_inventory_row(row)
 
-    return objects, summary
+    return objects, summary, object_file_map
 
 
 def _collect_tree(dir_path: Path, prefix: str, out: dict[str, bytes], depth: int = 0) -> None:
@@ -1111,11 +1153,18 @@ def verify_bundle(bundle_root: Path) -> list[str]:
             manifest_data = json.loads(manifest_path.read_text(encoding="utf-8"))
             declared_objects = manifest_data.get("objects", [])
             manifest_files: set[str] = set()
+            file_claimants: dict[str, list[str]] = {}
             for obj in declared_objects:
-                for file_entry in obj.get("files", []):
+                obj_path = obj.get("object_path") or f"{obj.get('object_type')}/{obj.get('product')}/{obj.get('profile')}/{obj.get('scope')}"
+                obj_status = obj.get("status", "")
+                obj_files = obj.get("files", [])
+                if obj_status in {"ready", "ready-lossy"} and not obj_files:
+                    errors.append(f"manifest object {obj_path} ({obj_status}) declares no files")
+                for file_entry in obj_files:
                     rel_p = file_entry.get("path", "")
                     if rel_p:
                         manifest_files.add(rel_p)
+                        file_claimants.setdefault(rel_p, []).append(obj_path)
                         expected_sha = file_entry.get("sha256")
                         disk_p = bundle_root / rel_p
                         if not disk_p.is_file():
@@ -1126,6 +1175,13 @@ def verify_bundle(bundle_root: Path) -> list[str]:
                                 errors.append(
                                     f"manifest file sha256 mismatch for {rel_p}: expected {expected_sha}, got {actual_sha}"
                                 )
+
+            # Enforce 1:1: Each file must be claimed by at most one object
+            for rel_p, claimants in file_claimants.items():
+                if len(claimants) > 1:
+                    errors.append(
+                        f"manifest file {rel_p} claimed by multiple objects: {claimants}"
+                    )
 
             # If manifest declared specific object files, ensure no undeclared files exist in objects/
             objects_root = bundle_root / ACB_OBJECTS_DIR

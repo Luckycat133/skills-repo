@@ -23,7 +23,11 @@ if _SCRIPT_DIR not in sys.path:
 
 from migration_core import (
     ADAPTER_VERSIONS,
+    AUTOMATIC_MIGRATION_POLICIES,
+    AUTOMATIC_OBJECT_TYPES,
+    INVENTORY_ONLY_OBJECT_TYPES,
     KNOWN_COMMANDS,
+    OPT_IN_WRITABLE_OBJECT_TYPES,
     Registry,
     apply_plan,
     atomic_write,
@@ -45,6 +49,7 @@ from acb.bundle import (
     ACB_CHECKSUMS_NAME,
     ACB_OBJECTS_DIR,
     ACB_SCHEMA_VERSION,
+    ACBError,
     ACBManifest,
     ACBSecretLeak,
     collect_reauth,
@@ -54,7 +59,9 @@ from acb.bundle import (
     load_manifest,
     make_bundle_id,
     restore_bundle_objects,
+    sign_bundle,
     verify_bundle,
+    verify_bundle_signature,
     write_bundle,
 )
 
@@ -245,13 +252,64 @@ def create_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Snapshot all detected and installed products on this device.",
     )
+    snapshot.add_argument(
+        "--include-configured",
+        action="store_true",
+        help="Include products detected in configured-only state.",
+    )
+    snapshot.add_argument(
+        "--include-compatibility",
+        action="store_true",
+        help="Include products detected in compatibility-only state.",
+    )
 
     verify_bundle = subparsers.add_parser(
         "bundle-verify",
-        help="Verify checksums inside an ACB directory.",
+        help="Verify checksums and optional Ed25519 signature inside an ACB directory.",
     )
     verify_bundle.add_argument("bundle", type=Path)
+    verify_bundle.add_argument(
+        "--trusted-key",
+        type=Path,
+        help="Path to trusted Ed25519 public key file to verify bundle signature.",
+    )
     verify_bundle.add_argument("--json", action="store_true", default=True)
+
+    bundle_sign = subparsers.add_parser(
+        "bundle-sign",
+        help="Sign an ACB directory with an Ed25519 private key.",
+    )
+    bundle_sign.add_argument("bundle", type=Path)
+    bundle_sign.add_argument(
+        "--key",
+        type=Path,
+        required=True,
+        help="Path to Ed25519 private key file (must be chmod 600).",
+    )
+    bundle_sign.add_argument(
+        "--signer",
+        default="local-operator",
+        help="Identifier or name of the signer.",
+    )
+    bundle_sign.add_argument("--json", action="store_true", default=True)
+
+    bundle_keygen = subparsers.add_parser(
+        "bundle-keygen",
+        help="Generate Ed25519 keypair for signing and verifying ACBs.",
+    )
+    bundle_keygen.add_argument(
+        "--out-private",
+        type=Path,
+        required=True,
+        help="Destination path for private key file (will be chmod 600).",
+    )
+    bundle_keygen.add_argument(
+        "--out-public",
+        type=Path,
+        required=True,
+        help="Destination path for public key file.",
+    )
+    bundle_keygen.add_argument("--json", action="store_true", default=True)
 
     restore = subparsers.add_parser(
         "restore",
@@ -266,6 +324,33 @@ def create_parser() -> argparse.ArgumentParser:
         "--all-installed",
         action="store_true",
         help="Restore context across all detected and installed target products.",
+    )
+    restore.add_argument(
+        "--include-configured",
+        action="store_true",
+        help="Include target products detected in configured-only state.",
+    )
+    restore.add_argument(
+        "--include-compatibility",
+        action="store_true",
+        help="Include target products detected in compatibility-only state.",
+    )
+    restore.add_argument(
+        "--include-session",
+        dest="include_session",
+        action="store_true",
+        help="Explicitly opt in to handoff/session transfer.",
+    )
+    restore.add_argument(
+        "--include-plugins",
+        dest="include_plugins",
+        action="store_true",
+        help="Explicitly opt in to plugin package transfer.",
+    )
+    restore.add_argument(
+        "--trusted-key",
+        type=Path,
+        help="Path to trusted Ed25519 public key file to verify bundle signature.",
     )
     restore.add_argument("--plan-out", type=Path)
     restore.add_argument(
@@ -345,28 +430,6 @@ def reject_legacy_write(argv: list[str]) -> None:
             "pass --print-path <ide> <object> or --dry-run. "
             "Use 'plan' / 'apply' for migrations."
         )
-
-
-AUTOMATIC_OBJECT_TYPES = {"skills", "instructions", "mcp"}
-INVENTORY_ONLY_OBJECT_TYPES = {
-    "prompts",
-    "commands",
-    "workflows",
-    "plugins",
-    "handoff",
-    "agents",
-    "modes",
-    "personas",
-    "hooks",
-    "cron",
-    "automation",
-    "user_memory",
-    "generated_memory",
-    "cloud_knowledge",
-    "config",
-    "policy",
-    "trust",
-}
 
 
 def resolve_objects(value: str) -> list[str]:
@@ -751,7 +814,7 @@ def run_snapshot(args: argparse.Namespace) -> int:
 
     collect_summary = {"captured": 0, "manual_rebuild": 0, "excluded_by_policy": 0, "parse_failed": 0, "secret_rejected": 0, "conflict": 0}
     try:
-        objects_dir_files, collect_summary = collect_source_objects(
+        objects_dir_files, collect_summary, object_file_map = collect_source_objects(
             registry,
             inventory_rows,
             home=registry.home,
@@ -777,11 +840,9 @@ def run_snapshot(args: argparse.Namespace) -> int:
         return 1
 
     # compatibility: source_product x target_product matrix sourced from
-    # Registry v2 support_level, not just the product list. Audit P1-7:
-    # the previous "products: [...]" shape was a placeholder, not a
-    # matrix. This is conservative: only include pairs that the Registry
-    # explicitly advertises as bidirectional-reviewed (the surface
-    # support level that ACB restore will actually attempt).
+    # Registry v2 migration_policy and support_level. Audit P1-2: check
+    # migration_policy (bidirectional-reviewed) rather than assuming
+    # support_level == "bidirectional-reviewed".
     compatibility_products = sorted(registry.products.keys())
     compatibility_pairs: list[dict[str, str]] = []
     for src in compatibility_products:
@@ -806,9 +867,12 @@ def run_snapshot(args: argparse.Namespace) -> int:
             # profile() returns (resolved_product, resolved_profile, profile_data)
             src_profile = src_profile_data[2] if len(src_profile_data) > 2 else {}
             tgt_profile = tgt_profile_data[2] if len(tgt_profile_data) > 2 else {}
-            src_support = src_profile.get("support_level")
-            tgt_support = tgt_profile.get("support_level")
-            if src_support == "bidirectional-reviewed" and tgt_support == "bidirectional-reviewed":
+            src_policy = src_profile.get("migration_policy") or src_profile.get("support_level")
+            tgt_policy = tgt_profile.get("migration_policy") or tgt_profile.get("support_level")
+            if (
+                (src_policy == "bidirectional-reviewed" or src_policy in AUTOMATIC_MIGRATION_POLICIES)
+                and (tgt_policy == "bidirectional-reviewed" or tgt_policy in AUTOMATIC_MIGRATION_POLICIES)
+            ):
                 compatibility_pairs.append({
                     "source": src,
                     "target": tgt,
@@ -865,6 +929,7 @@ def run_snapshot(args: argparse.Namespace) -> int:
             rebuild=rebuild,
             objects_dir_files=objects_dir_files,
             adapter_versions=ADAPTER_VERSIONS,
+            object_file_map=object_file_map,
         )
     except ACBSecretLeak as error:
         print(f"ERROR: ACB secret leak: {error}", file=sys.stderr)
@@ -889,17 +954,310 @@ def run_snapshot(args: argparse.Namespace) -> int:
 
 
 def run_bundle_verify(args: argparse.Namespace) -> int:
-    """Verify checksums for every file recorded in checksums.json."""
-    errors = verify_bundle(args.bundle.resolve())
+    """Verify checksums and optional Ed25519 signature for an ACB."""
+    bundle_path = args.bundle.resolve()
+    errors = verify_bundle(bundle_path)
+    trusted_key = getattr(args, "trusted_key", None)
+    if trusted_key:
+        sig_errors = verify_bundle_signature(bundle_path, trusted_key.resolve())
+        errors.extend(sig_errors)
     emit(
         {
             "ok": not errors,
-            "bundle": str(args.bundle.resolve()),
+            "bundle": str(bundle_path),
             "errors": errors,
+            "signature_verified": bool(trusted_key and not errors),
         },
         args.json,
     )
     return 0 if not errors else 1
+
+
+def run_bundle_sign(args: argparse.Namespace) -> int:
+    """Sign an ACB bundle with an Ed25519 private key."""
+    bundle_path = args.bundle.resolve()
+    try:
+        sig_path = sign_bundle(bundle_path, args.key.resolve(), signer=args.signer)
+        emit(
+            {
+                "ok": True,
+                "bundle": str(bundle_path),
+                "signature": str(sig_path),
+                "signer": args.signer,
+            },
+            args.json,
+        )
+        return 0
+    except Exception as error:
+        emit({"ok": False, "bundle": str(bundle_path), "error": str(error)}, args.json)
+        return 1
+
+
+def run_bundle_keygen(args: argparse.Namespace) -> int:
+    """Generate Ed25519 keypair for signing and verifying ACBs."""
+    try:
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+        from cryptography.hazmat.primitives import serialization
+        priv = Ed25519PrivateKey.generate()
+        priv_bytes = priv.private_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PrivateFormat.Raw,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+        pub_bytes = priv.public_key().public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
+        out_priv = args.out_private.resolve()
+        out_pub = args.out_public.resolve()
+        out_priv.parent.mkdir(parents=True, exist_ok=True)
+        out_pub.parent.mkdir(parents=True, exist_ok=True)
+        out_priv.write_bytes(priv_bytes)
+        try:
+            os.chmod(out_priv, 0o600)
+        except Exception:
+            pass
+        out_pub.write_bytes(pub_bytes)
+        emit(
+            {
+                "ok": True,
+                "private_key": str(out_priv),
+                "public_key": str(out_pub),
+            },
+            args.json,
+        )
+        return 0
+    except Exception as error:
+        emit({"ok": False, "error": str(error)}, args.json)
+        return 1
+
+
+def _detect_target_profiles_for_restore(
+    target_registry: Registry,
+    workspace: Path,
+    include_configured: bool = False,
+    include_compatibility: bool = False,
+) -> tuple[set[str], dict[str, str]]:
+    """Probe and filter target profiles on destination device for all-installed restore."""
+    from detect.probes import detect_profile, InstallState
+
+    target_detected_selectors: set[str] = set()
+    target_detection_status: dict[str, str] = {}
+
+    for prod_id, prod in target_registry.products.items():
+        for prof_id, prof in prod.get("profiles", {}).items():
+            detection = prof.get("detection", []) or []
+            profile_state = InstallState.NOT_DETECTED
+            profile_evidence: list[str] = []
+            for probe in detection:
+                if not isinstance(probe, dict):
+                    continue
+                paths = probe.get("paths", [])
+                binaries = probe.get("command") or probe.get("binaries") or []
+                if isinstance(binaries, str):
+                    binaries = [binaries]
+                res = detect_profile(
+                    prod_id,
+                    prof_id,
+                    binaries=binaries,
+                    file_signatures=paths,
+                    home=target_registry.home,
+                    workspace=workspace,
+                    app_bundle_id=probe.get("darwin_bundle_id"),
+                )
+                if res.state.value == "installed":
+                    profile_state = InstallState.INSTALLED
+                    profile_evidence.extend(res.evidence)
+                    break
+                elif res.state.value == "configured-only" and profile_state not in (InstallState.INSTALLED,):
+                    profile_state = InstallState.CONFIGURED_ONLY
+                    profile_evidence.extend(res.evidence)
+                elif res.state.value == "compatibility-only" and profile_state not in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY):
+                    profile_state = InstallState.COMPATIBILITY_ONLY
+                    profile_evidence.extend(res.evidence)
+                elif res.state.value == "cloud-connected" and profile_state not in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY, InstallState.COMPATIBILITY_ONLY):
+                    profile_state = InstallState.CLOUD_CONNECTED
+                    profile_evidence.extend(res.evidence)
+                elif res.state.value == "legacy" and profile_state not in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY, InstallState.COMPATIBILITY_ONLY, InstallState.CLOUD_CONNECTED):
+                    profile_state = InstallState.LEGACY
+                    profile_evidence.extend(res.evidence)
+                elif res.state.value == "ambiguous" and profile_state == InstallState.NOT_DETECTED:
+                    profile_state = InstallState.AMBIGUOUS
+                    profile_evidence.extend(res.evidence)
+
+            selector = f"{prod_id}/{prof_id}"
+            target_detection_status[selector] = profile_state.value
+            # Audit P1-3: strictly filter targets
+            if profile_state == InstallState.INSTALLED or (
+                profile_state == InstallState.CONFIGURED_ONLY
+            ) or (
+                include_compatibility and profile_state == InstallState.COMPATIBILITY_ONLY
+            ):
+                target_detected_selectors.add(selector)
+
+    return target_detected_selectors, target_detection_status
+
+
+def _build_all_installed_restore_items(
+    source_registry: Registry,
+    target_registry: Registry,
+    bundle_source_selectors: list[str],
+    target_detected_selectors: set[str],
+    object_types: list[str],
+    scope: str,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, str]]]:
+    """Build restore plan items with object-level identity, deduplication, and conflict tracking."""
+    all_items: list[dict[str, Any]] = []
+    dropped_losses: list[dict[str, Any]] = []
+    seen_target_skills: dict[tuple[str, str], tuple[str, str]] = {}
+    seen_target_files: dict[str, tuple[str, str]] = {}
+    seen_target_plugins: dict[tuple[str, str], tuple[str, str]] = {}
+    failed_targets: list[dict[str, str]] = []
+
+    for tgt_selector in sorted(target_detected_selectors):
+        for src_selector in bundle_source_selectors:
+            try:
+                doc = build_plan_document(
+                    source_registry,
+                    src_selector,
+                    tgt_selector,
+                    object_types,
+                    scope,
+                    target_registry=target_registry,
+                )
+                for item in doc.get("items", []):
+                    obj_type = item.get("object_type")
+                    target_dict = item.get("target") or {}
+                    source_dict = item.get("source") or {}
+                    target_path = target_dict.get("resolved_path")
+                    source_path_str = source_dict.get("resolved_path")
+                    source_path = Path(source_path_str) if source_path_str else None
+
+                    if not target_path or item.get("status") in {"invalid", "manual-rebuild"}:
+                        continue
+
+                    # Audit P0-1: Object-level conflict detection & deduplication
+                    if obj_type == "skills" and source_path and source_path.is_dir():
+                        skill_subdirs = [
+                            p for p in source_path.iterdir()
+                            if p.is_dir() and (p / "SKILL.md").is_file()
+                        ] if source_path.exists() else []
+
+                        has_conflict = False
+                        has_new_skill = False
+                        for skill_dir in skill_subdirs:
+                            skill_name = skill_dir.name
+                            skill_key = (target_path, skill_name)
+                            skill_hash = hash_path(skill_dir)
+                            if skill_key in seen_target_skills:
+                                prev_hash, prev_src = seen_target_skills[skill_key]
+                                if skill_hash != prev_hash:
+                                    has_conflict = True
+                                    conflict_msg = (
+                                        f"Skill conflict on '{skill_name}': target {target_path} "
+                                        f"already claimed by {prev_src} with differing content"
+                                    )
+                                    dropped_losses.append({
+                                        "object_type": "skills",
+                                        "field": skill_name,
+                                        "reason": conflict_msg,
+                                        "detail": None,
+                                    })
+                            else:
+                                seen_target_skills[skill_key] = (skill_hash, src_selector)
+                                has_new_skill = True
+
+                        if has_conflict:
+                            item_copy = dict(item)
+                            item_copy["status"] = "conflict"
+                            item_copy["reason"] = f"Skill conflict: multiple sources ({src_selector}) target {target_path} with conflicting skills"
+                            all_items.append(item_copy)
+                        elif has_new_skill:
+                            all_items.append(item)
+
+                    elif obj_type == "instructions":
+                        target_path_obj = Path(target_path)
+                        if target_dict.get("storage") == "file" or target_path_obj.suffix in (".md", ".json", ".txt"):
+                            file_key = target_path
+                            source_hash = hash_path(source_path) if (source_path and source_path.exists()) else ""
+                            if file_key in seen_target_files:
+                                prev_hash, prev_src = seen_target_files[file_key]
+                                if source_hash == prev_hash:
+                                    continue
+                                else:
+                                    item_copy = dict(item)
+                                    item_copy["status"] = "conflict"
+                                    item_copy["reason"] = (
+                                        f"Instruction conflict: multiple sources ({prev_src}, {src_selector}) "
+                                        f"target same file {target_path} with different content"
+                                    )
+                                    dropped_losses.append({
+                                        "object_type": "instructions",
+                                        "field": target_path,
+                                        "reason": item_copy["reason"],
+                                        "detail": None,
+                                    })
+                                    all_items.append(item_copy)
+                            else:
+                                seen_target_files[file_key] = (source_hash, src_selector)
+                                all_items.append(item)
+                        else:
+                            all_items.append(item)
+
+                    elif obj_type == "mcp":
+                        file_key = target_path
+                        source_hash = hash_path(source_path) if (source_path and source_path.is_file()) else ""
+                        if file_key in seen_target_files:
+                            prev_hash, prev_src = seen_target_files[file_key]
+                            if source_hash == prev_hash:
+                                continue
+                            else:
+                                all_items.append(item)
+                        else:
+                            seen_target_files[file_key] = (source_hash, src_selector)
+                            all_items.append(item)
+
+                    elif obj_type == "plugins":
+                        pkg_name = source_path.name if source_path else "pkg"
+                        plugin_key = (target_path, pkg_name)
+                        source_hash = hash_path(source_path) if (source_path and source_path.exists()) else ""
+                        if plugin_key in seen_target_plugins:
+                            prev_hash, prev_src = seen_target_plugins[plugin_key]
+                            if source_hash == prev_hash:
+                                continue
+                            else:
+                                item_copy = dict(item)
+                                item_copy["status"] = "conflict"
+                                item_copy["reason"] = f"Plugin conflict: multiple sources ({prev_src}, {src_selector}) targeting {plugin_key}"
+                                dropped_losses.append({
+                                    "object_type": "plugins",
+                                    "field": str(target_path),
+                                    "reason": item_copy["reason"],
+                                    "detail": None,
+                                })
+                                all_items.append(item_copy)
+                        else:
+                            seen_target_plugins[plugin_key] = (source_hash, src_selector)
+                            all_items.append(item)
+
+                    else:
+                        all_items.append(item)
+
+            except Exception as error:
+                # Audit P1-2: never silently swallow per-target plan
+                # build failures during all-installed restore. Surface
+                # the failure so the restore summary can report it.
+                failed_targets.append({
+                    "source": src_selector,
+                    "target": tgt_selector,
+                    "error": str(error),
+                })
+                print(
+                    f"WARNING: restore plan build failed for source={src_selector} target={tgt_selector}: {error}",
+                    file=sys.stderr,
+                )
+
+    return all_items, dropped_losses, failed_targets
 
 
 def run_restore(args: argparse.Namespace) -> int:
@@ -920,6 +1278,10 @@ def run_restore(args: argparse.Namespace) -> int:
     """
     bundle_root = args.bundle.resolve()
     errors = verify_bundle(bundle_root)
+    trusted_key = getattr(args, "trusted_key", None)
+    if trusted_key:
+        sig_errors = verify_bundle_signature(bundle_root, trusted_key.resolve())
+        errors.extend(sig_errors)
     if errors:
         emit({"ok": False, "stage": "verify", "errors": errors}, args.json)
         return 1
@@ -986,62 +1348,15 @@ def run_restore(args: argparse.Namespace) -> int:
                 document, target_registry, source_registry=source_registry
             )
         elif all_installed:
-            # Multi-target all-installed restore: detect installed target IDEs on Device B
-            # and restore applicable bundle objects to each.
-            from detect.probes import detect_profile, InstallState
-            target_detected_selectors: set[str] = set()  # "product/profile" pairs
-            target_detection_status: dict[str, str] = {}  # "product/profile" -> state
-            for prod_id, prod in target_registry.products.items():
-                for prof_id, prof in prod.get("profiles", {}).items():
-                    detection = prof.get("detection", []) or []
-                    profile_state = InstallState.NOT_DETECTED
-                    profile_evidence: list[str] = []
-                    for probe in detection:
-                        if not isinstance(probe, dict):
-                            continue
-                        paths = probe.get("paths", [])
-                        binaries = probe.get("command") or probe.get("binaries") or []
-                        if isinstance(binaries, str):
-                            binaries = [binaries]
-                        res = detect_profile(
-                            prod_id,
-                            prof_id,
-                            binaries=binaries,
-                            file_signatures=paths,
-                            home=target_registry.home,
-                            workspace=workspace,
-                            app_bundle_id=probe.get("darwin_bundle_id"),
-                        )
-                        # Use the most definitive state across all probes for this profile
-                        if res.state.value == "installed":
-                            profile_state = InstallState.INSTALLED
-                            profile_evidence.extend(res.evidence)
-                            break
-                        elif res.state.value == "configured-only" and profile_state not in (InstallState.INSTALLED,):
-                            profile_state = InstallState.CONFIGURED_ONLY
-                            profile_evidence.extend(res.evidence)
-                        elif res.state.value == "compatibility-only" and profile_state not in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY):
-                            profile_state = InstallState.COMPATIBILITY_ONLY
-                            profile_evidence.extend(res.evidence)
-                        elif res.state.value == "cloud-connected" and profile_state not in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY, InstallState.COMPATIBILITY_ONLY):
-                            profile_state = InstallState.CLOUD_CONNECTED
-                            profile_evidence.extend(res.evidence)
-                        elif res.state.value == "legacy" and profile_state not in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY, InstallState.COMPATIBILITY_ONLY, InstallState.CLOUD_CONNECTED):
-                            profile_state = InstallState.LEGACY
-                            profile_evidence.extend(res.evidence)
-                        elif res.state.value == "ambiguous" and profile_state == InstallState.NOT_DETECTED:
-                            profile_state = InstallState.AMBIGUOUS
-                            profile_evidence.extend(res.evidence)
-                    selector = f"{prod_id}/{prof_id}"
-                    target_detection_status[selector] = profile_state.value
-                    if profile_state in (
-                        InstallState.INSTALLED,
-                        InstallState.CONFIGURED_ONLY,
-                        InstallState.COMPATIBILITY_ONLY,
-                    ):
-                        target_detected_selectors.add(selector)
+            target_detected_selectors, target_detection_status = (
+                _detect_target_profiles_for_restore(
+                    target_registry=target_registry,
+                    workspace=workspace,
+                    include_configured=getattr(args, "include_configured", False),
+                    include_compatibility=getattr(args, "include_compatibility", False),
+                )
+            )
 
-            # Extract source selectors from bundle manifest (product/profile pairs that have objects)
             bundle_source_selectors = sorted({
                 f"{obj.get('product')}/{obj.get('profile')}"
                 for obj in manifest.objects
@@ -1050,42 +1365,14 @@ def run_restore(args: argparse.Namespace) -> int:
             if not bundle_source_selectors:
                 bundle_source_selectors = [source_sel] if source_sel else ["cline/ide"]
 
-            all_items: list[dict[str, Any]] = []
-            seen_target_paths: set[str] = set()
-            failed_targets: list[dict[str, str]] = []
-            for tgt_selector in sorted(target_detected_selectors):
-                for src_selector in bundle_source_selectors:
-                    try:
-                        doc = build_plan_document(
-                            source_registry,
-                            src_selector,
-                            tgt_selector,
-                            object_types,
-                            args.scope,
-                            target_registry=target_registry,
-                        )
-                        for item in doc.get("items", []):
-                            target_path = (item.get("target") or {}).get("resolved_path")
-                            if target_path and target_path in seen_target_paths:
-                                # Conflict: multiple sources mapping to same target path
-                                # Skip subsequent ones but record in loss report
-                                continue
-                            if target_path:
-                                seen_target_paths.add(target_path)
-                            all_items.append(item)
-                    except Exception as error:
-                        # Audit P1-2: never silently swallow per-target plan
-                        # build failures during all-installed restore. Surface
-                        # the failure so the restore summary can report it.
-                        failed_targets.append({
-                            "source": src_selector,
-                            "target": tgt_selector,
-                            "error": str(error),
-                        })
-                        print(
-                            f"WARNING: restore plan build failed for source={src_selector} target={tgt_selector}: {error}",
-                            file=sys.stderr,
-                        )
+            all_items, dropped_losses, failed_targets = _build_all_installed_restore_items(
+                source_registry=source_registry,
+                target_registry=target_registry,
+                bundle_source_selectors=bundle_source_selectors,
+                target_detected_selectors=target_detected_selectors,
+                object_types=object_types,
+                scope=args.scope,
+            )
 
             document = {
                 "schema_version": 1,
@@ -1103,7 +1390,7 @@ def run_restore(args: argparse.Namespace) -> int:
                 "adapter_versions": ADAPTER_VERSIONS,
                 "git_provenance": git_provenance(target_registry.workspace),
                 "items": all_items,
-                "loss_report": {"dropped_fields": [], "warnings": []},
+                "loss_report": {"dropped_fields": dropped_losses, "warnings": []},
                 "rebuild_manifest": {
                     "credential_policy": "references-only; never include literal credentials",
                     "items": [],
@@ -1560,6 +1847,12 @@ def run_new_cli(argv: list[str]) -> int:
 
     if args.command == "bundle-verify":
         return run_bundle_verify(args)
+
+    if args.command == "bundle-sign":
+        return run_bundle_sign(args)
+
+    if args.command == "bundle-keygen":
+        return run_bundle_keygen(args)
 
     if args.command == "restore":
         return run_restore(args)

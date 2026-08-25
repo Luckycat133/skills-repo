@@ -195,7 +195,7 @@ assert summary.get("applied", 0) >= 1, f"Expected applied >= 1, got {summary}"
 print("OK restore --all-installed applied summary:", summary)
 '
 
-echo "=== Test 6: Verify restored files on Device B ==="
+echo "=== Test 6: Verify restored files on Device B (P0-1: all sources restored) ==="
 # Check skills landed in destination IDEs
 find "$HOME_DST" -type f | sort
 python3 -c "
@@ -203,13 +203,60 @@ from pathlib import Path
 home_dst = Path(r'''$(native_path "$HOME_DST")''')
 ws_dst = Path(r'''$(native_path "$WS_DST")''')
 
-# Check skill restoration
-found_skills = list(home_dst.rglob('SKILL.md'))
-assert len(found_skills) >= 1, f'No skills restored under {home_dst}'
-print('OK restored skills found on Device B:', [str(s.relative_to(home_dst)) for s in found_skills])
+# Check skill restoration: ensure skills from ALL sources landed (no silent drops)
+found_skills = [str(s.name) for s in home_dst.rglob('SKILL.md')]
+assert len(found_skills) >= 3, f'Expected skills from multiple sources, got {found_skills}'
+skill_dirs = {s.parent.name for s in home_dst.rglob('SKILL.md')}
+assert 'cline-helper' in skill_dirs, f'Missing cline-helper in {skill_dirs}'
+assert 'cursor-helper' in skill_dirs, f'Missing cursor-helper in {skill_dirs}'
+assert 'claude-helper' in skill_dirs, f'Missing claude-helper in {skill_dirs}'
+print('OK P0-1 verified: all three source skills landed without collision loss:', sorted(skill_dirs))
 "
 
-echo "=== Test 7: Atomic bundle creation rollback on failure ==="
+echo "=== Test 7: Compatibility Matrix Non-Empty (P1-2) ==="
+python3 -c "
+import json
+from pathlib import Path
+bundle = Path(r'''$(native_path "$BUNDLE")''')
+compat = json.loads((bundle / 'compatibility.json').read_text(encoding='utf-8'))
+pairs = compat.get('pairs', [])
+assert len(pairs) > 0, f'Expected non-empty compatibility pairs, got {compat}'
+print(f'OK P1-2 verified: compatibility matrix contains {len(pairs)} bidirectional-reviewed pairs')
+"
+
+echo "=== Test 8: Ed25519 Keygen, Sign, and Verify (P1-6) ==="
+PRIV_KEY="$WORKSPACE/test_key.priv"
+PUB_KEY="$WORKSPACE/test_key.pub"
+
+if python3 -c "import cryptography" 2>/dev/null; then
+  # 8a: Keygen
+  $MIGRATOR bundle-keygen --out-private "$PRIV_KEY" --out-public "$PUB_KEY" --json
+  [[ -f "$PRIV_KEY" ]] || { echo "FAIL: private key not generated"; exit 1; }
+  [[ -f "$PUB_KEY" ]] || { echo "FAIL: public key not generated"; exit 1; }
+
+  # 8b: Sign
+  SIGN_OUT="$($MIGRATOR bundle-sign "$BUNDLE" --key "$PRIV_KEY" --signer "test-signer" --json)"
+  echo "$SIGN_OUT" | python3 -c '
+import json, sys
+data = json.load(sys.stdin)
+assert data.get("ok") is True, data
+print("OK bundle-sign emitted valid signature")
+'
+
+  # 8c: Verify with trusted key
+  VERIFY_OUT="$($MIGRATOR bundle-verify "$BUNDLE" --trusted-key "$PUB_KEY" --json)"
+  echo "$VERIFY_OUT" | python3 -c '
+import json, sys
+data = json.load(sys.stdin)
+assert data.get("ok") is True, data
+assert data.get("signature_verified") is True, data
+print("OK bundle-verify successfully verified Ed25519 signature with trusted public key")
+'
+else
+  echo "SKIP: cryptography library not installed in this environment; skipping live Ed25519 signing test"
+fi
+
+echo "=== Test 9: Atomic bundle creation rollback on failure (P1-7) ==="
 # Create a valid pre-existing bundle
 EXISTING_BUNDLE="$WORKSPACE/existing.acb"
 HOME="$(native_path "$HOME_SRC")" $MIGRATOR snapshot \
@@ -263,6 +310,41 @@ assert_exists() {
 }
 assert_exists
 echo "OK atomic staging safely preserved pre-existing bundle on write failure"
+
+echo "=== Test 10: Strict 1:1 Manifest Binding Rejects Duplicate Claimants (P0-2) ==="
+python3 -c "
+import sys, json
+from pathlib import Path
+sys.path.insert(0, r'''$(native_path "$SCRIPT_DIR")''')
+from acb.bundle import verify_bundle
+
+bundle_path = Path(r'''$(native_path "$BUNDLE")''')
+manifest_file = bundle_path / 'manifest.json'
+manifest_data = json.loads(manifest_file.read_text(encoding='utf-8'))
+
+# Duplicate a file entry into two distinct objects
+objects = manifest_data.get('objects', [])
+if len(objects) >= 2 and objects[0].get('files'):
+    first_file = objects[0]['files'][0]
+    objects[1].setdefault('files', []).append(first_file)
+    # Write tampered manifest to a temp copy
+    import tempfile, shutil
+    tmp_dir = Path(tempfile.mkdtemp())
+    try:
+        shutil.copytree(bundle_path, tmp_dir / 'bundle')
+        (tmp_dir / 'bundle' / 'manifest.json').write_text(json.dumps(manifest_data), encoding='utf-8')
+        # Update checksums.json for manifest.json so checksum passes
+        from acb.bundle import sha256_file
+        ck = json.loads((tmp_dir / 'bundle' / 'checksums.json').read_text(encoding='utf-8'))
+        ck['manifest.json'] = sha256_file(tmp_dir / 'bundle' / 'manifest.json')
+        (tmp_dir / 'bundle' / 'checksums.json').write_text(json.dumps(ck), encoding='utf-8')
+
+        errors = verify_bundle(tmp_dir / 'bundle')
+        assert any('claimed by multiple objects' in e for e in errors), f'Expected duplicate claimant error, got: {errors}'
+        print('OK P0-2 verified: verify_bundle successfully rejected manifest with duplicate file claimants')
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+"
 
 echo
 echo "All all-installed multi-IDE E2E tests PASSED!"

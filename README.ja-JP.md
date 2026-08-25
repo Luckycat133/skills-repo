@@ -1,4 +1,4 @@
-# スキルリポジトリ
+# Agent Context Migrator (エージェントコンテキスト移行ツール)
 
 [![GitHub Repo](https://img.shields.io/badge/GitHub-Luckycat133%2Fskills--repo-181717?logo=github)](https://github.com/Luckycat133/skills-repo)
 [![License](https://img.shields.io/badge/License-MIT-b7285.svg)](LICENSE)
@@ -6,47 +6,90 @@
 
 > Languages: [English](README.md) · [中文](README.zh-CN.md) · **日本語** · [Español](README.es.md)
 
-ローカルで作成し、GitHub から公開する再利用可能な AI アシスタントスキルです。
+**Cursor、Claude Code、Codex、Cline、Windsurf、Copilot、Gemini CLI** など、多数の AI コーディングツール間で Skills、ルール/指示、MCP 設定を**オフライン・プレビュー可能・ロールバック安全**に移行・バックアップ・復元します。
 
-## 利用方法
+---
 
-現在のエージェント自身の Skill 管理機能または ClawHub から `agent-skills-setup` を導入します。このリポジトリはクロスエージェント用インストーラーを提供せず、導入先のエージェントに参照資料と移行スクリプトだけを提供します。
-導入時に IDE は選びません。`--source`、`--target`、`--objects`、`--workspace` は、後でエージェントが実行する移行コマンドの引数です。
+## ⚡ クイックインストール
+
+ClawHub / OpenClaw からインストール:
+
+```bash
+openclaw skills install @luckycat133/agent-skills-setup
+```
+
+または GitHub から直接クローン:
+
+```bash
+git clone https://github.com/Luckycat133/skills-repo.git
+```
+
+---
+
+## 💬 エージェントへの指示例
+
+> *"このプロジェクトの Cursor の Skills、ルール、MCP を Claude Code に移行して。"*
+
+> *"PC を移行するので、インストール済み IDE の AI コーディング設定をバックアップして。"*
+
+> *"この ACB バンドルを新しい PC のインストール済み IDE に復元して。"*
+
+---
+
+## 🛡️ 移行の安全境界
+
+| 区分 | 対象 | 動作 |
+|---|---|---|
+| **自動移行** | Skills、Instructions/Rules (`CLAUDE.md`, `.cursorrules`)、ローカル stdio MCP | プレビュー、秘密情報マスキング、ロールバック対応で安全に移行。 |
+| **明示的オプトイン** | プラグインパッケージ複製 (`--include-plugins`)、セッション引き継ぎ要約 (`--include-session`) | 構造化ホワイトリストと同意に基づき処理。 |
+| **手動チェックリスト** | リモート MCP (HTTP/SSE)、クラウド/UI 設定、Prompts、Commands、Agents、Hooks | 具体的な再構築手順を出力（未検証の実行可能スクリプトは自動書き込みしません）。 |
+| **移行対象外** | API キー、OAuth トークン、資格情報、信頼状態、会話履歴、生成メモリ | ゼロリーク保証。秘密情報は消去または再認証を要求。 |
+
+---
+
+## 🚀 主なコマンド
+
+- **`migrate`**: ワンステップ移行: `detect` -> `inventory` -> `plan` -> `apply` -> `verify`。
+- **`snapshot`**: 1:1 マニフェストファイルバインディングを備えたアトミックでポータブルな **Agent Context Bundle (ACB)** を取得。
+- **`restore`**: ACB バンドルからターゲット環境への二者間復元プランを生成し、TOCTOU ガード付きで実行。
+- **`bundle-sign` & `bundle-verify`**: Ed25519 暗号鍵で ACB バンドルに署名・検証。
+- **`doctor`**: バンドルの依存関係と不足しているツールをオフラインで診断。
+
+---
+
+## 🌟 プロジェクトの支援
+
+Agent Context Migrator が環境構築や PC 移行の手間を省く役に立った場合は、ぜひ ⭐ **GitHub で Star をお願いします**！
+
+[GitHub Sponsors](https://github.com/sponsors/Luckycat133) や [Afdian / Ko-fi](https://afdian.com/a/Luckycat133) からの開発支援も歓迎しています。
+
+---
 
 ## 構成
 
 ```text
 skills-repo/
-├── docs/                         # 現行の保守資料
-├── scripts/                      # リポジトリ用ツール
+├── docs/                         # 現行の保守資料・リリースチェックリスト
+├── scripts/                      # リポジトリ用検証ツール
 └── skills/agent-skills-setup/    # 公開 Skill の正本
-    ├── SKILL.md
-    ├── references/
-    └── scripts/
+    ├── SKILL.md                  # Skill 定義・エントリーポイント
+    ├── references/               # Profile 登録表 v2・アダプター仕様
+    └── scripts/                  # 移行コアエンジン・ACB ツール
 ```
 
-## `agent-skills-setup`
-
-製品 profile 間で対象範囲を明確にしてコンテキストを移行します。Registry v2 は lifecycle、version、source、scope、storage、surface ごとの policy を保持し、legacy、cloud、provider、host-editor、alias を通常の書き込み先として扱いません。[IDE registry](skills/agent-skills-setup/references/ide-registry.md) を参照してください。
-
-実行パッケージに含まれるのは参照資料と 1 つの移行コマンドだけです。IDE やランタイムの導入、シンボリックリンクやレジストリロックの作成、各エージェントディレクトリへの自己コピーは行いません。global 移行の既定対象は Skills のみで、project オブジェクトにはコマンドで明示した workspace を使います。
-Skill ディレクトリをコピーする前にすべてのソーステキストを検査し、リテラル資格情報の疑いまたは Skill 外へのリンクがあれば、ソースと既存ターゲットを変更せずにその Skill をスキップします。
-正本 frontmatter は Agent Skills の標準フィールドだけを使います。profile-aware CLI は `detect`、`inventory`、`plan`、`apply`、`verify`、`rollback` を提供し、instructions は製品ネイティブの adapter と loss report 付きの型付き IR を通ります。`apply` は保存済みでチェックサム付きの plan だけを受け付け、操作全体を先にステージし、正確なバックアップを作成します。途中で失敗すれば先行する書き込みもすべて復元し、成功後にだけチェックサム付き検証 manifest を作成します。一般的な移行依頼が許可するのは plan の作成までで、`apply` と `rollback` には別途明示的な承認が必要です。旧インターフェースの参照と書き込みなし dry-run は、明示的な `legacy` サブコマンドからのみ利用できます。レビュー済みの自動サブセットは `full` ではなく `partial` とし、対象 transport adapter のないリモート MCP、専用 adapter のない形式、cloud/UI 製品には明示的な手動再構築手順を返します。
-
-## 開発
+## 開発と検証
 
 1. `skills/agent-skills-setup/` を編集し、生成されたルートのリポジトリポインターは編集しません。
 2. `bash validate-all.sh` を実行します。
 3. 正本の Skill を変えたら `bash scripts/sync-root-mirror.sh` でルートポインターを更新します。
-4. 検証後にマージします。
+4. すべての検証が通過した後にマージします。
 
-外部 Skill はブランチで `bash scripts/import-agent-skill.sh <source-dir> <skill-name>` を使って確認します。
+## プロジェクト資料
 
-## 公開
-
-GitHub が正本で、ClawHub と Awesome Copilot は配布経路です。リポジトリは MIT を維持し、生成する ClawHub bundle だけを MIT-0 として競合ライセンスを除去し、Bash/Python 要件を宣言します。公開には contributor authorization の明示確認が必要です。[公開チェックリスト](docs/agent-skills-setup/release-checklist.md)も参照してください。
-
-## プロジェクト
+- [貢献ガイド](CONTRIBUTING.md)
+- [セキュリティ](SECURITY.md)
+- [行動規範](CODE_OF_CONDUCT.md)
+- [ライセンス](LICENSE)
 
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
