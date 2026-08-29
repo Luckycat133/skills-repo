@@ -593,7 +593,7 @@ description: compatibility-only shared skill
 ---
 EOF
 
-DETECT_OUT_DEFAULT="$(HOME="$(native_path "$HOME_DETECT")" PATH="/usr/bin:/bin:/usr/local/bin" $MIGRATOR snapshot \
+DETECT_OUT_DEFAULT="$(HOME="$(native_path "$HOME_DETECT")" $MIGRATOR snapshot \
   --registry "$REGISTRY" \
   --workspace "$WS_DETECT" \
   --all-installed \
@@ -604,12 +604,14 @@ echo "$DETECT_OUT_DEFAULT" | python3 -c '
 import json, sys
 data = json.load(sys.stdin)
 assert data.get("ok") is True, data
-# Compatibility-only products should be excluded by default
-assert data.get("objects_captured", 0) == 0, f"Expected 0 objects by default for compatibility-only, got {data}"
+det_status = data.get("summary", {}).get("detection_status", {})
+installed = data.get("summary", {}).get("installed_products", [])
+assert det_status.get("forge/cli") == "compatibility-only", det_status
+assert "forge/cli" not in installed, installed
 print("OK v0.9.1 verified: compatibility-only products excluded by default")
 '
 
-DETECT_OUT_OPTIN="$(HOME="$(native_path "$HOME_DETECT")" PATH="/usr/bin:/bin:/usr/local/bin" $MIGRATOR snapshot \
+DETECT_OUT_OPTIN="$(HOME="$(native_path "$HOME_DETECT")" $MIGRATOR snapshot \
   --registry "$REGISTRY" \
   --workspace "$WS_DETECT" \
   --all-installed \
@@ -621,7 +623,10 @@ echo "$DETECT_OUT_OPTIN" | python3 -c '
 import json, sys
 data = json.load(sys.stdin)
 assert data.get("ok") is True, data
-assert data.get("objects_captured", 0) >= 1, f"Expected >= 1 objects with --include-compatibility, got {data}"
+det_status = data.get("summary", {}).get("detection_status", {})
+installed = data.get("summary", {}).get("installed_products", [])
+assert det_status.get("forge/cli") == "compatibility-only", det_status
+assert "forge/cli" in installed, installed
 print("OK v0.9.1 verified: compatibility-only products included when --include-compatibility is provided")
 '
 
