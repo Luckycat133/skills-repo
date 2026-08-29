@@ -26,6 +26,15 @@ exact-release CI matrix on `ubuntu-latest`, `macos-latest`, and
 - `--all-installed` snapshot and restore use real detection results as
   the only source of truth (no `inventory.exists` fallback) and
   iterate plan items with object-level conflict handling (0.9.0).
+- Child-level Skill PlanItems in restore decompose monolithic directory items
+  into individual skills with granular `target_group` conflict isolation (0.9.1).
+- Multi-source MCP IR server-level deduplication and merge isolate conflicting
+  servers into the loss report and emit a single atomic write operation (0.9.1).
+- Detection probes strictly default to `InstallState.INSTALLED` for snapshot
+  and restore, requiring explicit `--include-configured` and `--include-compatibility`
+  flags for non-installed profiles (0.9.1).
+- Full end-to-end plumbing and fail-closed guards for `--include-plugins`
+  and `--include-session` across migrate, apply, and restore (0.9.1).
 - MCP / Instructions / Skills use explicit adapter registries. JSONC
   uses a reviewed parser; JSON5 / TOML / YAML / XML / Lua / ambiguous
   UUID+JSON fail to a dedicated manual adapter.
