@@ -18,10 +18,14 @@ ClawHub / OpenClaw からインストール:
 openclaw skills install @luckycat133/agent-skills-setup
 ```
 
-または GitHub から直接クローン:
+または GitHub から直接インストール:
 
 ```bash
-git clone https://github.com/Luckycat133/skills-repo.git
+git clone --depth 1 --branch v0.9.1 https://github.com/Luckycat133/skills-repo.git
+
+openclaw skills install \
+  ./skills-repo/skills/agent-skills-setup \
+  --as agent-skills-setup
 ```
 
 ---
@@ -40,10 +44,10 @@ git clone https://github.com/Luckycat133/skills-repo.git
 
 | 区分 | 対象 | 動作 |
 |---|---|---|
-| **自動移行** | Skills、Instructions/Rules (`CLAUDE.md`, `.cursorrules`)、ローカル stdio MCP | プレビュー、秘密情報マスキング、ロールバック対応で安全に移行。 |
+| **自動移行** | Skills、Instructions/Rules (`CLAUDE.md`, `.cursorrules`)、ローカル stdio MCP | Skills の検証付き複製、指示のセマンティック変換と損失レポート、ローカル stdio MCP のサブセット自動変換。 |
 | **明示的オプトイン** | プラグインパッケージ複製 (`--include-plugins`)、セッション引き継ぎ要約 (`--include-session`) | 構造化ホワイトリストと同意に基づき処理。 |
 | **手動チェックリスト** | リモート MCP (HTTP/SSE)、クラウド/UI 設定、Prompts、Commands、Agents、Hooks | 具体的な再構築手順を出力（未検証の実行可能スクリプトは自動書き込みしません）。 |
-| **移行対象外** | API キー、OAuth トークン、資格情報、信頼状態、会話履歴、生成メモリ | ゼロリーク保証。秘密情報は消去または再認証を要求。 |
+| **移行対象外** | API キー、OAuth トークン、資格情報、信頼状態、会話履歴、生成メモリ | 厳格なシークレットスキャン、サブオブジェクト分離、Fail-closed 除外；平文の機密情報は移行前に自動除外・マスキング。 |
 
 ---
 

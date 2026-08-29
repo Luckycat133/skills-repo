@@ -3,18 +3,18 @@ name: agent-skills-setup
 license: MIT
 compatibility: Requires local Bash, Python 3, environment lookup, and filesystem reads. Writes only approved migration targets; no network access.
 metadata:
-  version: "0.9.0"
+  version: "0.9.1"
   permissions.shell: "bundled offline Bash/Python scripts plus local read-only detection commands"
   permissions.env: "read environment variables to resolve product paths"
   permissions.file_read: "named source products, workspace tree, bundled references"
   permissions.file_write: "reviewed plan targets after explicit --yes consent"
   permissions.network: "denied"
-description: >
-  Use when a user names two supported IDEs or agent products to plan, migrate,
-  or inspect specific skills, instructions, and MCP. The skill inventories local
-  paths and runs bundled Bash/Python; an approved apply or rollback may write
-  targets, create backups/manifests, verify results, and scan or redact secrets.
-  Network access is forbidden.
+description: >-
+  Use when a user wants to migrate, back up, restore, compare, or move
+  AI-coding-agent context across Cursor, Claude Code, Codex, Cline,
+  Copilot, Windsurf, Gemini CLI, or another supported profile, including
+  switching computers. Handles reviewed Skills, instructions/rules, and
+  MCP with secret redaction, preview, verification, and rollback.
 ---
 
 # AI IDE Context Migration

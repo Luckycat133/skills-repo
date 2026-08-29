@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import copy
 import hashlib
 import io
 import json
@@ -38,6 +39,8 @@ from migration_core import (
     hash_path,
     json_sha256,
     load_plan_document,
+    parse_mcp_document,
+    path_state,
     paths_overlap,
     rollback_manifest,
     validate_plan_document,
@@ -173,6 +176,12 @@ def create_parser() -> argparse.ArgumentParser:
             "selected file list, reviewed patch)."
         ),
     )
+    migrate.add_argument(
+        "--include-plugins",
+        dest="include_plugins",
+        action="store_true",
+        help="Explicitly opt in to plugin package transfer.",
+    )
     apply = subparsers.add_parser("apply")
     apply.add_argument("plan", type=Path)
     apply.add_argument("--registry", type=Path, default=REGISTRY_PATH)
@@ -223,6 +232,12 @@ def create_parser() -> argparse.ArgumentParser:
             "Explicitly opt in to handoff/session transfer for replayed "
             "plans (whitelisted fields only)."
         ),
+    )
+    apply.add_argument(
+        "--include-plugins",
+        dest="include_plugins",
+        action="store_true",
+        help="Explicitly opt in to plugin package transfer.",
     )
     verify = subparsers.add_parser("verify")
     verify.add_argument("--manifest", type=Path, required=True)
@@ -720,10 +735,12 @@ def run_snapshot(args: argparse.Namespace) -> int:
                     # NOT_DETECTED doesn't change anything
                 selector = f"{prod_id}/{prof_id}"
                 detection_status[selector] = profile_state.value
-                if profile_state in (
-                    InstallState.INSTALLED,
-                    InstallState.CONFIGURED_ONLY,
-                    InstallState.COMPATIBILITY_ONLY,
+                include_configured = getattr(args, "include_configured", False)
+                include_compatibility = getattr(args, "include_compatibility", False)
+                if (
+                    profile_state == InstallState.INSTALLED
+                    or (include_configured and profile_state == InstallState.CONFIGURED_ONLY)
+                    or (include_compatibility and profile_state == InstallState.COMPATIBILITY_ONLY)
                 ):
                     detected_selectors.add(selector)
 
@@ -734,7 +751,7 @@ def run_snapshot(args: argparse.Namespace) -> int:
                 doc = build_plan_document(
                     registry,
                     selector,
-                    args.target or "forge/cli",
+                    selector,
                     sorted(allowed_object_types),
                     args.scope,
                 )
@@ -749,10 +766,11 @@ def run_snapshot(args: argparse.Namespace) -> int:
                     file=sys.stderr,
                 )
     else:
+        src_sel = args.source or "cline/ide"
         document = build_plan_document(
             registry,
-            args.source or "cline/ide",
-            args.target or "forge/cli",
+            src_sel,
+            args.target or src_sel,
             sorted(allowed_object_types),
             args.scope,
         )
@@ -1087,11 +1105,11 @@ def _detect_target_profiles_for_restore(
 
             selector = f"{prod_id}/{prof_id}"
             target_detection_status[selector] = profile_state.value
-            # Audit P1-3: strictly filter targets
-            if profile_state == InstallState.INSTALLED or (
-                profile_state == InstallState.CONFIGURED_ONLY
-            ) or (
-                include_compatibility and profile_state == InstallState.COMPATIBILITY_ONLY
+            # Audit P1-3: strictly filter targets (0.9.1: INSTALLED default, configured/compat opt-in)
+            if (
+                profile_state == InstallState.INSTALLED
+                or (include_configured and profile_state == InstallState.CONFIGURED_ONLY)
+                or (include_compatibility and profile_state == InstallState.COMPATIBILITY_ONLY)
             ):
                 target_detected_selectors.add(selector)
 
@@ -1112,6 +1130,7 @@ def _build_all_installed_restore_items(
     seen_target_skills: dict[tuple[str, str], tuple[str, str]] = {}
     seen_target_files: dict[str, tuple[str, str]] = {}
     seen_target_plugins: dict[tuple[str, str], tuple[str, str]] = {}
+    mcp_candidates_by_target: dict[str, list[tuple[dict[str, Any], str, str]]] = {}
     failed_targets: list[dict[str, str]] = []
 
     for tgt_selector in sorted(target_detected_selectors):
@@ -1136,25 +1155,33 @@ def _build_all_installed_restore_items(
                     if not target_path or item.get("status") in {"invalid", "manual-rebuild"}:
                         continue
 
-                    # Audit P0-1: Object-level conflict detection & deduplication
+                    # Audit P0-1: Child-level skill conflict detection & deduplication (0.9.1)
                     if obj_type == "skills" and source_path and source_path.is_dir():
                         skill_subdirs = [
                             p for p in source_path.iterdir()
                             if p.is_dir() and (p / "SKILL.md").is_file()
                         ] if source_path.exists() else []
 
-                        has_conflict = False
-                        has_new_skill = False
                         for skill_dir in skill_subdirs:
                             skill_name = skill_dir.name
                             skill_key = (target_path, skill_name)
                             skill_hash = hash_path(skill_dir)
+                            child_target_path = str(Path(target_path) / skill_name)
+                            child_source_path = str(skill_dir)
+
+                            child_item = copy.deepcopy(item)
+                            if child_item.get("source"):
+                                child_item["source"]["resolved_path"] = child_source_path
+                            if child_item.get("target"):
+                                child_item["target"]["resolved_path"] = child_target_path
+                            child_item["source_state"] = path_state(Path(child_source_path))
+                            child_item["target_state"] = path_state(Path(child_target_path))
+
                             if skill_key in seen_target_skills:
                                 prev_hash, prev_src = seen_target_skills[skill_key]
                                 if skill_hash != prev_hash:
-                                    has_conflict = True
                                     conflict_msg = (
-                                        f"Skill conflict on '{skill_name}': target {target_path} "
+                                        f"Skill conflict on '{skill_name}': target {child_target_path} "
                                         f"already claimed by {prev_src} with differing content"
                                     )
                                     dropped_losses.append({
@@ -1163,17 +1190,14 @@ def _build_all_installed_restore_items(
                                         "reason": conflict_msg,
                                         "detail": None,
                                     })
+                                    child_item["status"] = "conflict"
+                                    child_item["reason"] = conflict_msg
+                                    all_items.append(child_item)
+                                # If skill_hash == prev_hash: identical deduplication (skip)
                             else:
                                 seen_target_skills[skill_key] = (skill_hash, src_selector)
-                                has_new_skill = True
-
-                        if has_conflict:
-                            item_copy = dict(item)
-                            item_copy["status"] = "conflict"
-                            item_copy["reason"] = f"Skill conflict: multiple sources ({src_selector}) target {target_path} with conflicting skills"
-                            all_items.append(item_copy)
-                        elif has_new_skill:
-                            all_items.append(item)
+                                child_item["status"] = "ready"
+                                all_items.append(child_item)
 
                     elif obj_type == "instructions":
                         target_path_obj = Path(target_path)
@@ -1205,17 +1229,9 @@ def _build_all_installed_restore_items(
                             all_items.append(item)
 
                     elif obj_type == "mcp":
-                        file_key = target_path
-                        source_hash = hash_path(source_path) if (source_path and source_path.is_file()) else ""
-                        if file_key in seen_target_files:
-                            prev_hash, prev_src = seen_target_files[file_key]
-                            if source_hash == prev_hash:
-                                continue
-                            else:
-                                all_items.append(item)
-                        else:
-                            seen_target_files[file_key] = (source_hash, src_selector)
-                            all_items.append(item)
+                        mcp_candidates_by_target.setdefault(target_path, []).append(
+                            (item, src_selector, source_path_str or "")
+                        )
 
                     elif obj_type == "plugins":
                         pkg_name = source_path.name if source_path else "pkg"
@@ -1256,6 +1272,104 @@ def _build_all_installed_restore_items(
                     f"WARNING: restore plan build failed for source={src_selector} target={tgt_selector}: {error}",
                     file=sys.stderr,
                 )
+
+    # Consolidate and merge multi-source MCP configs per target file (0.9.1)
+    for target_path, candidates in sorted(mcp_candidates_by_target.items()):
+        if len(candidates) == 1:
+            all_items.append(candidates[0][0])
+        else:
+            hashes = [
+                hash_path(Path(c[2])) for c in candidates
+                if c[2] and Path(c[2]).is_file()
+            ]
+            if len(set(hashes)) == 1:
+                all_items.append(candidates[0][0])
+            else:
+                seen_servers: dict[str, tuple[Any, str, dict[str, Any]]] = {}
+                conflicting_servers: set[str] = set()
+                for cand_item, cand_src, cand_path_str in candidates:
+                    if not cand_path_str or not Path(cand_path_str).is_file():
+                        continue
+                    cand_path = Path(cand_path_str)
+                    src_format = cand_item.get("source", {}).get("source_format", "json:mcpServers")
+                    try:
+                        text = cand_path.read_text(encoding="utf-8")
+                        servers = parse_mcp_document(text, src_format)
+                        for srv in servers:
+                            if srv.name in seen_servers:
+                                prev_srv, prev_src, _ = seen_servers[srv.name]
+                                is_same = (
+                                    srv.transport == prev_srv.transport
+                                    and srv.command == prev_srv.command
+                                    and srv.args == prev_srv.args
+                                    and srv.env == prev_srv.env
+                                    and srv.url == prev_srv.url
+                                    and srv.headers == prev_srv.headers
+                                    and srv.cwd == prev_srv.cwd
+                                )
+                                if not is_same:
+                                    conflicting_servers.add(srv.name)
+                                    conflict_msg = (
+                                        f"MCP server conflict on '{srv.name}': differing command/args/transport "
+                                        f"between {prev_src} and {cand_src}"
+                                    )
+                                    dropped_losses.append({
+                                        "object_type": "mcp",
+                                        "field": f"{srv.name}@{target_path}",
+                                        "reason": conflict_msg,
+                                        "detail": None,
+                                    })
+                            else:
+                                seen_servers[srv.name] = (srv, cand_src, cand_item)
+                    except Exception as error:
+                        print(f"WARNING: failed to parse MCP document for {cand_src} ({cand_path_str}): {error}", file=sys.stderr)
+
+                valid_servers = [
+                    srv for name, (srv, _, _) in seen_servers.items()
+                    if name not in conflicting_servers
+                ]
+
+                if valid_servers:
+                    mcp_temp_dir = Path(tempfile.mkdtemp(prefix="acb-mcp-merged-"))
+                    merged_file = mcp_temp_dir / f"merged_mcp_{hashlib.sha256(target_path.encode()).hexdigest()[:8]}.json"
+                    servers_map: dict[str, Any] = {}
+                    for srv in valid_servers:
+                        s_dict: dict[str, Any] = {}
+                        if srv.command is not None:
+                            s_dict["command"] = srv.command
+                        if srv.args:
+                            s_dict["args"] = srv.args
+                        if srv.env:
+                            s_dict["env"] = srv.env
+                        if srv.url is not None:
+                            s_dict["url"] = srv.url
+                        if srv.headers:
+                            s_dict["headers"] = srv.headers
+                        if srv.transport and srv.transport != "stdio":
+                            s_dict["transport"] = srv.transport
+                        if srv.cwd:
+                            s_dict["cwd"] = srv.cwd
+                        servers_map[srv.name] = s_dict
+
+                    merged_doc = {"mcpServers": servers_map}
+                    atomic_write(merged_file, json.dumps(merged_doc, indent=2) + "\n")
+
+                    merged_item = copy.deepcopy(candidates[0][0])
+                    merged_item["source"]["resolved_path"] = str(merged_file)
+                    merged_item["source"]["boundary"] = str(mcp_temp_dir)
+                    merged_item["source"]["source_format"] = "json:mcpServers"
+                    merged_item["source_state"] = path_state(merged_file)
+                    merged_item["target_state"] = path_state(Path(target_path))
+                    merged_item["status"] = "ready"
+                    merged_item["reason"] = f"Merged {len(valid_servers)} MCP server(s) from multiple sources"
+                    all_items.append(merged_item)
+                else:
+                    conflict_item = copy.deepcopy(candidates[0][0])
+                    conflict_item["status"] = "conflict"
+                    conflict_item["reason"] = f"MCP conflict: all servers targeting {target_path} conflicted across sources"
+                    conflict_item["source_state"] = path_state(Path(candidates[0][2])) if (candidates[0][2] and Path(candidates[0][2]).exists()) else None
+                    conflict_item["target_state"] = path_state(Path(target_path))
+                    all_items.append(conflict_item)
 
     return all_items, dropped_losses, failed_targets
 
@@ -1333,7 +1447,12 @@ def run_restore(args: argparse.Namespace) -> int:
                         # For all_installed, stage all products; otherwise filter by source_prod
                         if all_installed or prod == source_sel.split("/")[0]:
                             if scp.lower() in requested_scopes:
-                                target_staged = temp_source_dir / Path(*parts[4:])
+                                if parts[4] == "home" and len(parts) >= 6:
+                                    target_staged = staged_home / Path(*parts[5:])
+                                elif scp.lower() == "user":
+                                    target_staged = staged_home / Path(*parts[4:])
+                                else:
+                                    target_staged = temp_source_dir / Path(*parts[4:])
                                 target_staged.parent.mkdir(parents=True, exist_ok=True)
                                 target_staged.write_bytes(source_file.read_bytes())
 
@@ -1533,6 +1652,8 @@ def _apply_restore(
         include_lossy=(args.include_lossy == "lossy"),
         accept_loss_ids=set(),
         strict=args.strict,
+        allow_plugin_copy=bool(getattr(args, "include_plugins", False)),
+        allow_session_handoff=bool(getattr(args, "include_session", False)),
     )
     verify_errors = verify_manifest(manifest_path_out)
     emit(
@@ -1597,7 +1718,7 @@ def run_migrate(args: argparse.Namespace) -> int:
 
     # Reject unsupported automatic object types unless all-inventory.
     unsupported = sorted(
-        set(object_types) - AUTOMATIC_OBJECT_TYPES - INVENTORY_ONLY_OBJECT_TYPES
+        set(object_types) - AUTOMATIC_OBJECT_TYPES - OPT_IN_WRITABLE_OBJECT_TYPES - INVENTORY_ONLY_OBJECT_TYPES
     )
     if unsupported:
         raise ValueError(
@@ -1605,10 +1726,10 @@ def run_migrate(args: argparse.Namespace) -> int:
             + ", ".join(unsupported)
             + "; use --objects 'skills,instructions,mcp' or 'all-portable'"
         )
-    # Inventory-only types only run as inventory metadata; the planner
-    # already records them as manual-rebuild / forbidden items.
+    # Include automatic and opt-in writable types in the plan
     auto_object_types = [
-        obj for obj in object_types if obj in AUTOMATIC_OBJECT_TYPES
+        obj for obj in object_types
+        if obj in AUTOMATIC_OBJECT_TYPES or obj in OPT_IN_WRITABLE_OBJECT_TYPES
     ]
 
     # 3. scope handling: default user,project; full-disk 'all' requires --yes.
@@ -1674,6 +1795,7 @@ def run_migrate(args: argparse.Namespace) -> int:
         include_lossy=(args.include_lossy == "lossy"),
         accept_loss_ids=accept_loss_ids,
         strict=args.strict,
+        allow_plugin_copy=bool(getattr(args, "include_plugins", False)),
         allow_session_handoff=bool(getattr(args, "include_session", False)),
     )
 
@@ -1784,7 +1906,12 @@ def run_new_cli(argv: list[str]) -> int:
                             rel = source_file.relative_to(objects_root)
                             parts = rel.parts
                             if len(parts) >= 5:
-                                target_staged = temp_source_dir / Path(*parts[4:])
+                                if parts[4] == "home" and len(parts) >= 6:
+                                    target_staged = staged_home / Path(*parts[5:])
+                                elif parts[3].lower() == "user":
+                                    target_staged = staged_home / Path(*parts[4:])
+                                else:
+                                    target_staged = temp_source_dir / Path(*parts[4:])
                                 target_staged.parent.mkdir(parents=True, exist_ok=True)
                                 target_staged.write_bytes(source_file.read_bytes())
                 source_registry = Registry(
@@ -1817,6 +1944,7 @@ def run_new_cli(argv: list[str]) -> int:
                 include_lossy=(args.include_lossy == "lossy"),
                 accept_loss_ids=accept_loss_ids,
                 strict=args.strict,
+                allow_plugin_copy=bool(getattr(args, "include_plugins", False)),
                 allow_session_handoff=bool(getattr(args, "include_session", False)),
             )
             emit(
@@ -1869,8 +1997,10 @@ def run_new_cli(argv: list[str]) -> int:
         emit(rows, args.json)
         return 0
 
-    object_types = [item.strip() for item in args.objects.split(",") if item.strip()]
-    unsupported = sorted(set(object_types) - {"skills", "instructions", "mcp"})
+    object_types = resolve_objects(args.objects)
+    unsupported = sorted(
+        set(object_types) - AUTOMATIC_OBJECT_TYPES - OPT_IN_WRITABLE_OBJECT_TYPES - INVENTORY_ONLY_OBJECT_TYPES
+    )
     if unsupported:
         raise ValueError(f"unsupported automatic objects: {', '.join(unsupported)}")
     document = build_plan_document(

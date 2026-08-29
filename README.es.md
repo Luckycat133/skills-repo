@@ -18,10 +18,14 @@ Instala mediante ClawHub / OpenClaw:
 openclaw skills install @luckycat133/agent-skills-setup
 ```
 
-O clona directamente desde GitHub:
+O instala directamente desde GitHub:
 
 ```bash
-git clone https://github.com/Luckycat133/skills-repo.git
+git clone --depth 1 --branch v0.9.1 https://github.com/Luckycat133/skills-repo.git
+
+openclaw skills install \
+  ./skills-repo/skills/agent-skills-setup \
+  --as agent-skills-setup
 ```
 
 ---
@@ -40,10 +44,10 @@ git clone https://github.com/Luckycat133/skills-repo.git
 
 | Nivel | Elementos | Comportamiento |
 |---|---|---|
-| **Automático** | Skills, Instructions/Rules (`CLAUDE.md`, `.cursorrules`), MCP local stdio | Migración segura con vista previa, sanitización de credenciales y rollback. |
+| **Automático** | Skills, Instructions/Rules (`CLAUDE.md`, `.cursorrules`), MCP local stdio | Copia verificada de Skills, conversión semántica con reporte de pérdidas, y conversión del subconjunto local stdio de MCP. |
 | **Opt-in Explícito** | Copia de paquetes de plugins (`--include-plugins`), traspaso de sesión (`--include-session`) | Conservación estructurada bajo consentimiento y lista blanca estricta. |
 | **Lista Manual** | MCP remoto (HTTP/SSE), configuración Cloud/UI, Prompts, Commands, Agents, Hooks | Genera lista de reconstrucción paso a paso (nunca escribe scripts ejecutables no revisados). |
-| **Nunca se Mueve** | Claves API, tokens OAuth, credenciales, estado de confianza, historial de chat, memoria | Garantía de cero fugas. Todos los secretos se eliminan o requieren reautenticación. |
+| **Nunca se Mueve** | Claves API, tokens OAuth, credenciales, estado de confianza, historial de chat, memoria | Escaneo estricto de secretos, aislamiento de subobjetos y exclusiones fail-closed. Las credenciales se rechazan o redactan antes de la migración. |
 
 ---
 

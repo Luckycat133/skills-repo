@@ -117,7 +117,6 @@ INVENTORY_ONLY_OBJECT_TYPES = (
     MANUAL_TEMPLATE_OBJECT_TYPES
     | DRAFT_ONLY_OBJECT_TYPES
     | FORBIDDEN_OBJECT_TYPES
-    | {"handoff", "plugins"}
 )
 AUTOMATIC_SURFACE_POLICIES = {
     "validate-then-atomic-copy",
@@ -2074,6 +2073,8 @@ def _skill_sources(surface: SurfacePath) -> list[Path]:
     source = surface.resolved_path
     if not source.is_dir():
         return []
+    if (source / "SKILL.md").is_file():
+        return [source]
     return sorted(
         child
         for child in source.iterdir()
@@ -2335,7 +2336,11 @@ def _build_plan_for_scope(
                 )
             )
             continue
-        if source.policy not in SOURCE_AUTOMATIC_SURFACE_POLICIES:
+        is_opt_in_surface = (
+            (object_type == "plugins" and source.policy == "preserve-package" and target.policy == "preserve-package")
+            or (object_type == "handoff" and source.policy in {"session-summary-handoff", "preserve-package"} and target.policy in {"session-summary-handoff", "preserve-package"})
+        )
+        if source.policy not in SOURCE_AUTOMATIC_SURFACE_POLICIES and not is_opt_in_surface:
             items.append(
                 PlanItem(
                     object_type,
@@ -2363,7 +2368,7 @@ def _build_plan_for_scope(
             "manual-template",
             "disabled-draft-only",
             "official-api-or-rebuild-checklist",
-        }:
+        } and not is_opt_in_surface:
             items.append(
                 PlanItem(
                     object_type,
@@ -2711,7 +2716,11 @@ def _preview_plan_item(item: PlanItem) -> dict[str, Any] | None:
     if item.object_type == "skills":
         changes = []
         for skill_dir in _skill_sources(source):
-            destination = target.resolved_path / skill_dir.name
+            destination = (
+                target.resolved_path
+                if target.resolved_path.name == skill_dir.name
+                else target.resolved_path / skill_dir.name
+            )
             changes.append(
                 {
                     "path": str(destination),
@@ -3304,6 +3313,7 @@ def apply_plan(
     include_lossy: bool = False,
     accept_loss_ids: set[str] | None = None,
     strict: bool = False,
+    allow_plugin_copy: bool = False,
     allow_session_handoff: bool = False,
 ) -> tuple[dict[str, Any], Path]:
     """Apply a plan with the partial safe flow.
@@ -3491,11 +3501,16 @@ def apply_plan(
                     )
                     ensure_no_symlinks(staged)
                     preflight_skill_source(staged)
+                    destination = (
+                        target.resolved_path
+                        if target.resolved_path.name == child.name
+                        else target.resolved_path / child.name
+                    )
                     operations.append(
                         {
                             "kind": "directory",
                             "staged": staged,
-                            "destination": target.resolved_path / child.name,
+                            "destination": destination,
                             "boundary": target.boundary,
                         }
                     )
@@ -3572,6 +3587,15 @@ def apply_plan(
                     }
                 )
             elif item.object_type == "plugins":
+                # Plugin packages transfer is opt-in only (audit 0.9.1):
+                # the CLI exposes this as --include-plugins. Without the opt-in,
+                # apply fails closed.
+                if not allow_plugin_copy:
+                    raise ValueError(
+                        "plugins transfer requires explicit opt-in "
+                        "(--include-plugins); refusing to apply item: "
+                        f"{item.object_type}"
+                    )
                 # Plugin packages: copy entire .factory-plugin/ directory structure
                 # preserving all subdirectories (commands/, skills/, droids/, hooks/, mcp.json, plugin.json)
                 if not source.resolved_path.is_dir():

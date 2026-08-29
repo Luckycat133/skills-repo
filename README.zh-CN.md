@@ -18,10 +18,14 @@
 openclaw skills install @luckycat133/agent-skills-setup
 ```
 
-或直接从 GitHub 克隆到你的 Agent Skills 目录：
+或直接从 GitHub 安装：
 
 ```bash
-git clone https://github.com/Luckycat133/skills-repo.git
+git clone --depth 1 --branch v0.9.1 https://github.com/Luckycat133/skills-repo.git
+
+openclaw skills install \
+  ./skills-repo/skills/agent-skills-setup \
+  --as agent-skills-setup
 ```
 
 ---
@@ -40,10 +44,10 @@ git clone https://github.com/Luckycat133/skills-repo.git
 
 | 分级 | 对象类型 | 行为说明 |
 |---|---|---|
-| **全自动迁移** | Skills、Instructions/Rules (`CLAUDE.md`, `.cursorrules`)、本地 stdio MCP | 自动转换、敏感信息清除、支持完整预览与一键回滚。 |
+| **全自动迁移** | Skills、Instructions/Rules (`CLAUDE.md`, `.cursorrules`)、本地 stdio MCP | Skills 完整复制并验证，规则语义转换与损失报告，MCP 仅支持本地 stdio 子集安全转换。 |
 | **显式授权迁移** | 插件包复制 (`--include-plugins`)、会话总结交接 (`--include-session`) | 需显式传参；仅传输结构化白名单字段，拒绝未审查状态。 |
 | **手动核对清单** | 远程 MCP (HTTP/SSE)、云端/UI 配置、Prompts、Commands、Agents、Hooks | 生成具体的逐步重建清单；绝不自动写入未经验证的可执行脚本。 |
-| **绝对不迁移** | API Key、OAuth Token、凭据、信任状态、原始聊天历史、生成式记忆 | 零泄露保障。所有密钥被安全抹除或标记为重认证。 |
+| **绝对不迁移** | API Key、OAuth Token、凭据、信任状态、原始聊天历史、生成式记忆 | 严格密钥扫描、子对象隔离与 Fail-closed 排除；字面凭据在迁移前自动剔除或脱敏。 |
 
 ---
 

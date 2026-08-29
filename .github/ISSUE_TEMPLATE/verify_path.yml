@@ -1,0 +1,54 @@
+name: 🔍 Report Path Drift / Verify IDE Path
+description: Report an outdated, changed, or new configuration path for an existing profile
+title: "[Path Update]: "
+labels: ["ide-profile", "good first issue"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        AI coding tools evolve rapidly. If an IDE has changed its default Skills, Rules, or MCP file location, let us know!
+  - type: input
+    id: product_profile
+    attributes:
+      label: Product / Profile
+      description: The selector in Registry v2 (e.g. `cursor/ide`, `copilot/vscode`, `windsurf/ide`, `gemini/cli`).
+      placeholder: "e.g. cursor/ide"
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface Type
+      description: Which surface changed?
+      options:
+        - "skills"
+        - "instructions / rules"
+        - "mcp"
+        - "plugins"
+        - "other"
+    validations:
+      required: true
+  - type: input
+    id: old_path
+    attributes:
+      label: Current / Old Path in Registry
+      description: What is the current path recorded in the repository?
+      placeholder: "e.g. ~/.cursor/rules"
+    validations:
+      required: false
+  - type: input
+    id: new_path
+    attributes:
+      label: Verified New Path
+      description: What is the new verified location on disk?
+      placeholder: "e.g. ~/.cursor/extensions/rules"
+    validations:
+      required: true
+  - type: input
+    id: evidence_source
+    attributes:
+      label: Official Reference / Release Note URL
+      description: URL confirming this change.
+      placeholder: "https://..."
+    validations:
+      required: false

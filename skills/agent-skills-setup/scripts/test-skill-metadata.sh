@@ -49,8 +49,8 @@ if "## Permissions" not in skill:
     raise SystemExit("FAIL: body must carry an explicit ## Permissions section")
 
 version = re.search(r'(?m)^  version:\s*"([^"]+)"\s*$', frontmatter)
-if version is None or version.group(1) != "0.9.0":
-    raise SystemExit("FAIL: metadata.version must be the quoted release version (0.9.0)")
+if version is None or version.group(1) != "0.9.1":
+    raise SystemExit("FAIL: metadata.version must be the quoted release version (0.9.1)")
 
 compatibility = re.search(r"(?m)^compatibility:\s*(.*)$", frontmatter)
 if compatibility is None:
@@ -59,21 +59,21 @@ compatibility_text = compatibility.group(1).lower()
 if "no network" not in compatibility_text or "filesystem" not in compatibility_text:
     raise SystemExit("FAIL: compatibility must mention filesystem access and no network")
 
-description = re.search(r"(?ms)^description:\s*>\s*\n(.*?)(?=\n\S|\Z)", frontmatter)
+description = re.search(r"(?ms)^description:\s*>[-\s]*\n(.*?)(?=\n\S|\Z)", frontmatter)
 if description is None:
     raise SystemExit("FAIL: description is missing")
 description_text = " ".join(line.strip() for line in description.group(1).splitlines())
-if "two supported IDEs or agent products" not in description_text:
-    raise SystemExit("FAIL: description must require two named supported products")
 for capability in (
-    "specific skills",
-    "bundled Bash/Python",
-    "approved apply or rollback",
-    "write targets",
-    "backups/manifests",
-    "scan or redact secrets",
+    "migrate",
+    "restore",
+    "Cursor",
+    "Claude Code",
+    "Skills",
+    "MCP",
+    "secret redaction",
+    "rollback",
 ):
-    if capability not in description_text:
+    if capability.lower() not in description_text.lower():
         raise SystemExit(f"FAIL: description omits capability: {capability}")
 for generic in ("copy", "sync"):
     if re.search(rf"\b{re.escape(generic)}\b", description_text, re.IGNORECASE):

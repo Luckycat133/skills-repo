@@ -77,15 +77,22 @@ def probe_binary(
     return ProbeResult(product, profile, InstallState.NOT_DETECTED, ())
 
 
-_SHARED_COMPATIBILITY_NAMES = frozenset({
-    "AGENTS.md",
-    "skills",
-})
-
 _SHARED_COMPATIBILITY_SUFFIXES = (
     ".agents/skills",
     ".agents",
 )
+
+
+def _is_shared_compatibility_path(path: Path) -> bool:
+    p_posix = path.as_posix()
+    if path.name == "AGENTS.md":
+        return True
+    if any(p_posix.endswith(suf) for suf in _SHARED_COMPATIBILITY_SUFFIXES):
+        return True
+    # Generic workspace-level "skills" without a product-specific dot directory (e.g. .cursor, .cline)
+    if path.name == "skills" and not any(part.startswith(".") and part != ".agents" for part in path.parts):
+        return True
+    return False
 
 
 def probe_file_signature(
@@ -120,11 +127,7 @@ def probe_file_signature(
                 matches = list(parent.glob(pattern))
                 if matches:
                     matched = matches[0]
-                    p_posix = matched.as_posix()
-                    is_shared = (
-                        matched.name in _SHARED_COMPATIBILITY_NAMES
-                        or any(p_posix.endswith(suf) for suf in _SHARED_COMPATIBILITY_SUFFIXES)
-                    )
+                    is_shared = _is_shared_compatibility_path(matched)
                     state = (
                         InstallState.COMPATIBILITY_ONLY
                         if is_shared
@@ -136,11 +139,7 @@ def probe_file_signature(
         path = Path(target_str)
         if path.exists():
             # Distinguish shared/fallback paths from product-specific installation evidence
-            p_posix = path.as_posix()
-            is_shared = (
-                path.name in _SHARED_COMPATIBILITY_NAMES
-                or any(p_posix.endswith(suf) for suf in _SHARED_COMPATIBILITY_SUFFIXES)
-            )
+            is_shared = _is_shared_compatibility_path(path)
             if is_shared:
                 state = InstallState.COMPATIBILITY_ONLY
             else:
