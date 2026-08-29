@@ -1,0 +1,63 @@
+name: 🐛 Bug Report
+description: Report an issue with migration, backup, restore, or verification
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting an issue! Please check if your problem is already reported in open issues or discussions.
+  - type: input
+    id: source_target
+    attributes:
+      label: Source and Target IDEs / Products
+      description: Which tools are you migrating between? (e.g. Cursor -> Claude Code, Cline -> Windsurf, all-installed)
+      placeholder: "e.g. Cursor (ide) -> Claude Code (cli)"
+    validations:
+      required: true
+  - type: dropdown
+    id: command
+    attributes:
+      label: Command Executed
+      description: Which CLI command produced the issue?
+      options:
+        - "migrate"
+        - "snapshot"
+        - "restore"
+        - "plan"
+        - "apply"
+        - "verify"
+        - "rollback"
+        - "bundle-verify"
+        - "doctor"
+        - "other"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      description: Which platform are you running on?
+      options:
+        - "macOS (Apple Silicon)"
+        - "macOS (Intel)"
+        - "Linux (Ubuntu / Debian / Arch / Fedora)"
+        - "Windows (Native MSYS/Git Bash)"
+        - "Windows (WSL2)"
+        - "Other"
+    validations:
+      required: true
+  - type: textarea
+    id: what_happened
+    attributes:
+      label: What happened?
+      description: Describe what went wrong or paste the error output (secrets are automatically redacted).
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What should have happened instead?
+    validations:
+      required: false

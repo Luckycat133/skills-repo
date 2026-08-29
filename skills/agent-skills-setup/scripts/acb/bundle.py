@@ -953,7 +953,7 @@ def collect_source_objects(
             ) from error
         _record("captured")
 
-    if plan_items:
+    if plan_items is not None:
         for item in plan_items:
             _process_plan_item(item)
     else:

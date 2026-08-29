@@ -1,0 +1,44 @@
+name: 🚀 Request New IDE / Profile
+description: Request support for a new AI coding agent, IDE, or tool profile
+title: "[IDE Request]: "
+labels: ["enhancement", "ide-profile"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        We welcome requests for new AI coding tools and IDE profiles! Providing official documentation links and default configuration paths accelerates implementation.
+  - type: input
+    id: tool_name
+    attributes:
+      label: Tool / IDE Name
+      description: Name of the AI coding tool or IDE.
+      placeholder: "e.g. Continue.dev, Void, Superwhisper, Trae, Roo Code"
+    validations:
+      required: true
+  - type: input
+    id: official_docs
+    attributes:
+      label: Official Documentation URL
+      description: Official website or documentation link.
+      placeholder: "https://..."
+    validations:
+      required: true
+  - type: textarea
+    id: surfaces
+    attributes:
+      label: Known Surfaces & File Paths
+      description: |
+        Where does this tool store its skills, instructions, or MCP configurations?
+        Examples:
+        - Skills: `~/.config/tool/skills`
+        - Rules: `.toolrules` or `~/.tool/instructions.md`
+        - MCP: `~/.tool/mcp.json`
+    validations:
+      required: false
+  - type: checkboxes
+    id: sponsorship
+    attributes:
+      label: Sponsorship / Priority
+      description: Are you or your organization interested in sponsoring this adapter for priority implementation?
+      options:
+        - label: "Yes, I would like to sponsor this profile's adapter and test fixtures."

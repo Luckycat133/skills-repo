@@ -18,10 +18,14 @@ Install `agent-skills-setup` via ClawHub / OpenClaw:
 openclaw skills install @luckycat133/agent-skills-setup
 ```
 
-Or install directly from GitHub into your agent's skills directory:
+Or install directly from GitHub:
 
 ```bash
-git clone https://github.com/Luckycat133/skills-repo.git
+git clone --depth 1 --branch v0.9.1 https://github.com/Luckycat133/skills-repo.git
+
+openclaw skills install \
+  ./skills-repo/skills/agent-skills-setup \
+  --as agent-skills-setup
 ```
 
 ---
@@ -40,10 +44,10 @@ git clone https://github.com/Luckycat133/skills-repo.git
 
 | Tier | Items | Behavior |
 |---|---|---|
-| **Automatic** | Skills, Instructions/Rules (`CLAUDE.md`, `.cursorrules`), Local stdio MCP | Fully migrated with preview, secret redaction, and rollback. |
+| **Automatic** | Skills, Instructions/Rules (`CLAUDE.md`, `.cursorrules`), Local stdio MCP | Verified copy for Skills, semantic conversion for instructions, and supported local stdio MCP subset conversion. |
 | **Explicit Opt-in** | Plugin package copy (`--include-plugins`), Session handoff summary (`--include-session`) | Preserved with structured whitelisting and consent. |
 | **Manual Checklist** | Remote MCP (HTTP/SSE), Cloud/UI configurations, Prompts, Commands, Agents, Hooks | Emits concrete reconstruction checklists; never writes unreviewed executable scripts. |
-| **Never Moved** | API keys, OAuth tokens, credentials, trust state, raw chat history, generated memory | Zero-leak guarantee. All secrets redacted or required via re-auth. |
+| **Never Moved** | API keys, OAuth tokens, credentials, trust state, raw chat history, generated memory | Strict secret scanning, subobject isolation, and fail-closed exclusions. Literal credentials are rejected or redacted before migration. |
 
 ---
 

@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 💬 Community Discussions & Q&A
+    url: https://github.com/Luckycat133/skills-repo/discussions
+    about: Ask questions, share successful migrations, or discuss new ideas.
+  - name: 🛡️ Security Vulnerability Reporting
+    url: https://github.com/Luckycat133/skills-repo/security/policy
+    about: Privately report a security issue or vulnerability.
+  - name: 💖 Sponsor Development
+    url: https://github.com/sponsors/Luckycat133
+    about: Sponsor the project or fund custom IDE adapter development.

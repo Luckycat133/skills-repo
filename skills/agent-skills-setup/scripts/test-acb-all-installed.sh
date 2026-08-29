@@ -346,5 +346,321 @@ if len(objects) >= 2 and objects[0].get('files'):
         shutil.rmtree(tmp_dir, ignore_errors=True)
 "
 
+echo "=== Test 11: Child-level Skill Conflict Isolation (v0.9.1 regression) ==="
+WS_SKILL_SRC="$WORKSPACE/ws_skill_src"
+HOME_SKILL_SRC="$WORKSPACE/home_skill_src"
+HOME_SKILL_DST="$WORKSPACE/home_skill_dst"
+WS_SKILL_DST="$WORKSPACE/ws_skill_dst"
+mkdir -p "$WS_SKILL_SRC" "$HOME_SKILL_SRC" "$HOME_SKILL_DST" "$WS_SKILL_DST"
+
+# Source A (Cline): shared-skill (v1) + unique-a
+mkdir -p "$HOME_SKILL_SRC/.cline/skills/shared-skill" "$HOME_SKILL_SRC/.cline/skills/unique-a"
+cat <<'EOF' > "$HOME_SKILL_SRC/.cline/skills/shared-skill/SKILL.md"
+---
+name: shared-skill
+description: Shared skill version 1 from Cline
+---
+# Shared Skill V1
+EOF
+cat <<'EOF' > "$HOME_SKILL_SRC/.cline/skills/unique-a/SKILL.md"
+---
+name: unique-a
+description: Unique A skill from Cline
+---
+# Unique A
+EOF
+
+# Source B (Cursor): conflicting shared-skill (v2) + unique-b
+mkdir -p "$HOME_SKILL_SRC/.cursor/skills/shared-skill" "$HOME_SKILL_SRC/.cursor/skills/unique-b"
+cat <<'EOF' > "$HOME_SKILL_SRC/.cursor/skills/shared-skill/SKILL.md"
+---
+name: shared-skill
+description: Conflicting shared skill version 2 from Cursor
+---
+# Shared Skill V2 (Different Hash)
+EOF
+cat <<'EOF' > "$HOME_SKILL_SRC/.cursor/skills/unique-b/SKILL.md"
+---
+name: unique-b
+description: Unique B skill from Cursor
+---
+# Unique B
+EOF
+
+SKILL_BUNDLE="$WORKSPACE/skill-conflict.acb"
+HOME="$(native_path "$HOME_SKILL_SRC")" $MIGRATOR snapshot \
+  --registry "$REGISTRY" \
+  --workspace "$WS_SKILL_SRC" \
+  --output "$SKILL_BUNDLE" \
+  --all-installed \
+  --scope user \
+  --json >/dev/null
+
+# Destination: Cursor installed on Device B
+mkdir -p "$HOME_SKILL_DST/.cursor/skills" "$HOME_SKILL_DST/.cursor/rules"
+
+SKILL_RESTORE_OUT="$(HOME="$(native_path "$HOME_SKILL_DST")" $MIGRATOR restore \
+  "$SKILL_BUNDLE" \
+  --registry "$REGISTRY" \
+  --workspace "$WS_SKILL_DST" \
+  --all-installed \
+  --scope user \
+  --apply-safe \
+  --yes \
+  --json)"
+
+echo "$SKILL_RESTORE_OUT" | python3 -c '
+import json, sys
+data = json.load(sys.stdin)
+assert data.get("ok") is True, data
+'
+
+python3 -c "
+from pathlib import Path
+home_dst = Path(r'''$(native_path "$HOME_SKILL_DST")''')
+skills_dir = home_dst / '.cursor' / 'skills'
+
+unique_a = skills_dir / 'unique-a' / 'SKILL.md'
+unique_b = skills_dir / 'unique-b' / 'SKILL.md'
+shared = skills_dir / 'shared-skill' / 'SKILL.md'
+
+assert unique_a.is_file(), f'unique-a was blocked or not restored: {list(skills_dir.rglob(\"*\"))}'
+assert unique_b.is_file(), f'unique-b was blocked or not restored: {list(skills_dir.rglob(\"*\"))}'
+assert not shared.is_file(), f'conflicting shared-skill should not have been written'
+print('OK v0.9.1 verified: unique sibling skills (unique-a, unique-b) restored cleanly despite shared-skill conflict')
+"
+
+echo "=== Test 12: Multi-source MCP Server-Level Merge (v0.9.1 regression) ==="
+WS_MCP_SRC="$WORKSPACE/ws_mcp_src"
+HOME_MCP_SRC="$WORKSPACE/home_mcp_src"
+HOME_MCP_DST="$WORKSPACE/home_mcp_dst"
+WS_MCP_DST="$WORKSPACE/ws_mcp_dst"
+mkdir -p "$WS_MCP_SRC" "$HOME_MCP_SRC" "$HOME_MCP_DST" "$WS_MCP_DST"
+
+# Source A (Cline user MCP): filesystem (v1) + git
+mkdir -p "$HOME_MCP_SRC/.cline/data/settings" "$HOME_MCP_SRC/.cline/skills/dummy"
+cat <<'EOF' > "$HOME_MCP_SRC/.cline/skills/dummy/SKILL.md"
+---
+name: dummy
+description: Cline helper test skill for mcp
+---
+# Dummy Skill
+EOF
+cat <<'EOF' > "$HOME_MCP_SRC/.cline/data/settings/cline_mcp_settings.json"
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
+    },
+    "git": {
+      "command": "uvx",
+      "args": ["mcp-server-git"]
+    }
+  }
+}
+EOF
+
+# Source B (Claude user MCP): linear + git + conflicting filesystem
+mkdir -p "$HOME_MCP_SRC/.claude" "$HOME_MCP_SRC/.claude/skills/dummy2"
+cat <<'EOF' > "$HOME_MCP_SRC/.claude/skills/dummy2/SKILL.md"
+---
+name: dummy2
+description: Claude helper test skill for mcp
+---
+# Dummy Skill 2
+EOF
+cat <<'EOF' > "$HOME_MCP_SRC/.claude.json"
+{
+  "mcpServers": {
+    "linear": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-linear"]
+    },
+    "git": {
+      "command": "uvx",
+      "args": ["mcp-server-git"]
+    },
+    "filesystem": {
+      "command": "docker",
+      "args": ["run", "-i", "mcp/filesystem", "/conflicting/path"]
+    }
+  }
+}
+EOF
+
+# Source C (Cursor project MCP): conflicting filesystem (v2)
+mkdir -p "$HOME_MCP_SRC/.cursor/skills/dummy3" "$WS_MCP_SRC/.cursor/rules"
+cat <<'EOF' > "$HOME_MCP_SRC/.cursor/skills/dummy3/SKILL.md"
+---
+name: dummy3
+description: Cursor helper test skill for mcp
+---
+# Dummy Skill 3
+EOF
+cat <<'EOF' > "$WS_MCP_SRC/.cursor/mcp.json"
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "docker",
+      "args": ["run", "-i", "mcp/filesystem", "/conflicting/path"]
+    }
+  }
+}
+EOF
+
+MCP_BUNDLE="$WORKSPACE/mcp-merge.acb"
+HOME="$(native_path "$HOME_MCP_SRC")" $MIGRATOR snapshot \
+  --registry "$REGISTRY" \
+  --workspace "$WS_MCP_SRC" \
+  --output "$MCP_BUNDLE" \
+  --all-installed \
+  --scope user,project \
+  --json >/dev/null
+
+echo "=== MCP BUNDLE MANIFEST ==="
+python3 -c "
+import json
+from pathlib import Path
+b = Path(r'''$(native_path "$MCP_BUNDLE")''')
+m = json.loads((b / 'manifest.json').read_text())
+for o in m['objects']:
+    print(' ', o.get('product'), o.get('profile'), o.get('surface'), len(o.get('files', [])))
+"
+
+# Destination: Claude Code on Device B (reads user .claude.json and workspace .mcp.json)
+mkdir -p "$HOME_MCP_DST/.claude/skills"
+touch "$WS_MCP_DST/CLAUDE.md"
+
+MCP_RESTORE_OUT="$(HOME="$(native_path "$HOME_MCP_DST")" $MIGRATOR restore \
+  "$MCP_BUNDLE" \
+  --registry "$REGISTRY" \
+  --workspace "$WS_MCP_DST" \
+  --all-installed \
+  --scope user,project \
+  --apply-safe \
+  --yes \
+  --json)"
+
+echo "RESTORE OUT: $MCP_RESTORE_OUT"
+echo "$MCP_RESTORE_OUT" | python3 -c '
+import json, sys
+data = json.load(sys.stdin)
+assert data.get("ok") is True, data
+'
+
+python3 -c "
+import json
+from pathlib import Path
+home_dst = Path(r'''$(native_path "$HOME_MCP_DST")''')
+ws_dst = Path(r'''$(native_path "$WS_MCP_DST")''')
+
+print('Files in home_dst:', list(home_dst.rglob('*')))
+print('Files in ws_dst:', list(ws_dst.rglob('*')))
+
+claude_json = home_dst / '.claude.json'
+ws_mcp = ws_dst / '.mcp.json'
+
+found_servers = {}
+if claude_json.is_file():
+    data = json.loads(claude_json.read_text(encoding='utf-8'))
+    found_servers.update(data.get('mcpServers', {}))
+if ws_mcp.is_file():
+    data = json.loads(ws_mcp.read_text(encoding='utf-8'))
+    found_servers.update(data.get('mcpServers', {}))
+
+print('Restored MCP servers:', list(found_servers.keys()))
+assert 'git' in found_servers, f'git server missing: {found_servers}'
+assert 'linear' in found_servers, f'linear server missing: {found_servers}'
+assert 'filesystem' not in found_servers, f'conflicting filesystem server should not be present: {found_servers}'
+print('OK v0.9.1 verified: git deduplicated, linear merged, conflicting filesystem isolated')
+"
+
+echo "=== Test 13: Strict Detection Include Flags (v0.9.1 regression) ==="
+WS_DETECT="$WORKSPACE/ws_detect"
+HOME_DETECT="$WORKSPACE/home_detect"
+mkdir -p "$WS_DETECT/.agents/skills/shared-skill" "$HOME_DETECT/.agents/skills/shared-skill"
+cat <<'EOF' > "$WS_DETECT/.agents/skills/shared-skill/SKILL.md"
+---
+name: shared-skill
+description: compatibility-only shared skill
+---
+EOF
+cat <<'EOF' > "$HOME_DETECT/.agents/skills/shared-skill/SKILL.md"
+---
+name: shared-skill
+description: compatibility-only shared skill
+---
+EOF
+
+DETECT_OUT_DEFAULT="$(HOME="$(native_path "$HOME_DETECT")" PATH="/usr/bin:/bin:/usr/local/bin" $MIGRATOR snapshot \
+  --registry "$REGISTRY" \
+  --workspace "$WS_DETECT" \
+  --all-installed \
+  --output "$WORKSPACE/compat-default.acb" \
+  --json)"
+
+echo "$DETECT_OUT_DEFAULT" | python3 -c '
+import json, sys
+data = json.load(sys.stdin)
+assert data.get("ok") is True, data
+# Compatibility-only products should be excluded by default
+assert data.get("objects_captured", 0) == 0, f"Expected 0 objects by default for compatibility-only, got {data}"
+print("OK v0.9.1 verified: compatibility-only products excluded by default")
+'
+
+DETECT_OUT_OPTIN="$(HOME="$(native_path "$HOME_DETECT")" PATH="/usr/bin:/bin:/usr/local/bin" $MIGRATOR snapshot \
+  --registry "$REGISTRY" \
+  --workspace "$WS_DETECT" \
+  --all-installed \
+  --include-compatibility \
+  --output "$WORKSPACE/compat-optin.acb" \
+  --json)"
+
+echo "$DETECT_OUT_OPTIN" | python3 -c '
+import json, sys
+data = json.load(sys.stdin)
+assert data.get("ok") is True, data
+assert data.get("objects_captured", 0) >= 1, f"Expected >= 1 objects with --include-compatibility, got {data}"
+print("OK v0.9.1 verified: compatibility-only products included when --include-compatibility is provided")
+'
+
+echo "=== Test 14: Plugin & Session Handoff Opt-in Flags (v0.9.1 regression) ==="
+WS_OPTIN="$WORKSPACE/ws_optin"
+mkdir -p "$WS_OPTIN/.factory/plugins/plugin-pkg"
+cat <<'EOF' > "$WS_OPTIN/.factory/plugins/plugin-pkg/package.json"
+{
+  "name": "plugin-pkg",
+  "version": "1.0.0"
+}
+EOF
+
+# Plan with plugins
+PLAN_PLUGINS="$WORKSPACE/plan-plugins.json"
+$MIGRATOR plan \
+  --registry "$REGISTRY" \
+  --workspace "$WS_OPTIN" \
+  --source factory-droid/cli \
+  --target factory-droid/cli \
+  --objects plugins \
+  --output "$PLAN_PLUGINS" \
+  --json >/dev/null
+
+# Apply without --include-plugins should fail
+if $MIGRATOR apply "$PLAN_PLUGINS" --registry "$REGISTRY" --yes --json 2>/dev/null; then
+  echo "FAIL: apply plugins succeeded without --include-plugins"
+  exit 1
+fi
+echo "OK v0.9.1 verified: apply plugins fails closed without --include-plugins"
+
+# Apply with --include-plugins should succeed
+APPLY_OPTIN_OUT="$($MIGRATOR apply "$PLAN_PLUGINS" --registry "$REGISTRY" --include-plugins --yes --json)"
+echo "$APPLY_OPTIN_OUT" | python3 -c '
+import json, sys
+data = json.load(sys.stdin)
+assert data.get("ok") is True, data
+print("OK v0.9.1 verified: apply plugins succeeds with --include-plugins")
+'
+
 echo
 echo "All all-installed multi-IDE E2E tests PASSED!"
