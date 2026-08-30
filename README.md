@@ -21,7 +21,7 @@ openclaw skills install @luckycat133/agent-skills-setup
 Or install directly from GitHub:
 
 ```bash
-git clone --depth 1 --branch v0.9.1 https://github.com/Luckycat133/skills-repo.git
+git clone --depth 1 --branch v0.9.2 https://github.com/Luckycat133/skills-repo.git
 
 openclaw skills install \
   ./skills-repo/skills/agent-skills-setup \
