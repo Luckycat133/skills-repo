@@ -8,6 +8,8 @@
 
 Offline, previewed, and rollback-safe migration of AI coding context (Skills, Rules, Instructions, and MCP) across **Cursor, Claude Code, Codex, Cline, Windsurf, Copilot, Gemini CLI**, and dozens of supported AI coding tools.
 
+![Agent Skills Setup — 15-second demo: detect → plan → secret redaction → apply → verify](skills/agent-skills-setup/assets/demo.gif)
+
 ---
 
 ## ⚡ Quick Install

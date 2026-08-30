@@ -8,6 +8,8 @@
 
 在 **Cursor、Claude Code、Codex、Cline、Windsurf、Copilot、Gemini CLI** 以及数十种主流 AI 编程工具之间，进行**离线、带预览、可回滚**的 Skills、规则/指令和 MCP 配置迁移与跨设备备份恢复。
 
+![Agent Skills Setup — 15-second demo: detect → plan → secret redaction → apply → verify](skills/agent-skills-setup/assets/demo.gif)
+
 ---
 
 ## ⚡ 快速安装
