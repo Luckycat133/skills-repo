@@ -49,8 +49,8 @@ if "## Permissions" not in skill:
     raise SystemExit("FAIL: body must carry an explicit ## Permissions section")
 
 version = re.search(r'(?m)^  version:\s*"([^"]+)"\s*$', frontmatter)
-if version is None or version.group(1) != "0.9.1":
-    raise SystemExit("FAIL: metadata.version must be the quoted release version (0.9.1)")
+if version is None or version.group(1) != "0.9.2":
+    raise SystemExit("FAIL: metadata.version must be the quoted release version (0.9.2)")
 
 compatibility = re.search(r"(?m)^compatibility:\s*(.*)$", frontmatter)
 if compatibility is None:
