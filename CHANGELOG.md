@@ -2,6 +2,46 @@
 
 This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.2] - 2026-08-30
+
+### Fixed
+
+- **Canonical display name regression introduced by v0.9.1**: restored the public display name to "Agent Skills Setup", undoing the v0.9.1 repositioning to "Agent Context Migrator". Bumped `metadata.version` in `SKILL.md`, the README clone branch, and the metadata test assertion to `0.9.2`. No engine behaviour changed; v0.9.2 keeps all v0.9.1 capabilities (child-level skill conflicts, MCP server-level merge, strict detection flags, and fail-closed plugin/session opt-in guards).
+
+## [0.9.1] - 2026-08-29
+
+### Fixed
+
+- **P0-1 (Child-level Skill PlanItems in restore --all-installed)**:
+  - Decomposed monolithic Skills directory `PlanItem`s into per-skill child items (`<target-skills-dir>/<skill-name>`) with granular `target_group` conflict isolation.
+  - A conflicting shared skill now blocks only its own target group; unique sibling skills from every source are restored.
+  - Same-name/same-hash skills deduplicate; same-name/different-hash skills conflict individually.
+- **P0-2 (Multi-source MCP IR server-level merge)**:
+  - Multiple MCP sources mapping to the same destination file are now parsed to `MCPServerIR` and merged by server name.
+  - Identical normalized server definitions deduplicate; conflicting servers (differing command/args/transport) are isolated into the loss report.
+  - Each destination MCP file produces exactly one `PlanItem` and one atomic write operation.
+- **P1-1 (Strict detection include flags)**:
+  - `snapshot --all-installed` and restore target detection now default strictly to `InstallState.INSTALLED` sources.
+  - `CONFIGURED_ONLY` and `COMPATIBILITY_ONLY` profiles require explicit `--include-configured` and `--include-compatibility` flags.
+
+### Added
+
+- **End-to-end opt-in plumbing for plugins and session handoff**:
+  - `--include-plugins` and `--include-session` now flow from CLI (`migrate`, `apply`, `restore`) through to `apply_plan()` via the independent `allow_plugin_copy` / `allow_session_handoff` parameters.
+  - Plugin copies and handoff writes fail closed unless the corresponding flag is set.
+- **Regression tests** in `test-acb-all-installed.sh`:
+  - Mixed skill conflict + unique sibling skills (shared conflict, unique-a/unique-b applied).
+  - Multi-source MCP merge to one target (git dedupe, linear merge, filesystem conflict isolation).
+  - Strict detection include flags (default exclusion + explicit inclusion).
+  - Plugin/handoff opt-in fail-closed behavior.
+- **GitHub issue templates** (`bug_report.yml`, `request_ide_profile.yml`, `verify_path.yml`, `config.yml`) and `SUPPORT.md`.
+- **Compatibility matrix documentation** at `docs/agent-skills-setup/compatibility-matrix.md`.
+
+### Changed
+
+- Updated the canonical Skill description with natural-language search terms (migrate, back up, restore, compare, switching computers) covering Cursor, Claude Code, Codex, Cline, Copilot, Windsurf, and Gemini CLI.
+- Updated README installation commands to a versioned GitHub clone plus local-path `openclaw skills install` invocation, mirrored across all four language variants.
+
 ## [0.9.0] - 2026-08-25
 
 ### Fixed

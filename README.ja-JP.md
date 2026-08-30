@@ -8,6 +8,8 @@
 
 **Cursor、Claude Code、Codex、Cline、Windsurf、Copilot、Gemini CLI** など、多数の AI コーディングツール間で Skills、ルール/指示、MCP 設定を**オフライン・プレビュー可能・ロールバック安全**に移行・バックアップ・復元します。
 
+![Agent Skills Setup — 15-second demo: detect → plan → secret redaction → apply → verify](skills/agent-skills-setup/assets/demo.gif)
+
 ---
 
 ## ⚡ クイックインストール

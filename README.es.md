@@ -8,6 +8,8 @@
 
 Migración, respaldo y restauración de contexto de asistentes de IA (Skills, Reglas/Instrucciones y MCP) entre **Cursor, Claude Code, Codex, Cline, Windsurf, Copilot, Gemini CLI** y decenas de herramientas de programación con IA — **completamente offline, con vista previa y seguro ante rollback**.
 
+![Agent Skills Setup — 15-second demo: detect → plan → secret redaction → apply → verify](skills/agent-skills-setup/assets/demo.gif)
+
 ---
 
 ## ⚡ Instalación Rápida
