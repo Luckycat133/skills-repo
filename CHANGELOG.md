@@ -2,6 +2,12 @@
 
 This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.2] - 2026-08-30
+
+### Changed
+
+- Updated the canonical display name from "Agent Context Migrator" to "Agent Skills Setup" across `SKILL.md`, the four language variants of the README, and the metadata test.
+
 ## [0.9.1] - 2026-08-29
 
 ### Fixed
