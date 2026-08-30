@@ -4,9 +4,9 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ## [0.9.2] - 2026-08-30
 
-### Changed
+### Fixed
 
-- Updated the canonical display name from "Agent Context Migrator" to "Agent Skills Setup" across `SKILL.md`, the four language variants of the README, and the metadata test.
+- **Canonical display name regression introduced by v0.9.1**: restored the public display name to "Agent Skills Setup", undoing the v0.9.1 repositioning to "Agent Context Migrator". Bumped `metadata.version` in `SKILL.md`, the README clone branch, and the metadata test assertion to `0.9.2`. No engine behaviour changed; v0.9.2 keeps all v0.9.1 capabilities (child-level skill conflicts, MCP server-level merge, strict detection flags, and fail-closed plugin/session opt-in guards).
 
 ## [0.9.1] - 2026-08-29
 
