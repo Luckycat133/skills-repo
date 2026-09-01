@@ -37,12 +37,12 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.11'
 
@@ -148,7 +148,7 @@ jobs:
           EOF
 
       - name: Upload online freshness report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: online-freshness-report
           path: online-freshness-report.json
@@ -167,12 +167,12 @@ jobs:
     if: github.event.inputs.create_candidate_issue == 'true'
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.11'
 
@@ -275,7 +275,7 @@ jobs:
           EOF
 
       - name: Upload candidate discovery report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: candidate-discovery-report
           path: candidate-discovery-report.json
