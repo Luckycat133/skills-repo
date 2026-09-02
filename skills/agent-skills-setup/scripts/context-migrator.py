@@ -35,6 +35,7 @@ from migration_core import (
     build_plan,
     build_plan_document,
     choose_surface,
+    emit_mcp_document,
     git_provenance,
     hash_path,
     json_sha256,
@@ -1123,6 +1124,7 @@ def _build_all_installed_restore_items(
     target_detected_selectors: set[str],
     object_types: list[str],
     scope: str,
+    staging_root: Path,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, str]]]:
     """Build restore plan items with object-level identity, deduplication, and conflict tracking."""
     all_items: list[dict[str, Any]] = []
@@ -1330,29 +1332,14 @@ def _build_all_installed_restore_items(
                 ]
 
                 if valid_servers:
-                    mcp_temp_dir = Path(tempfile.mkdtemp(prefix="acb-mcp-merged-"))
+                    mcp_temp_dir = staging_root / "mcp-merged"
+                    mcp_temp_dir.mkdir(parents=True, exist_ok=True)
                     merged_file = mcp_temp_dir / f"merged_mcp_{hashlib.sha256(target_path.encode()).hexdigest()[:8]}.json"
-                    servers_map: dict[str, Any] = {}
-                    for srv in valid_servers:
-                        s_dict: dict[str, Any] = {}
-                        if srv.command is not None:
-                            s_dict["command"] = srv.command
-                        if srv.args:
-                            s_dict["args"] = srv.args
-                        if srv.env:
-                            s_dict["env"] = srv.env
-                        if srv.url is not None:
-                            s_dict["url"] = srv.url
-                        if srv.headers:
-                            s_dict["headers"] = srv.headers
-                        if srv.transport and srv.transport != "stdio":
-                            s_dict["transport"] = srv.transport
-                        if srv.cwd:
-                            s_dict["cwd"] = srv.cwd
-                        servers_map[srv.name] = s_dict
-
-                    merged_doc = {"mcpServers": servers_map}
-                    atomic_write(merged_file, json.dumps(merged_doc, indent=2) + "\n")
+                    merged_text, merge_losses = emit_mcp_document(
+                        valid_servers, "json:mcpServers"
+                    )
+                    dropped_losses.extend(merge_losses.to_dict()["items"])
+                    atomic_write(merged_file, merged_text)
 
                     merged_item = copy.deepcopy(candidates[0][0])
                     merged_item["source"]["resolved_path"] = str(merged_file)
@@ -1491,6 +1478,7 @@ def run_restore(args: argparse.Namespace) -> int:
                 target_detected_selectors=target_detected_selectors,
                 object_types=object_types,
                 scope=args.scope,
+                staging_root=temp_source_dir,
             )
 
             document = {

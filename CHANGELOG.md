@@ -2,6 +2,12 @@
 
 This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **All-installed MCP merge staging**: redact credential-bearing MCP values before generating merged plan sources, keep those files inside the managed restore staging tree, and remove them on every exit path. Clarified that `snapshot --all-installed` writes only its explicit bundle output, while bulk restore/apply requires `--yes`.
+
 ## [0.9.2] - 2026-08-30
 
 ### Fixed
