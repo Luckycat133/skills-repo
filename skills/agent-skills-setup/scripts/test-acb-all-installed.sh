@@ -475,7 +475,11 @@ cat <<'EOF' > "$HOME_MCP_SRC/.claude.json"
   "mcpServers": {
     "linear": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-linear"]
+      "args": ["-y", "@modelcontextprotocol/server-linear"],
+      "env": {
+        "LINEAR_API_KEY": "${LINEAR_API_KEY}",
+        "PRIVATE_API_KEY": "literal-test-value"
+      }
     },
     "git": {
       "command": "uvx",
@@ -531,8 +535,10 @@ for o in m['objects']:
 # Destination: Claude Code on Device B (reads user .claude.json and workspace .mcp.json)
 mkdir -p "$HOME_MCP_DST/.claude/skills"
 touch "$WS_MCP_DST/CLAUDE.md"
+MCP_TMPDIR="$WORKSPACE/mcp_tmp"
+mkdir -p "$MCP_TMPDIR"
 
-MCP_RESTORE_OUT="$(HOME="$(native_path "$HOME_MCP_DST")" $MIGRATOR restore \
+MCP_RESTORE_OUT="$(HOME="$(native_path "$HOME_MCP_DST")" TMPDIR="$(native_path "$MCP_TMPDIR")" $MIGRATOR restore \
   "$MCP_BUNDLE" \
   --registry "$REGISTRY" \
   --workspace "$WS_MCP_DST" \
@@ -573,8 +579,16 @@ print('Restored MCP servers:', list(found_servers.keys()))
 assert 'git' in found_servers, f'git server missing: {found_servers}'
 assert 'linear' in found_servers, f'linear server missing: {found_servers}'
 assert 'filesystem' not in found_servers, f'conflicting filesystem server should not be present: {found_servers}'
+assert found_servers['linear'].get('env', {}).get('LINEAR_API_KEY') == '\${LINEAR_API_KEY}', found_servers
+assert found_servers['linear'].get('env', {}).get('PRIVATE_API_KEY') == '\${PRIVATE_API_KEY}', found_servers
 print('OK v0.9.1 verified: git deduplicated, linear merged, conflicting filesystem isolated')
 "
+
+if find "$MCP_TMPDIR" -maxdepth 1 -type d -name 'acb-mcp-merged-*' | grep -q .; then
+  echo "FAIL: merged MCP temporary directory leaked outside the managed restore staging tree"
+  exit 1
+fi
+echo "OK merged MCP staging was cleaned with the managed restore source tree"
 
 echo "=== Test 13: Strict Detection Include Flags (v0.9.1 regression) ==="
 WS_DETECT="$WORKSPACE/ws_detect"

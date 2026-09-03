@@ -29,7 +29,7 @@ description: >-
 
 ## Capabilities and authorization
 
-- `detect`, `doctor`, `inventory`, `plan`, `snapshot`, and `bundle-verify` read only named products and workspace; network access is forbidden.
+- `detect`, `doctor`, `inventory`, `plan`, `snapshot`, and `bundle-verify` read only named products and workspace; network access is forbidden. `snapshot` additionally writes only its explicit bundle output.
 - A generic migration request authorizes planning only; separate explicit user approval (`--yes`) or explicit action verbs (apply, restore, 迁到) under `--apply-safe` authorize write.
 - Save the plan, review its diff/rebuild manifest, and apply that exact file. ACB `restore` constructs a dual-side plan binding bundle sources to destination targets, supporting replayable plans (`--plan-in`) with strict TOCTOU state guards.
 
@@ -47,7 +47,7 @@ description: >-
 
 - High-level: `bash scripts/smart-ide-migration.sh migrate --source <src> --target <dst> --workspace . --objects all-portable --yes`
 - Step-by-step: `plan --output <plan.json>` -> `apply <plan.json> --manifest <manifest.json> --yes` -> `verify --manifest <manifest.json>` -> `rollback --manifest <manifest.json> --yes`.
-- Device handoff (ACB): `snapshot` captures portable skills/instructions/MCP with atomic staging and 1:1 manifest bindings; `bundle-verify` re-checks checksums, bindings, secrets, and signatures; `restore [--plan-only | --plan-in <plan> --yes]` reviews then executes the dual-side plan. `--all-installed` bulk mode requires review and `--yes`.
+- Device handoff (ACB): `snapshot` captures portable skills/instructions/MCP with atomic staging and 1:1 manifest bindings; `bundle-verify` re-checks checksums, bindings, secrets, and signatures; `restore [--plan-only | --plan-in <plan> --yes]` reviews then executes the dual-side plan. `snapshot --all-installed` writes only the explicit bundle output after detection review; restoring or applying bulk results requires `--yes`.
 - Cross-platform: `%APPDATA%` / `%USERPROFILE%` / `$APPDATA` resolution, platform detection, per-surface path isolation (remote hosts experimental). `detect` / `doctor` inspect installation state offline.
 - The explicit `legacy` subcommand is read-only lookup compatibility (`--print-path`, `--dry-run`); legacy writes are disabled and enforced by the Python wrapper.
 - Object-type scope (exhaustive — apply writes nothing outside it):
