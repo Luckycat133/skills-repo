@@ -264,6 +264,16 @@ def create_parser() -> argparse.ArgumentParser:
     snapshot.add_argument("--target", default="forge/cli")
     snapshot.add_argument("--scope", default="user,project")
     snapshot.add_argument(
+        "--objects",
+        default="skills,instructions,mcp",
+        help=(
+            "Comma-separated list of object types to include in the snapshot "
+            "(default: skills,instructions,mcp). Use 'plugin' with "
+            "--include-plugins and 'handoff' with --include-session to round-trip "
+            "those opt-in objects through an ACB."
+        ),
+    )
+    snapshot.add_argument(
         "--all-installed",
         action="store_true",
         help="Snapshot all detected and installed products on this device.",
@@ -336,6 +346,16 @@ def create_parser() -> argparse.ArgumentParser:
     restore.add_argument("--source", default="cline/ide")
     restore.add_argument("--target", default="forge/cli")
     restore.add_argument("--scope", default="user,project")
+    restore.add_argument(
+        "--objects",
+        default="skills,instructions,mcp",
+        help=(
+            "Comma-separated list of object types to include in the restore "
+            "plan (default: skills,instructions,mcp). Use 'plugin' with "
+            "--include-plugins and 'handoff' with --include-session to round-trip "
+            "those opt-in objects through an ACB."
+        ),
+    )
     restore.add_argument(
         "--all-installed",
         action="store_true",
@@ -1952,7 +1972,7 @@ def run_new_cli(argv: list[str]) -> int:
                 shutil.rmtree(temp_dir, ignore_errors=True)
 
     if args.command == "migrate":
-        if not args.yes:
+        if not getattr(args, "plan_only", False) and not args.yes:
             raise ValueError(
                 "migrate requires --yes after specifying source/target/objects"
             )

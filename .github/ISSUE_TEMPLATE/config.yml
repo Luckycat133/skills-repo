@@ -1,8 +1,5 @@
 blank_issues_enabled: true
 contact_links:
-  - name: 💬 Community Discussions & Q&A
-    url: https://github.com/Luckycat133/skills-repo/discussions
-    about: Ask questions, share successful migrations, or discuss new ideas.
   - name: 🛡️ Security Vulnerability Reporting
     url: https://github.com/Luckycat133/skills-repo/security/policy
     about: Privately report a security issue or vulnerability.

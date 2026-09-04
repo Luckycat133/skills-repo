@@ -6,7 +6,21 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reporting an issue! Please check if your problem is already reported in open issues or discussions.
+        Thanks for reporting an issue! Please check if your problem is already reported in open issues.
+
+        > ⚠️ **Do NOT paste API keys, tokens, cookies, Authorization headers, environment
+        > values, private repository URLs, full configuration files, or any other
+        > credentials into this issue.** GitHub Issues are **public** and are **not**
+        > automatically redacted. The repository has no server-side secret scan at
+        > issue creation time.
+        >
+        > If you need to share logs, run a local secret scan first:
+        >
+        > ```bash
+        > python3 skills/agent-skills-setup/scripts/scan-skill-secrets.py path/to/your.log
+        > ```
+        >
+        > Remove or mask any remaining secret-looking values manually before pasting.
   - type: input
     id: source_target
     attributes:
@@ -51,7 +65,7 @@ body:
     id: what_happened
     attributes:
       label: What happened?
-      description: Describe what went wrong or paste the error output (secrets are automatically redacted).
+      description: Describe what went wrong. If you paste log output, first run the local secret scanner shown above and confirm no credentials remain.
     validations:
       required: true
   - type: textarea

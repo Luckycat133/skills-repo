@@ -1184,8 +1184,10 @@ def verify_bundle(bundle_root: Path) -> list[str]:
                     )
 
             # If manifest declared specific object files, ensure no undeclared files exist in objects/
+            # Unconditional: even an empty manifest must claim every file (otherwise
+            # an attacker who rewrites manifest+checksums could smuggle files in).
             objects_root = bundle_root / ACB_OBJECTS_DIR
-            if objects_root.is_dir() and manifest_files:
+            if objects_root.is_dir():
                 for disk_file in sorted(objects_root.rglob("*")):
                     if disk_file.is_file():
                         rel = f"{ACB_OBJECTS_DIR}/{disk_file.relative_to(objects_root).as_posix()}"
@@ -1337,11 +1339,34 @@ def _verify_signature_payload(
 
 
 def sign_bundle(bundle_root: Path, key_path: Path, signer: str) -> Path:
-    Ed25519PrivateKey, _, _ = _ensure_cryptography()
     bundle_root = bundle_root.resolve()
+
+    # 1. Refuse to sign if checksums.json is a symlink (audit #5): a hostile
+    # bundle could redirect the signer's read outside the bundle directory.
     checksums_path = bundle_root / ACB_CHECKSUMS_NAME
+    if checksums_path.is_symlink():
+        raise ACBError(f"refusing to sign: {checksums_path} is a symlink")
     if not checksums_path.is_file():
         raise ACBError(f"cannot sign: {checksums_path} missing")
+
+    # 2. Verify the bundle BEFORE signing (audit #5): never attest a bundle
+    # whose own integrity or content scans have already failed.
+    pre_errors = verify_bundle(bundle_root)
+    if pre_errors:
+        raise ACBError(
+            "refusing to sign bundle that failed verification: "
+            + "; ".join(pre_errors)
+        )
+
+    # 3. Refuse to overwrite a pre-existing signature.json that is a symlink
+    # (audit #5): prevents a hostile bundle from redirecting the write out of
+    # the bundle directory.
+    sig_path = bundle_root / ACB_SIGNATURE_NAME
+    if sig_path.is_symlink():
+        raise ACBError(f"refusing to overwrite symlink at {sig_path}")
+
+    # 4. Build the Ed25519 signature document.
+    Ed25519PrivateKey, _, _ = _ensure_cryptography()
     private_key = Ed25519PrivateKey.from_private_bytes(_read_signing_key(key_path))
     payload = checksums_path.read_bytes()
     signature_doc = _build_signature_document(
@@ -1350,11 +1375,45 @@ def sign_bundle(bundle_root: Path, key_path: Path, signer: str) -> Path:
         payload,
         signer,
     )
-    sig_path = bundle_root / ACB_SIGNATURE_NAME
-    sig_path.write_text(
-        json.dumps(signature_doc, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+
+    # 5. Atomic write: write to a sibling temp file, fsync, then os.replace.
+    sig_tmp = bundle_root / (ACB_SIGNATURE_NAME + ".tmp")
+    with open(sig_tmp, "w", encoding="utf-8") as fh:
+        fh.write(json.dumps(signature_doc, indent=2, sort_keys=True) + "\n")
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(sig_tmp, sig_path)
+
+    # 6. Post-signature verification (audit #5): verify the freshly written
+    # signature with the public key embedded in the signature document. This
+    # catches a corrupted write before the operator trusts the bundle, and
+    # also re-runs verify_bundle so any post-write drift is surfaced.
+    pub_tmp = bundle_root / (ACB_SIGNATURE_NAME + ".pubtmp")
+    try:
+        pub_tmp.write_bytes(
+            base64.b64decode(signature_doc["public_key"], validate=True)
+        )
+        try:
+            pub_tmp.chmod(0o600)
+        except OSError:
+            pass
+        post_errors = verify_bundle_signature(bundle_root, pub_tmp)
+    finally:
+        try:
+            pub_tmp.unlink()
+        except FileNotFoundError:
+            pass
+    if post_errors:
+        # Revert the bad signature so the bundle is not left in a
+        # "signed but unverifiable" state.
+        try:
+            sig_path.unlink()
+        except FileNotFoundError:
+            pass
+        raise ACBError(
+            "post-signature verification failed: " + "; ".join(post_errors)
+        )
+
     return sig_path
 
 

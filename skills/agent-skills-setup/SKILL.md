@@ -17,7 +17,9 @@ description: >-
   MCP with secret redaction, preview, verification, and rollback.
 ---
 
-# AI IDE Context Migration
+# Agent Skills Setup
+
+> AI IDE Context Migration across Cursor, Claude Code, Codex, Cline, Copilot, Windsurf, and Gemini CLI.
 
 ## Permissions
 
