@@ -7,6 +7,7 @@
 .workbuddy/
 .superpowers/
 .claude/
+.agent-context-migration/
 /datasets/
 
 # Secrets / environment (migration scripts write OpenClaw config/.env)
