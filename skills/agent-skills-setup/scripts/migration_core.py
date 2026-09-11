@@ -372,6 +372,7 @@ class PlanItem:
     target: SurfacePath | None = None
     manual_actions: list[str] = field(default_factory=list)
     object_id: str = field(default="", repr=False)
+    acb_uri: str | None = field(default=None, repr=False)
     expected_source_state: dict[str, Any] | None = field(default=None, repr=False)
     expected_target_state: dict[str, Any] | None = field(default=None, repr=False)
 
@@ -414,6 +415,7 @@ class PlanItem:
             "target": self.target.to_dict() if self.target else None,
             "manual_actions": self.manual_actions,
             "object_id": self.object_id,
+            "acb_uri": self.acb_uri,
         }
 
 
@@ -3033,8 +3035,15 @@ def validate_plan_document(
                 target=tgt_surf,
                 manual_actions=stored.get("manual_actions", []),
                 object_id=stored.get("object_id", ""),
+                acb_uri=stored.get("acb_uri"),
             )
-            if item.source is not None:
+            # P0-1 (0.9.3): items carrying an acb:// URI are backed by
+            # bundle objects, not the original /tmp staging path. The
+            # replay path re-stages them from the verified bundle into a
+            # fresh temp dir, so the recorded source_state is meaningless
+            # and the integrity guarantee comes from the bundle manifest
+            # + content hash. Skip the path_state check.
+            if item.source is not None and not item.acb_uri:
                 if stored.get("source_state") != path_state(item.source.resolved_path):
                     raise ValueError(
                         f"source changed after plan review: {item.source.resolved_path}"

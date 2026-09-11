@@ -10,6 +10,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -1137,6 +1138,162 @@ def _detect_target_profiles_for_restore(
     return target_detected_selectors, target_detection_status
 
 
+def _safe_canonical(canonical: str) -> str:
+    """Mirror ``acb.bundle._path_for_object``'s canonical transform.
+
+    The snapshot stores captured files at
+    ``objects/<obj_type>/<product>/<profile>/<scope>/<safe_canonical>/<rest>``.
+    Replay must strip the metadata prefix and stage the rest under the same
+    ``<safe_canonical>`` layout so a resolved_path can be rebuilt as
+    ``<staging_root>/<safe_canonical>/<skill>/SKILL.md`` — matching the
+    Process A staging that originally produced the plan.
+    """
+    safe = canonical.strip("/\\").replace("~", "home").replace("..", "_")
+    safe = re.sub(r"[/\\:]+", "/", safe)
+    return safe
+
+
+def _resolve_bundle_plan_sources(
+    document: dict[str, Any],
+    bundle_root: Path,
+    staging_root: Path,
+) -> list[Path]:
+    """Re-stage plan sources from verified bundle objects (P0-1, v0.9.3).
+
+    For every item carrying an ``acb_uri`` (``acb://<bundle-id>#<object-id>``),
+    verify the bundle, look up the referenced manifest object, verify content
+    hash, copy the object into a fresh ``staging_root/<object-id>/`` tree,
+    and rewrite ``source.resolved_path`` to point at the freshly staged file.
+
+    Items without an ``acb_uri`` are left untouched. The returned list
+    contains the new staging root so the caller can clean it up.
+
+    Raises:
+        ValueError: bundle verification fails, the object is missing, or
+            a content hash does not match.
+    """
+    from acb.bundle import verify_bundle as _verify_bundle
+
+    objects_root = bundle_root / ACB_OBJECTS_DIR
+    manifest = load_manifest(bundle_root)
+    object_by_id: dict[str, dict[str, Any]] = {
+        obj.get("object_id", ""): obj for obj in manifest.objects if obj.get("object_id")
+    }
+
+    if staging_root.exists():
+        shutil.rmtree(staging_root, ignore_errors=True)
+    staging_root.mkdir(parents=True, exist_ok=True)
+
+    # Verify the bundle once before staging anything. verify_bundle covers
+    # closed-world file enumeration, manifest integrity, and per-object
+    # secret/binary scans.
+    errors = _verify_bundle(bundle_root)
+    if errors:
+        raise ValueError(
+            "bundle failed verification before plan replay: " + "; ".join(errors)
+        )
+
+    resolved = 0
+    for item in document.get("items", []):
+        acb_uri = item.get("acb_uri")
+        src = item.get("source")
+        if not acb_uri or not src:
+            continue
+        object_id = item.get("object_id", "")
+        obj = object_by_id.get(object_id)
+        if obj is None:
+            raise ValueError(
+                f"acb_uri {acb_uri} references unknown object_id {object_id}"
+            )
+        # Validate the URI matches the loaded bundle before doing any I/O.
+        if not acb_uri.startswith("acb://"):
+            raise ValueError(f"malformed acb_uri: {acb_uri}")
+        uri_bundle = acb_uri[len("acb://"):].split("#", 1)[0]
+        if uri_bundle != manifest.bundle_id:
+            raise ValueError(
+                f"acb_uri bundle mismatch: uri={uri_bundle} bundle={manifest.bundle_id}"
+            )
+
+        # The bundle stores files under objects/<obj_type>/<prod>/<prof>/<scope>/
+        # <safe_canonical>/<rest> (see acb.bundle._path_for_object). We strip
+        # that metadata prefix and stage the rest directly under staging_root
+        # so the resulting tree mirrors Process A's staging layout
+        # (e.g. <staging>/home/.cline/skills/<skill>/SKILL.md).
+        obj_prefix = (
+            f"{src.get('object_type', '')}/{src.get('product', '')}/"
+            f"{src.get('profile', '')}/{src.get('scope', '')}"
+        )
+        canonical_path = src.get("canonical_path", "") or src.get("path", "")
+        safe_canonical = _safe_canonical(canonical_path)
+
+        # Stage every declared file for this object directly under staging_root.
+        staged_files: list[Path] = []
+        for file_entry in obj.get("files", []):
+            rel = file_entry.get("path", "")
+            if not rel:
+                continue
+            rel_clean = (
+                rel[len(ACB_OBJECTS_DIR) + 1:]
+                if rel.startswith(ACB_OBJECTS_DIR + "/")
+                else rel
+            )
+            prefix_with_sep = obj_prefix + "/"
+            if rel_clean.startswith(prefix_with_sep):
+                stripped = rel_clean[len(prefix_with_sep):]
+            else:
+                # Bundle predates the metadata-prefix convention: stage the
+                # full rel_clean so the test still produces a usable tree.
+                stripped = rel_clean
+            src_file = objects_root / rel_clean
+            if not src_file.is_file() or src_file.is_symlink():
+                raise ValueError(f"missing or symlinked object file: {rel}")
+            expected_sha = file_entry.get("sha256", "")
+            if expected_sha:
+                actual_sha = hashlib.sha256(src_file.read_bytes()).hexdigest()
+                if actual_sha != expected_sha:
+                    raise ValueError(
+                        f"object {object_id} file {rel} hash mismatch "
+                        f"(expected {expected_sha[:12]}\u2026 got {actual_sha[:12]}\u2026)"
+                    )
+            tgt = staging_root / stripped
+            tgt.parent.mkdir(parents=True, exist_ok=True)
+            tgt.write_bytes(src_file.read_bytes())
+            staged_files.append(tgt)
+
+        if not staged_files:
+            raise ValueError(
+                f"object {object_id} has no stageable files for replay"
+            )
+
+        # Pick the primary staged file: SKILL.md wins for skills, otherwise
+        # the first file. resolved_path must be the directory containing it
+        # so _skill_sources (and the apply preflight) accept it as a source.
+        primary_file = next(
+            (p for p in staged_files if p.name == "SKILL.md"),
+            staged_files[0],
+        )
+        src["resolved_path"] = str(primary_file.parent)
+
+        # Boundary is the HOME-equivalent inside the replay staging (the
+        # first segment of safe_canonical: "home" for user scope, the
+        # workspace-relative root for project scope). path-relative
+        # boundary checks then see resolved_path as inside boundary.
+        boundary = staging_root
+        if safe_canonical:
+            first_segment = safe_canonical.split("/", 1)[0]
+            if first_segment:
+                boundary = staging_root / first_segment
+        src["boundary"] = str(boundary)
+        resolved += 1
+
+    if resolved == 0 and any(item.get("acb_uri") for item in document.get("items", [])):
+        # All items had acb_uri but none resolved: this is a hard error,
+        # not a silent fallback. Forces operator attention on bad bundles.
+        raise ValueError("plan declares acb_uri items but none resolved from bundle")
+
+    return [staging_root]
+
+
 def _build_all_installed_restore_items(
     source_registry: Registry,
     target_registry: Registry,
@@ -1145,6 +1302,7 @@ def _build_all_installed_restore_items(
     object_types: list[str],
     scope: str,
     staging_root: Path,
+    bundle_id: str = "",
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, str]]]:
     """Build restore plan items with object-level identity, deduplication, and conflict tracking."""
     all_items: list[dict[str, Any]] = []
@@ -1176,6 +1334,13 @@ def _build_all_installed_restore_items(
 
                     if not target_path or item.get("status") in {"invalid", "manual-rebuild"}:
                         continue
+
+                    # P0-1 (0.9.3): attach a stable acb:// URI to every item so
+                    # the plan document survives a cross-process replay. The
+                    # object_id is already stable; the bundle_id is supplied
+                    # by run_restore from the loaded manifest.
+                    if bundle_id and item.get("object_id"):
+                        item["acb_uri"] = f"acb://{bundle_id}#{item['object_id']}"
 
                     # Audit P0-1: Child-level skill conflict detection & deduplication (0.9.1)
                     if obj_type == "skills" and source_path and source_path.is_dir():
@@ -1429,6 +1594,7 @@ def run_restore(args: argparse.Namespace) -> int:
     )
 
     temp_dir: str | None = None
+    replay_staging_dirs: list[Path] = []
     try:
         temp_dir = tempfile.mkdtemp(prefix="acb-source-stage-")
         temp_source_dir = Path(temp_dir)
@@ -1470,6 +1636,23 @@ def run_restore(args: argparse.Namespace) -> int:
         plan_in = getattr(args, "plan_in", None)
         if plan_in:
             document = load_plan_document(plan_in.resolve())
+            # P0-1 (v0.9.3): replay path. Re-stage any acb:// items from
+            # the verified bundle into a fresh temp dir before validation
+            # so the resolved_path matches reality on a different process.
+            # The replay staging must stay alive until apply_plan has read
+            # each item's resolved_path (outer finally cleans it up).
+            if (
+                document.get("source") in ("all-installed", "auto")
+                or document.get("target") in ("all-installed", "auto")
+            ):
+                replay_staging = Path(
+                    tempfile.mkdtemp(prefix="acb-replay-stage-")
+                )
+                replay_staging_dirs.extend(
+                    _resolve_bundle_plan_sources(
+                        document, bundle_root, replay_staging
+                    )
+                )
             plan_items, _ = validate_plan_document(
                 document, target_registry, source_registry=source_registry
             )
@@ -1499,6 +1682,7 @@ def run_restore(args: argparse.Namespace) -> int:
                 object_types=object_types,
                 scope=args.scope,
                 staging_root=temp_source_dir,
+                bundle_id=manifest.bundle_id,
             )
 
             document = {
@@ -1630,8 +1814,11 @@ def run_restore(args: argparse.Namespace) -> int:
         )
         return 0
     finally:
-        # The staged source tree must stay alive until apply_plan has read it,
-        # so it is cleaned up only here (audit #5: never leak to /tmp).
+        # The staged source tree (and any replay staging from --plan-in)
+        # must stay alive until apply_plan has read it, so they are cleaned
+        # up only here (audit #5: never leak to /tmp).
+        for d in replay_staging_dirs:
+            shutil.rmtree(d, ignore_errors=True)
         if temp_dir is not None and Path(temp_dir).exists():
             shutil.rmtree(temp_dir, ignore_errors=True)
 
