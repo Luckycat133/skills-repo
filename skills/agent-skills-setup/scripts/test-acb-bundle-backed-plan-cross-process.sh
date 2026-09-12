@@ -71,7 +71,7 @@ fi
 echo "OK no staging leak after Process A exit"
 
 # Sanity: plan.json contains acb:// URIs.
-ACB_URIS="$(python3 -c "import json,sys; d=json.load(open('$PLAN')); print(sum(1 for it in d.get('items',[]) if it.get('acb_uri')))")"
+ACB_URIS="$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(sum(1 for it in d.get('items',[]) if it.get('acb_uri')))" "$PLAN")"
 if [ "$ACB_URIS" = "0" ]; then
     echo "FAIL: plan has no acb_uri items (P0-1 source identity missing)"
     exit 1
