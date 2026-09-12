@@ -39,7 +39,7 @@ description: >-
 
 1. Resolve both product profiles through [ide-registry.md](references/ide-registry.md) / [registry-v2.json](references/registry-v2.json).
 2. Read only [references/ides/<source>.md](references/ides/) and [references/ides/<target>.md](references/ides/).
-3. Load reference by need:
+3. Load by need:
    - Before preview or apply: [references/migration-safety.md](references/migration-safety.md)
    - MCP objects: [references/mcp-migration.md](references/mcp-migration.md)
    - Other file objects: [references/object-migration.md](references/object-migration.md)
@@ -55,7 +55,7 @@ description: >-
 - Object-type scope (exhaustive — apply writes nothing outside it):
   - Auto-migratable (`ready`): `skills`, `instructions`, `mcp`; opaque plugin package copy where both profiles declare it.
   - Draft-only, never auto-written: `prompts`, `commands`, `agents`, `hooks`, `workflows`. Executable surfaces have no staging writer; replayed plans marking them eligible fail closed.
-  - Opt-in session transfer: `handoff` needs `--objects handoff` AND `--include-session`; only reviewed summary, git branch, relative selected files, and an explicit patch travel. Raw conversation, tokens, session state, machine paths, logs discarded.
+  - Opt-in session transfer: `handoff` needs `--objects handoff` AND `--include-session`; travels only reviewed summary, git branch, selected files, and an explicit patch. Raw conversation, tokens, session state, machine paths, logs discarded.
   - Never migrated: trust state, generated memory, cloud knowledge, approvals, chat history.
 - Sensitive shared settings files are read only for the named migration's authorized MCP subobject; trust sections (`never-migrate`) and sibling settings never enter plans or bundles; strict secret redaction before output. See [references/mcp-migration.md](references/mcp-migration.md).
-- Claude Desktop MCP in **Settings → Extensions/Connectors** is UI-managed; never infer or rewrite it from legacy JSON.
+- Claude Desktop app MCP in **Settings → Extensions** and **Settings → Connectors** is UI-managed; never infer or rewrite it from legacy JSON.
