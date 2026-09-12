@@ -1,7 +1,7 @@
 ---
 name: agent-skills-setup
 license: MIT
-compatibility: Requires local Bash, Python 3, environment lookup, and filesystem reads. Writes only approved migration targets; no network access.
+compatibility: Requires local Bash, Python 3, environment lookup, filesystem reads; writes only approved migration targets; no network access.
 metadata:
   version: "0.9.3"
   permissions.shell: "bundled offline Bash/Python scripts plus local read-only detection commands"
@@ -31,13 +31,13 @@ description: >-
 
 ## Capabilities and authorization
 
-- `detect`, `doctor`, `inventory`, `plan`, `snapshot`, and `bundle-verify` read only named products and workspace; network forbidden. `snapshot` writes only its explicit bundle output.
-- A generic migration request authorizes planning only; writes need explicit approval (`--yes`) or action verbs (apply, restore, 迁到) under `--apply-safe`.
+- `detect`, `doctor`, `inventory`, `plan`, `snapshot`, and `bundle-verify` read only named products/workspace; network access is forbidden. `snapshot` writes only its explicit bundle output.
+- A generic migration request authorizes planning only; separate explicit user approval (`--yes`) or explicit action verbs (apply, restore, 迁到) under `--apply-safe` authorize write.
 - Save the plan, review its diff/rebuild manifest, and apply that exact file. ACB `restore` constructs a dual-side plan binding bundle sources to destination targets, supporting replayable plans (`--plan-in`) with strict TOCTOU state guards.
 
 ## Route
 
-1. Resolve both product profiles through [ide-registry.md](references/ide-registry.md) / [registry-v2.json](references/registry-v2.json).
+1. Resolve both profiles through [ide-registry.md](references/ide-registry.md) / [registry-v2.json](references/registry-v2.json).
 2. Read only [references/ides/<source>.md](references/ides/) and [references/ides/<target>.md](references/ides/).
 3. Load by need:
    - Before preview or apply: [references/migration-safety.md](references/migration-safety.md)
@@ -51,11 +51,11 @@ description: >-
 - Step-by-step: `plan --output <plan.json>` -> `apply <plan.json> --manifest <manifest.json> --yes` -> `verify --manifest <manifest.json>` -> `rollback --manifest <manifest.json> --yes`.
 - Device handoff (ACB): `snapshot` captures portable skills/instructions/MCP with atomic staging and 1:1 manifest bindings; `bundle-verify` re-checks checksums, bindings, secrets, and signatures; `restore [--plan-only | --plan-in <plan> --yes]` reviews then executes the dual-side plan. `snapshot --all-installed` writes only its explicit bundle output after detection review; bulk restore/apply requires `--yes`.
 - Cross-platform: `%APPDATA%` / `%USERPROFILE%` / `$APPDATA` resolution, platform detection, per-surface path isolation (remote hosts experimental); `detect`/`doctor` inspect offline.
-- The explicit `legacy` subcommand is read-only lookup compatibility (`--print-path`, `--dry-run`); legacy writes are disabled and enforced by the Python wrapper.
+- The explicit `legacy` subcommand is read-only lookup (`--print-path`, `--dry-run`); legacy writes are disabled and enforced by the Python wrapper.
 - Object-type scope (exhaustive — apply writes nothing outside it):
   - Auto-migratable (`ready`): `skills`, `instructions`, `mcp`; opaque plugin package copy where both profiles declare it.
   - Draft-only, never auto-written: `prompts`, `commands`, `agents`, `hooks`, `workflows`. Executable surfaces have no staging writer; replayed plans marking them eligible fail closed.
   - Opt-in session transfer: `handoff` needs `--objects handoff` AND `--include-session`; travels only reviewed summary, git branch, selected files, and an explicit patch. Raw conversation, tokens, session state, machine paths, logs discarded.
   - Never migrated: trust state, generated memory, cloud knowledge, approvals, chat history.
-- Sensitive shared settings files are read only for the named migration's authorized MCP subobject; trust sections (`never-migrate`) and sibling settings never enter plans or bundles; strict secret redaction before output. See [references/mcp-migration.md](references/mcp-migration.md).
+- Sensitive shared settings files are read only for the named migration's authorized MCP subobject; trust sections (`never-migrate`) and sibling settings never enter plans or bundles; strict secret redaction. See [references/mcp-migration.md](references/mcp-migration.md).
 - Claude Desktop app MCP in **Settings → Extensions** and **Settings → Connectors** is UI-managed; never infer or rewrite it from legacy JSON.
