@@ -1,4 +1,6 @@
-# Agent Context Migrator (智能体上下文迁移器)
+# Agent Skills Setup（智能体技能配置）
+
+> 跨 Cursor、Claude Code、Codex、Cline、Windsurf、Copilot、Gemini CLI 等数十种 AI 编程工具的上下文迁移。
 
 [![GitHub Repo](https://img.shields.io/badge/GitHub-Luckycat133%2Fskills--repo-181717?logo=github)](https://github.com/Luckycat133/skills-repo)
 [![License](https://img.shields.io/badge/License-MIT-b7285.svg)](LICENSE)
@@ -23,7 +25,7 @@ openclaw skills install @luckycat133/agent-skills-setup
 或直接从 GitHub 安装：
 
 ```bash
-git clone --depth 1 --branch v0.9.2 https://github.com/Luckycat133/skills-repo.git
+git clone --depth 1 --branch v0.9.3 https://github.com/Luckycat133/skills-repo.git
 
 openclaw skills install \
   ./skills-repo/skills/agent-skills-setup \
@@ -65,7 +67,7 @@ openclaw skills install \
 
 ## 🌟 支持与赞助
 
-如果 Agent Context Migrator 帮您节省了配置或换机时间，欢迎 ⭐ **在 GitHub 上给本项目点个 Star**，让更多开发者发现它！
+如果 Agent Skills Setup 帮您节省了配置或换机时间，欢迎 ⭐ **在 GitHub 上给本项目点个 Star**，让更多开发者发现它！
 
 您也可以通过 [GitHub Sponsors](https://github.com/sponsors/Luckycat133) 或 [爱发电 (Afdian) / Ko-fi](https://afdian.com/a/Luckycat133) 支持持续开发。
 

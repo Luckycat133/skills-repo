@@ -33,14 +33,14 @@ script_dir = Path(sys.argv[1])
 tmp = Path(sys.argv[2])
 
 
-def manifest():
+def manifest(extra_objects=None):
     return ACBManifest(
         schema_version=ACB_SCHEMA_VERSION,
         bundle_id=make_bundle_id(),
         created_at="2026-08-17T00:00:00Z",
         source_platform={"system": "darwin"},
         inventory_summary={},
-        objects=[],
+        objects=list(extra_objects or []),
     )
 
 
@@ -101,7 +101,15 @@ for label, payload in benign_cases.items():
 inj = tmp / "secret-injected.acb"
 write_bundle(
     bundle_root=inj,
-    manifest=manifest(),
+    manifest=manifest(extra_objects=[
+        {
+            "object_type": "skills",
+            "product": "clean",
+            "profile": "",
+            "scope": "",
+            "status": "ready",
+        }
+    ]),
     inventory_rows=[],
     compatibility={},
     requirements={},
@@ -111,6 +119,7 @@ write_bundle(
     objects_dir_files={
         "skills/clean/SKILL.md": b"# Clean\nname: clean\ndescription: demo\n",
     },
+    object_file_map={"skills/clean//": ["skills/clean/SKILL.md"]},
 )
 
 # Inject a secret-laden object directly into the written bundle and verify.
@@ -127,7 +136,15 @@ print("OK #7 verify_bundle re-scanned objects/ and rejected injected secret")
 size_bundle = tmp / "size.acb"
 write_bundle(
     bundle_root=size_bundle,
-    manifest=manifest(),
+    manifest=manifest(extra_objects=[
+        {
+            "object_type": "skills",
+            "product": "big",
+            "profile": "",
+            "scope": "",
+            "status": "ready",
+        }
+    ]),
     inventory_rows=[],
     compatibility={},
     requirements={},
@@ -135,6 +152,7 @@ write_bundle(
     reauth=[],
     rebuild=[],
     objects_dir_files={"skills/big/ok.png": b"\x89PNG\r\n" + b"\x00" * 16},
+    object_file_map={"skills/big//": ["skills/big/ok.png"]},
 )
 # Inject an oversized allowlisted binary; verify must flag the size limit.
 big = size_bundle / "objects" / "skills" / "big" / "huge.png"

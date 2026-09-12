@@ -1,4 +1,6 @@
-# Agent Context Migrator
+# Agent Skills Setup
+
+> AI IDE Context Migration across Cursor, Claude Code, Codex, Cline, Windsurf, Copilot, Gemini CLI, and dozens of supported AI coding tools.
 
 [![GitHub Repo](https://img.shields.io/badge/GitHub-Luckycat133%2Fskills--repo-181717?logo=github)](https://github.com/Luckycat133/skills-repo)
 [![License](https://img.shields.io/badge/License-MIT-b7285.svg)](LICENSE)
@@ -23,7 +25,7 @@ openclaw skills install @luckycat133/agent-skills-setup
 Or install directly from GitHub:
 
 ```bash
-git clone --depth 1 --branch v0.9.2 https://github.com/Luckycat133/skills-repo.git
+git clone --depth 1 --branch v0.9.3 https://github.com/Luckycat133/skills-repo.git
 
 openclaw skills install \
   ./skills-repo/skills/agent-skills-setup \
@@ -65,7 +67,7 @@ openclaw skills install \
 
 ## 🌟 Support the Project
 
-If Agent Context Migrator saved you setup or computer-switching time, please ⭐ **Star this repository on GitHub** to help other developers discover it!
+If Agent Skills Setup saved you setup or computer-switching time, please ⭐ **Star this repository on GitHub** to help other developers discover it!
 
 You can also sponsor development through [GitHub Sponsors](https://github.com/sponsors/Luckycat133) or [Afdian / Ko-fi](https://afdian.com/a/Luckycat133).
 

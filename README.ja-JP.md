@@ -1,4 +1,6 @@
-# Agent Context Migrator (エージェントコンテキスト移行ツール)
+# Agent Skills Setup（エージェントスキル構成）
+
+> Cursor、Claude Code、Codex、Cline、Windsurf、Copilot、Gemini CLI など多数の対応 AI コーディングツール間でコンテキストを移行。
 
 [![GitHub Repo](https://img.shields.io/badge/GitHub-Luckycat133%2Fskills--repo-181717?logo=github)](https://github.com/Luckycat133/skills-repo)
 [![License](https://img.shields.io/badge/License-MIT-b7285.svg)](LICENSE)
@@ -23,7 +25,7 @@ openclaw skills install @luckycat133/agent-skills-setup
 または GitHub から直接インストール:
 
 ```bash
-git clone --depth 1 --branch v0.9.2 https://github.com/Luckycat133/skills-repo.git
+git clone --depth 1 --branch v0.9.3 https://github.com/Luckycat133/skills-repo.git
 
 openclaw skills install \
   ./skills-repo/skills/agent-skills-setup \
@@ -65,7 +67,7 @@ openclaw skills install \
 
 ## 🌟 プロジェクトの支援
 
-Agent Context Migrator が環境構築や PC 移行の手間を省く役に立った場合は、ぜひ ⭐ **GitHub で Star をお願いします**！
+Agent Skills Setup が環境構築や PC 移行の手間を省く役に立った場合は、ぜひ ⭐ **GitHub で Star をお願いします**！
 
 [GitHub Sponsors](https://github.com/sponsors/Luckycat133) や [Afdian / Ko-fi](https://afdian.com/a/Luckycat133) からの開発支援も歓迎しています。
 
