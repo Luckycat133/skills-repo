@@ -1218,7 +1218,7 @@ def _resolve_bundle_plan_sources(
         # <safe_canonical>/<rest> (see acb.bundle._path_for_object). We strip
         # that metadata prefix and stage the rest directly under staging_root
         # so the resulting tree mirrors Process A's staging layout
-        # (e.g. <staging>/home/.cline/skills/<skill>/SKILL.md).
+        # (e.g. <staging>/<home>/.cline/skills/<skill>/SKILL.md).
         obj_prefix = (
             f"{src.get('object_type', '')}/{src.get('product', '')}/"
             f"{src.get('profile', '')}/{src.get('scope', '')}"
