@@ -37,7 +37,7 @@ description: >-
 
 ## Route
 
-1. Resolve both profiles through [ide-registry.md](references/ide-registry.md) / [registry-v2.json](references/registry-v2.json).
+1. Resolve both product profiles through [ide-registry.md](references/ide-registry.md) / [registry-v2.json](references/registry-v2.json).
 2. Read only [references/ides/<source>.md](references/ides/) and [references/ides/<target>.md](references/ides/).
 3. Load by need:
    - Before preview or apply: [references/migration-safety.md](references/migration-safety.md)
