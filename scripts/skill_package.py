@@ -21,7 +21,7 @@ RUNTIME_FILES = (
     "common.sh", "context-migrator.py", "ide-paths.tsv",
     "legacy-smart-ide-migration.sh", "migration_core.py",
     "scan-skill-secrets.py", "skill_secret_scanner.py", "smart-ide-migration.sh",
-    "acb/__init__.py", "acb/bundle.py", "detect/__init__.py", "detect/probes.py",
+    "acb/__init__.py", "acb/bundle.py", "acb/key_security.py", "detect/__init__.py", "detect/probes.py",
     "registry/__init__.py", "registry/alias_resolver.py", "registry/exceptions.py",
 )
 CACHE_NAMES = {"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".DS_Store"}

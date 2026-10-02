@@ -36,6 +36,7 @@ from pathlib import Path
 from typing import Any
 
 import skill_secret_scanner
+from acb.key_security import read_private_file
 
 ACB_SCHEMA_VERSION = 1
 ACB_MANIFEST_NAME = "manifest.json"
@@ -1330,12 +1331,10 @@ def _read_signing_key(key_path: Path) -> bytes:
         raise ACBError(f"signing key path is a symlink: {key_path}")
     if not key_path.is_file():
         raise ACBError(f"signing key not found: {key_path}")
-    # Refuse group/world bits: a leaked signing key is a leaked bundle.
-    if stat.S_IMODE(key_path.stat().st_mode) & 0o077:
-        raise ACBError(
-            f"signing key {key_path} is group/world accessible; chmod 600 before use"
-        )
-    raw = key_path.read_bytes()
+    try:
+        raw = read_private_file(key_path)
+    except (OSError, ValueError) as error:
+        raise ACBError(str(error)) from error
     if len(raw) != _ED25519_KEY_BYTES:
         raise ACBError(
             f"signing key must be {_ED25519_KEY_BYTES} raw bytes; got {len(raw)}"

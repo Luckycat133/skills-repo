@@ -344,6 +344,15 @@ fi
 [[ ! -e "$TMP_ROOT/incomplete-package" ]]
 mv "$TMP_ROOT/registry.saved" "$FIXTURE_SKILL/scripts/registry"
 
+mv "$FIXTURE_SKILL/scripts/acb/key_security.py" "$TMP_ROOT/key-security.saved"
+if bash "$REPO_ROOT/scripts/stage-runtime-skill.sh" "$FIXTURE_SKILL" "$TMP_ROOT/missing-key-security" 0.0.0 \
+    >"$TMP_ROOT/missing-key-security.log" 2>&1; then
+    echo "FAIL: runtime staging accepted a missing signing key protection module" >&2
+    exit 1
+fi
+[[ ! -e "$TMP_ROOT/missing-key-security" ]]
+mv "$TMP_ROOT/key-security.saved" "$FIXTURE_SKILL/scripts/acb/key_security.py"
+
 cp "$FIXTURE_SKILL/SKILL.md" "$TMP_ROOT/valid-skill.md"
 printf '%s\n' '---' 'name: incorrect-name' 'description: Fixture.' '---' > "$FIXTURE_SKILL/SKILL.md"
 if PATH="$FAKE_BIN:$PATH" bash "$REPO_ROOT/scripts/prepare-clawhub-release.sh" \

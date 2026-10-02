@@ -32,6 +32,7 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 - Complete plugin and reviewed handoff opt-in through snapshot and restore, retaining package-copy and field-whitelist boundaries.
 - Validate every rollback backup before removing a target; preserve file bytes and executable permissions, original plan indices, and conflict isolation in apply manifests.
 - Validate standard Skill metadata, scalar types, and complete local link closure; use the shared secret scanner for computed source assignments without exposing values.
+- Create and read signing keys with owner-only file permissions on each platform: POSIX mode `0600` or a protected Windows ACL. Windows signing no longer misinterprets POSIX permission bits; unsafe keys remain rejected before their contents are read.
 - Report captured bundle objects separately from payload files and retain legitimate `.environment-*` Skill assets while excluding `.env` and `.env.*`.
 - Keep failed freshness reports available and make explicitly requested stale-profile demotion reachable. Validate the proposed registry before atomic replacement; malformed provenance and checks still fail without changing the registry.
 

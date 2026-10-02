@@ -133,7 +133,10 @@ Ed25519 key generation, signing, and signature checks need an already installed
 Python `cryptography` package. If unavailable, report the missing dependency;
 checksum verification and unsigned backup remain usable offline. Use fresh,
 distinct key paths outside bundles and migration surfaces. Keep the private
-32-byte raw key private with mode `0600`; distribute only the public key.
+32-byte raw key owner-only; distribute only the public key. Key generation uses
+POSIX mode `0600` or a protected Windows ACL granting access only to the current
+user. Signing checks those permissions before reading the private key and
+rejects keys with broader access. Windows key storage must support file ACLs.
 
 ```bash
 bash "$migrator" bundle-keygen --out-private /path/to/private.key \

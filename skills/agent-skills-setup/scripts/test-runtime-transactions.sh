@@ -120,7 +120,11 @@ with tempfile.TemporaryDirectory(prefix="runtime-transactions-") as temporary:
     assert not (workspace / ".destination").exists()
     reviewed = json.loads(plan.read_text(encoding="utf-8"))
     previews = [change for item in reviewed["items"] for change in (item.get("review_preview") or {}).get("changes", [])]
-    assert len([change for change in previews if change['path'].endswith(("/first", "/second"))]) == 2, previews
+    skill_previews = [change for change in previews if Path(change["path"]).name in expected_skills]
+    assert len(skill_previews) == 2, previews
+    assert {Path(change["path"]).resolve() for change in skill_previews} == {
+        workspace / ".destination/skills" / name for name in expected_skills
+    }, skill_previews
     assert all(not Path(item["source"]["resolved_path"]).exists() for item in reviewed["items"])
     instruction_items = [item for item in reviewed["items"] if item["object_type"] == "instructions"]
     assert len(instruction_items) == 1 and instruction_items[0]["status"] == "ready-lossy", instruction_items

@@ -4,6 +4,7 @@
 - [ ] canonical `SKILL.md` 的触发范围、路由、权限和实际 CLI 一致；frontmatter 使用 Agent Skills 标准字段，`metadata.version` 为字符串；运行 `bash scripts/sync-root-mirror.sh` 后验证根指针。
 - [ ] `bash validate-all.sh` 通过，包括官方 `skills-ref validate`、仓库安全校验、完整回归和运行时包验证。跨平台结果来自实际 CI，不以本机通过代替。
 - [ ] 已覆盖完整功能链：检测/清点、计划/应用/校验/回滚、快照/恢复、密钥生成/签名/可信公钥验证、doctor；别名与继承 profile 在各检测入口得到相同结果。
+- [ ] 签名密钥以 POSIX 私有权限或 Windows 当前用户独占的受保护 ACL 创建和读取；跨平台签名和宽权限拒绝回归通过，不用 POSIX 权限位替代 Windows ACL 检查。
 - [ ] 写入范围和已审阅 artifact 明确；用户在当前或此前明确授权的动作可继续执行，CLI `--yes` 记录该授权；缺少关键范围或授权才补问。
 - [ ] 预览不写入目标；输出 artifact 不覆盖 Registry、bundle、迁移源或目标，也不互相覆盖；计划重放验证 checksum、Registry、adapter、源/目标和 Git 状态。
 - [ ] 成功、失败和 dry-run 回归均使用隔离临时目录；失败保留旧目标；回滚先检查全部备份与目标漂移，再恢复精确文件内容和权限。

@@ -75,6 +75,7 @@ from acb.bundle import (
     validate_path_containment,
     write_bundle,
 )
+from acb.key_security import create_key_file
 from detect.probes import (
     InstallState,
     ProbeResult,
@@ -334,7 +335,7 @@ def create_parser() -> argparse.ArgumentParser:
         "--key",
         type=Path,
         required=True,
-        help="Path to Ed25519 private key file (must be chmod 600).",
+        help="Path to an owner-only Ed25519 private key (POSIX mode 600 or private Windows ACL).",
     )
     bundle_sign.add_argument(
         "--signer",
@@ -351,7 +352,7 @@ def create_parser() -> argparse.ArgumentParser:
         "--out-private",
         type=Path,
         required=True,
-        help="Destination path for private key file (will be chmod 600).",
+        help="New owner-only private key path (POSIX mode 600 or private Windows ACL).",
     )
     bundle_keygen.add_argument(
         "--out-public",
@@ -1013,7 +1014,7 @@ def run_bundle_keygen(args: argparse.Namespace) -> int:
         written: list[Path] = []
         try:
             for destination, data in ((out_priv, priv_bytes), (out_pub, pub_bytes)):
-                descriptor = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                descriptor = create_key_file(destination)
                 written.append(destination)
                 with os.fdopen(descriptor, "wb") as handle:
                     handle.write(data)

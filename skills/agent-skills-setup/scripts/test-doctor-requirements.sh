@@ -45,10 +45,13 @@ guard_program = (
     if os.name == "nt"
     else f"#!/bin/sh\nprintf 'unexpected' > '{marker}'\nexit 99\n"
 )
+guard_paths = {}
 for name in (tool_name, "npm", "pip", "uv", "curl"):
-    program = binary_dir / name
+    executable_name = name + ".cmd" if os.name == "nt" and not name.endswith(".cmd") else name
+    program = binary_dir / executable_name
     program.write_text(guard_program, encoding="utf-8")
     program.chmod(0o755)
+    guard_paths[name] = program
 manual_script = test_root / "scripts" / "local-tool.js"
 manual_script.parent.mkdir()
 manual_script.write_text("throw new Error('doctor must not run this script');\n", encoding="utf-8")
@@ -63,6 +66,9 @@ environment["PATH"] = str(binary_dir) + os.pathsep + environment.get("PATH", "")
 environment["PYTHONPATH"] = str(module_dir)
 environment["PYTHONDONTWRITEBYTECODE"] = "1"
 environment["TMPDIR"] = str(temporary_dir)
+for name, program in guard_paths.items():
+    discovered = shutil.which(name, path=environment["PATH"])
+    assert discovered and Path(discovered).resolve() == program.resolve(), (name, discovered, program)
 reauth = [{"server": "fixture-server", "action": "reauth"}]
 rebuild = [{"object_type": "mcp", "reason": "manual reconstruction"}]
 
