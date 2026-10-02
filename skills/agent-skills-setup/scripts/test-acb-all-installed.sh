@@ -148,13 +148,14 @@ print("OK bundle-verify clean for multi-product bundle")
 '
 
 echo "=== Test 4: doctor requirements inspection ==="
-DOCTOR_OUT="$($MIGRATOR doctor "$BUNDLE" --json)"
-ACB_BUNDLE="$(native_path "$BUNDLE")" python3 - "$DOCTOR_OUT" <<'PY'
-import json, os, sys
+python3 - "$(native_path "$SCRIPT_DIR")" "$(native_path "$BUNDLE")" "$(native_path "$WORKSPACE")" <<'PY'
+import json
+import os
+import subprocess
+import sys
 from pathlib import Path
-data = json.loads(sys.argv[1])
-assert data.get("ok") is True, data
-bundle = Path(os.environ["ACB_BUNDLE"])
+
+scripts, bundle, workspace = map(Path, sys.argv[1:])
 reqs = json.loads((bundle / 'requirements.json').read_text())
 executables = reqs.get("executables", [])
 packages = reqs.get("packages", [])
@@ -164,12 +165,44 @@ assert "cursor" not in executables, f"cursor should not be in executables: {exec
 assert "cline" not in executables, f"cline should not be in executables: {executables}"
 
 # Verify real command runners and packages are present
-# Only Cline user MCP (with filesystem server) matches a registry surface
 pkg_names = [p.get("name") for p in packages]
 assert any("@modelcontextprotocol/server-filesystem" in p for p in pkg_names), f"Missing filesystem package: {packages}"
-# npx should be in executables
-assert "npx" in executables, f"npx should be in executables: {executables}"
+assert set(executables) == {"npx", "uvx"}, executables
+
+# Isolate PATH: command presence must not depend on host-installed runners.
+# Doctor must inspect these sentinel programs without executing either one.
+present = workspace / "doctor-present"
+absent = workspace / "doctor-absent"
+present.mkdir()
+absent.mkdir()
+marker = workspace / "doctor-executed-dependency"
+guard = (
+    f'@echo off\r\necho unexpected > "{marker}"\r\nexit /b 99\r\n'
+    if os.name == "nt"
+    else f"#!/bin/sh\nprintf 'unexpected' > '{marker}'\nexit 99\n"
+)
+for binary in executables:
+    name = binary + ".cmd" if os.name == "nt" else binary
+    program = present / name
+    program.write_text(guard, encoding="utf-8")
+    program.chmod(0o755)
+
+for directory, expected_status in ((present, 0), (absent, 1)):
+    environment = dict(os.environ)
+    environment["PATH"] = str(directory)
+    result = subprocess.run(
+        [sys.executable, str(scripts / "context-migrator.py"), "doctor", str(bundle), "--json"],
+        env=environment, text=True, capture_output=True,
+    )
+    assert result.returncode == expected_status, (result.returncode, result.stdout, result.stderr)
+    data = json.loads(result.stdout)
+    assert data["ok"] == (expected_status == 0), data
+    assert data["requirements"] == reqs, data
+    expected_missing = set() if expected_status == 0 else set(executables)
+    assert set(data["missing_executables"]) == expected_missing, data
+    assert not marker.exists(), "doctor executed a dependency"
 print("OK doctor requirements accurately parsed command runners and packages:", pkg_names)
+print("OK doctor success and missing-runner paths are isolated and never execute dependencies")
 PY
 
 echo "=== Test 5: restore --all-installed onto Device B ==="

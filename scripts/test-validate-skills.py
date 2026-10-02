@@ -252,14 +252,27 @@ vs.errors.clear()
 vs.validate_skill_directory(directory)
 check("Markdown code examples and link titles do not cause false positives", not vs.errors)
 
-# git's non-NUL output quotes unusual filenames and can hide their contents.
+# Git's non-NUL output quotes unusual filenames and can hide their contents.
+# Windows forbids double quotes in filenames; Unicode still exercises Git
+# quoting there, while POSIX also retains the literal-double-quote case.
 git_root = pathlib.Path(tmp) / "git-fixture"
 git_root.mkdir()
 subprocess.run(["git", "init", "--quiet", str(git_root)], check=True)
-unusual = git_root / 'reference "quoted" 中文.md'
+unusual_name = "reference quoted 中文.md" if os.name == "nt" else 'reference "quoted" 中文.md'
+unusual = git_root / unusual_name
 unusual.write_text("fixture", encoding="utf-8")
+quoted_output = subprocess.run(
+    ["git", "-c", "core.quotePath=true", "ls-files", "--cached", "--others", "--exclude-standard"],
+    cwd=git_root,
+    capture_output=True,
+    text=True,
+    check=True,
+).stdout
 vs.ROOT = git_root
-check("git file enumeration preserves quoted and Unicode filenames", unusual in vs.get_files_to_scan())
+check(
+    "git file enumeration preserves quoted and Unicode filenames",
+    quoted_output.startswith('"') and vs.get_files_to_scan() == [unusual],
+)
 vs.ROOT = pathlib.Path(tmp)
 tmp_context.cleanup()
 

@@ -21,7 +21,7 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 - Simplify the Skill entrypoint and route migration, bundles/signing, and verification to focused references. Preserve scoped authorization across stages; align behavioral and trigger evals with the public profile-aware CLI.
 - Classify compatibility per object, scope, and actual runtime adapter. Index directional execution evidence conservatively; previews, legacy calls, unrelated objects, and ignored failures no longer imply end-to-end coverage.
 - Validate complete staged Skill trees before import/release packaging and commit them atomically with failure recovery. Require runtime dependencies, reject overlapping trees/unsafe links, and exclude environment files/caches. Local release preparation no longer needs ClawHub login or network access.
-- Refresh multilingual command guides and maintenance/release guidance. Add Python syntax checks to full validation and pin CI signing/schema/official-validator dependencies so optional checks run.
+- Refresh multilingual command guides and maintenance/release guidance. Add Python syntax checks to full validation and pin CI signing/schema/official-validator dependencies so optional checks run. Isolate command-runner fixtures and respect native filename constraints in cross-platform regressions.
 - Stream file and directory hashing with unchanged SHA-256 semantics to bound allocation for large assets.
 
 ### Fixed
