@@ -5,11 +5,13 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TMP_ROOT="$(mktemp -d /tmp/agent-skills-runtime-package.XXXXXX)"
-PACKAGE_ROOT="$TMP_ROOT/release-package"
+PACKAGE_ROOT="$TMP_ROOT/release package"
+CONSENTED_PACKAGE="$TMP_ROOT/consented package"
 FIXTURE_SKILL="$TMP_ROOT/fixture/agent-skills-setup"
 FIXTURE_PACKAGE="$TMP_ROOT/fixture-package"
 FAKE_BIN="$TMP_ROOT/bin"
 FAKE_CLAWHUB_LOG="$TMP_ROOT/clawhub-publish.log"
+FAKE_CLAWHUB_ARGV_LOG="$TMP_ROOT/clawhub-publish.argv"
 FAKE_CLAWHUB_AUTH_LOG="$TMP_ROOT/clawhub-auth.log"
 SMOKE_WORKSPACE="$TMP_ROOT/smoke-workspace"
 SMOKE_REGISTRY="$TMP_ROOT/smoke-registry.json"
@@ -32,12 +34,13 @@ if [[ "${1:-}" == "whoami" ]]; then
 fi
 if [[ "${1:-}" == "publish" ]]; then
     printf '%s\n' "$*" >> "$FAKE_CLAWHUB_LOG"
+    printf '%s\0' "$@" >> "$FAKE_CLAWHUB_ARGV_LOG"
     exit 0
 fi
 exit 1
 EOF
 chmod +x "$FAKE_BIN/clawhub"
-export FAKE_CLAWHUB_LOG FAKE_CLAWHUB_AUTH_LOG
+export FAKE_CLAWHUB_LOG FAKE_CLAWHUB_ARGV_LOG FAKE_CLAWHUB_AUTH_LOG
 
 PATH="$FAKE_BIN:$PATH" bash "$REPO_ROOT/scripts/prepare-clawhub-release.sh" \
     --skill-dir "$REPO_ROOT/skills/agent-skills-setup" \
@@ -191,10 +194,23 @@ if find "$PACKAGE_ROOT" \( -name 'skills-lock.json' -o -name 'package-lock.json'
     echo "FAIL: runtime package contains a lock file" >&2
     exit 1
 fi
-grep -F "$PACKAGE_ROOT" "$TMP_ROOT/release.log" >/dev/null || {
-    echo "FAIL: release command does not publish the staged runtime package" >&2
-    exit 1
-}
+# Decode printf %q arguments before comparing paths: Windows Python emits
+# native drive/backslash paths while Git Bash fixtures use POSIX paths.
+python3 - "$TMP_ROOT/release.log" "$PACKAGE_ROOT" <<'PY'
+from pathlib import Path
+import shlex
+import sys
+
+commands = [
+    line for line in Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+    if line.startswith("clawhub publish ")
+]
+if len(commands) != 1:
+    raise SystemExit("FAIL: release helper did not print exactly one publish command")
+arguments = shlex.split(commands[0])
+if len(arguments) < 3 or Path(arguments[2]).resolve() != Path(sys.argv[2]).resolve():
+    raise SystemExit("FAIL: release command does not publish the staged runtime package")
+PY
 for expected in \
     "--source-repo $SOURCE_REPO" \
     "--source-commit $SOURCE_COMMIT" \
@@ -255,7 +271,7 @@ grep -Fq 'complete source attribution' "$TMP_ROOT/no-provenance.log" || {
 
 PATH="$FAKE_BIN:$PATH" bash "$REPO_ROOT/scripts/prepare-clawhub-release.sh" \
     --skill-dir "$REPO_ROOT/skills/agent-skills-setup" \
-    --package-dir "$TMP_ROOT/consented-package" \
+    --package-dir "$CONSENTED_PACKAGE" \
     --slug agent-skills-setup \
     --name "Agent Skills Setup" \
     --version 0.0.0 \
@@ -265,10 +281,20 @@ PATH="$FAKE_BIN:$PATH" bash "$REPO_ROOT/scripts/prepare-clawhub-release.sh" \
     --source-path "$SOURCE_PATH" \
     --publish \
     --acknowledge-mit0 >"$TMP_ROOT/consented.log"
-grep -Fq "publish $TMP_ROOT/consented-package" "$FAKE_CLAWHUB_LOG" || {
-    echo "FAIL: authorized ClawHub publish did not use the staged package" >&2
-    exit 1
-}
+python3 - "$FAKE_CLAWHUB_ARGV_LOG" "$CONSENTED_PACKAGE" <<'PY'
+from pathlib import Path
+import sys
+
+recorded = Path(sys.argv[1]).read_bytes().split(b"\0")
+if not recorded or recorded[-1] != b"":
+    raise SystemExit("FAIL: fake ClawHub did not record complete publish arguments")
+arguments = [value.decode("utf-8") for value in recorded[:-1]]
+if (
+    len(arguments) < 2 or arguments[0] != "publish"
+    or Path(arguments[1]).resolve() != Path(sys.argv[2]).resolve()
+):
+    raise SystemExit("FAIL: authorized ClawHub publish did not use the staged package")
+PY
 for expected in \
     "--source-repo $SOURCE_REPO" \
     "--source-commit $SOURCE_COMMIT" \
