@@ -35,39 +35,51 @@ esac
 
 shopt -s nullglob
 for script in "$SCRIPT_DIR"/*.sh "$SCRIPT_DIR"/scripts/*.sh "$SCRIPT_DIR"/skills/*/scripts/*.sh; do
-  [[ -f "$script" ]] || continue
-  bash -n "$script"
+    [[ -f "$script" ]] || continue
+    bash -n "$script"
 done
 shopt -u nullglob
+
+python3 - "$SCRIPT_DIR" <<'PY'
+import ast
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+paths = list((root / "scripts").glob("*.py"))
+for skill in (root / "skills").iterdir():
+    paths.extend((skill / "scripts").rglob("*.py"))
+for path in sorted(paths):
+    ast.parse(path.read_text(encoding="utf-8"), filename=str(path.relative_to(root)))
+print(f"Python syntax checks passed ({len(paths)} files).")
+PY
 
 bash "$SCRIPT_DIR/scripts/run-official-skill-validator.sh"
 python3 "$SCRIPT_DIR/scripts/validate_skills.py"
 
 if [[ -f "$SCRIPT_DIR/scripts/test-validate-skills.py" ]]; then
-  python3 "$SCRIPT_DIR/scripts/test-validate-skills.py"
+    python3 "$SCRIPT_DIR/scripts/test-validate-skills.py"
 fi
 
 if [[ -f "$SCRIPT_DIR/scripts/sync-root-mirror.sh" ]]; then
-  bash "$SCRIPT_DIR/scripts/sync-root-mirror.sh" --check
+    bash "$SCRIPT_DIR/scripts/sync-root-mirror.sh" --check
 fi
 
 if [[ -f "$SCRIPT_DIR/scripts/test-validate-all-coverage.sh" ]]; then
-  bash "$SCRIPT_DIR/scripts/test-validate-all-coverage.sh"
+    bash "$SCRIPT_DIR/scripts/test-validate-all-coverage.sh"
 fi
 
 if [[ -d "$SETUP_SCRIPTS" ]]; then
-  # The zero-write legacy bash engine has never been supported on
-  # Windows hosts (roadmap: Experimental); its lookup tests emit NUL
-  # bytes through MSYS command substitution. Skip them on win32.
-  WINDOWS_SKIPPED="test-antigravity-migration.sh,test-conflict-strategies.sh,test-copilot-mapping.sh,test-ide-paths.sh,test-smart-ide-migration.sh"
-  while IFS= read -r test_script; do
-    base="$(basename "$test_script")"
-    if [[ "$(uname -s)" == MINGW* || "$(uname -s)" == MSYS* || "$(uname -s)" == CYGWIN* ]] \
-        && [[ ","$WINDOWS_SKIPPED"," == *,"$base",* ]]; then
-      echo "SKIP (windows): $base — legacy bash engine is unsupported on this host"
-      continue
-    fi
-    echo "Running $base..."
-    bash "$test_script"
-  done < <(list_focused_tests)
+    # Legacy lookup tests are unsupported on Windows's MSYS shell.
+    WINDOWS_SKIPPED="test-antigravity-migration.sh,test-conflict-strategies.sh,test-copilot-mapping.sh,test-ide-paths.sh,test-smart-ide-migration.sh"
+    while IFS= read -r test_script; do
+        base="$(basename "$test_script")"
+        if [[ "$(uname -s)" == MINGW* || "$(uname -s)" == MSYS* || "$(uname -s)" == CYGWIN* ]] \
+            && [[ ","$WINDOWS_SKIPPED"," == *,"$base",* ]]; then
+            echo "SKIP (windows): $base — legacy bash engine is unsupported on this host"
+            continue
+        fi
+        echo "Running $base..."
+        bash "$test_script"
+    done < <(list_focused_tests)
 fi

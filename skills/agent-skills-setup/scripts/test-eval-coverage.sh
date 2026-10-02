@@ -18,9 +18,9 @@ evals = eval_data.get("evals")
 assert isinstance(evals, list), "evals.json must contain an evals array"
 
 eval_ids = [item.get("id") for item in evals]
-assert eval_ids == list(range(1, 9)), (
-    "evals.json must cover stable IDs 1-8 for core, execution, trigger, "
-    "conflict, VS Code profile, and OpenCode V2 cases"
+assert eval_ids == list(range(1, 15)), (
+    "evals.json must cover stable IDs 1-8 plus bundle, restore, signing, "
+    "doctor, device-wide, and plugin/handoff cases"
 )
 for item in evals:
     assert isinstance(item.get("prompt"), str) and item["prompt"].strip(), (
@@ -37,7 +37,7 @@ for item in evals:
 assert trigger_evals_path.is_file(), "missing evals/trigger-evals.json"
 trigger_evals = json.loads(trigger_evals_path.read_text(encoding="utf-8"))
 assert isinstance(trigger_evals, list), "trigger-evals.json must be a JSON array"
-assert len(trigger_evals) == 20, "trigger-evals.json must contain exactly 20 cases"
+assert len(trigger_evals) == 24, "trigger-evals.json must contain exactly 24 cases"
 
 queries = [item.get("query") for item in trigger_evals]
 assert all(isinstance(query, str) and query.strip() for query in queries), (
@@ -49,9 +49,9 @@ labels = [item.get("should_trigger") for item in trigger_evals]
 assert all(isinstance(label, bool) for label in labels), (
     "every trigger eval needs a boolean should_trigger label"
 )
-assert labels.count(True) == 10 and labels.count(False) == 10, (
-    "trigger evals must contain ten positive and ten negative cases"
+assert labels.count(True) == 12 and labels.count(False) == 12, (
+    "trigger evals must contain twelve positive and twelve negative cases"
 )
 
-print("Evaluation coverage test passed (8 behavior evals, 20 trigger evals)")
+print("Evaluation coverage test passed (14 behavior evals, 24 trigger evals)")
 PYEOF

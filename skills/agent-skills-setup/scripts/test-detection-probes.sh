@@ -1,86 +1,96 @@
 #!/usr/bin/env bash
-
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REGISTRY_PATH="${SCRIPT_DIR}/../references/registry-v2.json"
 
-cd "$SCRIPT_DIR"
-
-python3 - "$REGISTRY_PATH" "$SCRIPT_DIR" <<'PYEOF'
+python3 - "$SCRIPT_DIR" <<'PYEOF'
+import plistlib
+import subprocess
 import sys
-from pathlib import Path
-
-registry_path = Path(sys.argv[1])
-script_dir = Path(sys.argv[2])
-sys.path.insert(0, str(registry_path.parent.parent / "scripts"))
-
-from detect.probes import (  # noqa: E402
-    InstallState,
-    detect_profile,
-    probe_binary,
-    probe_file_signature,
-    probe_app_bundle,
-)
-
-# App bundle probe: test bundle ID allowlist rejects injection attempts
-res = probe_app_bundle("test", "ide", darwin_bundle_id="com.example.app' || rm -rf /")
-assert res.state is InstallState.NOT_DETECTED, res
-res = probe_app_bundle("test", "ide", darwin_bundle_id="valid-bundle.id-123")
-# Should not crash or inject
-print("OK probe_app_bundle rejects invalid bundle ID injection")
-
-# Binary probe: python3 is always available; cline likely is not.
-res = probe_binary("cline", "ide", ["cline"])
-assert res.state is InstallState.NOT_DETECTED, res
-print("OK probe_binary returns not-detected for missing binary")
-
-res = probe_binary("python-mock", "ide", ["python3"], version_command=["python3", "--version"])
-assert res.state is InstallState.INSTALLED, res
-assert any("binary:" in e for e in res.evidence), res.evidence
-print(f"OK probe_binary found python3 with evidence: {res.evidence}")
-
-# File-signature probe: use a guaranteed temporary test fixture.
 import tempfile
-tmp_home = Path(tempfile.mkdtemp(prefix="detect-probe-test-"))
-fixture_file = tmp_home / ".config_fixture"
-fixture_file.write_text("dummy", encoding="utf-8")
+from pathlib import Path
+from unittest.mock import patch
 
-res = probe_file_signature(
-    "test",
-    "ide",
-    [fixture_file, tmp_home / "__acb_probe_should_not_exist__"],
-)
-assert res.state is InstallState.INSTALLED, res
-print("OK probe_file_signature found fixture file")
+sys.path.insert(0, sys.argv[1])
+import detect.probes as probes
+from detect.probes import InstallState, detect_profile, probe_app_bundle, probe_binary, probe_file_signature
 
-# detect_profile convenience wrapper.
-res = detect_profile(
-    "python-mock",
-    "ide",
-    binaries=["python3"],
-    version_command=["python3", "--version"],
-    home=tmp_home,
-)
-assert res.state is InstallState.INSTALLED, res
-print("OK detect_profile composes binary + version probes")
+with tempfile.TemporaryDirectory(prefix="detection-probes-") as temporary:
+    root = Path(temporary).resolve()
+    home = root / "home"
+    home.mkdir()
+    fixture_file = home / ".config-fixture"
+    fixture_file.write_text("dummy", encoding="utf-8")
 
-# detect_profile falls back to file-signature when binary missing.
-res = detect_profile(
-    "fs-only",
-    "ide",
-    binaries=["this-binary-does-not-exist"],
-    file_signatures=[str(fixture_file)],
-    home=tmp_home,
-)
-assert res.state is InstallState.INSTALLED, res
-print("OK detect_profile falls back to file signature")
+    with patch.object(probes.shutil, "which", return_value=None):
+        assert probe_binary("missing", "cli", ["mock"]).state is InstallState.NOT_DETECTED
+        assert detect_profile("fixture", "ide", binaries=["mock"], file_signatures=[fixture_file], home=home).state is InstallState.INSTALLED
+    version = subprocess.CompletedProcess(["mock", "--version"], 0, "mock 1.0\n", "")
+    with patch.object(probes.shutil, "which", return_value=str(root / "mock")), patch.object(probes.subprocess, "run", return_value=version):
+        result = probe_binary("fixture", "cli", ["mock"], version_command=["mock", "--version"])
+        assert result.state is InstallState.INSTALLED
+        assert result.evidence[-1] == "version:mock 1.0"
+    missing_extension = subprocess.CompletedProcess(["gh", "copilot", "--version"], 1, "", "unknown command copilot")
+    with patch.object(probes.shutil, "which", return_value=str(root / "gh")), patch.object(probes.subprocess, "run", return_value=missing_extension):
+        assert probe_binary("fixture", "cli", ["gh"], version_command=["gh", "copilot", "--version"], require_version=True).state is InstallState.NOT_DETECTED
+    print("PASS: isolated binary/version detection rejects missing subcommands")
 
-# All probe states are distinct.
-states = {s.value for s in InstallState}
-assert len(states) == len(InstallState), states
-print(f"OK InstallState has {len(InstallState)} distinct values: {sorted(states)}")
+    shared = home / "AGENTS.md"
+    shared.write_text("Shared instructions\n", encoding="utf-8")
+    assert probe_file_signature("fixture", "ide", [shared], home=home).state is InstallState.COMPATIBILITY_ONLY
+    assert probe_file_signature("fixture", "ide", [shared, fixture_file], home=home).state is InstallState.INSTALLED
+    assert probe_file_signature("fixture", "ide", ["~/.config-*"], home=home).state is InstallState.INSTALLED
+    apps = home / "Applications"
+    apps.mkdir()
+    matches = []
+    for name, identifier, fmt in (
+        ("Prefix.app", "com.example.app.beta", plistlib.FMT_XML),
+        ("Exact.app", "com.example.app", plistlib.FMT_BINARY),
+    ):
+        app = apps / name
+        contents = app / "Contents"
+        contents.mkdir(parents=True)
+        (contents / "Info.plist").write_bytes(plistlib.dumps({"CFBundleIdentifier": identifier}, fmt=fmt))
+        matches.append(app)
+    broken = apps / "Broken.app"
+    (broken / "Contents").mkdir(parents=True)
+    (broken / "Contents" / "Info.plist").write_bytes(b"<?xml version='1.0'?><unclosed>")
+    denied = apps / "Denied.app"
+    denied.mkdir()
 
-print()
+    original_read = Path.read_bytes
+    original_glob = Path.glob
+    original_is_dir = Path.is_dir
+    def guarded_read(path):
+        if path.parent.parent == denied:
+            raise PermissionError("fixture denied")
+        return original_read(path)
+    def guarded_glob(path, pattern):
+        if path == Path("/Applications"):
+            return iter(())
+        return original_glob(path, pattern)
+    def guarded_is_dir(path):
+        if path == denied:
+            raise PermissionError("fixture denied")
+        return original_is_dir(path)
+    spotlight = subprocess.CompletedProcess(["mdfind"], 0, "", "")
+    with patch.object(probes.sys, "platform", "darwin"), patch.object(Path, "glob", guarded_glob), patch.object(Path, "read_bytes", guarded_read), patch.object(Path, "is_dir", guarded_is_dir), patch.object(probes.subprocess, "run", return_value=spotlight):
+        result = probe_app_bundle("fixture", "ide", darwin_bundle_id="com.example.app", home=home)
+        assert result.state is InstallState.INSTALLED, result
+        assert result.evidence == (f"app-bundle:{apps / 'Exact.app'}",), result
+        assert probe_app_bundle("fixture", "ide", darwin_bundle_id="com.example", home=home).state is InstallState.NOT_DETECTED
+        assert probe_app_bundle("fixture", "ide", darwin_bundle_id="com.example.app' || malicious", home=home).state is InstallState.NOT_DETECTED
+        result = detect_profile("fixture", "ide", file_signatures=[shared], app_bundle_id="com.example.app", home=home)
+        assert result.state is InstallState.INSTALLED
+    print("PASS: exact binary/XML plist detection survives malformed and inaccessible applications")
+
+    # Spotlight may contain stale or unrelated paths before the correct app.
+    indexed = subprocess.CompletedProcess(["mdfind"], 0, f"{apps / 'Prefix.app'}\n{apps / 'Exact.app'}\n", "")
+    with patch.object(probes.sys, "platform", "darwin"), patch.object(Path, "glob", return_value=iter(())), patch.object(probes.subprocess, "run", return_value=indexed):
+        result = probe_app_bundle("fixture", "ide", darwin_bundle_id="com.example.app", home=home)
+        assert result.evidence == (f"app-bundle:{apps / 'Exact.app'}",), result
+    print("PASS: Spotlight results require verified bundle identifiers")
+
+assert len({state.value for state in InstallState}) == 7
 print("Detection probe tests passed")
 PYEOF

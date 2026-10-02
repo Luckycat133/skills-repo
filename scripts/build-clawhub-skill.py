@@ -7,6 +7,16 @@ import argparse
 import re
 from pathlib import Path
 
+SEMVER = re.compile(
+    r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
+    r"(?:-((?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?"
+    r"(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?"
+)
+
+
+def valid_version(version: str) -> bool:
+    return SEMVER.fullmatch(version) is not None
+
 
 def split_skill(text: str) -> tuple[list[str], str]:
     if not text.startswith("---\n"):
@@ -58,7 +68,7 @@ def main() -> int:
     parser.add_argument("--version", required=True)
     args = parser.parse_args()
 
-    if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:[.-][A-Za-z0-9]+)?", args.version):
+    if not valid_version(args.version):
         raise SystemExit(f"invalid release version: {args.version}")
 
     frontmatter, body = split_skill(args.source.read_text(encoding="utf-8"))

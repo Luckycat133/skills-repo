@@ -356,6 +356,27 @@ class SurfacePath:
     canonical_path: str
     precedence: int
 
+    @classmethod
+    def from_dict(cls, value: dict[str, Any]) -> "SurfacePath":
+        try:
+            return cls(
+                product=value["product"],
+                profile=value["profile"],
+                object_type=value["object_type"],
+                scope=value["scope"],
+                storage=value["storage"],
+                path=value["path"],
+                resolved_path=Path(value["resolved_path"]),
+                boundary=Path(value["boundary"]),
+                source_format=value["source_format"],
+                policy=value["policy"],
+                location_role=value.get("location_role", "canonical"),
+                canonical_path=value.get("canonical_path", value["path"]),
+                precedence=value.get("precedence", 0),
+            )
+        except (KeyError, TypeError) as error:
+            raise ValueError("invalid serialized migration surface") from error
+
     def to_dict(self) -> dict[str, Any]:
         value = asdict(self)
         value["resolved_path"] = str(self.resolved_path)
@@ -375,6 +396,21 @@ class PlanItem:
     acb_uri: str | None = field(default=None, repr=False)
     expected_source_state: dict[str, Any] | None = field(default=None, repr=False)
     expected_target_state: dict[str, Any] | None = field(default=None, repr=False)
+
+    @classmethod
+    def from_dict(cls, value: dict[str, Any]) -> "PlanItem":
+        source = value.get("source")
+        target = value.get("target")
+        return cls(
+            object_type=value["object_type"],
+            status=value["status"],
+            reason=value["reason"],
+            source=SurfacePath.from_dict(source) if source else None,
+            target=SurfacePath.from_dict(target) if target else None,
+            manual_actions=value.get("manual_actions", []),
+            object_id=value.get("object_id", ""),
+            acb_uri=value.get("acb_uri"),
+        )
 
     def __post_init__(self) -> None:
         # Compute a stable object_id from the resolved source when not
@@ -464,9 +500,10 @@ def _expand_path_vars(raw_path: str, home: Path) -> str:
 class Registry:
     """Resolve registry v2 products, profiles, and concrete surface paths."""
 
-    def __init__(self, path: Path, workspace: Path, home: Path | None = None) -> None:
+    def __init__(self, path: Path, workspace: Path, home: Path | None = None, *, portable_source: bool = False) -> None:
         self.path = path
         self.workspace = workspace.resolve()
+        self.portable_source = portable_source
         # Honor $HOME when it points at a real directory: Path.home() on
         # native Windows Python reads USERPROFILE only, which silently
         # ignored HOME-injected test fixtures and cross-device restores.
@@ -646,6 +683,14 @@ class Registry:
 
     def resolve_path(self, entry: dict[str, Any]) -> tuple[Path, Path]:
         raw_path = str(entry["path"])
+        if self.portable_source:
+            relative = raw_path.strip("/\\").replace("~", "home").replace("..", "_")
+            relative = re.sub(r"[/\\:]+", "/", relative)
+            if relative.startswith("home/"):
+                return self.home / relative[5:], self.home
+            if entry.get("scope") in {"user", "shared-user"}:
+                return self.home / relative, self.home
+            return self.workspace / relative, self.workspace
         override = entry.get("override_env")
         if override and os.environ.get(str(override)):
             base = Path(os.environ[str(override)]).expanduser()
@@ -2007,14 +2052,28 @@ def serialize_portable_handoff(
         raw_files = raw_data.get("selected_files")
         if isinstance(raw_files, list):
             for f in raw_files:
-                if isinstance(f, str) and not f.startswith("/") and ".." not in f:
-                    selected_files.append(f)
+                if not isinstance(f, str):
+                    continue
+                portable_path = f.replace("\\", "/")
+                if (
+                    portable_path
+                    and not portable_path.startswith("/")
+                    and not re.match(r"^[A-Za-z]:", portable_path)
+                    and ".." not in Path(portable_path).parts
+                ):
+                    selected_files.append(portable_path)
         raw_patch = raw_data.get("patch")
         if isinstance(raw_patch, str):
             patch = raw_patch
 
     git_branch: str | None = None
-    if workspace is not None:
+    if isinstance(raw_data, dict):
+        branch = raw_data.get("git_branch")
+        if isinstance(branch, str) and branch.strip() and not any(
+            character.isspace() for character in branch
+        ):
+            git_branch = branch
+    if git_branch is None and workspace is not None:
         git_info = git_provenance(workspace)
         if git_info and git_info.get("branch"):
             git_branch = str(git_info["branch"])
@@ -2084,12 +2143,19 @@ def _skill_sources(surface: SurfacePath) -> list[Path]:
     )
 
 
+def _is_skill_environment_file(name: str) -> bool:
+    return name == ".env" or name.startswith(".env.")
+
+
 def _skill_environment_files(skill_dir: Path) -> list[Path]:
-    return sorted(path for path in skill_dir.rglob(".env*") if path.is_file())
+    return sorted(
+        path for path in skill_dir.rglob(".env*")
+        if path.is_file() and _is_skill_environment_file(path.name)
+    )
 
 
 def _ignore_skill_environment_files(_directory: str, names: list[str]) -> list[str]:
-    return [name for name in names if name.startswith(".env")]
+    return [name for name in names if _is_skill_environment_file(name)]
 
 
 def preflight_skill_source(skill_dir: Path) -> None:
@@ -2208,6 +2274,8 @@ def _build_plan_for_scope(
     items: list[PlanItem] = []
     losses = LossReport()
     for object_type in object_types:
+        # Mandatory Skill environment exclusions do not require loss acceptance.
+        conversion_lossy = False
         source_error: ValueError | None = None
         try:
             source = choose_surface(
@@ -2454,6 +2522,7 @@ def _build_plan_for_scope(
                     )
                     _, report = emit_instruction(instruction, target.source_format)
                     losses.items.extend(report.items)
+                    conversion_lossy = conversion_lossy or report.lossy
             except (OSError, UnicodeError, ValueError) as error:
                 items.append(
                     PlanItem(
@@ -2532,6 +2601,7 @@ def _build_plan_for_scope(
                 )
                 _, report = emit_mcp_document(servers, target.source_format, existing)
                 losses.items.extend(report.items)
+                conversion_lossy = report.lossy
             except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as error:
                 items.append(
                     PlanItem(
@@ -2543,7 +2613,19 @@ def _build_plan_for_scope(
                     )
                 )
                 continue
-        items.append(PlanItem(object_type, "ready", "review before apply", source, target))
+        items.append(
+            PlanItem(
+                object_type,
+                "ready-lossy" if conversion_lossy else "ready",
+                (
+                    "conversion has reported losses; explicit loss acceptance required"
+                    if conversion_lossy
+                    else "review before apply"
+                ),
+                source,
+                target,
+            )
+        )
     return items, losses
 
 
@@ -2613,10 +2695,16 @@ def build_plan(
     return combined_items, combined_losses
 
 
+def _update_file_hash(digest: Any, path: Path) -> None:
+    with path.open("rb") as reader:
+        for chunk in iter(lambda: reader.read(1024 * 1024), b""):
+            digest.update(chunk)
+
+
 def hash_path(path: Path) -> str:
     digest = hashlib.sha256()
     if path.is_file():
-        digest.update(path.read_bytes())
+        _update_file_hash(digest, path)
         return digest.hexdigest()
     if path.is_dir():
         for child in sorted(path.rglob("*")):
@@ -2625,7 +2713,7 @@ def hash_path(path: Path) -> str:
             if child.is_file():
                 digest.update(str(child.relative_to(path)).encode("utf-8"))
                 digest.update(b"\0")
-                digest.update(child.read_bytes())
+                _update_file_hash(digest, child)
         return digest.hexdigest()
     raise ValueError(f"cannot hash missing path: {path}")
 
@@ -2657,6 +2745,26 @@ def paths_overlap(first: Path, second: Path) -> bool:
         or first_resolved in second_resolved.parents
         or second_resolved in first_resolved.parents
     )
+
+
+def resolve_output_path(path: Path) -> Path:
+    """Resolve output paths after rejecting user-controlled symlink components."""
+    absolute = path.expanduser().absolute()
+    system_aliases = {
+        Path("/tmp"): Path("/private/tmp"),
+        Path("/var"): Path("/private/var"),
+        Path("/etc"): Path("/private/etc"),
+    }
+    for candidate in (*reversed(absolute.parents), absolute):
+        if not candidate.is_symlink():
+            continue
+        if (
+            sys.platform == "darwin" and candidate in system_aliases
+            and candidate.resolve() == system_aliases[candidate]
+        ):
+            continue
+        raise ValueError(f"symbolic links are not allowed in output paths: {candidate}")
+    return absolute.resolve(strict=False)
 
 
 def _git_output(workspace: Path, *arguments: str) -> str | None:
@@ -2711,7 +2819,7 @@ def _unified_diff(existing: str, rendered: str, target: Path) -> str:
 
 
 def _preview_plan_item(item: PlanItem) -> dict[str, Any] | None:
-    if item.status != "ready" or item.source is None or item.target is None:
+    if item.status not in {"ready", "ready-lossy"} or item.source is None or item.target is None:
         return None
     source = item.source
     target = item.target
@@ -2735,6 +2843,7 @@ def _preview_plan_item(item: PlanItem) -> dict[str, Any] | None:
     if item.object_type == "instructions":
         previews = []
         sources = _instruction_sources(source)
+        used_targets: set[Path] = set()
         for index, instruction_path in enumerate(sources):
             instruction = parse_instruction(
                 instruction_path.read_text(encoding="utf-8"),
@@ -2746,9 +2855,18 @@ def _preview_plan_item(item: PlanItem) -> dict[str, Any] | None:
             if _instruction_target_is_file(target):
                 destination = target.resolved_path
             else:
-                destination = _instruction_target_path(
-                    target, instruction_path, item.object_id
+                file_object_id = compute_object_id(
+                    product=source.product,
+                    profile=source.profile,
+                    scope=source.scope,
+                    canonical_path=canonical_relative_path(
+                        instruction_path, source.boundary
+                    ),
                 )
+                destination = _instruction_target_path(
+                    target, instruction_path, file_object_id, used_targets
+                )
+            used_targets.add(destination)
             existing = (
                 destination.read_text(encoding="utf-8")
                 if destination.is_file()
@@ -2777,16 +2895,42 @@ def _preview_plan_item(item: PlanItem) -> dict[str, Any] | None:
             target.source_format,
             existing or None,
         )
-        old_servers: set[str] = set()
+        old_servers: dict[str, MCPServerIR] = {}
+        old_definitions: dict[str, Any] = {}
         if existing:
             try:
                 old_servers = {
-                    server.name
+                    server.name: server
                     for server in parse_mcp_document(existing, target.source_format)
                 }
+                _, old_definitions = _server_container(
+                    _decode_mcp_document(existing, target.source_format),
+                    target.source_format,
+                )
             except ValueError:
-                old_servers = set()
-        new_servers = {server.name for server in servers}
+                old_servers = {}
+        new_servers = {
+            server.name: server
+            for server in parse_mcp_document(rendered, target.source_format)
+        }
+        _, new_definitions = _server_container(
+            _decode_mcp_document(rendered, target.source_format),
+            target.source_format,
+        )
+        before_names = set(old_servers)
+        after_names = set(new_servers)
+        shared_names = before_names & after_names
+        updated = sorted(
+            name for name in shared_names if old_servers[name] != new_servers[name]
+        )
+        changed_fields = {
+            name: sorted(
+                field for field in old_definitions[name].keys() | new_definitions[name].keys()
+                if field not in old_definitions[name] or field not in new_definitions[name]
+                or old_definitions[name][field] != new_definitions[name][field]
+            )
+            for name in updated
+        }
         return {
             "kind": "mcp-semantic-diff",
             "changes": [
@@ -2799,14 +2943,48 @@ def _preview_plan_item(item: PlanItem) -> dict[str, Any] | None:
                         else None
                     ),
                     "post_sha256": hashlib.sha256(rendered.encode("utf-8")).hexdigest(),
-                    "server_names_before": sorted(old_servers),
-                    "server_names_after": sorted(new_servers),
-                    "added": sorted(new_servers - old_servers),
-                    "removed": sorted(old_servers - new_servers),
+                    "server_names_before": sorted(before_names),
+                    "server_names_after": sorted(after_names),
+                    "added": sorted(after_names - before_names),
+                    "removed": sorted(before_names - after_names),
+                    "updated": updated,
+                    "unchanged": sorted(shared_names - set(updated)),
+                    "changed_fields": changed_fields,
                     "credential_values_included": False,
                 }
             ],
         }
+    if item.object_type == "plugins":
+        changes = []
+        for child in sorted(source.resolved_path.iterdir()):
+            destination = target.resolved_path / child.name
+            changes.append({
+                "path": str(destination),
+                "action": "replace" if destination.exists() else "create",
+                "source_sha256": hash_path(child),
+                "target_sha256": hash_path(destination) if destination.exists() else None,
+            })
+        return {"kind": "file-list", "changes": changes}
+    if item.object_type == "handoff":
+        files = [source.resolved_path] if source.resolved_path.is_file() else sorted(
+            path for path in source.resolved_path.iterdir() if path.is_file()
+        )
+        changes = []
+        for path in files:
+            try:
+                raw = json.loads(path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                raw = {"reviewed_summary": "Reviewed handoff snapshot"}
+            rendered = json.dumps(serialize_portable_handoff(raw, target.boundary), indent=2, sort_keys=True) + "\n"
+            destination = target.resolved_path if source.resolved_path.is_file() else target.resolved_path / path.name
+            existing = destination.read_text(encoding="utf-8") if destination.is_file() else ""
+            changes.append({
+                "path": str(destination),
+                "action": "replace" if destination.exists() else "create",
+                "post_sha256": hashlib.sha256(rendered.encode("utf-8")).hexdigest(),
+                "diff": _unified_diff(existing, rendered, destination),
+            })
+        return {"kind": "unified-diff", "changes": changes}
     return None
 
 
@@ -2987,56 +3165,7 @@ def validate_plan_document(
     if source_sel in ("all-installed", "auto") or target_sel in ("all-installed", "auto"):
         items: list[PlanItem] = []
         for stored in stored_items:
-            src_dict = stored.get("source")
-            tgt_dict = stored.get("target")
-            src_surf = (
-                SurfacePath(
-                    product=src_dict["product"],
-                    profile=src_dict["profile"],
-                    object_type=src_dict["object_type"],
-                    scope=src_dict["scope"],
-                    storage=src_dict["storage"],
-                    path=src_dict["path"],
-                    resolved_path=Path(src_dict["resolved_path"]),
-                    boundary=Path(src_dict["boundary"]),
-                    source_format=src_dict["source_format"],
-                    policy=src_dict["policy"],
-                    location_role=src_dict.get("location_role", "canonical"),
-                    canonical_path=src_dict.get("canonical_path", src_dict["path"]),
-                    precedence=src_dict.get("precedence", 0),
-                )
-                if src_dict
-                else None
-            )
-            tgt_surf = (
-                SurfacePath(
-                    product=tgt_dict["product"],
-                    profile=tgt_dict["profile"],
-                    object_type=tgt_dict["object_type"],
-                    scope=tgt_dict["scope"],
-                    storage=tgt_dict["storage"],
-                    path=tgt_dict["path"],
-                    resolved_path=Path(tgt_dict["resolved_path"]),
-                    boundary=Path(tgt_dict["boundary"]),
-                    source_format=tgt_dict["source_format"],
-                    policy=tgt_dict["policy"],
-                    location_role=tgt_dict.get("location_role", "canonical"),
-                    canonical_path=tgt_dict.get("canonical_path", tgt_dict["path"]),
-                    precedence=tgt_dict.get("precedence", 0),
-                )
-                if tgt_dict
-                else None
-            )
-            item = PlanItem(
-                object_type=stored["object_type"],
-                status=stored["status"],
-                reason=stored["reason"],
-                source=src_surf,
-                target=tgt_surf,
-                manual_actions=stored.get("manual_actions", []),
-                object_id=stored.get("object_id", ""),
-                acb_uri=stored.get("acb_uri"),
-            )
+            item = PlanItem.from_dict(stored)
             # P0-1 (0.9.3): items carrying an acb:// URI are backed by
             # bundle objects, not the original /tmp staging path. The
             # replay path re-stages them from the verified bundle into a
@@ -3112,11 +3241,29 @@ def atomic_write(path: Path, text: str) -> None:
     descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     temporary = Path(temporary_name)
     try:
-        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="") as handle:
             handle.write(text)
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def atomic_copy_file(source: Path, target: Path) -> None:
+    """Copy bytes and executable permissions without a text conversion."""
+    target.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{target.name}.", dir=target.parent
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb") as handle, source.open("rb") as reader:
+            shutil.copyfileobj(reader, handle)
+            handle.flush()
+            os.fsync(handle.fileno())
+        shutil.copystat(source, temporary)
+        os.replace(temporary, target)
     finally:
         temporary.unlink(missing_ok=True)
 
@@ -3147,6 +3294,7 @@ def begin_change(
         "boundary": str(boundary),
         "kind": None,
         "backup": str(backup) if backup else None,
+        "backup_sha256": hash_path(backup) if backup else None,
         "created": backup is None,
         "post_sha256": None,
     }
@@ -3289,7 +3437,7 @@ def _build_manifest(
         "provenance": provenance,
         "changes": changes,
         "loss_report": loss_report.to_dict(),
-        "items": items,
+        "items": sorted(items, key=lambda item: item["plan_index"]),
         "blockers": [
             {
                 "target_group": group,
@@ -3348,6 +3496,7 @@ def apply_plan(
     When ``strict`` is set, any non-``ready`` item aborts the whole plan
     (legacy behavior preserved for callers that want it).
     """
+    strict = strict or not apply_safe
     if strict:
         blocked = [item for item in plan if item.status_enum is not ItemStatus.READY]
         if blocked:
@@ -3370,10 +3519,11 @@ def apply_plan(
     deferred_items: list[PlanItem] = []
     blocked_items: list[PlanItem] = []
     manifest_items: list[dict[str, Any]] = []
+    plan_indices = {id(item): index for index, item in enumerate(plan)}
     for index, item in enumerate(plan):
         status = item.status_enum
         item_id = f"{index}:{item.object_type}"
-        if status is ItemStatus.READY and item.target_group in target_groups_blocked:
+        if status in {ItemStatus.READY, ItemStatus.READY_LOSSY, ItemStatus.DRAFT_DISABLED} and item.target_group in target_groups_blocked:
             blocked_items.append(item)
             manifest_items.append(
                 _manifest_entry(item, item_id, "blocked-by-group", index)
@@ -3437,10 +3587,22 @@ def apply_plan(
         state_root = workspace_resolved / ".agent-context-migration"
         ensure_no_symlink_components(state_root, workspace_resolved)
         manifest_path_resolved = (
-            manifest_path.resolve(strict=False)
+            resolve_output_path(manifest_path)
             if manifest_path is not None
             else state_root / "manifests" / f"{operation_id}.json"
         )
+        if manifest_path_resolved.exists() or manifest_path_resolved.is_symlink():
+            raise ValueError(f"manifest path already exists: {manifest_path_resolved}")
+        if any(
+            paths_overlap(manifest_path_resolved, surface.resolved_path)
+            for item in plan
+            for surface in (item.source, item.target)
+            if surface is not None
+        ):
+            raise ValueError(
+                "manifest path overlaps a planned source or target surface: "
+                f"{manifest_path_resolved}"
+            )
         manifest = _build_manifest(
             operation_id=operation_id,
             workspace=workspace_resolved,
@@ -3469,7 +3631,7 @@ def apply_plan(
     ensure_no_symlink_components(state_root, workspace)
     backup_root = state_root / "backups" / operation_id
     manifest_path = (
-        manifest_path.resolve(strict=False)
+        resolve_output_path(manifest_path)
         if manifest_path is not None
         else state_root / "manifests" / f"{operation_id}.json"
     )
@@ -3794,15 +3956,13 @@ def apply_plan(
                         elif temporary.exists():
                             shutil.rmtree(temporary)
                 else:
-                    atomic_write(
-                        destination,
-                        operation["staged"].read_text(encoding="utf-8"),
-                    )
+                    atomic_copy_file(operation["staged"], destination)
                 finish_change(change, destination)
 
             # Record each actually applied eligible item in the manifest
             # alongside the deferred/blocked entries from dispatch.
-            for index, item in enumerate(eligible_items):
+            for item in eligible_items:
+                index = plan_indices[id(item)]
                 status = item.status_enum
                 item_id = f"{index}:{item.object_type}"
                 if status is ItemStatus.DRAFT_DISABLED:
@@ -3918,6 +4078,19 @@ def rollback_manifest(path: Path) -> int:
     errors = verify_manifest(path)
     if errors:
         raise ValueError("rollback refused: " + "; ".join(errors))
+    # Check every backup before removing any target. A missing or altered
+    # later backup must not leave an earlier item partially rolled back.
+    for change in manifest["changes"]:
+        backup_value = change.get("backup")
+        if not backup_value:
+            continue
+        backup = Path(backup_value)
+        if not backup.exists():
+            raise ValueError(f"missing rollback backup: {backup}")
+        ensure_no_symlinks(backup)
+        expected = change.get("backup_sha256")
+        if expected is not None and hash_path(backup) != expected:
+            raise ValueError(f"changed rollback backup: {backup}")
     restored = 0
     for change in reversed(manifest["changes"]):
         target = Path(change["path"])
@@ -3928,8 +4101,6 @@ def rollback_manifest(path: Path) -> int:
             target.unlink(missing_ok=True)
         if backup_value:
             backup = Path(backup_value)
-            if not backup.exists():
-                raise ValueError(f"missing rollback backup: {backup}")
             target.parent.mkdir(parents=True, exist_ok=True)
             if backup.is_dir():
                 shutil.copytree(backup, target)

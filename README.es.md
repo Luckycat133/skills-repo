@@ -8,6 +8,8 @@
 
 > Languages: [English](README.md) · [中文](README.zh-CN.md) · [日本語](README.ja-JP.md) · **Español**
 
+Versión: **0.10.0**. Consulta los [cambios](CHANGELOG.md#0100---2026-10-02). El ejemplo de instalación desde GitHub usa la etiqueta de lanzamiento correspondiente `v0.10.0`.
+
 Migración, respaldo y restauración de contexto de asistentes de IA (Skills, Reglas/Instrucciones y MCP) entre **Cursor, Claude Code, Codex, Cline, Windsurf, Copilot, Gemini CLI** y decenas de herramientas de programación con IA — **completamente offline, con vista previa y seguro ante rollback**.
 
 ![Agent Skills Setup — 15-second demo: detect → plan → secret redaction → apply → verify](skills/agent-skills-setup/assets/demo.gif)
@@ -25,7 +27,7 @@ openclaw skills install @luckycat133/agent-skills-setup
 O instala directamente desde GitHub:
 
 ```bash
-git clone --depth 1 --branch v0.9.3 https://github.com/Luckycat133/skills-repo.git
+git clone --depth 1 --branch v0.10.0 https://github.com/Luckycat133/skills-repo.git
 
 openclaw skills install \
   ./skills-repo/skills/agent-skills-setup \
@@ -57,11 +59,25 @@ openclaw skills install \
 
 ## 🚀 Comandos Principales
 
-- **`migrate`**: Flujo completo: `detect` -> `inventory` -> `plan` -> `apply` -> `verify`.
+- **`migrate`**: Examina los productos seleccionados, guarda un plan, lo aplica y verifica el resultado.
 - **`snapshot`**: Captura un paquete atómico **Agent Context Bundle (ACB)** con enlace 1:1 estricto con el manifiesto.
 - **`restore`**: Reconstruye un plan de restauración dual desde un ACB hacia el dispositivo de destino con protección TOCTOU.
-- **`bundle-sign` & `bundle-verify`**: Firma y verifica paquetes ACB mediante claves criptográficas Ed25519.
+- **`bundle-keygen`, `bundle-sign` y `bundle-verify`**: Genera claves Ed25519, firma paquetes ACB y verifica su integridad con una clave pública de confianza.
 - **`doctor`**: Diagnostica dependencias y ejecutables faltantes de forma offline.
+
+ACB conserva los permisos normales de archivos, incluidos los bits de ejecución,
+y admite paquetes antiguos sin estos metadatos. Los planes de restauración
+guardados se vinculan a la identidad del paquete; la vista previa de MCP muestra
+servidores añadidos, eliminados y modificados sin valores de credenciales.
+Las conversiones de instrucciones/MCP con pérdidas requieren aceptación explícita.
+`doctor` también enumera requisitos de paquetes, extensiones, plataforma e instalación manual.
+
+`detect` / `inventory` descubren y enumeran el contexto; `plan` guarda la vista
+previa; `apply` ejecuta el plan revisado; `verify` / `rollback` verifican y
+recuperan los cambios. Consulta la [guía de comandos](skills/agent-skills-setup/references/cli-workflow.md)
+y la [matriz de compatibilidad](docs/agent-skills-setup/compatibility-matrix.md)
+para los ejemplos y el alcance probado de cada perfil. MCP remoto y ajustes
+cloud requieren reconstrucción manual; plugins y traspasos requieren opt-in explícito.
 
 ---
 
@@ -88,18 +104,20 @@ skills-repo/
 ## Desarrollo y Validación
 
 1. Edita `skills/agent-skills-setup/`; no edites el puntero generado en la raíz.
-2. Ejecuta la validación completa: `bash validate-all.sh`.
-3. Tras modificar el Skill canónico, ejecuta `bash scripts/sync-root-mirror.sh` para actualizar el puntero raíz.
+2. Tras modificar el Skill canónico, ejecuta `bash scripts/sync-root-mirror.sh` para actualizar el puntero raíz.
+3. Ejecuta la validación completa: `bash validate-all.sh`.
 4. Realiza el merge únicamente tras superar todas las validaciones.
+
+Para probar la escala en entornos aislados, ejecuta `python3 scripts/benchmark-scale.py --sizes 10,100,1000`.
+Comprueba migración, restauración del plan guardado, contenido exacto y rollback.
+Los tiempos son observaciones, no umbrales de CI. Usa `--report /path/to/new-report.json`
+y `--keep-workspace` para conservar las evidencias; no lee configuración real de agentes.
 
 ## Documentos del Proyecto
 
+- [Historial de cambios](CHANGELOG.md)
+- [Lista de lanzamiento](docs/agent-skills-setup/release-checklist.md)
 - [Guía de contribución](CONTRIBUTING.md)
-- [Seguridad](SECURITY.md)
-- [Código de conducta](CODE_OF_CONDUCT.md)
-- [Licencia](LICENSE)
-
-- [Contribuir](CONTRIBUTING.md)
 - [Seguridad](SECURITY.md)
 - [Código de conducta](CODE_OF_CONDUCT.md)
 - [Licencia](LICENSE)

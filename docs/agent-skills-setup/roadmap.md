@@ -1,136 +1,71 @@
 # Roadmap
 
-This document organizes the current state of the Agent Skills Setup into
-fixed, verifiable buckets. The shape is intentionally different from the
-old "Completed / Next / Engineering backlog" split — that layout hid
-experimental capabilities behind neutral-sounding "Next" milestones and
-made it easy to misrepresent product-path support as production-ready.
+The Registry and [compatibility matrix](compatibility-matrix.md) define each
+profile's scope and evidence. A passing fixture establishes the tested behavior;
+native discovery and execution in a target application remain separate checks.
+The repository configures Linux, macOS, and Windows validation in CI.
 
-## Production
+## Implemented
 
-These capabilities are self-contained, offline-safe, and covered by the
-exact-release CI matrix on `ubuntu-latest`, `macos-latest`, and
-`windows-latest`.
+- Registry v2 resolves product/profile aliases, inheritance, platform paths,
+  scopes, support levels, and evidence. No profile claims `full` support.
+- `detect`, bulk `snapshot`, and bulk `restore` share detection and precedence.
+  Named operations inspect only their selected products. Product-specific files
+  can provide installation evidence; shared compatibility files remain opt-in.
+- Saved plans bind Registry/adapter versions, source and target state, Git
+  provenance, and stable object identities. Apply stages outputs, creates exact
+  backups, writes a checksummed manifest, and verifies persisted results.
+- Partial safe apply records manual, forbidden, invalid, lossy, and conflicting
+  items. Conflicts block the affected target group; strict mode rejects mixed
+  plans. Reported instruction/MCP losses require explicit acceptance. Rollback
+  checks every target and backup before restoring changes.
+- ACB `snapshot`, `bundle-verify`, `restore`, and `doctor` support atomic bundles,
+  closed-world checksums, 1:1 object/file bindings, multi-source merging,
+  ordinary file permissions, reviewable previews, and cross-process plan replay.
+  Named plans bind the manifest digest and stable object URIs; bundles without
+  permission metadata remain readable.
+- `bundle-keygen`, `bundle-sign`, and `bundle-verify` / `restore --trusted-key`
+  use Ed25519. Integrity checks can run without a trusted key; authentication of
+  the signer requires a trusted public key obtained independently.
+- Skills, instructions, and supported local stdio MCP subsets have automatic
+  writers. Remote transports and unsupported configuration formats yield manual
+  reconstruction actions. Shared MCP settings preserve unrelated fields; previews
+  expose server additions, removals, and changed field names without credentials.
+- Plugin packages and reviewed handoff summaries retain separate object/opt-in
+  gates through snapshot, migration, and restore. Hooks and agents have no live
+  staging writer. Legacy compatibility remains read-only.
+- Source scanning, secret redaction, environment-file exclusion, symlink
+  rejection, output-path containment, and explicit manual follow-ups remain
+  enforced. Import and runtime packaging validate a complete staged tree before
+  replacing any destination.
+- Offline freshness reports retain stale evidence on failure. Explicitly requested
+  demotion validates the proposed registry before replacement; the CI workflow
+  preserves reports and requires manual opt-in to propose a downgrade.
+- Repository scale testing exercises isolated migration, saved-plan restore,
+  contents, rollback, and source preservation. Streaming SHA-256 keeps allocation
+  bounded; timings are observations rather than CI performance thresholds.
 
-- `Registry v2` is the sole source of product / profile / version /
-  surface / scope / evidence-backed support levels. No profile is
-  advertised as `full`.
-- Plan / apply / verify / rollback are profile-aware, replayable, and
-  checksummed. Every plan item carries a stable `object_id`.
-- ACB (`snapshot`, `bundle-verify`, `restore`, `doctor`) writes a
-  closed-world, atomic-staged bundle with a strict 1:1 manifest-to-object
-  binding validated by SHA256 (0.9.0).
-- Bundles are signed with **Ed25519** over `checksums.json` (P1-5, 0.8.27).
-  `bundle-keygen`, `bundle-sign`, and `bundle-verify` / `restore` accept `--trusted-key <id_ed25519.pub>` (0.9.0).
-  HMAC-SHA256 is retained for backward compatibility.
-- `--all-installed` snapshot and restore use real detection results as
-  the only source of truth (no `inventory.exists` fallback) and
-  iterate plan items with object-level conflict handling (0.9.0).
-- Child-level Skill PlanItems in restore decompose monolithic directory items
-  into individual skills with granular `target_group` conflict isolation (0.9.1).
-- Multi-source MCP IR server-level deduplication and merge isolate conflicting
-  servers into the loss report and emit a single atomic write operation (0.9.1).
-- Detection probes strictly default to `InstallState.INSTALLED` for snapshot
-  and restore, requiring explicit `--include-configured` and `--include-compatibility`
-  flags for non-installed profiles (0.9.1).
-- Full end-to-end plumbing and fail-closed guards for `--include-plugins`
-  and `--include-session` across migrate, apply, and restore (0.9.1).
-- MCP / Instructions / Skills use explicit adapter registries. JSONC
-  uses a reviewed parser; JSON5 / TOML / YAML / XML / Lua / ambiguous
-  UUID+JSON fail to a dedicated manual adapter.
-- Apply uses a seven-status partial safe flow (`ready`, `ready-lossy`,
-  `draft-disabled`, `manual-rebuild`, `forbidden`, `conflict`,
-  `invalid`).
-- Apply stages `skills` / `instructions` / `mcp` plus opaque plugin
-  package copies; session `handoff` transfer exists behind the explicit
-  `--include-session` opt-in with a field whitelist. Executable
-  surfaces (hooks, agents) have no staging writer — a replayed plan
-  marking them eligible fails closed, and the legacy wrapper admits
-  only read-only `--print-path` / `--dry-run` invocations (0.8.33).
-- Alias resolver follows `alias_of` chains iteratively with cycle,
-  depth, and unknown-selector guards.
-- macOS path expansion and `~` resolution are deterministic.
-- `secrets.required.json`, `reauth.json`, `rebuild.json`, and
-  `collection_summary` are non-secret metadata only.
-- Parse failures are surfaced explicitly in `requirements.json` and
-  `collection_summary` (P1-2, 0.8.27); no silent exception swallowing.
-- Manifest objects carry rich metadata: `object_path`, `files[]` with
-  SHA256/size, `adapter_version`, `source_format_version`,
-  `portability_mode`, `content_hash`.
+## Limitations and follow-up evidence
 
-## Experimental
+- WSL, Remote-SSH, Dev-Container, Codespaces, VS Code profiles, and extension-host
+  declarations require host/guest path and apply/rollback tests before stronger
+  cross-platform support claims. They remain experimental.
+- Ed25519 signing requires the optional `cryptography` dependency. The skill
+  does not download or install it; ordinary snapshot and integrity checks do not
+  require it. Cross-device signature tests use ephemeral keys.
+- `doctor` reports missing executables, package requirements, re-authentication,
+  and rebuild work. It does not install dependencies or prove package availability,
+  credentials, transport connectivity, or native application acceptance.
+- Compatibility data does not prove every source/target pair works in a native
+  application. New support requires fixtures, official source evidence, and
+  updates to the generated matrix and profile contracts.
+- Maintainer online freshness checks are separate from the offline skill.
+  Timestamp and schema validation alone do not establish current external paths.
 
-These work in restricted environments but are not yet ready for
-production-grade cross-platform guarantees.
+## Out of scope
 
-- WSL / Remote-SSH / Dev-Container / Codespaces host classes. The
-  `windows-latest` matrix job now runs the full suite (ACB E2E, plan /
-  apply / verify, detection, mapping assertions) with MSYS-aware test
-  harnesses; the remaining host classes have no CI coverage yet.
-- ACB signed bundle cross-device handoff. Ed25519 is asymmetric, so
-  the security boundary is now "self-generated + trusted-key verified".
-  Third-party ACBs can be verified with `--trusted-key`.
-- Maintainer-side documentation freshness via online checks (monthly
-  `maintainer-online-checks.yml`). The 365-day window in
-  `doc-freshness-checks.json` applies only to the offline runtime
-  check; maintainer online checks use a 30-day window.
-
-## Known limitations
-
-- `cryptography` is required at runtime for `sign_bundle` /
-  `verify_bundle_signature`. It is not committed to the repo and the
-  bundle path does not require it at snapshot time unless `--sign` is
-  requested.
-- `doctor` surfaces requirements as a list of `executables` and
-  `packages` parsed from MCP server configs. It does not run an
-  install planner; it does not validate that the listed package
-  actually exists on the target platform.
-- The OS / profile locations wiring covers `darwin`, `linux`, and
-  `windows` deeply. `wsl`, `remote-ssh`, `dev-container`,
-  `codespaces`, `vscode-profile`, and `extension-host` are stored on
-  profiles but not yet lazy-evaluated at apply time.
-- `Inventory_only` object types (`workflows`, `plugins`, `handoff`,
-  `config`, `policy`, `trust`, `user_memory`, `automation`, `cron`,
-  `personas`, `modes`) emit inventory rows but no automatic
-  migration.
-- ACB verify re-scans object bytes with the strict secret/binary
-  scanner, but third-party bundles without a trusted Ed25519 public
-  key cannot be verified.
-
-## Next milestone
-
-Captured here so they are visible without being mistaken for
-Production. Each item lists the test or evidence required to promote
-itself.
-
-- Implementation tests for `wsl`, `remote-ssh`, `dev-container`,
-  `codespaces`, `vscode-profile`, `extension-host`. Acceptance: every
-  profile harness has at least three fixture paths each.
-- A `--prune-stale` apply flag that reconciles `verify.json`
-  drift against the live registry. Acceptance: `apply --prune-stale`
-  is a non-destructive dry-run by default; `--yes` confirms.
-- Real `doctor` install planner. Acceptance: doctor proposes a
-  per-platform install command list derived from each product's
-  declared installer, not just a guessed package name.
-- A true `compatibility.json` matrix. Acceptance: each entry has
-  `source_profile`, `target_profile`, `evidence`, and `verified_at`.
-- WSL / Remote-SSH / Dev-Container / Codespaces E2E tests covering
-  host/guest `HOME` interaction, actual file apply/rollback, and
-  cross-OS ACB handoff (Windows↔macOS).
-
-## Rejected / out of scope
-
-- Sniffing the host registry at startup to discover installed
-  products. The audit explicitly forbids this — it both leaks
-  information and produces false positives.
-- Bundles that mutate OpenClaw config, tools, models, cron,
-  heartbeat, or approval. Clover is a read-only control plane
-  (consent fail-closed).
-- Auto-grant of `operator.write` or tool-event observation scope
-  without explicit user opt-in.
-- Saving or transmitting test private keys. CI and dev run on
-  per-commit ephemeral keys; no key is ever embedded in the repo
-  or in a fixture bundle.
-- Modify the OpenClaw `dist/` tree to accept additional client
-  identities. The audit verdict is that this is an upstream
-  responsibility; downstream forks must not patch installed code.
+Automatic downloads, dependency installation, cloud account changes, credential
+or trust-state transfer, raw chat-history migration, and patches to installed
+third-party applications are outside this skill. Generated/manual surfaces such
+as workflows, automation, cron, personas, and modes remain inventory or rebuild
+items unless a reviewed adapter and meaningful regression justify a new writer.

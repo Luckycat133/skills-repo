@@ -9,13 +9,16 @@ network.
 from __future__ import annotations
 
 import os
+import plistlib
 import re
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable
+from xml.parsers.expat import ExpatError
 
 
 class InstallState(str, Enum):
@@ -35,7 +38,7 @@ class ProbeResult:
     state: InstallState
     evidence: tuple[str, ...]
 
-    def to_dict(self) -> dict[str, str]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "product": self.product,
             "profile": self.profile,
@@ -50,6 +53,7 @@ def probe_binary(
     binary_names: Iterable[str],
     *,
     version_command: Iterable[str] | None = None,
+    require_version: bool = False,
 ) -> ProbeResult:
     """Locate a binary in ``$PATH`` and capture its version."""
     names = list(binary_names)
@@ -68,11 +72,16 @@ def probe_binary(
                         timeout=2,
                         check=False,
                     )
-                    stdout = proc.stdout.strip() or proc.stderr.strip()
+                    if require_version and proc.returncode != 0:
+                        continue
+                    stdout = proc.stdout.strip() if proc.returncode == 0 else ""
                     if stdout:
                         evidence.append(f"version:{stdout.splitlines()[0][:64]}")
                 except (OSError, subprocess.SubprocessError):
-                    pass
+                    if require_version:
+                        continue
+            elif require_version:
+                continue
             return ProbeResult(product, profile, InstallState.INSTALLED, tuple(evidence))
     return ProbeResult(product, profile, InstallState.NOT_DETECTED, ())
 
@@ -85,7 +94,7 @@ _SHARED_COMPATIBILITY_SUFFIXES = (
 
 def _is_shared_compatibility_path(path: Path) -> bool:
     p_posix = path.as_posix()
-    if path.name == "AGENTS.md":
+    if path.name in {"AGENTS.md", ".mcp.json"}:
         return True
     if any(p_posix.endswith(suf) for suf in _SHARED_COMPATIBILITY_SUFFIXES):
         return True
@@ -108,7 +117,8 @@ def probe_file_signature(
     Supports exact paths, globs (e.g. ``github.copilot-*``), home resolution,
     and workspace-relative resolution.
     """
-    effective_home = home or Path.home()
+    effective_home = resolve_home(home)
+    compatibility_match: ProbeResult | None = None
     for raw in candidate_paths:
         p_str = str(raw)
         if p_str.startswith("~"):
@@ -118,38 +128,30 @@ def probe_file_signature(
         else:
             target_str = p_str
 
-        # Check for glob wildcard matching
-        if any(char in target_str for char in ("*", "?", "[")):
-            target_path = Path(target_str)
-            parent = target_path.parent
-            pattern = target_path.name
-            if parent.exists() and parent.is_dir():
-                matches = list(parent.glob(pattern))
-                if matches:
-                    matched = matches[0]
-                    is_shared = _is_shared_compatibility_path(matched)
-                    state = (
-                        InstallState.COMPATIBILITY_ONLY
-                        if is_shared
-                        else (InstallState.INSTALLED if matched.is_dir() or matched.is_file() else InstallState.CONFIGURED_ONLY)
-                    )
-                    return ProbeResult(product, profile, state, (f"file:{matched}",))
-            continue
-
-        path = Path(target_str)
-        if path.exists():
-            # Distinguish shared/fallback paths from product-specific installation evidence
-            is_shared = _is_shared_compatibility_path(path)
-            if is_shared:
-                state = InstallState.COMPATIBILITY_ONLY
-            else:
+        target_path = Path(target_str)
+        try:
+            paths = (
+                sorted(target_path.parent.glob(target_path.name))
+                if any(char in target_str for char in ("*", "?", "["))
+                else [target_path]
+            )
+            for path in paths:
+                if not path.exists():
+                    continue
                 state = (
-                    InstallState.INSTALLED
+                    InstallState.COMPATIBILITY_ONLY
+                    if _is_shared_compatibility_path(path)
+                    else InstallState.INSTALLED
                     if path.is_dir() or path.is_file()
                     else InstallState.CONFIGURED_ONLY
                 )
-            return ProbeResult(product, profile, state, (f"file:{path}",))
-    return ProbeResult(product, profile, InstallState.NOT_DETECTED, ())
+                result = ProbeResult(product, profile, state, (f"file:{path}",))
+                if state is not InstallState.COMPATIBILITY_ONLY:
+                    return result
+                compatibility_match = compatibility_match or result
+        except OSError:
+            continue
+    return compatibility_match or ProbeResult(product, profile, InstallState.NOT_DETECTED, ())
 
 
 DARWIN_BUNDLE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.-]{0,255}$")
@@ -160,31 +162,36 @@ def probe_app_bundle(
     profile: str,
     *,
     darwin_bundle_id: str | None = None,
+    home: Path | None = None,
 ) -> ProbeResult:
     """Best-effort macOS app-bundle probe."""
     if (
         not darwin_bundle_id
         or sys.platform != "darwin"
-        or not DARWIN_BUNDLE_ID_RE.match(darwin_bundle_id)
+        or not DARWIN_BUNDLE_ID_RE.fullmatch(darwin_bundle_id)
     ):
         return ProbeResult(product, profile, InstallState.NOT_DETECTED, ())
 
-    # 1. Search standard macOS app locations
-    for app_dir in (Path("/Applications"), Path.home() / "Applications"):
-        if not app_dir.is_dir():
+    def matches(app: Path) -> bool:
+        try:
+            if app.suffix != ".app" or not app.is_dir():
+                return False
+            document = plistlib.loads((app / "Contents" / "Info.plist").read_bytes())
+            return isinstance(document, dict) and document.get("CFBundleIdentifier") == darwin_bundle_id
+        except (OSError, ValueError, plistlib.InvalidFileException, ExpatError):
+            return False
+
+    # Parse XML and binary plists and compare the actual identifier exactly.
+    for app_dir in (Path("/Applications"), resolve_home(home) / "Applications"):
+        try:
+            apps = sorted(app_dir.glob("*.app"))
+        except OSError:
             continue
-        for app in app_dir.glob("*.app"):
-            plist = app / "Contents" / "Info.plist"
-            if plist.is_file():
-                try:
-                    text = plist.read_text(encoding="utf-8", errors="ignore")
-                    if darwin_bundle_id in text:
-                        return ProbeResult(
-                            product, profile, InstallState.INSTALLED,
-                            (f"app-bundle:{app}",),
-                        )
-                except OSError:
-                    pass
+        for app in apps:
+            if matches(app):
+                return ProbeResult(
+                    product, profile, InstallState.INSTALLED, (f"app-bundle:{app}",),
+                )
 
     # 2. Try mdfind for Spotlight index lookup
     try:
@@ -196,20 +203,16 @@ def probe_app_bundle(
             check=False,
         )
         if proc.returncode == 0 and proc.stdout.strip():
-            found_app = proc.stdout.strip().splitlines()[0]
-            if Path(found_app).exists():
-                return ProbeResult(
-                    product, profile, InstallState.INSTALLED,
-                    (f"app-bundle:{found_app}",),
-                )
+            for found_app in proc.stdout.splitlines():
+                if matches(Path(found_app)):
+                    return ProbeResult(
+                        product, profile, InstallState.INSTALLED,
+                        (f"app-bundle:{found_app}",),
+                    )
     except (OSError, subprocess.SubprocessError):
         pass
 
     return ProbeResult(product, profile, InstallState.NOT_DETECTED, ())
-
-
-# Local import to keep the top of the module focused on data classes.
-import sys  # noqa: E402
 
 
 def resolve_home(home: Path | None) -> Path:
@@ -238,6 +241,7 @@ def detect_product(
     app_bundle_id: str | None = None,
 ) -> ProbeResult:
     """Run a small, deterministic detection probe for one product."""
+    fallback = ProbeResult(product, profile, InstallState.NOT_DETECTED, ())
     if binary:
         result = probe_binary(
             product, profile, binary, version_command=version_command
@@ -253,12 +257,14 @@ def detect_product(
             home=home,
         )
         if result.state is not InstallState.NOT_DETECTED:
-            return result
+            if result.state is InstallState.INSTALLED:
+                return result
+            fallback = result
     if app_bundle_id:
-        result = probe_app_bundle(product, profile, darwin_bundle_id=app_bundle_id)
+        result = probe_app_bundle(product, profile, darwin_bundle_id=app_bundle_id, home=home)
         if result.state is InstallState.INSTALLED:
             return result
-    return ProbeResult(product, profile, InstallState.NOT_DETECTED, ())
+    return fallback
 
 
 def detect_profile(

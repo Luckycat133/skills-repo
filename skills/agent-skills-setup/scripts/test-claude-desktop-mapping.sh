@@ -7,6 +7,7 @@ MIGRATION_SCRIPT="${SCRIPT_DIR}/smart-ide-migration.sh"
 PATHS_FILE="${SCRIPT_DIR}/../references/ide-paths.json"
 IDE_REFERENCE="${SCRIPT_DIR}/../references/ides/claude-desktop.md"
 SKILL_FILE="${SCRIPT_DIR}/../SKILL.md"
+REGISTRY_FILE="${SCRIPT_DIR}/../references/registry-v2.json"
 
 case "$(uname -s)" in
     Darwin|MINGW*|MSYS*|CYGWIN*)
@@ -62,16 +63,56 @@ if ! grep -Fq 'claude_desktop_config.json' <<< "$section"; then
     exit 1
 fi
 
-if ! grep -Fq 'Claude Desktop app' "$SKILL_FILE" || \
-   ! grep -Fq 'Settings → Extensions' "$SKILL_FILE" || \
-   ! grep -Fq 'Settings → Connectors' "$SKILL_FILE"; then
-    echo "FAIL: canonical SKILL.md is missing Claude Desktop's manual MCP boundary" >&2
-    exit 1
-fi
-
 TMP_ROOT="$(mktemp -d /tmp/claude-desktop-mapping-test.XXXXXX)"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 mkdir -p "$TMP_ROOT/home" "$TMP_ROOT/workspace"
+
+python3 - "$SKILL_FILE" "$IDE_REFERENCE" "$REGISTRY_FILE" "$SCRIPT_DIR" "$TMP_ROOT" <<'PYEOF'
+import json
+from pathlib import Path
+import sys
+
+skill_path = Path(sys.argv[1])
+reference_path = Path(sys.argv[2])
+registry_path = Path(sys.argv[3])
+sys.path.insert(0, sys.argv[4])
+fixture = Path(sys.argv[5])
+from migration_core import Registry
+
+skill = skill_path.read_text(encoding="utf-8")
+reference = reference_path.read_text(encoding="utf-8")
+index = (registry_path.parent / "ide-registry.md").read_text(encoding="utf-8")
+for route in (
+    "references/ide-registry.md",
+    "references/registry-v2.json",
+    "references/ides/<source>.md",
+    "references/ides/<target>.md",
+):
+    assert route in skill, f"canonical Skill lost safe profile/reference routing: {route}"
+assert "Cloud/UI and remote MCP remain manual" in skill
+assert "(ides/claude-desktop.md)" in index
+for boundary in (
+    "Settings → Extensions",
+    "Customize → Connectors",
+    "no portable mapper path",
+    "Code tab uses Claude Code's own",
+):
+    assert boundary in reference, f"conditional Claude Desktop reference lost boundary: {boundary}"
+
+data = json.loads(registry_path.read_text(encoding="utf-8"))
+alias = data["products"]["claude-desktop"]
+assert alias["alias_of"] == {"product": "claude", "profile": "desktop-chat"}
+assert alias["reference"] == "ides/claude-desktop.md"
+assert data["aliases"]["claude-desktop"] == "claude/desktop-chat"
+registry = Registry(registry_path, fixture / "workspace", home=fixture / "home")
+product, profile, resolved = registry.profile("claude-desktop")
+assert (product, profile) == ("claude", "desktop-chat")
+assert resolved["migration_policy"] == "official-api-or-rebuild-checklist"
+assert not resolved.get("surfaces"), "Desktop Chat must not expose guessed automatic filesystem surfaces"
+for object_type in ("mcp", "skills", "instructions"):
+    assert registry.surfaces("claude-desktop", object_type) == []
+print("Claude Desktop conditional routing and UI-managed boundaries verified")
+PYEOF
 
 target_output="$(HOME="$TMP_ROOT/home" bash "$MIGRATION_SCRIPT" legacy \
     --source claude --target claude-desktop --workspace "$TMP_ROOT/workspace" \
