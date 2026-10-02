@@ -22,6 +22,12 @@ from pathlib import Path
 registry = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 products = registry["products"]
 
+for profile_name in ("code-cli", "desktop-code"):
+    assert {(entry["scope"], entry["path"], entry["format"])
+            for entry in products["claude"]["profiles"][profile_name]["surfaces"]["mcp"]} == {
+        ("user", "~/.claude.json", "json:mcpServers"),
+        ("project", ".mcp.json", "json:mcpServers"),
+    }
 assert products["cline"]["profiles"]["ide"]["surfaces"]["mcp"][0]["path"] == "~/.cline/data/settings/cline_mcp_settings.json"
 assert products["cline"]["profiles"]["ide"]["surfaces"]["mcp"][0]["override_relative_path"] == "settings/cline_mcp_settings.json"
 cline_rules = products["cline"]["profiles"]["ide"]["surfaces"]["instructions"]
@@ -120,4 +126,3 @@ grep -Fq "letta' was unexpected" "$TMP_ROOT/polluted.log" || {
 }
 
 echo "Registry pollution gate test passed"
-

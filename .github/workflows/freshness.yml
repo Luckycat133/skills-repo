@@ -24,6 +24,8 @@ permissions:
 jobs:
   freshness-check:
     runs-on: ubuntu-latest
+    outputs:
+      stale_found: ${{ steps.evidence.outputs.stale_found }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -35,10 +37,6 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-
       - name: Run offline freshness check
         id: freshness
         run: |
@@ -47,10 +45,28 @@ jobs:
             --checks skills/agent-skills-setup/references/doc-freshness-checks.json \
             --max-age-days 365 \
             --report freshness-report.json
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Export stale evidence
+        id: evidence
+        if: always()
+        run: |
+          python3 <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          path = Path("freshness-report.json")
+          stale = []
+          if path.is_file():
+              report = json.loads(path.read_text(encoding="utf-8"))
+              stale = report.get("stale_profiles", [])
+          found = isinstance(stale, list) and bool(stale) and all(isinstance(item, str) for item in stale)
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"stale_found={'true' if found else 'false'}\n")
+          PY
 
       - name: Upload freshness report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: freshness-report
@@ -67,7 +83,7 @@ jobs:
     # Only run on manual dispatch with demote_stale=true.
     # Do NOT run on schedule to avoid creating PRs automatically.
     needs: freshness-check
-    if: github.event.inputs.demote_stale == 'true'
+    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && inputs.demote_stale && needs.freshness-check.outputs.stale_found == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -82,10 +98,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
 
       - name: Run freshness check with demote-stale
         id: demote
@@ -121,11 +133,12 @@ jobs:
             --title "chore: demote stale profiles [$(date +%Y-%m-%d)]" \
             --body "Automated freshness check identified stale profiles and demoted them. Please review before merging." \
             --head "$BRANCH" \
-            --base main || true
+            --base main
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload demotion report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: demote-report

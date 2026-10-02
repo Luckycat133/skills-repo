@@ -372,6 +372,13 @@
                 "policy": "profile-version-adapter",
                 "scope": "user",
                 "storage": "file"
+              },
+              {
+                "format": "json:mcpServers",
+                "path": ".mcp.json",
+                "policy": "profile-version-adapter",
+                "scope": "project",
+                "storage": "file"
               }
             ],
             "skills": [
@@ -444,6 +451,13 @@
                 "path": "~/.claude.json",
                 "policy": "profile-version-adapter",
                 "scope": "user",
+                "storage": "file"
+              },
+              {
+                "format": "json:mcpServers",
+                "path": ".mcp.json",
+                "policy": "profile-version-adapter",
+                "scope": "project",
                 "storage": "file"
               }
             ],

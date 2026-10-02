@@ -20,7 +20,9 @@ for reference in \
     references/migration-safety.md \
     references/mcp-migration.md \
     references/object-migration.md \
-    references/verification.md; do
+    references/verification.md \
+    references/cli-workflow.md \
+    references/bundle-workflow.md; do
     [[ -f "$SKILL_ROOT/$reference" ]] || \
         fail "missing progressively loaded reference: $reference"
     grep -F "$reference" "$SKILL_FILE" >/dev/null || \
@@ -38,11 +40,11 @@ grep -F 'legacy writes are disabled' "$SKILL_FILE" >/dev/null || \
 grep -F 'apply that exact file' "$SKILL_FILE" >/dev/null || \
     fail "SKILL.md must require replay of the reviewed plan"
 grep -F -- '--yes' "$SKILL_FILE" >/dev/null || \
-    fail "SKILL.md must retain the explicit approval gate"
-grep -F 'generic migration request authorizes planning only' "$SKILL_FILE" >/dev/null || \
-    fail "SKILL.md must make generic migration requests plan-only"
-grep -F 'separate explicit user approval' "$SKILL_FILE" >/dev/null || \
-    fail "SKILL.md must require separate user approval for writes"
+    fail "SKILL.md must retain the CLI authorization record"
+grep -F 'Preserve prior authorization' "$SKILL_FILE" >/dev/null || \
+    fail "SKILL.md must honor authorization already given by the user"
+grep -F 'preview-only requests stop after preview' "$SKILL_FILE" >/dev/null || \
+    fail "SKILL.md must preserve preview-only scope"
 grep -F 'explicit `legacy` subcommand' "$SKILL_FILE" >/dev/null || \
     fail "SKILL.md must require explicit legacy routing"
 grep -F 'network access is forbidden' "$SKILL_FILE" >/dev/null || \

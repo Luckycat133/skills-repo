@@ -2,6 +2,46 @@
 
 This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.10.0] - 2026-10-02
+
+### Added
+
+- ACB ordinary file-permission metadata, preserved through snapshot, named/bulk restore, saved-plan apply, and explicit extraction. Older bundles without it remain readable; malformed metadata is rejected before writes.
+- Named restore plans bound to the exact bundle manifest and stable `acb://` object URIs. Replay rejects mismatched sources and preserves the saved plan bytes.
+- MCP semantic previews showing added, removed, updated, and unchanged servers, with changed field names and no credential values.
+- Complete offline `doctor` requirements for executables, packages, extensions, local-script installation, and platforms; PATH checks remain separate from runtime acceptance.
+- An optional isolated scale benchmark covering migration, saved-plan restore, exact contents, rollback, and source preservation, plus persistent scale/hash-allocation regressions. Independent forward tests exercise the packaged Skill.
+
+### Changed
+
+- Instruction/MCP conversions with reported field losses now require explicit acceptance. Lossy previews remain reviewable and bulk restore replay retains conversion evidence; strict mode rejects them before writes.
+- Unify discovery for `detect`, bulk snapshot, and bulk restore; resolve inherited and alias profiles, expand environment paths, retain project evidence beneath HOME, and verify exact macOS app identifiers without failing on inaccessible or malformed plists.
+- Simplify the Skill entrypoint and route migration, bundles/signing, and verification to focused references. Preserve scoped authorization across stages; align behavioral and trigger evals with the public profile-aware CLI.
+- Classify compatibility per object, scope, and actual runtime adapter. Index directional execution evidence conservatively; previews, legacy calls, unrelated objects, and ignored failures no longer imply end-to-end coverage.
+- Validate complete staged Skill trees before import/release packaging and commit them atomically with failure recovery. Require runtime dependencies, reject overlapping trees/unsafe links, and exclude environment files/caches. Local release preparation no longer needs ClawHub login or network access.
+- Refresh multilingual command guides and maintenance/release guidance. Add Python syntax checks to full validation and pin CI signing/schema/official-validator dependencies so optional checks run.
+- Stream file and directory hashing with unchanged SHA-256 semantics to bound allocation for large assets.
+
+### Fixed
+
+- Keep named migration/snapshot inventories within selected products. Preserve requested manual objects in migration previews, permit all-scope planning without apply consent, and validate report paths before any write.
+- Restore the documented Claude Code project MCP surface (`.mcp.json`) in CLI and desktop-code profiles, with bidirectional JSON mapping and transactional regression coverage.
+- Make restore previews reviewable, honor strict apply, preserve the replayed plan path, and require approved extraction. Rebind each child Skill and reconstruct merged MCP sources on cross-process bundle-plan replay.
+- Complete plugin and reviewed handoff opt-in through snapshot and restore, retaining package-copy and field-whitelist boundaries.
+- Validate every rollback backup before removing a target; preserve file bytes and executable permissions, original plan indices, and conflict isolation in apply manifests.
+- Validate standard Skill metadata, scalar types, and complete local link closure; use the shared secret scanner for computed source assignments without exposing values.
+- Report captured bundle objects separately from payload files and retain legitimate `.environment-*` Skill assets while excluding `.env` and `.env.*`.
+- Keep failed freshness reports available and make explicitly requested stale-profile demotion reachable. Validate the proposed registry before atomic replacement; malformed provenance and checks still fail without changing the registry.
+
+### Upgrade notes
+
+- Review instruction/MCP losses and record acceptance before replaying automation that previously applied lossy items; `--yes` alone does not accept losses. See [migration safety](skills/agent-skills-setup/references/migration-safety.md).
+- Replay saved restore plans with their original verified `--bundle`; changed manifest/object identities require a new reviewed plan. Older ACB bundles without permission metadata remain supported.
+- Use distinct output paths for plans, reports, manifests, and bundles. Paths overlapping sources, targets, the Registry, or each other now fail before writes.
+- Runtime and native IDE acceptance remain separate from file validation; cross-platform claims require actual CI/native evidence. GitHub installation examples pin the matching `v0.10.0` release tag.
+
 ## [0.9.3] - 2026-09-11
 
 ### Fixed

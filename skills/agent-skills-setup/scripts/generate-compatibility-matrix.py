@@ -9,16 +9,12 @@ Inputs (all paths relative to repo root unless absolute):
   --scripts-dir scripts   (scans test-*.sh)
   --output      docs/agent-skills-setup/compatibility-matrix.md
 
-Tier rules (in priority order, highest first):
-  1. User override in ide-tier-overrides.json for the (profile, scope, object_type).
-  2. If the source or target profile's migration_policy is in {manual-template,
-     official-api-or-rebuild-checklist, manual-rebuild, source-only,
-     never-migrate, forbidden-regenerate}: tier = "Manual / Rebuild".
-  3. If a test-*.sh in scripts/ exercises (source, target, scope, object_type):
-     tier = "E2E Verified".
-  4. Else (both profiles are bidirectional-reviewed): tier = "Adapter-Compatible".
-  5. If a profile does not surface the object_type at all: object is omitted
-     from the row (cell shows "-").
+Tier rules:
+  Missing surfaces produce "-". Manual overrides can lower any cell; no test
+  or override can promote an unsupported object/scope adapter. Automatic cells
+  use explicit, directional execution coverage for that object/scope, otherwise
+  "Adapter-Compatible". MCP compatibility covers the reviewed local stdio
+  subset only; remote transports need manual reconstruction.
 
 Run --check to verify the output matches committed content (CI gate).
 """
@@ -28,10 +24,19 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shlex
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from migration_core import (
+    AUTOMATIC_MIGRATION_POLICIES,
+    AUTOMATIC_SURFACE_POLICIES,
+    FORMAT_FEATURES,
+    SOURCE_AUTOMATIC_SURFACE_POLICIES,
+    mcp_adapter,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -56,12 +61,6 @@ MANUAL_POLICIES = frozenset({
 OBJECT_TYPES = ("skills", "instructions", "mcp")
 SCOPES = ("user", "project")
 
-# Regex helpers for parsing test scripts
-RE_SOURCE = re.compile(r"--source\s+([a-zA-Z0-9._/-]+)")
-RE_TARGET = re.compile(r"--target\s+([a-zA-Z0-9._/-]+)")
-RE_OBJECTS = re.compile(r"--objects\s+([a-zA-Z0-9,_-]+)")
-RE_SCOPE = re.compile(r"--scope\s+([a-zA-Z0-9,_-]+)")
-
 # Mapping from ide-paths.tsv surface keys to object types
 TSV_SURFACE_TO_OBJECT = {
     "skills": "skills",
@@ -71,13 +70,13 @@ TSV_SURFACE_TO_OBJECT = {
 
 
 def load_registry(path: Path) -> dict[str, Any]:
-    return json.loads(path.read_text())
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def load_overrides(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {"tiers": {}}
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     return data.get("tiers", {}) or {}
 
 
@@ -86,7 +85,7 @@ def load_paths_tsv(path: Path) -> dict[str, list[tuple[str, str]]]:
     if not path.exists():
         return {}
     paths: dict[str, list[tuple[str, str]]] = {}
-    for line in path.read_text().splitlines()[1:]:
+    for line in path.read_text(encoding="utf-8").splitlines()[1:]:
         if not line.strip():
             continue
         parts = line.split("\t")
@@ -128,46 +127,84 @@ def scan_test_scripts(
     scripts_dir: Path,
     registry: dict[str, Any],
 ) -> dict[tuple[str, str, str], set[str]]:
-    """Scan ``test-*.sh`` for source/target/objects/scope triples.
+    """Collect explicit directional execution coverage, never file-wide unions.
 
-    Returns ``{(source, target, scope): {object_type, ...}}``. Scope is
-    the union of scopes exercised across tests for the (source, target)
-    pair; object_type defaults to all three when no --objects flag is set.
+    Dynamic/Python fixtures and saved-plan chains are conservatively unindexed.
+    A preview, legacy conversion, or expected-failure conditional is not public
+    end-to-end execution evidence.
     """
-    aliases = registry.get("aliases") or {}
     coverage: dict[tuple[str, str, str], set[str]] = {}
     if not scripts_dir.is_dir():
         return coverage
     for script in sorted(scripts_dir.glob("test-*.sh")):
-        text = script.read_text()
-        sources = RE_SOURCE.findall(text)
-        targets = RE_TARGET.findall(text)
-        objects = RE_OBJECTS.findall(text)
-        scopes = RE_SCOPE.findall(text)
-        if not sources or not targets:
-            continue
-        # Union objects + scopes across the script body
-        obj_set = _union_objects(objects)
-        scope_set = _union_scopes(scopes)
-        for src in sources:
-            for tgt in targets:
-                src_canonical = resolve_selector(src, aliases, registry)
-                tgt_canonical = resolve_selector(tgt, aliases, registry)
-                if not src_canonical or not tgt_canonical:
-                    continue
-                if src_canonical == tgt_canonical:
-                    continue  # skip self-migrations in coverage
-                for scope in scope_set:
-                    key = (src_canonical, tgt_canonical, scope)
-                    coverage.setdefault(key, set()).update(obj_set)
+        for source, target, scopes, objects in _script_executions(script, registry):
+            for scope in scopes:
+                coverage.setdefault((source, target, scope), set()).update(objects)
     return coverage
+
+
+def _literal_option(tokens: list[str], option: str) -> str | None:
+    for index, token in enumerate(tokens):
+        if token == option and index + 1 < len(tokens):
+            return tokens[index + 1]
+        if token.startswith(option + "="):
+            return token.partition("=")[2]
+    return None
+
+
+def _script_executions(
+    script: Path,
+    registry: dict[str, Any],
+) -> list[tuple[str, str, set[str], set[str]]]:
+    aliases = registry.get("aliases") or {}
+    executions: list[tuple[str, str, set[str], set[str]]] = []
+    text = re.sub(r"\\\r?\n", " ", script.read_text(encoding="utf-8"))
+    for line in text.splitlines():
+        try:
+            lexer = shlex.shlex(line, posix=True, punctuation_chars=";&|")
+            lexer.whitespace_split = True
+            tokens = list(lexer)
+        except ValueError:
+            continue
+        # A tolerated failure is not successful execution evidence. Avoid
+        # inferring the control-flow semantics of arbitrary fallback blocks.
+        if "||" in tokens:
+            continue
+        segments: list[list[str]] = [[]]
+        for token in tokens:
+            if token and all(character in ";&|" for character in token):
+                segments.append([])
+            else:
+                segments[-1].append(token)
+        for command in segments:
+            if not any(token in {"migrate", "restore"} for token in command):
+                continue
+            if any(token in {"legacy", "--plan-only", "--dry-run", "if", "!"} for token in command):
+                continue
+            if "--yes" not in command:
+                continue
+            source = _literal_option(command, "--source")
+            target = _literal_option(command, "--target")
+            objects_value = _literal_option(command, "--objects")
+            scope_value = _literal_option(command, "--scope")
+            if not all((source, target, objects_value, scope_value)):
+                continue
+            source_selector = resolve_selector(source, aliases, registry)
+            target_selector = resolve_selector(target, aliases, registry)
+            if not source_selector or not target_selector or source_selector == target_selector:
+                continue
+            objects = _union_objects([objects_value])
+            scopes = _union_scopes([scope_value])
+            if objects and scopes:
+                executions.append((source_selector, target_selector, scopes, objects))
+    return executions
 
 
 def _union_objects(values: list[str]) -> set[str]:
     """Expand --objects flag values to the OBJECT_TYPES union.
 
-    Recognised keywords: skills, instructions, mcp, rules, config,
-    project-mcp, all-portable, all, and negation prefixes.
+    Recognised keywords match public automatic object selectors. Unrecognised
+    or unrelated objects never imply coverage of the portable trio.
     """
     objects: set[str] = set()
     for value in values:
@@ -175,15 +212,11 @@ def _union_objects(values: list[str]) -> set[str]:
             token = token.strip().lower()
             if not token:
                 continue
-            if token in {"all-portable", "all"}:
+            if token in {"all-portable", "all-inventory"}:
                 return set(OBJECT_TYPES)
-            if token in {"skills", "agents"}:
-                objects.add("skills")
-            elif token in {"instructions", "rules", "config", "settings"}:
-                objects.add("instructions")
-            elif token in {"mcp", "project-mcp", "stdio-mcp"}:
-                objects.add("mcp")
-    return objects or set(OBJECT_TYPES)
+            if token in OBJECT_TYPES:
+                objects.add(token)
+    return objects
 
 
 def _union_scopes(values: list[str]) -> set[str]:
@@ -198,7 +231,7 @@ def _union_scopes(values: list[str]) -> set[str]:
                     scopes.add(token)
             elif token == "all":
                 scopes.update({"user", "project"})
-    return scopes or set(SCOPES)
+    return scopes
 
 
 def supported_objects(profile_data: dict[str, Any]) -> set[str]:
@@ -218,6 +251,62 @@ def scope_objects(profile_data: dict[str, Any]) -> dict[str, set[str]]:
     return out
 
 
+def _automatic_surface(surface: dict[str, Any], object_type: str, *, source: bool) -> bool:
+    policies = SOURCE_AUTOMATIC_SURFACE_POLICIES if source else AUTOMATIC_SURFACE_POLICIES
+    if surface.get("policy") not in policies:
+        return False
+    format_name = str(surface.get("format", ""))
+    storage = surface.get("storage")
+    if object_type == "skills":
+        return format_name == "agent-skill" and storage in {"directory", "hierarchy"}
+    if object_type == "instructions":
+        return format_name in FORMAT_FEATURES and storage in {
+            "file", "directory", "hierarchy", "precedence-files",
+        }
+    if object_type == "mcp":
+        if not mcp_adapter(format_name)["automatic"]:
+            return False
+        if storage not in {"file", "config-subobject"}:
+            return False
+        # The shared runtime adapter supports these JSON/JSONC server maps,
+        # not arbitrary native containers or remote transport schemas.
+        if format_name.partition(":")[2] not in {"", "mcpServers", "servers", "mcp"}:
+            return False
+        transports = surface.get("transports", surface.get("transport", "stdio"))
+        if isinstance(transports, str):
+            transports = [transports]
+        return isinstance(transports, list) and bool(transports) and set(transports) <= {"stdio"}
+    return False
+
+
+def automatic_object_pair(
+    src_profile: dict[str, Any],
+    tgt_profile: dict[str, Any],
+    object_type: str,
+    scope: str,
+) -> bool:
+    """Check scope-specific runtime adapter boundaries before test promotion.
+
+    Multiple surfaces may resolve according to local existence/precedence. A
+    static matrix cannot promise automatic conversion if any such surface needs
+    reconstruction; the runtime plan decides the selected content's eligibility.
+    """
+    for profile, source in ((src_profile, True), (tgt_profile, False)):
+        if profile.get("migration_policy") not in AUTOMATIC_MIGRATION_POLICIES:
+            return False
+        surfaces = [
+            surface
+            for surface in profile.get("surfaces", {}).get(object_type, [])
+            if surface.get("scope", "").lower() == scope
+        ]
+        if not surfaces or not all(
+            _automatic_surface(surface, object_type, source=source)
+            for surface in surfaces
+        ):
+            return False
+    return True
+
+
 def classify_pair(
     src_profile: dict[str, Any],
     tgt_profile: dict[str, Any],
@@ -229,25 +318,32 @@ def classify_pair(
     overrides: dict[str, Any],
 ) -> str:
     """Return the tier string for one (src, tgt, scope, object_type) cell."""
-    # 1. User override
+    # Preserve human downgrades; upgrades cannot create a missing adapter.
     scope_obj_key = f"{scope}:{object_type}"
+    selected_overrides: list[str] = []
     for selector in (src_selector, tgt_selector):
         prof_overrides = overrides.get(selector) or {}
-        if not prof_overrides:
-            continue
         if isinstance(prof_overrides, dict):
             if scope_obj_key in prof_overrides:
-                return prof_overrides[scope_obj_key]
-            if object_type in prof_overrides:
-                return prof_overrides[object_type]
-    # 2. Manual policy if either side restricts writes
+                selected_overrides.append(prof_overrides[scope_obj_key])
+            elif object_type in prof_overrides:
+                selected_overrides.append(prof_overrides[object_type])
+    for downgrade in (TIER_NA, TIER_MANUAL):
+        if downgrade in selected_overrides:
+            return downgrade
+
     src_policy = src_profile.get("migration_policy", "")
     tgt_policy = tgt_profile.get("migration_policy", "")
     if src_policy in MANUAL_POLICIES or tgt_policy in MANUAL_POLICIES:
         return TIER_MANUAL
-    # 3. E2E Verified if a test exercises this pair + scope + object_type
+    if not automatic_object_pair(src_profile, tgt_profile, object_type, scope):
+        return TIER_MANUAL
+    if selected_overrides:
+        return selected_overrides[0]
+
+    # Only explicit coverage of this direction, scope, and object can promote it.
     key = (src_selector, tgt_selector, scope)
-    objects = coverage.get(key) or coverage.get((tgt_selector, src_selector, scope), set())
+    objects = coverage.get(key, set())
     if object_type in objects:
         return TIER_E2E
     # 4. Adapter-Compatible (both sides bidirectional-reviewed)
@@ -265,35 +361,17 @@ def profile_summary(profile: dict[str, Any]) -> str:
 
 
 def build_fixture_index(scripts_dir: Path, registry: dict[str, Any]) -> dict[tuple[str, str], list[tuple[int, str]]]:
-    """Scan ``test-*.sh`` once and return ``{(src, tgt): [(object_count, path), ...]}``.
-
-    Also indexes the reverse direction so a fixture that uses ``--target A --source B``
-    is found for the (B, A) lookup as well.
-    """
-    aliases = registry.get("aliases") or {}
+    """Index the same explicit directional executions used for tier coverage."""
     index: dict[tuple[str, str], list[tuple[int, str]]] = {}
     if not scripts_dir.is_dir():
         return index
     for script in sorted(scripts_dir.glob("test-*.sh")):
-        text = script.read_text()
-        srcs = RE_SOURCE.findall(text)
-        tgts = RE_TARGET.findall(text)
-        if not srcs or not tgts:
-            continue
-        objs = _union_objects(RE_OBJECTS.findall(text))
-        rel = str(script.relative_to(REPO_ROOT))
-        for src in srcs:
-            src_canonical = resolve_selector(src, aliases, registry)
-            if not src_canonical:
-                continue
-            for tgt in tgts:
-                tgt_canonical = resolve_selector(tgt, aliases, registry)
-                if not tgt_canonical:
-                    continue
-                if src_canonical == tgt_canonical:
-                    continue
-                index.setdefault((src_canonical, tgt_canonical), []).append((len(objs), rel))
-                index.setdefault((tgt_canonical, src_canonical), []).append((len(objs), rel))
+        try:
+            rel = str(script.relative_to(REPO_ROOT))
+        except ValueError:
+            rel = str(script)
+        for source, target, _scopes, objects in _script_executions(script, registry):
+            index.setdefault((source, target), []).append((len(objects), rel))
     return index
 
 
@@ -327,9 +405,10 @@ def generate(
     lines.append("")
     lines.append("## Tier definitions")
     lines.append("")
-    lines.append(f"- **{TIER_E2E}** — a `scripts/test-*.sh` exercises this pair at the given scope + object type end-to-end.")
-    lines.append(f"- **{TIER_ADAPTER}** — both profiles carry `migration_policy: bidirectional-reviewed` and the registry ships the required adapter, but no on-disk E2E fixture covers the pair yet.")
-    lines.append(f"- **{TIER_MANUAL}** — at least one profile is `manual-template`, `official-api-or-rebuild-checklist`, `manual-rebuild`, `source-only`, or otherwise non-automatic; emit rebuild checklists via the official API/UI.")
+    lines.append(f"- **{TIER_E2E}** — an explicit directional execution fixture covers this automatic object at the given scope; preview, legacy-only, and unrelated object tests do not promote it.")
+    lines.append(f"- **{TIER_ADAPTER}** — both profiles and the selected object/scope surfaces have reviewed runtime adapters, but no explicit directional execution fixture is indexed.")
+    lines.append(f"- **{TIER_MANUAL}** — a profile, surface policy, native format, or declared transport requires reconstruction. Test coverage cannot promote an unsupported adapter; human downgrades remain effective.")
+    lines.append("MCP automatic tiers cover the reviewed local stdio JSON/JSONC subset only. Remote MCP, unsupported activation semantics, local conflicts, and actual content eligibility are decided by the saved runtime plan.")
     lines.append("")
     lines.append("## Source profiles")
     lines.append("")
@@ -488,7 +567,7 @@ def main() -> int:
         if not args.output.exists():
             print(f"--check failed: {args.output} does not exist", file=sys.stderr)
             return 1
-        committed = args.output.read_text()
+        committed = args.output.read_text(encoding="utf-8")
         # The generation timestamp differs on every run; normalise it for the check.
         committed_normalised = re.sub(
             r"^Generated at: .*$",
@@ -505,7 +584,7 @@ def main() -> int:
         print(f"--check passed: {args.output} matches generated content.")
         return 0
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(content)
+    args.output.write_text(content, encoding="utf-8")
     print(f"Wrote {args.output}: {content.count(chr(10))} lines")
     return 0
 

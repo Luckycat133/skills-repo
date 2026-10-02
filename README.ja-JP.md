@@ -8,6 +8,8 @@
 
 > Languages: [English](README.md) · [中文](README.zh-CN.md) · **日本語** · [Español](README.es.md)
 
+バージョンは **0.10.0** です。[変更履歴](CHANGELOG.md#0100---2026-10-02)を参照してください。下の GitHub インストール例は対応するリリースタグ `v0.10.0` を使用します。
+
 **Cursor、Claude Code、Codex、Cline、Windsurf、Copilot、Gemini CLI** など、多数の AI コーディングツール間で Skills、ルール/指示、MCP 設定を**オフライン・プレビュー可能・ロールバック安全**に移行・バックアップ・復元します。
 
 ![Agent Skills Setup — 15-second demo: detect → plan → secret redaction → apply → verify](skills/agent-skills-setup/assets/demo.gif)
@@ -25,7 +27,7 @@ openclaw skills install @luckycat133/agent-skills-setup
 または GitHub から直接インストール:
 
 ```bash
-git clone --depth 1 --branch v0.9.3 https://github.com/Luckycat133/skills-repo.git
+git clone --depth 1 --branch v0.10.0 https://github.com/Luckycat133/skills-repo.git
 
 openclaw skills install \
   ./skills-repo/skills/agent-skills-setup \
@@ -57,11 +59,23 @@ openclaw skills install \
 
 ## 🚀 主なコマンド
 
-- **`migrate`**: ワンステップ移行: `detect` -> `inventory` -> `plan` -> `apply` -> `verify`。
+- **`migrate`**: 選択した製品を一覧化し、プランを保存してから適用・検証します。
 - **`snapshot`**: 1:1 マニフェストファイルバインディングを備えたアトミックでポータブルな **Agent Context Bundle (ACB)** を取得。
 - **`restore`**: ACB バンドルからターゲット環境への二者間復元プランを生成し、TOCTOU ガード付きで実行。
-- **`bundle-sign` & `bundle-verify`**: Ed25519 暗号鍵で ACB バンドルに署名・検証。
+- **`bundle-keygen`、`bundle-sign`、`bundle-verify`**: Ed25519 鍵を生成し、ACB バンドルに署名して信頼済み公開鍵で検証。
 - **`doctor`**: バンドルの依存関係と不足しているツールをオフラインで診断。
+
+ACB は実行権限を含む通常のファイル権限を保存し、権限メタデータのない旧バンドルも読み込めます。
+保存した復元プランはバンドルの識別情報に結び付き、MCP プレビューは資格情報の値を含めずに
+サーバーの追加・削除・変更を示します。指示/MCP 変換で報告された損失は明示的な承認が必要です。
+`doctor` は実行ファイルの確認に加えて、パッケージ・拡張機能・プラットフォーム・手動インストールの要件を示します。
+
+`detect` / `inventory` で検出と一覧取得、`plan` でプレビュー保存、`apply` で確認済み
+プランの実行、`verify` / `rollback` で検証と復旧を行います。
+[コマンドガイド](skills/agent-skills-setup/references/cli-workflow.md)と
+[互換性マトリクス](docs/agent-skills-setup/compatibility-matrix.md)に、実行例と各 profile
+の検証範囲を記載しています。リモート MCP とクラウド設定は手動再構築、プラグインと
+引き継ぎの転送はそれぞれ明示的な opt-in が必要です。
 
 ---
 
@@ -88,18 +102,20 @@ skills-repo/
 ## 開発と検証
 
 1. `skills/agent-skills-setup/` を編集し、生成されたルートのリポジトリポインターは編集しません。
-2. `bash validate-all.sh` を実行します。
-3. 正本の Skill を変えたら `bash scripts/sync-root-mirror.sh` でルートポインターを更新します。
+2. 正本の Skill を変えたら `bash scripts/sync-root-mirror.sh` でルートポインターを更新します。
+3. `bash validate-all.sh` を実行します。
 4. すべての検証が通過した後にマージします。
+
+隔離した規模テストは `python3 scripts/benchmark-scale.py --sizes 10,100,1000` で実行します。
+移行、保存済みプランの復元、内容の一致、ロールバックを確認します。時間は実測値であり、
+CI の合格基準にはしません。`--report /path/to/new-report.json` と `--keep-workspace`
+で証拠を保存でき、実際の Agent 設定は読み込みません。
 
 ## プロジェクト資料
 
+- [変更履歴](CHANGELOG.md)
+- [リリースチェックリスト](docs/agent-skills-setup/release-checklist.md)
 - [貢献ガイド](CONTRIBUTING.md)
 - [セキュリティ](SECURITY.md)
 - [行動規範](CODE_OF_CONDUCT.md)
 - [ライセンス](LICENSE)
-
-- [Contributing](CONTRIBUTING.md)
-- [Security](SECURITY.md)
-- [Code of conduct](CODE_OF_CONDUCT.md)
-- [License](LICENSE)

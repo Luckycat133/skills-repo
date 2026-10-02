@@ -430,14 +430,14 @@ assert not shared.is_file(), f'conflicting shared-skill should not have been wri
 print('OK v0.9.1 verified: unique sibling skills (unique-a, unique-b) restored cleanly despite shared-skill conflict')
 "
 
-echo "=== Test 12: Multi-source MCP Server-Level Merge (v0.9.1 regression) ==="
+echo "=== Test 12: Multi-source MCP merge keeps user and project scopes separate ==="
 WS_MCP_SRC="$WORKSPACE/ws_mcp_src"
 HOME_MCP_SRC="$WORKSPACE/home_mcp_src"
 HOME_MCP_DST="$WORKSPACE/home_mcp_dst"
 WS_MCP_DST="$WORKSPACE/ws_mcp_dst"
 mkdir -p "$WS_MCP_SRC" "$HOME_MCP_SRC" "$HOME_MCP_DST" "$WS_MCP_DST"
 
-# Source A (Cline user MCP): filesystem (v1) + git
+# Source A (Cline user MCP): filesystem (v1) + git + a user-scoped server
 mkdir -p "$HOME_MCP_SRC/.cline/data/settings" "$HOME_MCP_SRC/.cline/skills/dummy"
 cat <<'EOF' > "$HOME_MCP_SRC/.cline/skills/dummy/SKILL.md"
 ---
@@ -456,6 +456,27 @@ cat <<'EOF' > "$HOME_MCP_SRC/.cline/data/settings/cline_mcp_settings.json"
     "git": {
       "command": "uvx",
       "args": ["mcp-server-git"]
+    },
+    "scoped": {
+      "command": "node",
+      "args": ["user-server.js"]
+    }
+  }
+}
+EOF
+
+# Cline project MCP conflicts with Cursor only within the project scope.
+mkdir -p "$WS_MCP_SRC/.cline"
+cat <<'EOF' > "$WS_MCP_SRC/.cline/mcp.json"
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/project-a"]
+    },
+    "project-only": {
+      "command": "node",
+      "args": ["project-only.js"]
     }
   }
 }
@@ -493,7 +514,8 @@ cat <<'EOF' > "$HOME_MCP_SRC/.claude.json"
 }
 EOF
 
-# Source C (Cursor project MCP): conflicting filesystem (v2)
+# Source C (Cursor project MCP): conflicting filesystem (v2) + scoped.
+# The scoped server differs from the user definition and must remain independent.
 mkdir -p "$HOME_MCP_SRC/.cursor/skills/dummy3" "$WS_MCP_SRC/.cursor/rules"
 cat <<'EOF' > "$HOME_MCP_SRC/.cursor/skills/dummy3/SKILL.md"
 ---
@@ -508,6 +530,10 @@ cat <<'EOF' > "$WS_MCP_SRC/.cursor/mcp.json"
     "filesystem": {
       "command": "docker",
       "args": ["run", "-i", "mcp/filesystem", "/conflicting/path"]
+    },
+    "scoped": {
+      "command": "node",
+      "args": ["project-server.js"]
     }
   }
 }
@@ -520,23 +546,65 @@ HOME="$(native_path "$HOME_MCP_SRC")" $MIGRATOR snapshot \
   --output "$MCP_BUNDLE" \
   --all-installed \
   --scope user,project \
+  --objects mcp \
   --json >/dev/null
-
-echo "=== MCP BUNDLE MANIFEST ==="
-python3 -c "
-import json
-from pathlib import Path
-b = Path(r'''$(native_path "$MCP_BUNDLE")''')
-m = json.loads((b / 'manifest.json').read_text())
-for o in m['objects']:
-    print(' ', o.get('product'), o.get('profile'), o.get('surface'), len(o.get('files', [])))
-"
 
 # Destination: Claude Code on Device B (reads user .claude.json and workspace .mcp.json)
 mkdir -p "$HOME_MCP_DST/.claude/skills"
 touch "$WS_MCP_DST/CLAUDE.md"
 MCP_TMPDIR="$WORKSPACE/mcp_tmp"
 mkdir -p "$MCP_TMPDIR"
+MCP_PLAN="$WORKSPACE/mcp-merge.plan.json"
+
+HOME="$(native_path "$HOME_MCP_DST")" TMPDIR="$(native_path "$MCP_TMPDIR")" $MIGRATOR restore \
+  "$MCP_BUNDLE" \
+  --registry "$REGISTRY" \
+  --workspace "$WS_MCP_DST" \
+  --all-installed \
+  --scope user,project \
+  --objects mcp \
+  --plan-only \
+  --plan-out "$MCP_PLAN" \
+  --json >/dev/null
+
+python3 - "$(native_path "$MCP_PLAN")" "$(native_path "$MCP_BUNDLE")" \
+  "$(native_path "$HOME_MCP_DST")" "$(native_path "$WS_MCP_DST")" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+plan_path, bundle, home_dst, ws_dst = map(Path, sys.argv[1:])
+plan = json.loads(plan_path.read_text(encoding="utf-8"))
+manifest = json.loads((bundle / "manifest.json").read_text(encoding="utf-8"))
+objects = {obj["object_id"]: obj for obj in manifest["objects"]}
+expected_targets = {
+    str((home_dst / ".claude.json").resolve()): {"git", "linear", "scoped"},
+    str((ws_dst / ".mcp.json").resolve()): {"project-only", "scoped"},
+}
+assert all(not Path(target).exists() for target in expected_targets), "preview wrote target MCP files"
+reviewed_targets = set()
+for item in plan["items"]:
+    if item["object_type"] != "mcp":
+        continue
+    target = item["target"]
+    for candidate in item.get("acb_merge_sources") or [item]:
+        source = candidate["source"]
+        obj = objects[candidate["object_id"]]
+        assert source["scope"] == target["scope"], (source, target)
+        assert all(obj[field] == source[field] for field in ("product", "profile", "scope")), candidate
+        assert candidate["acb_uri"] == f"acb://{manifest['bundle_id']}#{obj['object_id']}", candidate
+        assert (obj.get("surface") or obj.get("object_type")) == "mcp", obj
+    target_path = target["resolved_path"]
+    if target_path in expected_targets:
+        reviewed_targets.add(target_path)
+        assert item["status"] == "ready", item
+        changes = item["review_preview"]["changes"]
+        assert len(changes) == 1 and changes[0]["path"] == target_path, changes
+        assert set(changes[0]["server_names_after"]) == expected_targets[target_path], changes
+        assert item.get("acb_merge_sources"), "both scopes must merge distinct sources"
+assert reviewed_targets == set(expected_targets), reviewed_targets
+print("OK scope-specific preview omits both conflicts and binds every source to its manifest object")
+PY
 
 MCP_RESTORE_OUT="$(HOME="$(native_path "$HOME_MCP_DST")" TMPDIR="$(native_path "$MCP_TMPDIR")" $MIGRATOR restore \
   "$MCP_BUNDLE" \
@@ -544,45 +612,53 @@ MCP_RESTORE_OUT="$(HOME="$(native_path "$HOME_MCP_DST")" TMPDIR="$(native_path "
   --workspace "$WS_MCP_DST" \
   --all-installed \
   --scope user,project \
+  --objects mcp \
+  --plan-in "$MCP_PLAN" \
   --apply-safe \
   --yes \
   --json)"
 
-echo "RESTORE OUT: $MCP_RESTORE_OUT"
-echo "$MCP_RESTORE_OUT" | python3 -c '
-import json, sys
-data = json.load(sys.stdin)
-assert data.get("ok") is True, data
-'
+MCP_RESTORE_JSON="$WORKSPACE/mcp-restore.json"
+printf '%s\n' "$MCP_RESTORE_OUT" > "$MCP_RESTORE_JSON"
 
-python3 -c "
+python3 - "$(native_path "$MCP_RESTORE_JSON")" "$(native_path "$MCP_PLAN")" \
+  "$(native_path "$HOME_MCP_DST")" "$(native_path "$WS_MCP_DST")" \
+  "$(native_path "$SCRIPT_DIR")" <<'PY'
 import json
+import sys
 from pathlib import Path
-home_dst = Path(r'''$(native_path "$HOME_MCP_DST")''')
-ws_dst = Path(r'''$(native_path "$WS_MCP_DST")''')
 
-print('Files in home_dst:', list(home_dst.rglob('*')))
-print('Files in ws_dst:', list(ws_dst.rglob('*')))
+result_path, plan_path, home_dst, ws_dst, scripts = map(Path, sys.argv[1:])
+sys.path.insert(0, str(scripts))
+from migration_core import hash_path, rollback_manifest, verify_manifest
 
-claude_json = home_dst / '.claude.json'
-ws_mcp = ws_dst / '.mcp.json'
-
-found_servers = {}
-if claude_json.is_file():
-    data = json.loads(claude_json.read_text(encoding='utf-8'))
-    found_servers.update(data.get('mcpServers', {}))
-if ws_mcp.is_file():
-    data = json.loads(ws_mcp.read_text(encoding='utf-8'))
-    found_servers.update(data.get('mcpServers', {}))
-
-print('Restored MCP servers:', list(found_servers.keys()))
-assert 'git' in found_servers, f'git server missing: {found_servers}'
-assert 'linear' in found_servers, f'linear server missing: {found_servers}'
-assert 'filesystem' not in found_servers, f'conflicting filesystem server should not be present: {found_servers}'
-assert found_servers['linear'].get('env', {}).get('LINEAR_API_KEY') == '\${LINEAR_API_KEY}', found_servers
-assert found_servers['linear'].get('env', {}).get('PRIVATE_API_KEY') == '\${PRIVATE_API_KEY}', found_servers
-print('OK v0.9.1 verified: git deduplicated, linear merged, conflicting filesystem isolated')
-"
+result = json.loads(result_path.read_text(encoding="utf-8"))
+plan = json.loads(plan_path.read_text(encoding="utf-8"))
+assert result.get("ok") is True and result["stage"] == "verify", result
+assert Path(result["plan"]).resolve() == plan_path.resolve(), result
+assert result["plan_sha256"] == plan["plan_sha256"], result
+user_path = home_dst / ".claude.json"
+project_path = ws_dst / ".mcp.json"
+user_servers = json.loads(user_path.read_text(encoding="utf-8"))["mcpServers"]
+project_servers = json.loads(project_path.read_text(encoding="utf-8"))["mcpServers"]
+assert set(user_servers) == {"git", "linear", "scoped"}, user_servers
+assert set(project_servers) == {"project-only", "scoped"}, project_servers
+assert user_servers["scoped"]["args"] == ["user-server.js"], user_servers
+assert project_servers["scoped"]["args"] == ["project-server.js"], project_servers
+assert user_servers["linear"]["env"]["LINEAR_API_KEY"] == "${LINEAR_API_KEY}", user_servers
+assert user_servers["linear"]["env"]["PRIVATE_API_KEY"] == "${PRIVATE_API_KEY}", user_servers
+manifest_path = Path(result["manifest"])
+manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+assert manifest["provenance"]["plan_sha256"] == plan["plan_sha256"], manifest
+for item in plan["items"]:
+    if item["target"]["resolved_path"] in {str(user_path.resolve()), str(project_path.resolve())}:
+        change = item["review_preview"]["changes"][0]
+        assert hash_path(Path(change["path"])) == change["post_sha256"], change
+assert verify_manifest(manifest_path) == [], manifest
+rollback_manifest(manifest_path)
+assert not user_path.exists() and not project_path.exists(), "rollback did not remove both scope outputs"
+print("OK cross-process MCP replay keeps scopes independent, isolates both conflicts, and verifies/rolls back")
+PY
 
 if find "$MCP_TMPDIR" -maxdepth 1 -type d -name 'acb-mcp-merged-*' | grep -q .; then
   echo "FAIL: merged MCP temporary directory leaked outside the managed restore staging tree"

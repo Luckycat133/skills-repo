@@ -30,6 +30,7 @@ from migration_core import (
     INVENTORY_ONLY_OBJECT_TYPES,
     KNOWN_COMMANDS,
     OPT_IN_WRITABLE_OBJECT_TYPES,
+    PlanItem,
     Registry,
     apply_plan,
     atomic_write,
@@ -45,9 +46,12 @@ from migration_core import (
     path_state,
     paths_overlap,
     rollback_manifest,
+    resolve_output_path,
+    scope_matches,
     validate_plan_document,
     verify_manifest,
     _plan_hash_payload,
+    _preview_plan_item,
 )
 
 from acb.bundle import (
@@ -61,13 +65,22 @@ from acb.bundle import (
     collect_rebuild,
     collect_requirements,
     collect_source_objects,
+    file_entry_mode,
     load_manifest,
     make_bundle_id,
     restore_bundle_objects,
     sign_bundle,
     verify_bundle,
     verify_bundle_signature,
+    validate_path_containment,
     write_bundle,
+)
+from detect.probes import (
+    InstallState,
+    ProbeResult,
+    probe_app_bundle,
+    probe_binary,
+    probe_file_signature,
 )
 
 
@@ -269,10 +282,20 @@ def create_parser() -> argparse.ArgumentParser:
         default="skills,instructions,mcp",
         help=(
             "Comma-separated list of object types to include in the snapshot "
-            "(default: skills,instructions,mcp). Use 'plugin' with "
+            "(default: skills,instructions,mcp). Use 'plugins' with "
             "--include-plugins and 'handoff' with --include-session to round-trip "
             "those opt-in objects through an ACB."
         ),
+    )
+    snapshot.add_argument(
+        "--include-plugins",
+        action="store_true",
+        help="Explicitly opt in to opaque plugin package capture.",
+    )
+    snapshot.add_argument(
+        "--include-session",
+        action="store_true",
+        help="Explicitly opt in to reviewed handoff capture (portable fields only).",
     )
     snapshot.add_argument(
         "--all-installed",
@@ -352,7 +375,7 @@ def create_parser() -> argparse.ArgumentParser:
         default="skills,instructions,mcp",
         help=(
             "Comma-separated list of object types to include in the restore "
-            "plan (default: skills,instructions,mcp). Use 'plugin' with "
+            "plan (default: skills,instructions,mcp). Use 'plugins' with "
             "--include-plugins and 'handoff' with --include-session to round-trip "
             "those opt-in objects through an ACB."
         ),
@@ -415,7 +438,7 @@ def create_parser() -> argparse.ArgumentParser:
     restore.add_argument(
         "--restore-root",
         type=Path,
-        help="Destination tree for bundle/objects/ restore (default: <workspace>/.acb-restored).",
+        help="Explicit destination tree for object extraction after approved apply.",
     )
     restore.add_argument(
         "--allow-noop",
@@ -490,179 +513,152 @@ def default_workspace_migration_dir(workspace: Path) -> Path:
     return workspace / ".migration"
 
 
-def run_detection(args: argparse.Namespace) -> int:
-    """Run per-product detection probes against the local device.
+def validate_artifact_output(
+    path: Path,
+    registry: Registry,
+    document: dict[str, Any],
+    protected_paths: list[Path] | None = None,
+) -> None:
+    """Keep reports and extracted objects away from inputs and live surfaces."""
+    protected = [registry.path, *(protected_paths or [])]
+    for item in document.get("items", []):
+        for side in ("source", "target"):
+            surface = item.get(side)
+            if isinstance(surface, dict) and surface.get("resolved_path"):
+                protected.append(Path(surface["resolved_path"]))
+    if any(paths_overlap(path, candidate) for candidate in protected):
+        raise ValueError(f"artifact output overlaps an input or migration surface: {path}")
 
-    Uses the Registry v2 ``detection`` block on each profile (binary,
-    file-signature, app-bundle). Detection is PROBE-ONLY: inventory.exists
-    is NOT used as a fallback to claim "installed" (audit P0-3).
-    Returns one ``InstallState`` per profile.
-    """
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from detect.probes import (
-        detect_profile,
-        detect_product,
-        probe_binary,
-        probe_file_signature,
-        InstallState,
-    )
-    workspace = args.workspace.resolve()
-    registry = Registry(args.registry, workspace)
-    home = registry.home
-    profiles_to_check: set[tuple[str, str]] = set()
-    for product_id, product in registry.products.items():
-        for profile_id in product.get("profiles", {}):
-            profiles_to_check.add((product_id, profile_id))
 
-    filter_prod = getattr(args, "product", None)
-    filter_prof = getattr(args, "profile", None)
-    if filter_prod:
-        profiles_to_check = {p for p in profiles_to_check if p[0] == filter_prod}
-    if filter_prof:
-        profiles_to_check = {p for p in profiles_to_check if p[1] == filter_prof}
-
-    detections: list[dict[str, str]] = []
-    for product_id, profile_id in sorted(profiles_to_check):
-        product = registry.products[product_id]
-        profile = product["profiles"][profile_id]
-        detection = profile.get("detection", []) or []
-        profile_state = InstallState.NOT_DETECTED
-        profile_evidence: list[str] = []
-        for probe in detection:
-            if not isinstance(probe, dict):
-                continue
-            kind = probe.get("type")
-            if kind == "binary":
-                names = probe.get("command") or probe.get("binaries") or []
-                version_command = probe.get("version_command")
-                if isinstance(names, str):
-                    names = [names]
-                result = probe_binary(
-                    product_id, profile_id, names,
-                    version_command=version_command,
-                )
-                # Use the most definitive state across all probes for this profile
-                # Priority: INSTALLED > CONFIGURED_ONLY > COMPATIBILITY_ONLY > CLOUD_CONNECTED > LEGACY > AMBIGUOUS > NOT_DETECTED
-                if result.state.value == "installed":
-                    profile_state = InstallState.INSTALLED
-                    profile_evidence.extend(result.evidence)
-                    break  # INSTALLED is definitive
-                elif result.state.value == "configured-only" and profile_state not in (InstallState.INSTALLED,):
-                    profile_state = InstallState.CONFIGURED_ONLY
-                    profile_evidence.extend(result.evidence)
-                elif result.state.value == "compatibility-only" and profile_state not in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY):
-                    profile_state = InstallState.COMPATIBILITY_ONLY
-                    profile_evidence.extend(result.evidence)
-                elif result.state.value == "cloud-connected" and profile_state not in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY, InstallState.COMPATIBILITY_ONLY):
-                    profile_state = InstallState.CLOUD_CONNECTED
-                    profile_evidence.extend(result.evidence)
-                elif result.state.value == "legacy" and profile_state not in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY, InstallState.COMPATIBILITY_ONLY, InstallState.CLOUD_CONNECTED):
-                    profile_state = InstallState.LEGACY
-                    profile_evidence.extend(result.evidence)
-                elif result.state.value == "ambiguous" and profile_state == InstallState.NOT_DETECTED:
-                    profile_state = InstallState.AMBIGUOUS
-                    profile_evidence.extend(result.evidence)
-                # NOT_DETECTED doesn't change anything
-            elif kind == "file-signature":
-                paths = probe.get("paths") or []
-                result = probe_file_signature(
-                    product_id, profile_id, paths,
-                    workspace=workspace, home=home,
-                )
-                if result.state.value == "installed":
-                    profile_state = InstallState.INSTALLED
-                    profile_evidence.extend(result.evidence)
-                    break
-                elif result.state.value == "configured-only" and profile_state not in (InstallState.INSTALLED,):
-                    profile_state = InstallState.CONFIGURED_ONLY
-                    profile_evidence.extend(result.evidence)
-                elif result.state.value == "compatibility-only" and profile_state not in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY):
-                    profile_state = InstallState.COMPATIBILITY_ONLY
-                    profile_evidence.extend(result.evidence)
-                elif result.state.value == "cloud-connected" and profile_state not in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY, InstallState.COMPATIBILITY_ONLY):
-                    profile_state = InstallState.CLOUD_CONNECTED
-                    profile_evidence.extend(result.evidence)
-                elif result.state.value == "legacy" and profile_state not in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY, InstallState.COMPATIBILITY_ONLY, InstallState.CLOUD_CONNECTED):
-                    profile_state = InstallState.LEGACY
-                    profile_evidence.extend(result.evidence)
-                elif result.state.value == "ambiguous" and profile_state == InstallState.NOT_DETECTED:
-                    profile_state = InstallState.AMBIGUOUS
-                    profile_evidence.extend(result.evidence)
-            elif kind == "app-bundle":
-                result = detect_product(
-                    product_id, profile_id,
-                    app_bundle_id=probe.get("darwin_bundle_id"),
-                )
-                if result.state.value == "installed":
-                    profile_state = InstallState.INSTALLED
-                    profile_evidence.extend(result.evidence)
-                    break
-                elif result.state.value == "configured-only" and profile_state not in (InstallState.INSTALLED,):
-                    profile_state = InstallState.CONFIGURED_ONLY
-                    profile_evidence.extend(result.evidence)
-                elif result.state.value == "compatibility-only" and profile_state not in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY):
-                    profile_state = InstallState.COMPATIBILITY_ONLY
-                    profile_evidence.extend(result.evidence)
-                elif result.state.value == "cloud-connected" and profile_state not in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY, InstallState.COMPATIBILITY_ONLY):
-                    profile_state = InstallState.CLOUD_CONNECTED
-                    profile_evidence.extend(result.evidence)
-                elif result.state.value == "legacy" and profile_state not in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY, InstallState.COMPATIBILITY_ONLY, InstallState.CLOUD_CONNECTED):
-                    profile_state = InstallState.LEGACY
-                    profile_evidence.extend(result.evidence)
-                elif result.state.value == "ambiguous" and profile_state == InstallState.NOT_DETECTED:
-                    profile_state = InstallState.AMBIGUOUS
-                    profile_evidence.extend(result.evidence)
-            # Other probe types (vscode-extension, schema-probe, cloud-account, environment)
-            # are declared in Registry but not yet implemented in probes.py
-
-        # Targeted fallback: check inventory for workspace-relative paths only.
-        # Home-relative paths (user-scoped) are covered by probes; workspace-relative
-        # paths (project-scoped) may not have probes but are valid installations.
-        # This avoids the old bug where inventory.exists claimed "installed" for
-        # shared/compatibility-only paths like AGENTS.md or .agents/skills.
-        if profile_state is InstallState.NOT_DETECTED:
-            rows = registry.inventory(f"{product_id}/{profile_id}")
-            for row in rows:
-                if not row.get("exists"):
-                    continue
-                resolved = row.get("resolved_path")
-                if not resolved:
-                    continue
-                resolved_path = Path(resolved)
-                # Only claim INSTALLED if the path is under workspace (project-scoped)
-                # and NOT under home (user-scoped). Home paths should be caught by probes.
-                try:
-                    is_under_workspace = resolved_path.is_relative_to(workspace)
-                    is_under_home = resolved_path.is_relative_to(home)
-                except ValueError:
-                    is_under_workspace = False
-                    is_under_home = False
-                if is_under_workspace and not is_under_home:
-                    # Check if this is a shared/compatibility path
-                    c_path = row.get("canonical_path", "")
-                    role = row.get("location_role", "canonical")
-                    if c_path in ("AGENTS.md", ".agents/skills", ".agents") or role != "canonical":
-                        profile_state = InstallState.COMPATIBILITY_ONLY
-                    else:
-                        profile_state = InstallState.INSTALLED
-                    profile_evidence.append(f"inventory:{row.get('object_type')}:{c_path}")
-                    break
-
-        detections.append(
-            {
-                "product": product_id,
-                "profile": profile_id,
-                "state": profile_state.value,
-                "evidence": profile_evidence,
-            }
+def _registry_profile_detections(
+    registry: Registry,
+    product: str | None = None,
+    profile: str | None = None,
+) -> list[ProbeResult]:
+    """Use the same resolved profiles and probe precedence for every command."""
+    if product:
+        product, separator, selected_profile = product.partition("/")
+        if separator:
+            if profile and profile != selected_profile:
+                raise ValueError("conflicting profiles in --product and --profile")
+            profile = selected_profile
+        registry.profile(f"{product}/{profile}" if profile else product)
+        products = {product: registry.products[product]}
+    else:
+        products = registry.products
+    priority = {
+        state: index for index, state in enumerate((
+            InstallState.NOT_DETECTED, InstallState.AMBIGUOUS, InstallState.LEGACY,
+            InstallState.CLOUD_CONNECTED, InstallState.COMPATIBILITY_ONLY,
+            InstallState.CONFIGURED_ONLY, InstallState.INSTALLED,
+        ))
+    }
+    results: dict[tuple[str, str], ProbeResult] = {}
+    for product_id, definition in products.items():
+        if not product and definition.get("alias_of"):
+            continue
+        selectors = (
+            [f"{product_id}/{profile}"] if product and profile
+            else [f"{product_id}/{key}" for key in definition.get("profiles", {})]
+            or [product_id]
         )
+        for selector in selectors:
+            resolved_product, resolved_profile, resolved = registry.profile(selector)
+            if profile and not product and resolved_profile != profile:
+                continue
+            key = (resolved_product, resolved_profile)
+            if key in results:
+                continue
+            best = ProbeResult(*key, InstallState.NOT_DETECTED, ())
+            for probe in resolved.get("detection", []) or []:
+                if not isinstance(probe, dict):
+                    continue
+                kind = probe.get("type")
+                if kind == "binary":
+                    command = probe.get("command") or []
+                    if isinstance(command, str):
+                        command = [command]
+                    names = command[:1] if command else probe.get("binaries", [])
+                    if isinstance(names, str):
+                        names = [names]
+                    result = probe_binary(
+                        *key, names,
+                        version_command=probe.get("version_command"),
+                        require_version=len(command) > 1,
+                    )
+                elif kind == "file-signature":
+                    paths = [
+                        registry.resolve_path({"path": str(raw)})[0]
+                        for raw in probe.get("paths", [])
+                    ]
+                    result = probe_file_signature(*key, paths, home=registry.home)
+                elif kind == "app-bundle":
+                    result = probe_app_bundle(
+                        *key, darwin_bundle_id=probe.get("darwin_bundle_id"),
+                        home=registry.home,
+                    )
+                else:
+                    # Undeclared implementations cannot prove installation.
+                    continue
+                if priority[result.state] > priority[best.state]:
+                    best = result
+                if best.state is InstallState.INSTALLED:
+                    break
+
+            # Concrete project surfaces supply local evidence even when the
+            # project's directory lives beneath HOME. Shared paths remain opt-in.
+            if best.state is not InstallState.INSTALLED:
+                for object_type in sorted(AUTOMATIC_OBJECT_TYPES):
+                    for surface in registry.surfaces(f"{key[0]}/{key[1]}", object_type):
+                        if surface.scope != "project":
+                            continue
+                        result = probe_file_signature(
+                            *key, [surface.resolved_path], home=registry.home,
+                        )
+                        if (
+                            surface.location_role != "canonical"
+                            and result.state is not InstallState.NOT_DETECTED
+                        ):
+                            result = ProbeResult(*key, InstallState.COMPATIBILITY_ONLY, result.evidence)
+                        if priority[result.state] > priority[best.state]:
+                            best = result
+                        if best.state is InstallState.INSTALLED:
+                            break
+                    if best.state is InstallState.INSTALLED:
+                        break
+            results[key] = best
+    if profile and not results:
+        raise ValueError(f"unknown profile: {profile}")
+    return [results[key] for key in sorted(results)]
+
+
+def _select_installed_profiles(
+    registry: Registry,
+    include_configured: bool = False,
+    include_compatibility: bool = False,
+) -> tuple[set[str], dict[str, str]]:
+    accepted = {InstallState.INSTALLED}
+    if include_configured:
+        accepted.add(InstallState.CONFIGURED_ONLY)
+    if include_compatibility:
+        accepted.add(InstallState.COMPATIBILITY_ONLY)
+    detections = _registry_profile_detections(registry)
+    return (
+        {f"{row.product}/{row.profile}" for row in detections if row.state in accepted},
+        {f"{row.product}/{row.profile}": row.state.value for row in detections},
+    )
+
+
+def run_detection(args: argparse.Namespace) -> int:
+    registry = Registry(args.registry, args.workspace.resolve())
+    detections = _registry_profile_detections(registry, args.product, args.profile)
     emit(
         {
             "ok": True,
             "stage": "detect",
             "platform": sys.platform,
-            "home": str(home),
-            "detections": detections,
+            "home": str(registry.home),
+            "detections": [row.to_dict() for row in detections],
         },
         args.json,
     )
@@ -680,8 +676,9 @@ def run_snapshot(args: argparse.Namespace) -> int:
     """
     workspace = args.workspace.resolve()
     registry = Registry(args.registry, workspace)
-    bundle_root = (args.output or workspace / "device.acb").resolve(strict=False)
-    inventory_rows = registry.inventory(None)
+    bundle_root = resolve_output_path(args.output or workspace / "device.acb")
+    all_installed = getattr(args, "all_installed", False) or args.source in ("auto", "all-installed")
+    inventory_rows = registry.inventory(None if all_installed else args.source)
     detect_rows = [row for row in inventory_rows if row.get("exists")]
 
     requested_scopes = {
@@ -694,6 +691,11 @@ def run_snapshot(args: argparse.Namespace) -> int:
     allowed_object_types = set(
         resolve_objects(getattr(args, "objects", "skills,instructions,mcp"))
     )
+    for object_type, flag in (("plugins", "include_plugins"), ("handoff", "include_session")):
+        if object_type in allowed_object_types and not getattr(args, flag, False):
+            raise ValueError(
+                f"snapshot {object_type} requires --{flag.replace('_', '-')}"
+            )
 
     all_installed = getattr(args, "all_installed", False) or args.source in ("auto", "all-installed")
     source_product, source_profile = (
@@ -703,68 +705,11 @@ def run_snapshot(args: argparse.Namespace) -> int:
     )
 
     if all_installed:
-        # Auto-orchestrate snapshot across all detected and installed products.
-        #
-        # Audit P0-3 (0.8.27): detection result is the SINGLE source of truth.
-        # inventory_rows.exists must NEVER be used as a fallback to claim
-        # "installed" — that previously masked failing detection probes and
-        # produced bundles that claimed to contain a product with no files.
-        from detect.probes import detect_profile, InstallState
-        detected_selectors: set[str] = set()  # "product/profile" pairs
-        detection_status: dict[str, str] = {}  # "product/profile" -> state
-        for prod_id, prod in registry.products.items():
-            for prof_id, prof in prod.get("profiles", {}).items():
-                detection = prof.get("detection", []) or []
-                profile_state = InstallState.NOT_DETECTED
-                profile_evidence: list[str] = []
-                for probe in detection:
-                    if not isinstance(probe, dict):
-                        continue
-                    paths = probe.get("paths", [])
-                    binaries = probe.get("command") or probe.get("binaries") or []
-                    if isinstance(binaries, str):
-                        binaries = [binaries]
-                    res = detect_profile(
-                        prod_id,
-                        prof_id,
-                        binaries=binaries,
-                        file_signatures=paths,
-                        home=registry.home,
-                        workspace=workspace,
-                        app_bundle_id=probe.get("darwin_bundle_id"),
-                    )
-                    # Use the most definitive state across all probes for this profile
-                    # Priority: INSTALLED > CONFIGURED_ONLY > COMPATIBILITY_ONLY > CLOUD_CONNECTED > LEGACY > AMBIGUOUS > NOT_DETECTED
-                    if res.state.value == "installed":
-                        profile_state = InstallState.INSTALLED
-                        profile_evidence.extend(res.evidence)
-                        break  # INSTALLED is definitive
-                    elif res.state.value == "configured-only" and profile_state not in (InstallState.INSTALLED,):
-                        profile_state = InstallState.CONFIGURED_ONLY
-                        profile_evidence.extend(res.evidence)
-                    elif res.state.value == "compatibility-only" and profile_state not in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY):
-                        profile_state = InstallState.COMPATIBILITY_ONLY
-                        profile_evidence.extend(res.evidence)
-                    elif res.state.value == "cloud-connected" and profile_state not in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY, InstallState.COMPATIBILITY_ONLY):
-                        profile_state = InstallState.CLOUD_CONNECTED
-                        profile_evidence.extend(res.evidence)
-                    elif res.state.value == "legacy" and profile_state not in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY, InstallState.COMPATIBILITY_ONLY, InstallState.CLOUD_CONNECTED):
-                        profile_state = InstallState.LEGACY
-                        profile_evidence.extend(res.evidence)
-                    elif res.state.value == "ambiguous" and profile_state == InstallState.NOT_DETECTED:
-                        profile_state = InstallState.AMBIGUOUS
-                        profile_evidence.extend(res.evidence)
-                    # NOT_DETECTED doesn't change anything
-                selector = f"{prod_id}/{prof_id}"
-                detection_status[selector] = profile_state.value
-                include_configured = getattr(args, "include_configured", False)
-                include_compatibility = getattr(args, "include_compatibility", False)
-                if (
-                    profile_state == InstallState.INSTALLED
-                    or (include_configured and profile_state == InstallState.CONFIGURED_ONLY)
-                    or (include_compatibility and profile_state == InstallState.COMPATIBILITY_ONLY)
-                ):
-                    detected_selectors.add(selector)
+        detected_selectors, detection_status = _select_installed_profiles(
+            registry,
+            include_configured=getattr(args, "include_configured", False),
+            include_compatibility=getattr(args, "include_compatibility", False),
+        )
 
         plan_rows: list[dict[str, Any]] = []
         failed_products: list[dict[str, str]] = []
@@ -810,6 +755,11 @@ def run_snapshot(args: argparse.Namespace) -> int:
         "detection_status": detection_status if all_installed else {},
         "failed_products": failed_products if all_installed else [],
     }
+    requested_scopes = {
+        source["scope"] for item in plan_rows
+        if (source := item.get("source")) and scope_matches(source["scope"], args.scope)
+    }
+    validate_artifact_output(bundle_root, registry, {"items": plan_rows})
 
     # Only include authorized, planned objects in manifest
     manifest_objects = []
@@ -846,13 +796,12 @@ def run_snapshot(args: argparse.Namespace) -> int:
     )
     # Copy source files under objects/ using strict allowlist (audit P0-2 & 0.8.25).
     if not all_installed:
-        source_product, source_profile = (
-            args.source.split("/", 1) if "/" in args.source else (args.source, None)
-        )
+        source_product, source_profile, _ = registry.profile(args.source)
     else:
         source_product, source_profile = None, None
 
     collect_summary = {"captured": 0, "manual_rebuild": 0, "excluded_by_policy": 0, "parse_failed": 0, "secret_rejected": 0, "conflict": 0}
+    object_file_modes: dict[str, int] = {}
     try:
         objects_dir_files, collect_summary, object_file_map = collect_source_objects(
             registry,
@@ -864,6 +813,9 @@ def run_snapshot(args: argparse.Namespace) -> int:
             allowed_scopes=requested_scopes,
             allowed_object_types=allowed_object_types,
             plan_items=plan_rows,
+            include_plugins=bool(getattr(args, "include_plugins", False)),
+            include_session=bool(getattr(args, "include_session", False)),
+            object_file_modes=object_file_modes,
         )
     except ACBError as error:
         # Parse failure during object collection - emit failure with summary
@@ -970,6 +922,7 @@ def run_snapshot(args: argparse.Namespace) -> int:
             objects_dir_files=objects_dir_files,
             adapter_versions=ADAPTER_VERSIONS,
             object_file_map=object_file_map,
+            object_file_modes=object_file_modes,
         )
     except ACBSecretLeak as error:
         print(f"ERROR: ACB secret leak: {error}", file=sys.stderr)
@@ -983,7 +936,8 @@ def run_snapshot(args: argparse.Namespace) -> int:
             "manifest": str(bundle_root / "manifest.json"),
             "checksums": str(bundle_root / ACB_CHECKSUMS_NAME),
             "objects_dir": str(bundle_root / ACB_OBJECTS_DIR),
-            "objects_captured": len(objects_dir_files),
+            "objects_captured": sum(bool(files) for files in object_file_map.values()),
+            "files_captured": len(objects_dir_files),
             "detected": detect_rows[:50],
             "summary": inventory_summary,
             "collection_summary": collect_summary,
@@ -999,7 +953,7 @@ def run_bundle_verify(args: argparse.Namespace) -> int:
     errors = verify_bundle(bundle_path)
     trusted_key = getattr(args, "trusted_key", None)
     if trusted_key:
-        sig_errors = verify_bundle_signature(bundle_path, trusted_key.resolve())
+        sig_errors = verify_bundle_signature(bundle_path, trusted_key)
         errors.extend(sig_errors)
     emit(
         {
@@ -1017,7 +971,7 @@ def run_bundle_sign(args: argparse.Namespace) -> int:
     """Sign an ACB bundle with an Ed25519 private key."""
     bundle_path = args.bundle.resolve()
     try:
-        sig_path = sign_bundle(bundle_path, args.key.resolve(), signer=args.signer)
+        sig_path = sign_bundle(bundle_path, args.key, signer=args.signer)
         emit(
             {
                 "ok": True,
@@ -1048,16 +1002,27 @@ def run_bundle_keygen(args: argparse.Namespace) -> int:
             encoding=serialization.Encoding.Raw,
             format=serialization.PublicFormat.Raw,
         )
-        out_priv = args.out_private.resolve()
-        out_pub = args.out_public.resolve()
+        out_priv = resolve_output_path(args.out_private)
+        out_pub = resolve_output_path(args.out_public)
+        if paths_overlap(out_priv, out_pub):
+            raise ValueError("private and public key outputs must be distinct files")
+        if out_priv.exists() or out_pub.exists():
+            raise ValueError("key outputs already exist; choose new paths")
         out_priv.parent.mkdir(parents=True, exist_ok=True)
         out_pub.parent.mkdir(parents=True, exist_ok=True)
-        out_priv.write_bytes(priv_bytes)
+        written: list[Path] = []
         try:
-            os.chmod(out_priv, 0o600)
-        except Exception:
-            pass
-        out_pub.write_bytes(pub_bytes)
+            for destination, data in ((out_priv, priv_bytes), (out_pub, pub_bytes)):
+                descriptor = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                written.append(destination)
+                with os.fdopen(descriptor, "wb") as handle:
+                    handle.write(data)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+        except BaseException:
+            for destination in written:
+                destination.unlink(missing_ok=True)
+            raise
         emit(
             {
                 "ok": True,
@@ -1078,64 +1043,8 @@ def _detect_target_profiles_for_restore(
     include_configured: bool = False,
     include_compatibility: bool = False,
 ) -> tuple[set[str], dict[str, str]]:
-    """Probe and filter target profiles on destination device for all-installed restore."""
-    from detect.probes import detect_profile, InstallState
-
-    target_detected_selectors: set[str] = set()
-    target_detection_status: dict[str, str] = {}
-
-    for prod_id, prod in target_registry.products.items():
-        for prof_id, prof in prod.get("profiles", {}).items():
-            detection = prof.get("detection", []) or []
-            profile_state = InstallState.NOT_DETECTED
-            profile_evidence: list[str] = []
-            for probe in detection:
-                if not isinstance(probe, dict):
-                    continue
-                paths = probe.get("paths", [])
-                binaries = probe.get("command") or probe.get("binaries") or []
-                if isinstance(binaries, str):
-                    binaries = [binaries]
-                res = detect_profile(
-                    prod_id,
-                    prof_id,
-                    binaries=binaries,
-                    file_signatures=paths,
-                    home=target_registry.home,
-                    workspace=workspace,
-                    app_bundle_id=probe.get("darwin_bundle_id"),
-                )
-                if res.state.value == "installed":
-                    profile_state = InstallState.INSTALLED
-                    profile_evidence.extend(res.evidence)
-                    break
-                elif res.state.value == "configured-only" and profile_state not in (InstallState.INSTALLED,):
-                    profile_state = InstallState.CONFIGURED_ONLY
-                    profile_evidence.extend(res.evidence)
-                elif res.state.value == "compatibility-only" and profile_state not in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY):
-                    profile_state = InstallState.COMPATIBILITY_ONLY
-                    profile_evidence.extend(res.evidence)
-                elif res.state.value == "cloud-connected" and profile_state not in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY, InstallState.COMPATIBILITY_ONLY):
-                    profile_state = InstallState.CLOUD_CONNECTED
-                    profile_evidence.extend(res.evidence)
-                elif res.state.value == "legacy" and profile_state not in (InstallState.INSTALLED, InstallState.CONFIGURED_ONLY, InstallState.COMPATIBILITY_ONLY, InstallState.CLOUD_CONNECTED):
-                    profile_state = InstallState.LEGACY
-                    profile_evidence.extend(res.evidence)
-                elif res.state.value == "ambiguous" and profile_state == InstallState.NOT_DETECTED:
-                    profile_state = InstallState.AMBIGUOUS
-                    profile_evidence.extend(res.evidence)
-
-            selector = f"{prod_id}/{prof_id}"
-            target_detection_status[selector] = profile_state.value
-            # Audit P1-3: strictly filter targets (0.9.1: INSTALLED default, configured/compat opt-in)
-            if (
-                profile_state == InstallState.INSTALLED
-                or (include_configured and profile_state == InstallState.CONFIGURED_ONLY)
-                or (include_compatibility and profile_state == InstallState.COMPATIBILITY_ONLY)
-            ):
-                target_detected_selectors.add(selector)
-
-    return target_detected_selectors, target_detection_status
+    """Probe destination profiles with the same rules as detect and snapshot."""
+    return _select_installed_profiles(target_registry, include_configured, include_compatibility)
 
 
 def _safe_canonical(canonical: str) -> str:
@@ -1151,6 +1060,20 @@ def _safe_canonical(canonical: str) -> str:
     safe = canonical.strip("/\\").replace("~", "home").replace("..", "_")
     safe = re.sub(r"[/\\:]+", "/", safe)
     return safe
+
+
+def _merged_mcp_source_document(servers: list[Any]) -> tuple[str, list[dict[str, Any]]]:
+    """Keep verified source fields inert in staging until loss-aware target emission."""
+    rendered, report = emit_mcp_document(servers, "json:mcpServers")
+    document = json.loads(rendered)
+    for server in servers:
+        fields = document["mcpServers"][server.name]
+        fields.update(server.extra_fields)
+        if server.args:
+            fields["args"] = list(server.args)
+        if server.env:
+            fields["env"] = dict(server.env)
+    return json.dumps(document, indent=2, sort_keys=True) + "\n", report.to_dict()["items"]
 
 
 def _resolve_bundle_plan_sources(
@@ -1172,33 +1095,30 @@ def _resolve_bundle_plan_sources(
         ValueError: bundle verification fails, the object is missing, or
             a content hash does not match.
     """
-    from acb.bundle import verify_bundle as _verify_bundle
-
     objects_root = bundle_root / ACB_OBJECTS_DIR
     manifest = load_manifest(bundle_root)
     object_by_id: dict[str, dict[str, Any]] = {
         obj.get("object_id", ""): obj for obj in manifest.objects if obj.get("object_id")
     }
 
-    if staging_root.exists():
-        shutil.rmtree(staging_root, ignore_errors=True)
-    staging_root.mkdir(parents=True, exist_ok=True)
-
     # Verify the bundle once before staging anything. verify_bundle covers
     # closed-world file enumeration, manifest integrity, and per-object
     # secret/binary scans.
-    errors = _verify_bundle(bundle_root)
+    errors = verify_bundle(bundle_root)
     if errors:
         raise ValueError(
             "bundle failed verification before plan replay: " + "; ".join(errors)
         )
 
-    resolved = 0
-    for item in document.get("items", []):
-        acb_uri = item.get("acb_uri")
+    if staging_root.exists():
+        shutil.rmtree(staging_root, ignore_errors=True)
+    staging_root.mkdir(parents=True, exist_ok=True)
+
+    def stage_source(item: dict[str, Any]) -> Path:
+        acb_uri = item.get("acb_uri", "")
         src = item.get("source")
-        if not acb_uri or not src:
-            continue
+        if not isinstance(src, dict) or not isinstance(acb_uri, str):
+            raise ValueError("bundle plan source must declare an acb_uri and surface")
         object_id = item.get("object_id", "")
         obj = object_by_id.get(object_id)
         if obj is None:
@@ -1208,25 +1128,32 @@ def _resolve_bundle_plan_sources(
         # Validate the URI matches the loaded bundle before doing any I/O.
         if not acb_uri.startswith("acb://"):
             raise ValueError(f"malformed acb_uri: {acb_uri}")
-        uri_bundle = acb_uri[len("acb://"):].split("#", 1)[0]
+        uri_bundle, separator, uri_object = acb_uri[len("acb://"):].partition("#")
+        if not separator or uri_object != object_id:
+            raise ValueError(f"acb_uri object mismatch: {acb_uri}")
         if uri_bundle != manifest.bundle_id:
             raise ValueError(
                 f"acb_uri bundle mismatch: uri={uri_bundle} bundle={manifest.bundle_id}"
             )
+        for field in ("product", "profile", "scope"):
+            if obj.get(field) != src.get(field):
+                raise ValueError(f"bundle source {field} does not match manifest: {acb_uri}")
+        if (obj.get("surface") or obj.get("object_type")) != src.get("object_type"):
+            raise ValueError(f"bundle source object type does not match manifest: {acb_uri}")
 
         # The bundle stores files under objects/<obj_type>/<prod>/<prof>/<scope>/
         # <safe_canonical>/<rest> (see acb.bundle._path_for_object). We strip
-        # that metadata prefix and stage the rest directly under staging_root
-        # so the resulting tree mirrors Process A's staging layout
-        # (e.g. <staging>/<home>/.cline/skills/<skill>/SKILL.md).
+        # that metadata prefix and give each object its own canonical tree
+        # so shared paths from different products cannot overwrite each other.
         obj_prefix = (
             f"{src.get('object_type', '')}/{src.get('product', '')}/"
             f"{src.get('profile', '')}/{src.get('scope', '')}"
         )
         canonical_path = src.get("canonical_path", "") or src.get("path", "")
         safe_canonical = _safe_canonical(canonical_path)
+        object_stage = validate_path_containment(object_id, staging_root)
 
-        # Stage every declared file for this object directly under staging_root.
+        # Stage every declared file for this object under its isolated tree.
         staged_files: list[Path] = []
         for file_entry in obj.get("files", []):
             rel = file_entry.get("path", "")
@@ -1244,7 +1171,7 @@ def _resolve_bundle_plan_sources(
                 # Bundle predates the metadata-prefix convention: stage the
                 # full rel_clean so the test still produces a usable tree.
                 stripped = rel_clean
-            src_file = objects_root / rel_clean
+            src_file = validate_path_containment(rel_clean, objects_root)
             if not src_file.is_file() or src_file.is_symlink():
                 raise ValueError(f"missing or symlinked object file: {rel}")
             expected_sha = file_entry.get("sha256", "")
@@ -1255,9 +1182,12 @@ def _resolve_bundle_plan_sources(
                         f"object {object_id} file {rel} hash mismatch "
                         f"(expected {expected_sha[:12]}\u2026 got {actual_sha[:12]}\u2026)"
                     )
-            tgt = staging_root / stripped
+            tgt = validate_path_containment(stripped, object_stage)
             tgt.parent.mkdir(parents=True, exist_ok=True)
             tgt.write_bytes(src_file.read_bytes())
+            mode = file_entry_mode(file_entry)
+            if mode is not None:
+                tgt.chmod(mode)
             staged_files.append(tgt)
 
         if not staged_files:
@@ -1265,25 +1195,52 @@ def _resolve_bundle_plan_sources(
                 f"object {object_id} has no stageable files for replay"
             )
 
-        # Pick the primary staged file: SKILL.md wins for skills, otherwise
-        # the first file. resolved_path must be the directory containing it
-        # so _skill_sources (and the apply preflight) accept it as a source.
-        primary_file = next(
-            (p for p in staged_files if p.name == "SKILL.md"),
-            staged_files[0],
-        )
-        src["resolved_path"] = str(primary_file.parent)
-
-        # Boundary is the HOME-equivalent inside the replay staging (the
-        # first segment of safe_canonical: "home" for user scope, the
-        # workspace-relative root for project scope). path-relative
-        # boundary checks then see resolved_path as inside boundary.
-        boundary = staging_root
-        if safe_canonical:
-            first_segment = safe_canonical.split("/", 1)[0]
-            if first_segment:
-                boundary = staging_root / first_segment
+        # Rebind the exact reviewed file or child directory. An object can
+        # contain multiple Skills; selecting its first SKILL.md loses the
+        # identity of every later child and turns file sources into folders.
+        boundary = object_stage / "home" if safe_canonical.startswith("home/") else object_stage
+        try:
+            relative_source = Path(src["resolved_path"]).relative_to(Path(src["boundary"]))
+        except (KeyError, ValueError) as error:
+            raise ValueError(f"invalid reviewed source boundary: {acb_uri}") from error
+        source_path = validate_path_containment(relative_source, boundary)
+        if not source_path.exists():
+            raise ValueError(f"reviewed source is absent from bundle: {relative_source}")
+        expected = item.get("source_state")
+        if expected is not None and path_state(source_path) != expected:
+            raise ValueError(f"bundle source changed after plan review: {relative_source}")
+        src["resolved_path"] = str(source_path)
         src["boundary"] = str(boundary)
+        return source_path
+
+    resolved = 0
+    for item in document.get("items", []):
+        if not item.get("acb_uri") or not item.get("source"):
+            continue
+        merge_sources = item.get("acb_merge_sources")
+        if merge_sources:
+            servers_by_name: dict[str, Any] = {}
+            for candidate in merge_sources:
+                source_path = stage_source(candidate)
+                for server in parse_mcp_document(
+                    source_path.read_text(encoding="utf-8"),
+                    candidate["source"]["source_format"],
+                ):
+                    servers_by_name.setdefault(server.name, server)
+            names = item.get("acb_merge_server_names", [])
+            if not isinstance(names, list) or any(name not in servers_by_name for name in names):
+                raise ValueError("bundle MCP merge recipe names an absent server")
+            rendered, _ = _merged_mcp_source_document(
+                [servers_by_name[name] for name in names]
+            )
+            merged_file = staging_root / "mcp-merged" / f"{resolved}.json"
+            atomic_write(merged_file, rendered)
+            if path_state(merged_file) != item.get("source_state"):
+                raise ValueError("bundle MCP merge changed after plan review")
+            item["source"]["resolved_path"] = str(merged_file)
+            item["source"]["boundary"] = str(merged_file.parent)
+        else:
+            stage_source(item)
         resolved += 1
 
     if resolved == 0 and any(item.get("acb_uri") for item in document.get("items", [])):
@@ -1303,6 +1260,7 @@ def _build_all_installed_restore_items(
     scope: str,
     staging_root: Path,
     bundle_id: str = "",
+    bundle_objects: list[dict[str, Any]] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, str]]]:
     """Build restore plan items with object-level identity, deduplication, and conflict tracking."""
     all_items: list[dict[str, Any]] = []
@@ -1312,6 +1270,10 @@ def _build_all_installed_restore_items(
     seen_target_plugins: dict[tuple[str, str], tuple[str, str]] = {}
     mcp_candidates_by_target: dict[str, list[tuple[dict[str, Any], str, str]]] = {}
     failed_targets: list[dict[str, str]] = []
+    bundle_object_ids = {
+        (obj.get("surface") or obj.get("object_type"), obj.get("product"), obj.get("profile"), obj.get("scope")): obj["object_id"]
+        for obj in bundle_objects or [] if obj.get("files") and obj.get("object_id")
+    }
 
     for tgt_selector in sorted(target_detected_selectors):
         for src_selector in bundle_source_selectors:
@@ -1324,6 +1286,7 @@ def _build_all_installed_restore_items(
                     scope,
                     target_registry=target_registry,
                 )
+                dropped_losses.extend(doc.get("loss_report", {}).get("items", []))
                 for item in doc.get("items", []):
                     obj_type = item.get("object_type")
                     target_dict = item.get("target") or {}
@@ -1339,6 +1302,9 @@ def _build_all_installed_restore_items(
                     # the plan document survives a cross-process replay. The
                     # object_id is already stable; the bundle_id is supplied
                     # by run_restore from the loaded manifest.
+                    object_key = (obj_type, source_dict.get("product"), source_dict.get("profile"), source_dict.get("scope"))
+                    if object_key in bundle_object_ids:
+                        item["object_id"] = bundle_object_ids[object_key]
                     if bundle_id and item.get("object_id"):
                         item["acb_uri"] = f"acb://{bundle_id}#{item['object_id']}"
 
@@ -1520,10 +1486,8 @@ def _build_all_installed_restore_items(
                     mcp_temp_dir = staging_root / "mcp-merged"
                     mcp_temp_dir.mkdir(parents=True, exist_ok=True)
                     merged_file = mcp_temp_dir / f"merged_mcp_{hashlib.sha256(target_path.encode()).hexdigest()[:8]}.json"
-                    merged_text, merge_losses = emit_mcp_document(
-                        valid_servers, "json:mcpServers"
-                    )
-                    dropped_losses.extend(merge_losses.to_dict()["items"])
+                    merged_text, merge_losses = _merged_mcp_source_document(valid_servers)
+                    dropped_losses.extend(merge_losses)
                     atomic_write(merged_file, merged_text)
 
                     merged_item = copy.deepcopy(candidates[0][0])
@@ -1532,8 +1496,21 @@ def _build_all_installed_restore_items(
                     merged_item["source"]["source_format"] = "json:mcpServers"
                     merged_item["source_state"] = path_state(merged_file)
                     merged_item["target_state"] = path_state(Path(target_path))
-                    merged_item["status"] = "ready"
-                    merged_item["reason"] = f"Merged {len(valid_servers)} MCP server(s) from multiple sources"
+                    merged_item["status"] = "ready-lossy" if merge_losses else "ready"
+                    merged_item["reason"] = (
+                        f"Merged {len(valid_servers)} MCP server(s) from multiple sources"
+                        + ("; explicit loss acceptance required" if merge_losses else "")
+                    )
+                    merged_item["acb_merge_sources"] = [
+                        {
+                            "object_id": candidate[0].get("object_id"),
+                            "acb_uri": candidate[0].get("acb_uri"),
+                            "source": copy.deepcopy(candidate[0].get("source")),
+                            "source_state": candidate[0].get("source_state"),
+                        }
+                        for candidate in candidates
+                    ]
+                    merged_item["acb_merge_server_names"] = [server.name for server in valid_servers]
                     all_items.append(merged_item)
                 else:
                     conflict_item = copy.deepcopy(candidates[0][0])
@@ -1543,7 +1520,131 @@ def _build_all_installed_restore_items(
                     conflict_item["target_state"] = path_state(Path(target_path))
                     all_items.append(conflict_item)
 
-    return all_items, dropped_losses, failed_targets
+    for item in all_items:
+        item["review_preview"] = _preview_plan_item(PlanItem.from_dict(item))
+    unique_losses = {
+        json.dumps(loss, sort_keys=True): loss for loss in dropped_losses
+    }
+    return all_items, list(unique_losses.values()), failed_targets
+
+
+def _stage_bundle_source_registry(
+    bundle_root: Path,
+    target_registry: Registry,
+    staging_root: Path,
+    source_selector: str,
+    scope: str,
+    object_types: list[str],
+) -> Registry:
+    """Stage only the plan's bundle sources, independent of device overrides."""
+    file_modes = {
+        entry["path"]: file_entry_mode(entry)
+        for obj in load_manifest(bundle_root).objects for entry in obj.get("files", [])
+    }
+    staged_home = staging_root / "home"
+    staged_home.mkdir(parents=True, exist_ok=True)
+    selected = None
+    if source_selector not in ("auto", "all-installed"):
+        product, profile, _ = target_registry.profile(source_selector)
+        selected = (product, profile)
+    objects_root = bundle_root / ACB_OBJECTS_DIR
+    for source in sorted(objects_root.rglob("*")):
+        if not source.is_file():
+            continue
+        parts = source.relative_to(objects_root).parts
+        if len(parts) < 5:
+            raise ValueError("bundle object has no product/profile/scope binding")
+        object_type, product, profile, surface_scope = parts[:4]
+        if object_type not in object_types or not scope_matches(surface_scope, scope):
+            continue
+        if selected is not None and selected != (product, profile):
+            continue
+        if parts[4] == "home":
+            destination = validate_path_containment(Path(*parts[5:]), staged_home)
+        else:
+            boundary = staged_home if surface_scope in {"user", "shared-user"} else staging_root
+            destination = validate_path_containment(Path(*parts[4:]), boundary)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(source.read_bytes())
+        mode = file_modes.get(f"{ACB_OBJECTS_DIR}/{source.relative_to(objects_root).as_posix()}")
+        if mode is not None:
+            destination.chmod(mode)
+    return Registry(target_registry.path, staging_root, home=staged_home, portable_source=True)
+
+
+def _bind_named_bundle_sources(
+    document: dict[str, Any],
+    bundle_root: Path,
+    manifest: ACBManifest,
+    *,
+    bind_identity: bool = False,
+) -> dict[str, Any]:
+    """Bind named sources and return a staged-ID validation copy if needed."""
+    identity = {
+        "bundle_id": manifest.bundle_id,
+        "manifest_sha256": hashlib.sha256(
+            (bundle_root / "manifest.json").read_bytes()
+        ).hexdigest(),
+    }
+    recorded_identity = document.get("bundle_source")
+    if bind_identity:
+        document["bundle_source"] = identity
+    elif recorded_identity is not None and recorded_identity != identity:
+        raise ValueError("bundle source identity does not match the reviewed plan")
+
+    for item in document.get("items", []):
+        source = item.get("source")
+        source_state = item.get("source_state") or {}
+        if not source or not source_state.get("exists"):
+            if item.get("acb_uri"):
+                raise ValueError("bundle source URI requires a captured source")
+            continue
+        object_id = item.get("object_id")
+        strict_identity = not bind_identity and (
+            recorded_identity is not None or item.get("acb_uri") is not None
+        )
+        if strict_identity:
+            matches = [obj for obj in manifest.objects if obj.get("object_id") == object_id]
+        else:
+            matches = [
+                obj for obj in manifest.objects
+                if all(source.get(field) == obj.get(field) for field in ("product", "profile", "scope"))
+                and source.get("object_type") == (obj.get("surface") or obj.get("object_type"))
+            ]
+            exact_matches = [obj for obj in matches if obj.get("object_id") == object_id]
+            if exact_matches:
+                matches = exact_matches
+        if len(matches) != 1:
+            raise ValueError(f"bundle source object identity is absent or ambiguous: {object_id}")
+        obj = matches[0]
+        captured_id = obj.get("object_id")
+        if not isinstance(captured_id, str) or not captured_id:
+            raise ValueError("bundle source object identity must be a non-empty string")
+        for field in ("product", "profile", "scope"):
+            if source.get(field) != obj.get(field):
+                raise ValueError(f"bundle source {field} does not match the manifest")
+        object_type = obj.get("surface") or obj.get("object_type")
+        if source.get("object_type") != object_type or item.get("object_type") != object_type:
+            raise ValueError("bundle source object type does not match the manifest")
+        expected_uri = f"acb://{manifest.bundle_id}#{captured_id}"
+        if bind_identity:
+            item["object_id"] = captured_id
+            item["acb_uri"] = expected_uri
+        elif recorded_identity is not None or item.get("acb_uri") is not None:
+            if item.get("acb_uri") != expected_uri:
+                raise ValueError("bundle source URI does not match the manifest identity")
+
+    if bind_identity:
+        document["plan_sha256"] = json_sha256(_plan_hash_payload(document))
+    # Environment overrides can give captured objects different IDs from the
+    # portable Registry's canonical staging paths. Keep captured IDs in the
+    # reviewed document while validating the freshly resolved named plan.
+    execution_document = copy.deepcopy(document)
+    for item in execution_document.get("items", []):
+        if item.get("acb_uri") and item.get("source"):
+            staged_item = PlanItem.from_dict({**item, "object_id": ""})
+            item["object_id"] = staged_item.object_id
+    return execution_document
 
 
 def run_restore(args: argparse.Namespace) -> int:
@@ -1566,7 +1667,7 @@ def run_restore(args: argparse.Namespace) -> int:
     errors = verify_bundle(bundle_root)
     trusted_key = getattr(args, "trusted_key", None)
     if trusted_key:
-        sig_errors = verify_bundle_signature(bundle_root, trusted_key.resolve())
+        sig_errors = verify_bundle_signature(bundle_root, trusted_key)
         errors.extend(sig_errors)
     if errors:
         emit({"ok": False, "stage": "verify", "errors": errors}, args.json)
@@ -1574,21 +1675,29 @@ def run_restore(args: argparse.Namespace) -> int:
     manifest = load_manifest(bundle_root)
     workspace = args.workspace.resolve()
     target_registry = Registry(args.registry, workspace)
-    detected = [row for row in target_registry.inventory(None) if row.get("exists")]
-
     all_installed = getattr(args, "all_installed", False) or args.target in ("auto", "all-installed")
     source_sel = args.source or "cline/ide"
     target_sel = args.target or "forge/cli"
     object_types = resolve_objects(getattr(args, "objects", "skills,instructions,mcp"))
+    scope = args.scope
+    plan_in = getattr(args, "plan_in", None)
+    reviewed_document = load_plan_document(plan_in.resolve()) if plan_in else None
+    if reviewed_document is not None:
+        source_sel = reviewed_document["source"]
+        target_sel = reviewed_document["target"]
+        scope = reviewed_document["scope"]
+        object_types = reviewed_document["objects"]
+        all_installed = source_sel in ("auto", "all-installed") or target_sel in ("auto", "all-installed")
+    detected = [row for row in target_registry.inventory(None if all_installed else target_sel) if row.get("exists")]
     have_bundle_objects = (bundle_root / ACB_OBJECTS_DIR).is_dir()
 
     # Optional object extraction into an explicit restore-root (audit #4:
     # opt-in; defaults OFF so we never imply a transaction landed there).
     restore_root = (
-        args.restore_root.resolve(strict=False) if args.restore_root else None
+        resolve_output_path(args.restore_root) if args.restore_root else None
     )
     restore_result = (
-        restore_bundle_objects(bundle_root, restore_root, dry_run=args.dry_run)
+        restore_bundle_objects(bundle_root, restore_root, dry_run=True)
         if restore_root is not None
         else None
     )
@@ -1598,44 +1707,12 @@ def run_restore(args: argparse.Namespace) -> int:
     try:
         temp_dir = tempfile.mkdtemp(prefix="acb-source-stage-")
         temp_source_dir = Path(temp_dir)
-        staged_home = temp_source_dir / "home"
-        staged_home.mkdir(parents=True, exist_ok=True)
-
-        if have_bundle_objects:
-            objects_root = bundle_root / ACB_OBJECTS_DIR
-            requested_scopes = {
-                s.strip().lower()
-                for s in (args.scope or "user,project").split(",")
-                if s.strip()
-            }
-            if "all" in requested_scopes:
-                requested_scopes = {"user", "project", "local"}
-
-            for source_file in sorted(objects_root.rglob("*")):
-                if source_file.is_file():
-                    rel = source_file.relative_to(objects_root)
-                    parts = rel.parts
-                    if len(parts) >= 5:
-                        obj_t, prod, prof, scp = parts[0], parts[1], parts[2], parts[3]
-                        # For all_installed, stage all products; otherwise filter by source_prod
-                        if all_installed or prod == source_sel.split("/")[0]:
-                            if scp.lower() in requested_scopes:
-                                if parts[4] == "home" and len(parts) >= 6:
-                                    target_staged = staged_home / Path(*parts[5:])
-                                elif scp.lower() == "user":
-                                    target_staged = staged_home / Path(*parts[4:])
-                                else:
-                                    target_staged = temp_source_dir / Path(*parts[4:])
-                                target_staged.parent.mkdir(parents=True, exist_ok=True)
-                                target_staged.write_bytes(source_file.read_bytes())
-
-        source_registry = Registry(
-            args.registry, temp_source_dir, home=staged_home
+        source_registry = _stage_bundle_source_registry(
+            bundle_root, target_registry, temp_source_dir,
+            "all-installed" if all_installed else source_sel, scope, object_types,
         )
-
-        plan_in = getattr(args, "plan_in", None)
         if plan_in:
-            document = load_plan_document(plan_in.resolve())
+            document = reviewed_document
             # P0-1 (v0.9.3): replay path. Re-stage any acb:// items from
             # the verified bundle into a fresh temp dir before validation
             # so the resolved_path matches reality on a different process.
@@ -1648,13 +1725,17 @@ def run_restore(args: argparse.Namespace) -> int:
                 replay_staging = Path(
                     tempfile.mkdtemp(prefix="acb-replay-stage-")
                 )
-                replay_staging_dirs.extend(
-                    _resolve_bundle_plan_sources(
-                        document, bundle_root, replay_staging
-                    )
+                replay_staging_dirs.append(replay_staging)
+                execution_document = copy.deepcopy(document)
+                _resolve_bundle_plan_sources(
+                    execution_document, bundle_root, replay_staging
+                )
+            else:
+                execution_document = _bind_named_bundle_sources(
+                    document, bundle_root, manifest
                 )
             plan_items, _ = validate_plan_document(
-                document, target_registry, source_registry=source_registry
+                execution_document, target_registry, source_registry=source_registry
             )
         elif all_installed:
             target_detected_selectors, target_detection_status = (
@@ -1680,9 +1761,10 @@ def run_restore(args: argparse.Namespace) -> int:
                 bundle_source_selectors=bundle_source_selectors,
                 target_detected_selectors=target_detected_selectors,
                 object_types=object_types,
-                scope=args.scope,
+                scope=scope,
                 staging_root=temp_source_dir,
                 bundle_id=manifest.bundle_id,
+                bundle_objects=manifest.objects,
             )
 
             document = {
@@ -1695,7 +1777,7 @@ def run_restore(args: argparse.Namespace) -> int:
                 "target": "all-installed",
                 "target_profile": "all",
                 "target_support_level": "bidirectional-reviewed",
-                "scope": args.scope or "user,project",
+                "scope": scope,
                 "objects": object_types,
                 "registry_sha256": hash_path(target_registry.path),
                 "adapter_versions": ADAPTER_VERSIONS,
@@ -1720,25 +1802,36 @@ def run_restore(args: argparse.Namespace) -> int:
                 source_sel,
                 target_sel,
                 object_types,
-                args.scope,
+                scope,
                 target_registry=target_registry,
+            )
+            execution_document = _bind_named_bundle_sources(
+                document, bundle_root, manifest, bind_identity=True
             )
             # Enforce TOCTOU state lock validation on the generated plan document
             plan_items, _ = validate_plan_document(
-                document, target_registry, source_registry=source_registry
+                execution_document, target_registry, source_registry=source_registry
             )
 
-        # Write the reviewed plan document if requested
-        plan_out = None
-        if args.plan_out and not args.dry_run:
-            plan_out = args.plan_out.resolve(strict=False)
-            plan_out.parent.mkdir(parents=True, exist_ok=True)
+        # Preflight all artifact destinations before writing the first one.
+        plan_out = resolve_output_path(args.plan_out) if args.plan_out else None
+        manifest_out = resolve_output_path(args.manifest_out) if args.manifest_out else None
+        outputs = [path for path in (plan_out, manifest_out, restore_root) if path is not None]
+        for output in outputs:
+            protected = [bundle_root, *(path for path in outputs if path != output)]
+            if plan_in is not None:
+                protected.append(plan_in)
+            validate_artifact_output(output, target_registry, document, protected)
+        if len(outputs) != len(set(outputs)):
+            raise ValueError("restore artifact output paths must be distinct")
+        args.manifest_out = manifest_out
+        if plan_out is not None and not args.dry_run:
             atomic_write(
                 plan_out,
                 json.dumps(document, indent=2, sort_keys=True) + "\n",
             )
 
-        plan_display = str(plan_out) if plan_out else (str(plan_in) if plan_in else None)
+        plan_display = str(plan_out) if plan_out and not args.dry_run else (str(plan_in) if plan_in else None)
 
         if args.dry_run:
             # Zero-write guarantee for dry-run.
@@ -1750,6 +1843,7 @@ def run_restore(args: argparse.Namespace) -> int:
                     "bundle_id": manifest.bundle_id,
                     "plan": plan_display,
                     "plan_sha256": document["plan_sha256"],
+                    "plan_document": document,
                     "restore": restore_result,
                     "dry_run": True,
                     "detected": detected[:50],
@@ -1769,6 +1863,7 @@ def run_restore(args: argparse.Namespace) -> int:
                     "bundle_id": manifest.bundle_id,
                     "plan": plan_display,
                     "plan_sha256": document["plan_sha256"],
+                    "plan_document": document,
                     "restore": restore_result,
                     "detected": detected[:50],
                     "failed_targets": document.get("failed_targets", []),
@@ -1777,42 +1872,26 @@ def run_restore(args: argparse.Namespace) -> int:
             )
             return 0
 
-        if args.apply_safe:
-            # No-op guard (audit #2): bundle carried objects but nothing
-            # eligible was resolved — refuse to report success.
-            if have_bundle_objects and not any(
-                item.status == "ready" for item in plan_items
-            ):
-                if not getattr(args, "allow_noop", False):
-                    emit(
-                        {
-                            "ok": False,
-                            "stage": "apply",
-                            "error": "restore resolved no eligible items; refusing silent no-op (use --allow-noop to override)",
-                        },
-                        args.json,
-                    )
-                    return 1
-            return _apply_restore(
-                plan_items, workspace, args, bundle_root, manifest,
-                document, restore_result, detected,
+        # --no-apply-safe requires strict execution; it is not a preview switch.
+        if have_bundle_objects and not any(
+            item.status == "ready"
+            or (item.status == "ready-lossy" and args.include_lossy == "lossy")
+            or (item.status == "draft-disabled" and item.object_type in {"skills", "instructions", "mcp"})
+            for item in plan_items
+        ) and not getattr(args, "allow_noop", False):
+            emit(
+                {
+                    "ok": False,
+                    "stage": "apply",
+                    "error": "restore resolved no eligible items; refusing silent no-op (use --allow-noop to override)",
+                },
+                args.json,
             )
-
-        emit(
-            {
-                "ok": True,
-                "stage": "plan",
-                "bundle": str(bundle_root),
-                "bundle_id": manifest.bundle_id,
-                "plan": plan_display,
-                "plan_sha256": document["plan_sha256"],
-                "restore": restore_result,
-                "detected": detected[:50],
-                "failed_targets": document.get("failed_targets", []),
-            },
-            args.json,
+            return 1
+        return _apply_restore(
+            plan_items, workspace, args, bundle_root, manifest,
+            document, restore_result, detected,
         )
-        return 0
     finally:
         # The staged source tree (and any replay staging from --plan-in)
         # must stay alive until apply_plan has read it, so they are cleaned
@@ -1843,20 +1922,25 @@ def _apply_restore(
             "registry_sha256": document["registry_sha256"],
             "adapter_versions": document["adapter_versions"],
         },
-        apply_safe=True,
+        apply_safe=args.apply_safe,
         include_lossy=(args.include_lossy == "lossy"),
         accept_loss_ids=set(),
-        strict=args.strict,
+        strict=args.strict or not args.apply_safe,
         allow_plugin_copy=bool(getattr(args, "include_plugins", False)),
         allow_session_handoff=bool(getattr(args, "include_session", False)),
     )
     verify_errors = verify_manifest(manifest_path_out)
+    if not verify_errors and args.restore_root is not None:
+        restore_result = restore_bundle_objects(
+            bundle_root, args.restore_root, dry_run=False
+        )
     emit(
         {
             "ok": not verify_errors,
             "stage": "verify",
             "bundle": str(bundle_root),
-            "plan": str(args.plan_out) if getattr(args, "plan_out", None) else None,
+            "plan": str(args.plan_out or args.plan_in) if (args.plan_out or args.plan_in) else None,
+            "plan_sha256": document["plan_sha256"],
             "manifest": str(manifest_path_out),
             "restore": restore_result,
             "stale_targets": [],
@@ -1871,7 +1955,7 @@ def _apply_restore(
 
 
 def run_doctor(args: argparse.Namespace) -> int:
-    """Inspect a bundle and surface missing executables / re-auth work."""
+    """Report recorded requirements and check executable presence only."""
     bundle_root = args.bundle.resolve()
     errors = verify_bundle(bundle_root)
     if errors:
@@ -1883,14 +1967,23 @@ def run_doctor(args: argparse.Namespace) -> int:
     reauth = json.loads((bundle_root / "reauth.json").read_text(encoding="utf-8"))
     rebuild = json.loads((bundle_root / "rebuild.json").read_text(encoding="utf-8"))
     missing_executables: list[str] = []
+    executable_checks: list[dict[str, Any]] = []
     for binary in requirements.get("executables", []):
-        if not shutil.which(binary):
+        found_on_path = shutil.which(binary) is not None
+        executable_checks.append(
+            {"executable": binary, "found_on_path": found_on_path}
+        )
+        if not found_on_path:
             missing_executables.append(binary)
+    unresolved_requirements = {**requirements, "executables": missing_executables}
     emit(
         {
             "ok": not missing_executables,
             "bundle": str(bundle_root),
             "missing_executables": missing_executables,
+            "requirements": requirements,
+            "executable_checks": executable_checks,
+            "unresolved_requirements": unresolved_requirements,
             "reauth_actions": reauth.get("items", []),
             "rebuild_actions": rebuild.get("items", []),
             "platform_notes": requirements.get("platform_notes", []),
@@ -1905,8 +1998,12 @@ def run_migrate(args: argparse.Namespace) -> int:
     workspace = args.workspace.resolve()
     registry = Registry(args.registry, workspace)
 
-    # 1. detect --installed (informational; does not gate the run).
-    detect_rows = [row for row in registry.inventory(None) if row.get("exists")]
+    # Inspect only the products named by this migration.
+    selectors = {args.source, args.target}
+    detect_rows = [
+        row for named in sorted(selectors)
+        for row in registry.inventory(named) if row.get("exists")
+    ]
 
     # 2. Resolve --objects.
     object_types = resolve_objects(args.objects)
@@ -1921,30 +2018,32 @@ def run_migrate(args: argparse.Namespace) -> int:
             + ", ".join(unsupported)
             + "; use --objects 'skills,instructions,mcp' or 'all-portable'"
         )
-    # Include automatic and opt-in writable types in the plan
-    auto_object_types = [
-        obj for obj in object_types
-        if obj in AUTOMATIC_OBJECT_TYPES or obj in OPT_IN_WRITABLE_OBJECT_TYPES
-    ]
-
-    # 3. scope handling: default user,project; full-disk 'all' requires --yes.
-    scope = args.scope
-    if scope == "all" and not args.yes:
+    # Previewing every scope does not authorize or require an apply.
+    scope = args.scope.replace("+", ",")
+    requested_scopes = [part.strip() for part in scope.split(",") if part.strip()]
+    if not requested_scopes or any(part not in {"user", "project", "local", "all"} for part in requested_scopes):
+        raise ValueError(f"unsupported scope: {args.scope}")
+    if "all" in requested_scopes and len(requested_scopes) != 1:
+        raise ValueError("--scope all cannot be combined with individual scopes")
+    scope = ",".join(dict.fromkeys(requested_scopes))
+    if scope == "all" and not args.plan_only and not args.yes:
         raise ValueError("--scope all requires --yes")
-    if scope not in {"user", "project", "user,project", "all"}:
-        raise ValueError(f"unsupported scope: {scope}")
 
     # 4. plan
     document = build_plan_document(
-        registry, args.source, args.target, auto_object_types, scope,
+        registry, args.source, args.target, object_types, scope,
     )
 
     # 5. save plan
-    plan_out = (
-        args.plan_out.resolve(strict=False)
-        if args.plan_out
-        else default_workspace_migration_dir(workspace) / "migrate-plan.json"
-    )
+    output_root = default_workspace_migration_dir(workspace)
+    plan_out = resolve_output_path(args.plan_out or output_root / "migrate-plan.json")
+    default_manifest_out = resolve_output_path(args.manifest_out or output_root / "migrate-manifest.json")
+    verify_out = resolve_output_path(args.verify_out or output_root / "migrate-verify.json")
+    artifacts = [plan_out] if args.plan_only else [plan_out, default_manifest_out, verify_out]
+    for index, artifact in enumerate(artifacts):
+        validate_artifact_output(artifact, registry, document, artifacts[:index])
+    if not args.plan_only and default_manifest_out.exists():
+        raise ValueError(f"manifest path already exists: {default_manifest_out}")
     plan_out.parent.mkdir(parents=True, exist_ok=True)
     atomic_write(
         plan_out,
@@ -1964,17 +2063,12 @@ def run_migrate(args: argparse.Namespace) -> int:
         )
         return 0
 
-    # 6. apply (re-load the saved plan so the apply path matches the
-    # production flow exactly).
+    # Validate the persisted artifact before applying it.
+    document = load_plan_document(plan_out)
     plan_items, _ = validate_plan_document(document, registry)
     accept_loss_ids = {
         token.strip() for token in args.accept_loss.split(",") if token.strip()
     }
-    default_manifest_out = (
-        args.manifest_out.resolve(strict=False)
-        if args.manifest_out
-        else default_workspace_migration_dir(workspace) / "migrate-manifest.json"
-    )
     manifest, manifest_path_out = apply_plan(
         plan_items,
         workspace,
@@ -1996,11 +2090,6 @@ def run_migrate(args: argparse.Namespace) -> int:
 
     # 7. verify
     errors = verify_manifest(manifest_path_out)
-    verify_out = (
-        args.verify_out.resolve(strict=False)
-        if args.verify_out
-        else default_workspace_migration_dir(workspace) / "migrate-verify.json"
-    )
     verify_out.parent.mkdir(parents=True, exist_ok=True)
     atomic_write(
         verify_out,
@@ -2092,29 +2181,28 @@ def run_new_cli(argv: list[str]) -> int:
                     return 1
                 temp_dir = tempfile.mkdtemp(prefix="acb-source-stage-")
                 temp_source_dir = Path(temp_dir)
-                staged_home = temp_source_dir / "home"
-                staged_home.mkdir(parents=True, exist_ok=True)
-                objects_root = bundle_root / ACB_OBJECTS_DIR
-                if objects_root.is_dir():
-                    for source_file in sorted(objects_root.rglob("*")):
-                        if source_file.is_file():
-                            rel = source_file.relative_to(objects_root)
-                            parts = rel.parts
-                            if len(parts) >= 5:
-                                if parts[4] == "home" and len(parts) >= 6:
-                                    target_staged = staged_home / Path(*parts[5:])
-                                elif parts[3].lower() == "user":
-                                    target_staged = staged_home / Path(*parts[4:])
-                                else:
-                                    target_staged = temp_source_dir / Path(*parts[4:])
-                                target_staged.parent.mkdir(parents=True, exist_ok=True)
-                                target_staged.write_bytes(source_file.read_bytes())
-                source_registry = Registry(
-                    args.registry, temp_source_dir, home=staged_home
+                source_registry = _stage_bundle_source_registry(
+                    bundle_root, registry, temp_source_dir,
+                    document["source"], document["scope"], document["objects"],
                 )
+                if document.get("source") in ("all-installed", "auto") or document.get("target") in ("all-installed", "auto"):
+                    execution_document = copy.deepcopy(document)
+                    _resolve_bundle_plan_sources(
+                        execution_document, bundle_root, temp_source_dir / "replay"
+                    )
+                else:
+                    execution_document = _bind_named_bundle_sources(
+                        document, bundle_root, load_manifest(bundle_root)
+                    )
+            else:
+                if document.get("bundle_source") is not None or any(
+                    item.get("acb_uri") for item in document.get("items", [])
+                ):
+                    raise ValueError("bundle-backed plans require --bundle")
+                execution_document = document
 
             plan_items, _ = validate_plan_document(
-                document, registry, source_registry=source_registry
+                execution_document, registry, source_registry=source_registry
             )
             accept_loss_ids = {
                 token.strip()

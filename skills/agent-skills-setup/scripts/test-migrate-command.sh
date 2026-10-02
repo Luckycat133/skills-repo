@@ -123,15 +123,25 @@ VERIFY_OK="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['ok
 [[ "$VERIFY_OK" == "True" ]] || { echo "FAIL: verify reported errors: $VERIFY_OK"; exit 1; }
 echo "OK verify artifact reports ok=true"
 
-# Re-run should be idempotent at the target tree level.
-HOME="$(native_path "$HOME_DIR")" "${WRAPPER}" migrate \
+# Reusing a manifest must fail before replacing reviewed artifacts or targets.
+cp "$PLAN" "$WS/plan-before-rerun.json"
+cp "$WS/.migration/migrate-manifest.json" "$WS/manifest-before-rerun.json"
+cp "$SKILL_DST/SKILL.md" "$WS/skill-before-rerun.md"
+if HOME="$(native_path "$HOME_DIR")" "${WRAPPER}" migrate \
     --source cline/ide \
     --target forge/cli \
     --workspace "$WS" \
     --scope user \
     --objects skills,instructions,mcp \
-    --yes >/dev/null 2>&1 || true
-echo "OK second migrate invocation completed (idempotency not strictly asserted without fixtures)"
+    --yes >"$WS/rerun-output.log" 2>&1; then
+    echo "FAIL: repeated migration replaced an existing manifest"
+    exit 1
+fi
+grep -Fq 'manifest path already exists' "$WS/rerun-output.log"
+cmp "$PLAN" "$WS/plan-before-rerun.json"
+cmp "$WS/.migration/migrate-manifest.json" "$WS/manifest-before-rerun.json"
+cmp "$SKILL_DST/SKILL.md" "$WS/skill-before-rerun.md"
+echo "OK repeated migration preserved the plan, manifest and target"
 
 # --strict with mixed-status plan should fail.
 set +e

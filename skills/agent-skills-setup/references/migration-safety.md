@@ -1,36 +1,77 @@
 # Migration safety and conflicts
 
-Use before a migration can write. A generic request to migrate or transfer authorizes planning only. Inspect only the explicitly named source, target, objects, scope, and workspace; if any is missing, stop before filesystem inspection. Save the profile-aware plan and show its exact file list/diff or cloud rebuild actions and target paths. Obtain separate explicit user approval before `apply` or `rollback`; `--yes` records that approval but does not replace it. Apply only the reviewed plan: its checksum binds the Registry digest, adapter versions, resolved surfaces, source/target hashes, and Git provenance. Any drift requires a new review. Inventory canonical and compatibility paths; if more than one alternative exists, stop for explicit selection, and if multiple precedence files exist, do not pretend they are one document. Before copying a Skill directory or converting instructions, scan the source and reject likely literal credentials. Reject links outside a Skill root, exclude `.env` and `.env.*`, and preserve the source.
+Read before previewing or writing migration targets. Use the user's requested
+products, objects, workspace, and scope. Infer ordinary defaults from the request:
+a named project implies project scope; personal context needs user scope. Inspect
+other products only for a requested device-wide inventory or backup. Ask when a
+profile, destination, conflict choice, or authorization is materially ambiguous.
 
-Apply stages and validates every output before the first target mutation, snapshots every destination, then commits the saved plan as one operation. A failure in any later write or in manifest creation restores every earlier target in reverse order; no partial success is reported. Plan and manifest artifact paths must not overlap the Registry or any selected source/target surface. The manifest is written only after all target hashes are recorded.
+An explicit request to move, apply, restore, or undo context authorizes that
+scoped action, including necessary planning and verification. Retain prior
+authorization across turns. Preview-only requests authorize no target writes;
+if the user forbids all writes, use `plan --json` without `--output`. Writing a
+plan or bundle is still an artifact write. `--yes` records authorization for
+execution; it never supplies missing user consent. Ask before expanding scope,
+accepting unapproved semantic loss, or resolving a conflict that the request
+does not settle.
 
-## Device handoff and Agent Context Bundle (ACB) safety
+## Review and execute the plan
 
-- **Strict Allowlist Snapshotting (P0-2)**: `snapshot` captures only requested scopes and valid portable objects (skills, instructions, mcp). Policies like `forbidden-regenerate`, `never-migrate`, `source-only`, and objects like `generated_memory`, `session`, `chat`, `runtime`, `database`, `trust`, `approval`, `oauth_state` are strictly blocked before disk read.
-- **Sub-Object Field-Level Whitelist**: For `config-subobject` surfaces (e.g. `settings.json` storing `mcpServers` in Augment, Gemini, VS Code, Qoder), snapshot extracts, validates, and serializes ONLY the targeted sub-object slice. Host configuration sibling keys (API keys, provider tokens, telemetry, UI preferences, proxy configs, organizational policies) are never copied into the bundle.
-- **Dual-Side Plan Architecture (P0-1)**: `restore` builds a dual-side plan with the verified bundle as `source_registry` and the local host as `target_registry`. Real destination paths, pre-apply states (`exists` -> `replace` vs `create`), semantic diffs, and workspace are evaluated on the destination device and locked into `plan_sha256` before apply.
-- **Replayable Restore Plans & TOCTOU State Locks**: Plans saved with `restore --plan-out <plan.json>` can be replayed and applied via `restore --plan-in <plan.json> --yes` (or `apply <plan.json> --bundle <bundle.acb> --yes`). Replay verifies bundle integrity, plan checksum, registry checksum, and enforces strict state locks (`expected_source_state` and `expected_target_state`) against destination surfaces.
-- **Authoritative Bundle Precedence (P0-3)**: The bundle is always the single source of truth during `restore`. The presence of a local source IDE on the destination device cannot override or bypass bundle content.
-- **Strict Handoff Whitelist (P0-4)**: Handoff data serializes only explicitly whitelisted fields (`reviewed_summary`, `git_branch`, `selected_files`, `patch`). Raw logs, conversation histories, tokens, and machine paths are dropped.
-- **Closed-World Integrity Verification**: Bundles must pass `bundle-verify` against `checksums.json` and deep secret/binary scans before restore.
-- **Plan-Only Review & Execution Safety**: `restore <bundle.acb>` (or `--plan-only`) builds and reviews the plan with zero disk writes. Applying requires explicit `--yes`. Extraction into a review tree (`--restore-root <dir>`) is opt-in.
+Resolve concrete profiles using [ide-registry.md](ide-registry.md). Review both
+canonical and compatibility locations; ambiguous alternatives produce conflicts.
+Use documented precedence where it resolves the choice, and retain activation
+and directory hierarchy when instructions have multiple files.
 
-## Surface and runtime boundaries
+Save the plan before execution and review each destination, diff, loss report,
+and rebuild action. Apply that exact file. Its checksum binds the Registry,
+adapter versions, resolved surfaces, source/target states, and Git provenance.
+Changed inputs require a new plan and review; renewed user approval is needed
+only when the revised action exceeds existing authorization. `migrate` performs
+planning, apply, and verification in one invocation; use separate `plan`/`apply`
+when the user wants to inspect or approve the exact artifact first.
 
-- **Plugins & Extensions**: Binary packages and executable plugins are not auto-installed or executed; they are recorded as `draft-disabled` or `manual-rebuild`.
-- **Sessions & Runtime State**: Interactive chat logs, runtime tokens, OAuth tokens, and approval grants are strictly non-migratable and excluded.
-- **Probes & Diagnostics**: `detect` and `doctor` run local filesystem and binary checks only; network access is forbidden.
+The default safe apply writes eligible items and records deferred ones. Inspect
+the resulting counts and reasons; a successful verification does not mean every
+requested item migrated. Instruction/MCP conversions with reported losses are
+`ready-lossy` and deferred until accepted; `--yes` alone is insufficient.
+Required Skill environment-file exclusions still apply to eligible copies.
+`--strict` requires all items to be `ready`.
+`--include lossy` accepts all lossy items; `--accept-loss` on `apply`/`migrate`
+accepts selected item identifiers. See [the CLI guide](cli-workflow.md).
+Neither option authorizes previously unapproved loss. Executable draft surfaces
+remain review/rebuild actions and are never activated by safe apply.
 
-Use [mcp-transport.md](mcp-transport.md) for remote transport, OAuth, or protocol state. The script blanks literal credentials and may translate an exact documented environment reference; mixed or complex expressions need manual reconstruction. MCP target symlinks fail before conversion. Redaction cleanup accepts only the exact target artifacts, while copied-skill cleanup is contained within the canonical target copy root.
+Apply stages and validates outputs before target mutation, snapshots destinations,
+and records a checksummed manifest. Write or manifest failure restores earlier
+mutations in reverse order. Existing targets are backed up under
+`<workspace>/.agent-context-migration/backups/`; public profile-aware commands
+do not expose legacy `skip`/`backup`/`overwrite` strategies. MCP migration preserves
+unrelated settings while replacing the selected server map; inspect added,
+removed, and changed servers in the saved preview. Bulk restore merges selected
+bundle sources before writing and reports conflicts. Do not invent renamed
+fallback servers.
 
-| Strategy | Existing selected object |
-| --- | --- |
-| `skip` | Leave unchanged. |
-| `backup` (default) | Save `.bak.<timestamp>`, then merge. |
-| `overwrite` | Replace only the selected object, without backup. |
+Plan, manifest, bundle, extraction, and key outputs must not overlap selected
+sources/targets or the Registry. Reject symlink escapes and credential-bearing
+objects; exclude `.env` and `.env.*` from Skill copies. Keep source bytes intact.
+Shared configuration transfers only the authorized subobject, including when
+the registry uses plain file storage. Trust, credentials, approvals, raw history,
+and generated memory never become portable objects.
 
-For shared MCP configuration, preserve unrelated settings; `overwrite` replaces only the selected server map. Do not invent renamed fallback entries.
+## Bundles and recovery
 
-The explicit `legacy` subcommand supports lookup and zero-write dry-runs only. Calls beginning with an implicit legacy flag are rejected. Any `legacy --yes` write fails before the compatibility engine runs; create and apply a saved profile-aware plan instead.
+For backup, destination-side restore planning, signing, or dependency diagnostics,
+read [bundle-workflow.md](bundle-workflow.md). A restore source is the verified
+bundle; an installed source product on the destination device cannot override it.
+Review-only restore can stage ephemeral source files and optionally save a plan;
+`--restore-root` explicitly requests a persistent extraction tree. Extraction
+alone does not prove that any destination product received context.
 
-Restate source, target, objects, scope, workspace, and boundaries. After review, use `apply <plan.json> --yes --json`; report checksums, paths, parse result, source integrity, target evidence, backup, and manual follow-ups.
+Use [verification.md](verification.md) for applied-state evidence and guarded
+rollback. No step here installs or launches plugins, contacts MCP servers,
+changes trust, or performs authentication. Cloud/UI and remote MCP require
+reviewed reconstruction; [mcp-transport.md](mcp-transport.md) defines that boundary.
+
+The explicit `legacy` subcommand permits lookup and zero-write dry-runs only.
+Implicit legacy flags and all legacy writes are rejected; execute saved
+profile-aware plans instead.

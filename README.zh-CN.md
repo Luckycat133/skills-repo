@@ -8,6 +8,8 @@
 
 > Languages: [English](README.md) · **中文** · [日本語](README.ja-JP.md) · [Español](README.es.md)
 
+版本：**0.10.0**。变更见[更新记录](CHANGELOG.md#0100---2026-10-02)；下方 GitHub 安装示例固定使用对应的 `v0.10.0` 发布标签。
+
 在 **Cursor、Claude Code、Codex、Cline、Windsurf、Copilot、Gemini CLI** 以及数十种主流 AI 编程工具之间，进行**离线、带预览、可回滚**的 Skills、规则/指令和 MCP 配置迁移与跨设备备份恢复。
 
 ![Agent Skills Setup — 15-second demo: detect → plan → secret redaction → apply → verify](skills/agent-skills-setup/assets/demo.gif)
@@ -25,7 +27,7 @@ openclaw skills install @luckycat133/agent-skills-setup
 或直接从 GitHub 安装：
 
 ```bash
-git clone --depth 1 --branch v0.9.3 https://github.com/Luckycat133/skills-repo.git
+git clone --depth 1 --branch v0.10.0 https://github.com/Luckycat133/skills-repo.git
 
 openclaw skills install \
   ./skills-repo/skills/agent-skills-setup \
@@ -57,11 +59,21 @@ openclaw skills install \
 
 ## 🚀 核心命令
 
-- **`migrate`**：一键端到端迁移：`detect` -> `inventory` -> `plan` -> `apply` -> `verify`。
+- **`migrate`**：清点选定产品，保存计划，再应用并校验结果。
 - **`snapshot`**：捕获原子、便携的 **Agent Context Bundle (ACB)**，严格保持 1:1 清单文件绑定。
 - **`restore`**：基于 ACB 备份包在目标设备上生成双端计划并执行恢复，带 TOCTOU 防篡改保护。
-- **`bundle-sign` & `bundle-verify`**：使用 Ed25519 密钥签名并验证 ACB 备份包完整性。
+- **`bundle-keygen`、`bundle-sign` 和 `bundle-verify`**：生成 Ed25519 密钥、签名备份包，并通过可信公钥验证完整性。
 - **`doctor`**：离线诊断 ACB 运行依赖及缺失的可执行工具。
+
+ACB 保留普通文件权限（含可执行位），并兼容没有权限元数据的旧备份。
+保存的恢复计划绑定备份身份；MCP 预览列出新增、移除及同名服务的字段变化，不展示凭据值。
+指令/MCP 转换出现已报告损失时默认延后，明确接受后才应用。
+`doctor` 同时列出包、扩展、平台和手动安装需求，可执行文件检查不代表运行验收。
+
+`detect` / `inventory` 用于发现与清点，`plan` 保存预览，`apply` 执行已审阅计划，
+`verify` / `rollback` 校验与恢复。完整示例见[命令指南](skills/agent-skills-setup/references/cli-workflow.md)，
+各 profile 的验证范围见[兼容性矩阵](docs/agent-skills-setup/compatibility-matrix.md)。
+远程 MCP 和云端设置生成手动重建清单；插件与交接迁移各自需要显式 opt-in。
 
 ---
 
@@ -88,12 +100,18 @@ skills-repo/
 ## 开发与验证
 
 1. 请编辑 `skills/agent-skills-setup/`，不要直接修改根目录生成的仓库指针。
-2. 运行全量测试：`bash validate-all.sh`。
-3. 修改规范 Skill 后运行：`bash scripts/sync-root-mirror.sh` 更新根指针。
+2. 修改规范 Skill 后运行：`bash scripts/sync-root-mirror.sh` 更新根指针。
+3. 运行全量测试：`bash validate-all.sh`。
 4. 所有验证通过后再提交合并。
+
+规模测试使用 `python3 scripts/benchmark-scale.py --sizes 10,100,1000`，在隔离夹具中
+检查迁移、保存计划后的恢复、完整内容及回滚。耗时仅作实测记录，不设置 CI 时间阈值。
+可加 `--report /path/to/new-report.json` 和 `--keep-workspace` 保存证据；不读取真实 Agent 配置。
 
 ## 项目资料
 
+- [更新记录](CHANGELOG.md)
+- [发布检查清单](docs/agent-skills-setup/release-checklist.md)
 - [贡献指南](CONTRIBUTING.md)
 - [安全策略](SECURITY.md)
 - [行为准则](CODE_OF_CONDUCT.md)

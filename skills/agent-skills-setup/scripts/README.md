@@ -1,35 +1,32 @@
-# Scripts
+# Script maintenance
 
-`smart-ide-migration.sh` is the public wrapper. Its profile-aware commands are
-`detect`, `inventory`, `plan`, `apply`, `verify`, and `rollback`. Always save a
-plan with `plan --output plan.json`; `apply plan.json --yes` verifies the plan
-checksum, Registry digest, adapter versions, resolved source/target state, and
-Git HEAD before any write. Apply emits a checksummed manifest with exact
-backups. `--json` reserves stdout for one JSON document and sends diagnostics
-to stderr.
+`smart-ide-migration.sh` is the public offline wrapper. Use the
+[public CLI workflow](../references/cli-workflow.md) for detection, inventory,
+planning, apply, verification, rollback, and legacy lookup. Use the
+[bundle workflow](../references/bundle-workflow.md) for snapshot, restore,
+signing/key generation, bundle verification, and doctor diagnostics. Those
+references are included in runtime packages; this file is maintainer guidance.
 
-Legacy discovery and dry-run compatibility require the explicit `legacy`
-subcommand. Calls beginning with implicit legacy flags are rejected. Every
-`legacy --yes` write fails before the retained compatibility engine runs; use a
-saved profile-aware plan. The legacy engine rejects ordinary direct execution.
+`migration_core.py`, `context-migrator.py`, `acb/`, `detect/`, `registry/`,
+`skill_secret_scanner.py`, and the guarded legacy engine implement that wrapper.
+Direct legacy execution and all legacy writes are disabled. Shell/Python,
+filesystem, and environment capabilities remain offline and within authorized
+scope; tests never grant permission to mutate a user's configuration.
 
-The Skill declares local environment lookup, file-read, file-write, and bundled
-shell/Python capabilities only; generic migration requests authorize planning,
-while apply and rollback require separate explicit user approval.
-MCP targets that are symbolic links fail before conversion. Redaction cleanup
-can remove only the exact target artifacts; copied-skill cleanup must remain
-inside its canonicalized target copy root.
+## Maintainer helpers
 
-`scan-skill-secrets.py` checks every regular source file before a Skill copy and
-reports only relative paths and reason categories, never credential values.
-`ide-paths.tsv` is generated from `references/ide-paths.json`; regenerate it
-with `sync-ide-reference-summaries.py`, never edit it directly. `common.sh` is
-an internal helper.
+- `scan-skill-secrets.py` scans regular source files before Skill copies and
+  reports relative paths and reason categories, never credential values.
+- `sync-ide-reference-summaries.py` regenerates reference summaries and
+  `ide-paths.tsv` from `references/ide-paths.json`; edit the source JSON, not
+  generated tables. `common.sh` is internal.
+- `validate-registry-v2.py` validates registry structure and contracts.
+  `generate-compatibility-matrix.py` renders repository compatibility guidance.
+- `check-doc-freshness.py` validates official HTTPS provenance, schema, and
+  `verified_at` freshness offline. It performs no network verification.
 
-`check-doc-freshness.py` validates source/freshness metadata and provenance
-offline without network access. It verifies schemas, official HTTPS source
-declarations, and verified_at freshness boundaries locally.
-
-`test-*.sh` files are maintainer regression suites run by `bash validate-all.sh`,
-not local-IDE migration commands. Legacy converter suites opt into the private
-guard explicitly; `test-legacy-registry-gate.sh` covers the public boundary.
+`test-*.sh` files are focused maintainer regression suites, run together by
+`bash validate-all.sh` at the repository root. They are excluded from the
+runtime package and must use isolated fixtures rather than real agent settings.
+Legacy converter suites opt into the private test guard;
+`test-legacy-registry-gate.sh` covers the public read-only boundary.

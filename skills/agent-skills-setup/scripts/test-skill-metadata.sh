@@ -4,8 +4,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILL_FILE="$SCRIPT_DIR/../SKILL.md"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
-python3 - "$SKILL_FILE" <<'PY'
+python3 - "$SKILL_FILE" "$REPO_ROOT" <<'PY'
 from pathlib import Path
 import re
 import sys
@@ -49,8 +50,25 @@ if "## Permissions" not in skill:
     raise SystemExit("FAIL: body must carry an explicit ## Permissions section")
 
 version = re.search(r'(?m)^  version:\s*"([^"]+)"\s*$', frontmatter)
-if version is None or version.group(1) != "0.9.3":
-    raise SystemExit("FAIL: metadata.version must be the quoted release version (0.9.3)")
+if version is None:
+    raise SystemExit("FAIL: metadata.version must be a quoted string")
+
+repo = Path(sys.argv[2])
+changelog = (repo / "CHANGELOG.md").read_text(encoding="utf-8")
+pending = re.search(r"(?m)^Next release: `([^`]+)`", changelog)
+released = re.search(r"(?m)^## \[([^\]]+)\] - \d{4}-\d{2}-\d{2}$", changelog)
+if released is None:
+    raise SystemExit("FAIL: Changelog must identify the latest dated release")
+expected = pending.group(1) if pending else released.group(1)
+if version.group(1) != expected:
+    raise SystemExit(f"FAIL: metadata.version must match Changelog ({expected})")
+for name in ("README.md", "README.zh-CN.md", "README.ja-JP.md", "README.es.md"):
+    readme = (repo / name).read_text(encoding="utf-8")
+    if f"**{expected}**" not in readme:
+        raise SystemExit(f"FAIL: {name} must identify the current version ({expected})")
+    clone = re.search(r"(?m)^git clone --depth 1 --branch v(\S+) ", readme)
+    if clone is None or clone.group(1) != released.group(1):
+        raise SystemExit(f"FAIL: {name} must pin the latest released GitHub tag ({released.group(1)})")
 
 compatibility = re.search(r"(?m)^compatibility:\s*(.*)$", frontmatter)
 if compatibility is None:

@@ -144,12 +144,13 @@ def enrich_manifest_object(
     objects_dir_files: dict[str, bytes],
     adapter_versions: dict[str, str] | None = None,
     object_file_map: dict[str, list[str]] | None = None,
+    object_file_modes: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     """Enrich a manifest object with file list, hashes, and metadata.
 
     Adds:
     - object_path: logical path under objects/
-    - files: list of {path, sha256, size} for each file
+    - files: list of {path, sha256, size, optional mode} for each file
     - source_format_version: format version from plan/registry
     - adapter_version: adapter version used for this object type
     - portability_mode: "full" | "lossy" | "manual" | "excluded"
@@ -186,6 +187,8 @@ def enrich_manifest_object(
             "sha256": file_hash,
             "size": len(data),
         }
+        if object_file_modes is not None and rel_path in object_file_modes:
+            file_entry["mode"] = validate_file_mode(object_file_modes[rel_path], rel_path)
         obj_files.append(file_entry)
         if primary_hash is None:
             primary_hash = file_hash
@@ -223,7 +226,27 @@ def sha256_bytes(data: bytes) -> str:
 
 
 def sha256_file(path: Path) -> str:
-    return sha256_bytes(path.read_bytes())
+    digest = hashlib.sha256()
+    with path.open("rb") as reader:
+        for chunk in iter(lambda: reader.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def validate_file_mode(value: Any, path: str) -> int:
+    """Accept only ordinary permission bits, never special permission flags."""
+    if type(value) is not int or not 0 <= value <= 0o777:
+        raise ACBIntegrityError(
+            f"invalid file mode for {path}: expected integer permission bits 0..0o777"
+        )
+    return value
+
+
+def file_entry_mode(file_entry: dict[str, Any]) -> int | None:
+    """Older bundles omit modes; explicit null or malformed values are invalid."""
+    if "mode" not in file_entry:
+        return None
+    return validate_file_mode(file_entry["mode"], file_entry.get("path", ""))
 
 
 def is_binary_bytes(data: bytes) -> bool:
@@ -535,6 +558,7 @@ def write_bundle(
     objects_dir_files: dict[str, bytes] | None = None,
     adapter_versions: dict[str, str] | None = None,
     object_file_map: dict[str, list[str]] | None = None,
+    object_file_modes: dict[str, int] | None = None,
 ) -> Path:
     """Write a fully-formed, closed-world ACB at ``bundle_root`` atomically.
 
@@ -546,7 +570,15 @@ def write_bundle(
     4. Upon successful verification, atomically replaces staging into bundle_root via backup/rename.
     5. If any error occurs during write, verification, or replace, rolls back cleanly.
     """
-    bundle_root = bundle_root.resolve()
+    from migration_core import resolve_output_path
+
+    # Validate supplied permissions before creating any output directories.
+    for relative, mode in (object_file_modes or {}).items():
+        validate_file_mode(mode, relative)
+        if relative not in (objects_dir_files or {}):
+            raise ACBIntegrityError(f"file mode has no corresponding object bytes: {relative}")
+
+    bundle_root = resolve_output_path(bundle_root)
     parent_dir = bundle_root.parent
     parent_dir.mkdir(parents=True, exist_ok=True)
 
@@ -563,7 +595,7 @@ def write_bundle(
         enriched_manifest_objects = []
         for obj in manifest.objects:
             enriched = enrich_manifest_object(
-                obj, objects_dir_files, adapter_versions, object_file_map
+                obj, objects_dir_files, adapter_versions, object_file_map, object_file_modes
             )
             enriched_manifest_objects.append(enriched)
 
@@ -668,6 +700,9 @@ def collect_source_objects(
     allowed_scopes: set[str] | None = None,
     allowed_object_types: set[str] | None = None,
     plan_items: list[dict[str, Any]] | None = None,
+    include_plugins: bool = False,
+    include_session: bool = False,
+    object_file_modes: dict[str, int] | None = None,
 ) -> tuple[dict[str, bytes], dict[str, int], dict[str, list[str]]]:
     """Walk plan items and copy source files into stable paths under ``objects/``.
 
@@ -697,7 +732,8 @@ def collect_source_objects(
     - Refuses non-migratable types (generated_memory, session, chat, runtime, database, trust, etc.)
     - Only collects requested scopes and requested object types
 
-    Returns ``(objects, summary, object_file_map)``.
+    Returns ``(objects, summary, object_file_map)``. When supplied,
+    ``object_file_modes`` receives the source files' ordinary permission bits.
     """
     objects: dict[str, bytes] = {}
     object_file_map: dict[str, list[str]] = {}
@@ -716,9 +752,26 @@ def collect_source_objects(
     def _record(status: str) -> None:
         summary[status] = summary.get(status, 0) + 1
 
+    def _collect_handoff(source: Path, relative: str, obj_key: str) -> None:
+        from migration_core import serialize_portable_handoff
+
+        candidates = [source] if source.is_file() else sorted(source.iterdir())
+        for candidate in candidates:
+            if not candidate.is_file() or candidate.is_symlink():
+                continue
+            if _SENSITIVE_FILENAME_HINT.search(candidate.name):
+                continue
+            raw = json.loads(candidate.read_text(encoding="utf-8"))
+            portable = serialize_portable_handoff(raw, workspace)
+            destination = relative if source.is_file() else f"{relative}/{candidate.name}"
+            objects[destination] = (json.dumps(portable, indent=2, sort_keys=True) + "\n").encode("utf-8")
+            if object_file_modes is not None:
+                object_file_modes[destination] = stat.S_IMODE(candidate.stat().st_mode) & 0o777
+            object_file_map.setdefault(obj_key, []).append(destination)
+
     # Build (product, profile, object_type, scope) -> inventory row index.
-    # Plan items don't carry storage/format/policy, so rows remain the
-    # canonical metadata source for those fields.
+    # Serialized plan surfaces take precedence; inventory rows provide
+    # metadata for older documents that omit these fields.
     row_index: dict[tuple[str, str, str, str], dict[str, Any]] = {}
     for row in rows:
         key = (
@@ -753,12 +806,17 @@ def collect_source_objects(
         if allowed_scopes is not None and scope not in allowed_scopes:
             _record("excluded_by_policy")
             return
+        if (obj_type == "plugins" and not include_plugins) or (
+            obj_type == "handoff" and not include_session
+        ):
+            _record("excluded_by_policy")
+            return
         if item_status == "manual-rebuild":
             _record("manual_rebuild")
             return
 
         row = row_index.get((prod, prof, obj_type, scope)) or {}
-        policy = row.get("policy") or ""
+        policy = src.get("policy") or row.get("policy") or ""
         if policy in FORBIDDEN_SNAPSHOT_POLICIES:
             _record("excluded_by_policy")
             return
@@ -774,11 +832,11 @@ def collect_source_objects(
             _record("parse_failed")
             return
 
-        canonical = row.get("canonical_path") or source_path.name
+        canonical = src.get("canonical_path") or row.get("canonical_path") or source_path.name
         relative = _path_for_object(obj_type, prod, prof, scope, canonical)
 
-        storage = row.get("storage") or ""
-        format_name = row.get("source_format") or row.get("format") or ""
+        storage = src.get("storage") or row.get("storage") or ""
+        format_name = src.get("source_format") or row.get("source_format") or row.get("format") or ""
 
         # Conflict detection (audit P1-1): two distinct sources collapsing
         # to the same bundle-relative path is recorded as a conflict rather
@@ -795,7 +853,9 @@ def collect_source_objects(
             return
 
         try:
-            if source_path.is_file():
+            if obj_type == "handoff":
+                _collect_handoff(source_path, relative, obj_key)
+            elif source_path.is_file():
                 if obj_type == "mcp" or storage == "config-subobject":
                     if obj_type == "mcp":
                         # MCP objects never travel as raw bytes (clawscan
@@ -833,12 +893,14 @@ def collect_source_objects(
                     object_file_map.setdefault(obj_key, []).append(relative)
             elif source_path.is_dir():
                 start_keys = set(objects.keys())
-                _collect_tree(source_path, relative, objects, depth=0)
+                _collect_tree(source_path, relative, objects, depth=0, file_modes=object_file_modes)
                 new_keys = set(objects.keys()) - start_keys
                 object_file_map.setdefault(obj_key, []).extend(sorted(new_keys))
             else:
                 _record("parse_failed")
                 return
+            if object_file_modes is not None and source_path.is_file() and relative in objects:
+                object_file_modes[relative] = stat.S_IMODE(source_path.stat().st_mode) & 0o777
         except ACBSecretLeak:
             _record("secret_rejected")
             return
@@ -886,6 +948,11 @@ def collect_source_objects(
         if allowed_object_types is not None and object_type not in allowed_object_types:
             _record("excluded_by_policy")
             return
+        if (object_type == "plugins" and not include_plugins) or (
+            object_type == "handoff" and not include_session
+        ):
+            _record("excluded_by_policy")
+            return
 
         resolved = row.get("resolved_path")
         if not isinstance(resolved, str):
@@ -903,7 +970,9 @@ def collect_source_objects(
         format_name = row.get("source_format") or row.get("format") or ""
 
         try:
-            if source_path.is_file():
+            if object_type == "handoff":
+                _collect_handoff(source_path, relative, obj_key)
+            elif source_path.is_file():
                 if _SENSITIVE_FILENAME_HINT.search(source_path.name):
                     _record("secret_rejected")
                     return
@@ -937,12 +1006,14 @@ def collect_source_objects(
                     object_file_map.setdefault(obj_key, []).append(relative)
             elif source_path.is_dir():
                 start_keys = set(objects.keys())
-                _collect_tree(source_path, relative, objects, depth=0)
+                _collect_tree(source_path, relative, objects, depth=0, file_modes=object_file_modes)
                 new_keys = set(objects.keys()) - start_keys
                 object_file_map.setdefault(obj_key, []).extend(sorted(new_keys))
             else:
                 _record("parse_failed")
                 return
+            if object_file_modes is not None and source_path.is_file() and relative in objects:
+                object_file_modes[relative] = stat.S_IMODE(source_path.stat().st_mode) & 0o777
         except ACBSecretLeak:
             _record("secret_rejected")
             return
@@ -963,7 +1034,13 @@ def collect_source_objects(
     return objects, summary, object_file_map
 
 
-def _collect_tree(dir_path: Path, prefix: str, out: dict[str, bytes], depth: int = 0) -> None:
+def _collect_tree(
+    dir_path: Path,
+    prefix: str,
+    out: dict[str, bytes],
+    depth: int = 0,
+    file_modes: dict[str, int] | None = None,
+) -> None:
     if depth > MAX_DIR_DEPTH:
         return
     for item in sorted(dir_path.iterdir()):
@@ -974,8 +1051,10 @@ def _collect_tree(dir_path: Path, prefix: str, out: dict[str, bytes], depth: int
         rel = f"{prefix}/{item.name}"
         if item.is_file():
             out[rel] = item.read_bytes()
+            if file_modes is not None:
+                file_modes[rel] = stat.S_IMODE(item.stat().st_mode) & 0o777
         elif item.is_dir():
-            _collect_tree(item, rel, out, depth + 1)
+            _collect_tree(item, rel, out, depth + 1, file_modes)
 
 
 def _path_for_object(
@@ -996,6 +1075,13 @@ def restore_bundle_objects(
     """Extract files from ``bundle/objects/`` safely into destination tree."""
     bundle_root = bundle_root.resolve()
     destination_root = destination_root.resolve()
+    errors = verify_bundle(bundle_root)
+    if errors:
+        raise ACBIntegrityError("bundle failed verification before extraction: " + "; ".join(errors))
+    file_modes = {
+        entry["path"]: file_entry_mode(entry)
+        for obj in load_manifest(bundle_root).objects for entry in obj.get("files", [])
+    }
     objects_root = bundle_root / ACB_OBJECTS_DIR
     if not objects_root.is_dir():
         raise ACBError(f"bundle has no objects/ directory: {bundle_root}")
@@ -1023,6 +1109,9 @@ def restore_bundle_objects(
         if not dry_run:
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(data)
+            mode = file_modes.get(f"{ACB_OBJECTS_DIR}/{relative}")
+            if mode is not None:
+                target.chmod(mode)
         written.append(
             {
                 "path": relative,
@@ -1053,8 +1142,17 @@ def verify_bundle(bundle_root: Path) -> list[str]:
         checksums = json.loads(checksums_path.read_text(encoding="utf-8"))
     except Exception as error:
         return [f"corrupted {ACB_CHECKSUMS_NAME}: {error}"]
+    if not isinstance(checksums, dict) or not all(
+        isinstance(path, str) and isinstance(digest, str)
+        and re.fullmatch(r"[0-9a-f]{64}", digest)
+        for path, digest in checksums.items()
+    ):
+        return [f"invalid {ACB_CHECKSUMS_NAME}: expected path-to-SHA256 mapping"]
 
     errors: list[str] = []
+    for name in ACB_JSON_FILES:
+        if name not in checksums:
+            errors.append(f"required bundle metadata is not checksummed: {name}")
 
     # 1. Closed-world file enumeration: actual files == expected files
     expected_files = set(checksums.keys())
@@ -1083,7 +1181,11 @@ def verify_bundle(bundle_root: Path) -> list[str]:
 
     # 2. Checksum validation for all listed files
     for relative, expected in sorted(checksums.items()):
-        target = bundle_root / relative
+        try:
+            target = validate_path_containment(relative, bundle_root)
+        except ACBIntegrityError as error:
+            errors.append(f"invalid checksum path: {error}")
+            continue
         if target.is_file() and not target.is_symlink():
             actual = sha256_file(target)
             if actual != expected:
@@ -1092,9 +1194,19 @@ def verify_bundle(bundle_root: Path) -> list[str]:
     # 3. Validate JSON schemas & secret scans
     for json_name in ACB_JSON_FILES:
         target = bundle_root / json_name
-        if target.is_file():
+        if target.is_file() and not target.is_symlink():
             try:
                 payload = json.loads(target.read_text(encoding="utf-8"))
+                if not isinstance(payload, dict):
+                    raise ValueError("bundle metadata must be an object")
+                if json_name == ACB_MANIFEST_NAME:
+                    parsed = ACBManifest.from_dict(payload)
+                    if parsed.schema_version != ACB_SCHEMA_VERSION:
+                        raise ValueError("unsupported bundle manifest schema")
+                    if not parsed.bundle_id or not parsed.created_at or not all(
+                        isinstance(obj, dict) for obj in parsed.objects
+                    ):
+                        raise ValueError("invalid bundle manifest identity or objects")
                 assert_no_lateral_secrets(payload)
             except Exception as error:
                 errors.append(f"invalid JSON payload in {json_name}: {error}")
@@ -1161,12 +1273,18 @@ def verify_bundle(bundle_root: Path) -> list[str]:
                 if obj_status in {"ready", "ready-lossy"} and not obj_files:
                     errors.append(f"manifest object {obj_path} ({obj_status}) declares no files")
                 for file_entry in obj_files:
+                    file_entry_mode(file_entry)
                     rel_p = file_entry.get("path", "")
                     if rel_p:
                         manifest_files.add(rel_p)
                         file_claimants.setdefault(rel_p, []).append(obj_path)
                         expected_sha = file_entry.get("sha256")
-                        disk_p = bundle_root / rel_p
+                        if not rel_p.startswith(ACB_OBJECTS_DIR + "/"):
+                            errors.append(f"manifest file is outside objects/: {rel_p}")
+                            continue
+                        disk_p = validate_path_containment(
+                            rel_p[len(ACB_OBJECTS_DIR) + 1:], objects_root
+                        )
                         if not disk_p.is_file():
                             errors.append(f"manifest declared file missing on disk: {rel_p}")
                         elif expected_sha:
@@ -1208,6 +1326,8 @@ _ED25519_KEY_BYTES = 32
 
 
 def _read_signing_key(key_path: Path) -> bytes:
+    if key_path.is_symlink():
+        raise ACBError(f"signing key path is a symlink: {key_path}")
     if not key_path.is_file():
         raise ACBError(f"signing key not found: {key_path}")
     # Refuse group/world bits: a leaked signing key is a leaked bundle.
@@ -1283,13 +1403,18 @@ def _load_signature_artifact(
     checksums_path = bundle_root / ACB_CHECKSUMS_NAME
     errors: list[str] = []
     if not sig_path.is_file():
-        return None, checksums_path, [f"missing signature: {sig_path}"]
+        return None, b"", [f"missing signature: {sig_path}"]
     if not checksums_path.is_file():
-        return None, checksums_path, [f"missing {ACB_CHECKSUMS_NAME}"]
+        return None, b"", [f"missing {ACB_CHECKSUMS_NAME}"]
+    if sig_path.is_symlink() or checksums_path.is_symlink():
+        return None, b"", ["signature/checksums paths must not be symlinks"]
     try:
-        return json.loads(sig_path.read_text(encoding="utf-8")), checksums_path.read_bytes(), errors
+        document = json.loads(sig_path.read_text(encoding="utf-8"))
+        if not isinstance(document, dict):
+            return None, b"", ["signature.json must be an object"]
+        return document, checksums_path.read_bytes(), errors
     except Exception as error:
-        return None, checksums_path, [f"corrupted signature.json: {error}"]
+        return None, b"", [f"corrupted signature.json: {error}"]
 
 
 def _check_signature_metadata(
@@ -1339,7 +1464,9 @@ def _verify_signature_payload(
 
 
 def sign_bundle(bundle_root: Path, key_path: Path, signer: str) -> Path:
-    bundle_root = bundle_root.resolve()
+    from migration_core import resolve_output_path
+
+    bundle_root = resolve_output_path(bundle_root)
 
     # 1. Refuse to sign if checksums.json is a symlink (audit #5): a hostile
     # bundle could redirect the signer's read outside the bundle directory.
@@ -1376,40 +1503,40 @@ def sign_bundle(bundle_root: Path, key_path: Path, signer: str) -> Path:
         signer,
     )
 
-    # 5. Atomic write: write to a sibling temp file, fsync, then os.replace.
-    sig_tmp = bundle_root / (ACB_SIGNATURE_NAME + ".tmp")
-    with open(sig_tmp, "w", encoding="utf-8") as fh:
-        fh.write(json.dumps(signature_doc, indent=2, sort_keys=True) + "\n")
-        fh.flush()
-        os.fsync(fh.fileno())
-    os.replace(sig_tmp, sig_path)
-
-    # 6. Post-signature verification (audit #5): verify the freshly written
-    # signature with the public key embedded in the signature document. This
-    # catches a corrupted write before the operator trusts the bundle, and
-    # also re-runs verify_bundle so any post-write drift is surfaced.
-    pub_tmp = bundle_root / (ACB_SIGNATURE_NAME + ".pubtmp")
+    # Use an exclusive temporary file so fixed temporary names cannot
+    # redirect writes. Keep the old signature if re-signing fails.
+    previous_signature = sig_path.read_bytes() if sig_path.exists() else None
+    descriptor, temporary_name = tempfile.mkstemp(prefix=".acb-sign-", dir=bundle_root)
+    sig_tmp = Path(temporary_name)
     try:
-        pub_tmp.write_bytes(
-            base64.b64decode(signature_doc["public_key"], validate=True)
-        )
-        try:
-            pub_tmp.chmod(0o600)
-        except OSError:
-            pass
-        post_errors = verify_bundle_signature(bundle_root, pub_tmp)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps(signature_doc, indent=2, sort_keys=True) + "\n")
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(sig_tmp, sig_path)
     finally:
-        try:
-            pub_tmp.unlink()
-        except FileNotFoundError:
-            pass
+        sig_tmp.unlink(missing_ok=True)
+
+    # Verify both stored content and the new signature after temporary
+    # files are gone; closed-world verification rejects extra files.
+    stored_doc, stored_payload, post_errors = _load_signature_artifact(bundle_root)
+    post_errors.extend(verify_bundle(bundle_root))
+    if stored_doc is not None:
+        post_errors.extend(_check_signature_metadata(stored_doc, stored_payload))
+        decoded = _decode_signature_fields(stored_doc)
+        if isinstance(decoded, list):
+            post_errors.extend(decoded)
+        else:
+            signature, public_bytes = decoded
+            if public_bytes != base64.b64decode(signature_doc["public_key"], validate=True):
+                post_errors.append("stored signature public key changed during signing")
+            post_errors.extend(_verify_signature_payload(private_key.public_key(), signature, stored_payload))
     if post_errors:
-        # Revert the bad signature so the bundle is not left in a
-        # "signed but unverifiable" state.
-        try:
-            sig_path.unlink()
-        except FileNotFoundError:
-            pass
+        if previous_signature is None:
+            sig_path.unlink(missing_ok=True)
+        else:
+            from migration_core import atomic_write
+            atomic_write(sig_path, previous_signature.decode("utf-8"))
         raise ACBError(
             "post-signature verification failed: " + "; ".join(post_errors)
         )

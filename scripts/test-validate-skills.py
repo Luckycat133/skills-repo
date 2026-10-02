@@ -10,6 +10,8 @@ drift/regression is caught before it can let a secret through.
 import importlib.util
 import os
 import pathlib
+import shutil
+import subprocess
 import sys
 import tempfile
 import textwrap
@@ -63,17 +65,16 @@ check("PRIVATE_PATH matches /Users/...", bool(vs.PRIVATE_PATH.search("/Users/jac
 check("PRIVATE_PATH matches /home/...", bool(vs.PRIVATE_PATH.search("/home/alice/.ssh/id_rsa")))
 check("PRIVATE_PATH ignores relative", not vs.PRIVATE_PATH.search("~/.config/secret"))
 
-tmp = tempfile.mkdtemp()
+tmp_context = tempfile.TemporaryDirectory()
+tmp = tmp_context.name
 vs.ROOT = pathlib.Path(tmp)  # keep relative_to() valid for our out-of-tree fixture
 
 
 def write_skill(body: str) -> pathlib.Path:
     skill_dir = pathlib.Path(tmp) / "demo-skill"
     if skill_dir.exists():
-        for f in skill_dir.iterdir():
-            f.unlink()
-    else:
-        skill_dir.mkdir()
+        shutil.rmtree(skill_dir)
+    skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text(body, encoding="utf-8")
     return skill_dir
 
@@ -194,6 +195,73 @@ check(
     any("allowed-tools must be a space-separated string" in e for e in vs.errors),
 )
 vs.errors.clear()
+
+
+for label, fields in {
+    "empty description": "description: ",
+    "whitespace description": 'description: "   "',
+    "list description": "description: [one, two]",
+    "boolean description": "description: true",
+    "empty metadata": "description: valid\nmetadata:",
+    "unclosed metadata quote": 'description: valid\nmetadata:\n  version: "unclosed',
+    "duplicate metadata key": 'description: valid\nmetadata:\n  version: "1"\n  version: "2"',
+    "empty metadata with nested children": 'description: valid\nmetadata: {}\n  version: "1"',
+    "invalid tools after empty metadata": 'description: valid\nmetadata: {}\nallowed-tools: [Bash, Read]',
+    "invalid frontmatter syntax": "description: valid\ninvalid syntax",
+    "overlong folded description": "description: >-\n  " + "a" * 1025,
+    "overlong literal description": "description: |-\n  " + "a" * 1025,
+}.items():
+    directory = write_skill("---\nname: demo-skill\n" + fields + "\n---\nbody\n")
+    vs.errors.clear()
+    vs.validate_skill(directory)
+    check(f"validate_skill rejects {label}", bool(vs.errors))
+
+for label, fields in {
+    "folded description with chomp": "description: >-\n  first line\n  second line",
+    "literal description with chomp": "description: |-\n  first line\n  second line",
+    "single quoted apostrophe": "description: 'A user''s valid Skill.'",
+    "double quoted comment": 'description: "A valid Skill" # comment',
+    "quoted non-string metadata": 'description: valid\nmetadata:\n  version: "1"\n  enabled: "true"',
+    "empty metadata mapping": "description: valid\nmetadata: {}\nallowed-tools: Bash Read",
+    "metadata block string": "description: valid\nmetadata:\n  notes: >-\n    first line\n    second line",
+    "metadata with different legal indentation": 'description: valid\nmetadata:\n    "release name": "Version 1"',
+    "description with indentation indicator": "description: |2-\n  valid description",
+    "multiline plain description": "description: first line\n  second line",
+}.items():
+    directory = write_skill("---\nname: demo-skill\n" + fields + "\n---\nbody\n")
+    vs.errors.clear()
+    vs.validate_skill(directory)
+    check(f"validate_skill accepts {label}", not vs.errors)
+
+directory = write_skill("---\nname: demo-skill\ndescription: valid\n---\n[reference](references/reference.md)\n")
+(directory / "references").mkdir()
+(directory / "references/reference.md").write_text("[broken](missing.md)\n", encoding="utf-8")
+vs.errors.clear()
+vs.validate_skill_directory(directory)
+check("complete Skill validation checks links in references", any("broken relative link" in e for e in vs.errors))
+
+(directory / "references/reference.md").write_text("[outside](../../outside.md)\n", encoding="utf-8")
+(pathlib.Path(tmp) / "outside.md").write_text("outside", encoding="utf-8")
+vs.errors.clear()
+vs.validate_skill_directory(directory)
+check("complete Skill validation rejects links outside Skill", any("link escapes Skill directory" in e for e in vs.errors))
+
+(directory / "references/reference.md").write_text('`[example](missing.md)`\n[valid](<file with spaces.md> "title")\n', encoding="utf-8")
+(directory / "references/file with spaces.md").write_text("valid", encoding="utf-8")
+vs.errors.clear()
+vs.validate_skill_directory(directory)
+check("Markdown code examples and link titles do not cause false positives", not vs.errors)
+
+# git's non-NUL output quotes unusual filenames and can hide their contents.
+git_root = pathlib.Path(tmp) / "git-fixture"
+git_root.mkdir()
+subprocess.run(["git", "init", "--quiet", str(git_root)], check=True)
+unusual = git_root / 'reference "quoted" 中文.md'
+unusual.write_text("fixture", encoding="utf-8")
+vs.ROOT = git_root
+check("git file enumeration preserves quoted and Unicode filenames", unusual in vs.get_files_to_scan())
+vs.ROOT = pathlib.Path(tmp)
+tmp_context.cleanup()
 
 
 if FAIL == 0:
