@@ -5,6 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 python3 - "$SCRIPT_DIR" <<'PY'
+import hashlib
 import importlib.util
 import json
 import os
@@ -13,11 +14,12 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from unittest import mock
 
 scripts = Path(sys.argv[1])
 sys.path.insert(0, str(scripts))
 from acb.bundle import verify_bundle
-from migration_core import PlanItem, SurfacePath, apply_plan, rollback_manifest, verify_manifest
+from migration_core import PlanItem, SurfacePath, apply_plan, atomic_write, hash_path, rollback_manifest, verify_manifest
 
 
 def surface(path, boundary):
@@ -25,6 +27,24 @@ def surface(path, boundary):
     return SurfacePath("fixture", "cli", "skills", "project", "directory", relative,
                        path, boundary, "agent-skill", "validate-then-atomic-copy",
                        "canonical", relative, 0)
+
+
+with tempfile.TemporaryDirectory(prefix="atomic-write-newline-") as temporary:
+    target = Path(temporary) / "mixed newline 文本.md"
+    rendered = "# 审查迁移\n保留 LF 行\n保留 CRLF 行\r\nUnicode: 中文 café 🐈\n"
+    expected_bytes = rendered.encode("utf-8")
+    original_fdopen = os.fdopen
+
+    def windows_fdopen(descriptor, mode="r", *arguments, **keywords):
+        if "b" not in mode and "newline" not in keywords:
+            keywords["newline"] = "\r\n"
+        return original_fdopen(descriptor, mode, *arguments, **keywords)
+
+    with mock.patch("migration_core.os.fdopen", side_effect=windows_fdopen):
+        atomic_write(target, rendered)
+    assert target.read_bytes() == expected_bytes, "atomic text write changed reviewed UTF-8 bytes"
+    assert hash_path(target) == hashlib.sha256(expected_bytes).hexdigest(), "written bytes differ from preview hash"
+    print("OK atomic text write preserves mixed newlines, Unicode and preview hash under Windows defaults")
 
 
 with tempfile.TemporaryDirectory(prefix="runtime-transactions-") as temporary:
