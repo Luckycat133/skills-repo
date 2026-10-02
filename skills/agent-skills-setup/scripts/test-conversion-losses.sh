@@ -15,7 +15,7 @@ import sys
 import tempfile
 
 script_dir = Path(sys.argv[1])
-wrapper = script_dir / "smart-ide-migration.sh"
+migrator = script_dir / "context-migrator.py"
 raw_registry = json.loads((script_dir.parent / "references/registry-v2.json").read_text())
 environment = {**os.environ, "AGENT_SKILLS_PLATFORM": "linux", "PYTHONDONTWRITEBYTECODE": "1"}
 sys.path.insert(0, str(script_dir))
@@ -32,7 +32,7 @@ def hashes(root: Path) -> dict[str, str]:
 
 def run(*arguments: object, success: bool = True) -> dict:
     result = subprocess.run(
-        ["bash", str(wrapper), *(str(argument) for argument in arguments)],
+        [sys.executable, str(migrator), *(str(argument) for argument in arguments)],
         capture_output=True, text=True, env=environment, check=False,
     )
     if not success:
