@@ -1,6 +1,6 @@
 # Windows legacy compatibility acceptance
 
-Baseline: v0.10.0 (`12d56c84407ff91847b0c9afe1c970f90818a102`). This record covers the five legacy suites previously excluded from Windows validation. The initial isolated macOS baseline passed all five; native Windows acceptance requires the Windows CI run described below.
+Baseline: v0.10.0 (`12d56c84407ff91847b0c9afe1c970f90818a102`). This record covers the five legacy suites previously excluded from Windows validation. Updated fixtures passed all five on a real Windows runner at commit `31223c949008940840acb9403d07ef5a629939b7` on 2026-10-03; the full PR matrix is recorded separately.
 
 ## Supported boundary
 
@@ -22,7 +22,9 @@ Every suite also checks a public Skills dry-run against an existing target. File
 
 The [shared fixture helper](../../../skills/agent-skills-setup/scripts/test-support/legacy-fixture.sh) confines HOME, USERPROFILE, APPDATA, LOCALAPPDATA, XDG_CONFIG_HOME, and temporary paths to the suite's own directory. It clears inherited Cline path overrides, uses paths accepted by both Git Bash and native Python, and requires `win32`/`nt` Python when running under Windows Git Bash. No `uname` override is used. The helper is maintainer code and is excluded from published runtime packages.
 
-The path-drift suite compares the documented public display format: paths beneath the isolated HOME render as `~/...`; Windows USERPROFILE/APPDATA placeholders are expanded within that fixture. Its Python TSV producer emits LF explicitly so Windows text-mode stdout cannot insert a carriage return into the expected path field. Per-IDE references still undergo comparison with the original registry strings.
+The path-drift suite compares the documented public display format: USERPROFILE-relative paths render as `~/...`; APPDATA resolves within the fixture. Its Python TSV producer emits LF explicitly so Windows text-mode stdout cannot insert a carriage return into the expected path field. Per-IDE references still undergo comparison with the original registry strings.
+
+The first Windows run at `764618b784098cc1297e2afa42e47dd376c5b071` passed the first three suites, then failed one of the 488 path checks: native Python received a backslash-form HOME while Git Bash printed the documented `~/.mcp.json`. The fixture now compares the USERPROFILE-relative display form directly. No runtime path mapping or original assertion was removed.
 
 ## Reproduce and record
 
@@ -45,7 +47,7 @@ Record the exact commit, GitHub Actions run URL, native Python version, per-suit
 | --- | --- |
 | Unchanged v0.10.0 suites under isolated macOS HOME | Passed all five. |
 | Updated isolation and public-boundary checks on macOS | Passed all five focused suites and Bash syntax checks. |
-| Updated suites on native Windows CI | Pending runner execution. |
+| Updated suites on native Windows CI | All five passed; `MINGW64_NT-10.0-26100`, native Python `win32`/`nt` 3.12.10; [Actions run](https://github.com/Luckycat133/skills-repo/actions/runs/37083839585). |
 | Full validation matrix with the five Windows exclusions removed | Pending PR checks. |
 
 Live IDE/UI acceptance, dependency installation, authentication, cloud services, and undocumented adapters remain outside these isolated legacy suites. Their absence is not converted into a passing Windows acceptance claim.
