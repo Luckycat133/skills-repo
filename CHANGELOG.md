@@ -4,6 +4,17 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ## [Unreleased]
 
+## [0.10.2] - 2026-10-03
+
+### Fixed
+
+- Keep legacy dry-run reports on stdout even when `--report` names a file. Existing files, source assets, and nonexistent report paths remain untouched through both the Python facade and the no-Python Bash fallback.
+- Preserve machine-readable preview output and explain the ignored report path on stderr. Explicit report saving outside dry-run remains available to the internal compatibility engine.
+
+### Validation
+
+- Add 12 public-entry regressions covering both entry paths, text/JSON output, and existing, new, or source-asset report paths. Preserve the surrounding source, destination, and workspace trees.
+
 ## [0.10.1] - 2026-10-03
 
 ### Fixed

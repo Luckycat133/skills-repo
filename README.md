@@ -8,7 +8,7 @@
 
 > Languages: **English** · [中文](README.zh-CN.md) · [日本語](README.ja-JP.md) · [Español](README.es.md)
 
-Version: **0.10.1**. See the [release changes](CHANGELOG.md#0101---2026-10-03). GitHub installation pins `v0.10.1`.
+Version: **0.10.2**. See the [release changes](CHANGELOG.md#0102---2026-10-03). GitHub installation pins `v0.10.2`.
 
 Offline, previewed, and rollback-safe migration of AI coding context (Skills, Rules, Instructions, and MCP) across **Cursor, Claude Code, Codex, Cline, Windsurf, Copilot, Gemini CLI**, and dozens of supported AI coding tools.
 
@@ -27,7 +27,7 @@ openclaw skills install @luckycat133/agent-skills-setup
 Or install directly from GitHub:
 
 ```bash
-git clone --depth 1 --branch v0.10.1 https://github.com/Luckycat133/skills-repo.git
+git clone --depth 1 --branch v0.10.2 https://github.com/Luckycat133/skills-repo.git
 
 openclaw skills install \
   ./skills-repo/skills/agent-skills-setup \
