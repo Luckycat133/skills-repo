@@ -117,13 +117,12 @@ root = Path(sys.argv[2]).resolve() / "report-boundary"
 bash = sys.argv[3]
 root.mkdir()
 hook = root / "without-python.bash"
-hook.write_text(
+hook.write_bytes((
     "command() {\n"
     '    if [[ "${1:-}" == "-v" && "${2:-}" == "python3" ]]; then return 1; fi\n'
     '    builtin command "$@"\n'
-    "}\n",
-    encoding="utf-8",
-)
+    "}\n"
+).encode("utf-8"))
 
 def snapshot(directory: Path) -> dict[str, str]:
     return {
@@ -168,6 +167,15 @@ for fallback in (False, True):
                 environment["BASH_ENV"] = str(hook)
             else:
                 environment.pop("BASH_ENV", None)
+            probe = subprocess.run(
+                [bash, "-c", 'if command -v python3 >/dev/null 2>&1; then printf python; else printf fallback; fi'],
+                env=environment, capture_output=True, timeout=10,
+            )
+            expected_route = b"fallback" if fallback else b"python"
+            assert probe.returncode == 0 and probe.stdout == expected_route and not probe.stderr, (
+                "Python-discovery fixture did not select the expected route", expected_route,
+                probe.returncode, probe.stdout, probe.stderr,
+            )
             arguments = [
                 bash, str(cli), "legacy", "--source", "cline", "--target", "windsurf",
                 "--workspace", str(workspace), "--objects", "skills", "--dry-run",

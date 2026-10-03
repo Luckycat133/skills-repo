@@ -57,6 +57,11 @@ calls covering prior failures, source-asset preservation, truly absent Python
 on PATH, JSON output and explicit internal report saving. These checks were
 executed separately from the scan.
 
+Final PR review identified Windows newline translation in the fallback fixture.
+The Bash hook now uses explicit UTF-8 bytes with LF line endings, and each case
+asserts the intended Python-discovery route with no hook-loading error. The
+updated 12-case suite passed locally; final native CI remains a separate gate.
+
 ## Analysis limits
 
 Partial files remain `scripts/acb/key_security.py` (obfuscation),

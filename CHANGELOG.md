@@ -13,7 +13,7 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ### Validation
 
-- Add 12 public-entry regressions covering both entry paths, text/JSON output, and existing, new, or source-asset report paths. Preserve the surrounding source, destination, and workspace trees.
+- Add 12 public-entry regressions covering both entry paths, text/JSON output, and existing, new, or source-asset report paths. Preserve the surrounding source, destination, and workspace trees. Use an LF-only Bash hook and assert Python discovery selects the intended route on every platform.
 - Record 69 local suites and 32 independent macOS calls passed, along with the unchanged warning-bearing scanner verdict and analysis limits in the [candidate security review](docs/agent-skills-setup/verification/security-v0.10.2.md).
 
 ## [0.10.1] - 2026-10-03
