@@ -1,6 +1,6 @@
-# v0.10.0 post-release verification
+# Verification records
 
-These records cover the published `v0.10.0` payload at commit
+The v0.10.0 records cover the published payload at commit
 `12d56c84407ff91847b0c9afe1c970f90818a102`, observed on 2026-10-03.
 They separate file/fixture checks, native client behavior, platform security
 reports, and browser delivery.
@@ -17,3 +17,9 @@ and synthetic fixture outputs are retained as local verification evidence.
 Their digests and assertion scope are recorded in the linked reports. These
 records do not upgrade experimental profiles or certify every source/target
 pair, installed product, transport, or model session.
+
+The [v0.10.1 security review](security-v0.10.1.md) binds the signing-key
+transaction correction to the actual 120-file runtime candidate and records
+all 101 local scan findings, preserved warnings and incomplete coverage.
+The v0.10.0 native and browser records remain evidence for that earlier payload;
+they do not certify native application behavior of v0.10.1.

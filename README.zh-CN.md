@@ -8,7 +8,7 @@
 
 > Languages: [English](README.md) · **中文** · [日本語](README.ja-JP.md) · [Español](README.es.md)
 
-下一版本：**0.10.1**（未发布）。变更见[待发布记录](CHANGELOG.md#unreleased)；下方 GitHub 安装示例仍使用已发布的 `v0.10.0` 标签。
+版本：**0.10.1**。变更见[发行记录](CHANGELOG.md#0101---2026-10-03)；GitHub 安装示例使用 `v0.10.1` 标签。
 
 在 **Cursor、Claude Code、Codex、Cline、Windsurf、Copilot、Gemini CLI** 以及数十种主流 AI 编程工具之间，进行**离线、带预览、可回滚**的 Skills、规则/指令和 MCP 配置迁移与跨设备备份恢复。
 
@@ -27,7 +27,7 @@ openclaw skills install @luckycat133/agent-skills-setup
 或直接从 GitHub 安装：
 
 ```bash
-git clone --depth 1 --branch v0.10.0 https://github.com/Luckycat133/skills-repo.git
+git clone --depth 1 --branch v0.10.1 https://github.com/Luckycat133/skills-repo.git
 
 openclaw skills install \
   ./skills-repo/skills/agent-skills-setup \
