@@ -1,0 +1,48 @@
+name: Windows Legacy Regression
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['codex/**']
+    paths:
+      - '.github/workflows/windows-legacy.yml'
+      - 'validate-all.sh'
+      - 'skills/agent-skills-setup/scripts/test-support/legacy-fixture.sh'
+      - 'skills/agent-skills-setup/scripts/test-antigravity-migration.sh'
+      - 'skills/agent-skills-setup/scripts/test-conflict-strategies.sh'
+      - 'skills/agent-skills-setup/scripts/test-copilot-mapping.sh'
+      - 'skills/agent-skills-setup/scripts/test-ide-paths.sh'
+      - 'skills/agent-skills-setup/scripts/test-smart-ide-migration.sh'
+      - 'skills/agent-skills-setup/scripts/legacy-smart-ide-migration.sh'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-legacy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  legacy:
+    name: Native Windows legacy regressions
+    runs-on: windows-latest
+    env:
+      PYTHONUTF8: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run every previously skipped suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          for suite in \
+              test-antigravity-migration.sh \
+              test-conflict-strategies.sh \
+              test-copilot-mapping.sh \
+              test-ide-paths.sh \
+              test-smart-ide-migration.sh; do
+              bash "skills/agent-skills-setup/scripts/$suite"
+          done

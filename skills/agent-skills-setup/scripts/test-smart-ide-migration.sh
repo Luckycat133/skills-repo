@@ -4,22 +4,14 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Native Windows Python ignores MSYS-style env values; convert HOME
-# fixtures so $HOME resolution sees a real directory on every platform.
-
-# Pin surface resolution to the POSIX layout the fixtures create;
-# otherwise windows-latest would resolve $APPDATA-style overrides.
-export AGENT_SKILLS_PLATFORM=linux
-
-native_path() {
-    if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
-}
+source "$SCRIPT_DIR/test-support/legacy-fixture.sh"
 MIGRATION_SCRIPT="$SCRIPT_DIR/legacy-smart-ide-migration.sh"
 export AGENT_SKILLS_SETUP_INTERNAL_LEGACY=1
-TMP_ROOT="$(mktemp -d /tmp/agent-skills-migration-test.XXXXXX)"
+TMP_ROOT="$(native_path "$(mktemp -d /tmp/agent-skills-migration-test.XXXXXX)")"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 
 TEST_HOME="$TMP_ROOT/home"
+legacy_fixture_init "$TMP_ROOT"
 VALID_SKILL="$TEST_HOME/.agents/skills/demo-skill"
 NON_SKILL="$TEST_HOME/.agents/skills/not-a-skill"
 PRIVATE_STATE="$TEST_HOME/.codex/sessions"
@@ -31,7 +23,7 @@ assert_path() {
     local expected="$3"
     local actual
 
-    actual="$(HOME="${4:-$TEST_HOME}" bash "$MIGRATION_SCRIPT" --print-path "$ide" "$object" 2>/dev/null || true)"
+    actual="$(HOME="$(native_path "${4:-$TEST_HOME}")" bash "$MIGRATION_SCRIPT" --print-path "$ide" "$object" 2>/dev/null || true)"
     if [[ "$actual" != "$expected" ]]; then
         echo "FAIL: ${ide}/${object} expected '${expected}', got '${actual}'" >&2
         exit 1
@@ -703,4 +695,5 @@ if grep -Fq "$PRIVATE_STATE" "$OUTPUT"; then
 fi
 
 grep -Fq 'successfully migrated 1 skills' "$OUTPUT"
+legacy_fixture_assert_public_boundary "$SCRIPT_DIR" "$TMP_ROOT"
 echo "Smart IDE migration isolation test passed"

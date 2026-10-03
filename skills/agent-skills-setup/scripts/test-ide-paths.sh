@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 
-set -uo pipefail
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/test-support/legacy-fixture.sh"
+TMP_ROOT="$(native_path "$(mktemp -d /tmp/ide-paths-test.XXXXXX)")"
+trap 'rm -rf "$TMP_ROOT"' EXIT
+legacy_fixture_init "$TMP_ROOT"
 JSON_FILE="${SCRIPT_DIR}/../references/ide-paths.json"
 MIGRATION_SCRIPT="${SCRIPT_DIR}/smart-ide-migration.sh"
 IDE_REFERENCE_DIR="${SCRIPT_DIR}/../references/ides"
@@ -21,7 +25,12 @@ checks=0
 
 dump_rows() {
     python3 - "$JSON_FILE" "$@" <<'PYEOF'
-import json, sys, platform
+import json
+import os
+import platform
+import sys
+
+sys.stdout.reconfigure(newline="")
 data = json.load(open(sys.argv[1]))
 keymap = {"global_skills":"global","project_skills":"project-skills","rules":"rules","mcp":"mcp","project_mcp":"project-mcp","project_config":"project-config","config":"config"}
 key_filter = set(sys.argv[2:]) if len(sys.argv) > 2 else None
@@ -33,6 +42,13 @@ for ide in sorted(data.keys()):
         val = data[ide].get(jk, "")
         if isinstance(val, dict):
             val = val.get(os_key, "")
+            if os_key == "windows":
+                val = val.replace("%USERPROFILE%", os.environ["HOME"])
+                val = val.replace("%APPDATA%", os.environ["APPDATA"])
+                val = val.replace("\\", "/")
+                home = os.environ["HOME"].rstrip("/")
+                if val.startswith(home + "/"):
+                    val = "~" + val[len(home):]
         print(f"{ide}\t{jk}\t{keymap[jk]}\t{val}")
 PYEOF
 }
@@ -67,12 +83,18 @@ while IFS=$'\t' read -r ide jsonkey scriptobj expected; do
     [[ -z "$ide" ]] && continue
     checks=$((checks + 1))
 
-    actual="$(bash "$MIGRATION_SCRIPT" legacy --print-path "$ide" "$scriptobj" 2>/dev/null)"
-    rc=$?
+    if actual="$(bash "$MIGRATION_SCRIPT" legacy --print-path "$ide" "$scriptobj" 2>/dev/null)"; then
+        rc=0
+    else
+        rc=$?
+    fi
 
     if [[ -z "$expected" ]]; then
         if [[ -n "$actual" ]]; then
             echo "FAIL: ${ide}/${jsonkey} - expected empty, got: ${actual}"
+            failures=$((failures + 1))
+        elif [[ $rc -eq 0 ]]; then
+            echo "FAIL: ${ide}/${jsonkey} - unsupported lookup exited successfully"
             failures=$((failures + 1))
         else
             echo "PASS: ${ide}/${jsonkey} -> (unsupported/empty)"
@@ -147,8 +169,7 @@ else
     failures=$((failures + 1))
 fi
 
-COPILOT_PROMPT_WORKSPACE="$(mktemp -d /tmp/copilot-prompt-scope.XXXXXX)"
-trap 'rm -rf "$COPILOT_PROMPT_WORKSPACE"' EXIT
+COPILOT_PROMPT_WORKSPACE="$TMP_ROOT/copilot-prompt-scope"
 mkdir -p "$COPILOT_PROMPT_WORKSPACE/.github/prompts"
 printf '%s\n' '---' 'description: test prompt' '---' > "$COPILOT_PROMPT_WORKSPACE/.github/prompts/test.prompt.md"
 COPILOT_PROMPT_OUTPUT="$(bash "$MIGRATION_SCRIPT" legacy --source copilot --target cursor --workspace "$COPILOT_PROMPT_WORKSPACE" --objects prompts --dry-run 2>&1)"
@@ -233,6 +254,10 @@ if [[ -d "$IDE_REFERENCE_DIR" ]]; then
     done <<< "$KEY_ROWS"
 else
     echo "WARN: per-IDE reference directory not found at $IDE_REFERENCE_DIR; skipping reference cross-check" >&2
+fi
+
+if ! legacy_fixture_assert_public_boundary "$SCRIPT_DIR" "$TMP_ROOT"; then
+    failures=$((failures + 1))
 fi
 
 echo ""
