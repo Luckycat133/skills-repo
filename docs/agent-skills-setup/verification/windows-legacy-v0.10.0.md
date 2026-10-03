@@ -48,6 +48,6 @@ Record the exact commit, GitHub Actions run URL, native Python version, per-suit
 | Unchanged v0.10.0 suites under isolated macOS HOME | Passed all five. |
 | Updated isolation and public-boundary checks on macOS | Passed all five focused suites and Bash syntax checks. |
 | Updated suites on native Windows CI | All five passed; `MINGW64_NT-10.0-26100`, native Python `win32`/`nt` 3.12.10; [Actions run](https://github.com/Luckycat133/skills-repo/actions/runs/37083839585). |
-| Full validation matrix with the five Windows exclusions removed | Pending PR checks. |
+| Full validation matrix with the five Windows exclusions removed | Required Ubuntu/macOS/Windows [PR checks](https://github.com/Luckycat133/skills-repo/pull/25/checks); consult the exact head/run for the current result. |
 
 Live IDE/UI acceptance, dependency installation, authentication, cloud services, and undocumented adapters remain outside these isolated legacy suites. Their absence is not converted into a passing Windows acceptance claim.
