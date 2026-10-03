@@ -138,6 +138,12 @@ POSIX mode `0600` or a protected Windows ACL granting access only to the current
 user. Signing checks those permissions before reading the private key and
 rejects keys with broader access. Windows key storage must support file ACLs.
 
+If generation fails after creating an output, inspect `outputs_requiring_review`
+before retrying with fresh paths. POSIX outputs are preserved because a pathname
+may have been replaced concurrently; never delete a listed path without checking
+its current contents and ownership. Windows removes only files still bound to
+the original held creation handles. Do not use a keypair from a failed operation.
+
 ```bash
 bash "$migrator" bundle-keygen --out-private /path/to/private.key \
     --out-public /path/to/public.key --json

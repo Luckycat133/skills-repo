@@ -8,7 +8,7 @@
 
 > Languages: [English](README.md) · [中文](README.zh-CN.md) · [日本語](README.ja-JP.md) · **Español**
 
-Versión: **0.10.0**. Consulta los [cambios](CHANGELOG.md#0100---2026-10-02). El ejemplo de instalación desde GitHub usa la etiqueta de lanzamiento correspondiente `v0.10.0`.
+Próxima versión: **0.10.1** (sin publicar). Consulta los [cambios pendientes](CHANGELOG.md#unreleased). El ejemplo de instalación desde GitHub usa la etiqueta publicada `v0.10.0`.
 
 Migración, respaldo y restauración de contexto de asistentes de IA (Skills, Reglas/Instrucciones y MCP) entre **Cursor, Claude Code, Codex, Cline, Windsurf, Copilot, Gemini CLI** y decenas de herramientas de programación con IA — **completamente offline, con vista previa y seguro ante rollback**.
 

@@ -8,7 +8,7 @@
 
 > Languages: [English](README.md) · **中文** · [日本語](README.ja-JP.md) · [Español](README.es.md)
 
-版本：**0.10.0**。变更见[更新记录](CHANGELOG.md#0100---2026-10-02)；下方 GitHub 安装示例固定使用对应的 `v0.10.0` 发布标签。
+下一版本：**0.10.1**（未发布）。变更见[待发布记录](CHANGELOG.md#unreleased)；下方 GitHub 安装示例仍使用已发布的 `v0.10.0` 标签。
 
 在 **Cursor、Claude Code、Codex、Cline、Windsurf、Copilot、Gemini CLI** 以及数十种主流 AI 编程工具之间，进行**离线、带预览、可回滚**的 Skills、规则/指令和 MCP 配置迁移与跨设备备份恢复。
 

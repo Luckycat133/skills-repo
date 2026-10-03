@@ -3,7 +3,7 @@ name: agent-skills-setup
 license: MIT
 compatibility: Requires local Bash, Python 3, environment lookup, and filesystem access; optional signing needs installed cryptography; no network access.
 metadata:
-  version: "0.10.0"
+  version: "0.10.1"
   permissions.shell: "bundled offline Bash/Python scripts plus local read-only detection commands"
   permissions.env: "read environment variables to resolve product paths"
   permissions.file_read: "selected product surfaces, workspace, bundles, named signing keys, bundled references"
@@ -14,7 +14,8 @@ description: >-
   AI-coding-agent context across Cursor, Claude Code, Codex, Cline,
   Copilot, Windsurf, Gemini CLI, or another registered profile, including
   switching computers. Handles Skills, instructions/rules, and MCP with
-  secret redaction, preview, verification, rollback, and portable bundles.
+  secret redaction, preview, verification, rollback, and portable bundles;
+  compatible plugin packages and reviewed handoff are available by explicit opt-in.
 ---
 
 # Agent Skills Setup
@@ -42,7 +43,7 @@ description: >-
 
 Resolve both product profiles through [ide-registry.md](references/ide-registry.md) / [registry-v2.json](references/registry-v2.json) for migration; use bundle manifest selectors for restore.
 
-1. Read the selected profiles' references only: [references/ides/<source>.md](references/ides/) and [references/ides/<target>.md](references/ides/). Follow registry reference/alias routing; filenames need not match selectors.
+1. Read only the selected profiles' `references/ides/<source>.md` and `references/ides/<target>.md` files. Resolve concrete filenames through the [profile index](references/ide-registry.md) and registry reference/alias routing; filenames need not match selectors.
 2. Before preview or apply, read [migration-safety.md](references/migration-safety.md).
 3. For MCP, read [mcp-migration.md](references/mcp-migration.md); for other objects, [object-migration.md](references/object-migration.md). Load [verification.md](references/verification.md) for delivery evidence.
 

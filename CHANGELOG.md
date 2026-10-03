@@ -4,6 +4,19 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ## [Unreleased]
 
+Next release: `0.10.1`
+
+### Fixed
+
+- Hold generated signing-key file descriptors through pair completion. Failed POSIX operations preserve outputs for review; Windows cleanup uses only the original creation handles. Errors retain their original cause and report any outputs needing review.
+- Replace profile-directory placeholder links with the concrete profile index so published Skill navigation reaches a file viewer.
+
+### Changed
+
+- Run the five previously excluded legacy suites under native Windows Python and isolated user directories. Keep all original assertions and correct platform-specific fixture paths.
+- Name opt-in plugin packages and reviewed handoff explicitly in the Skill description.
+- Record post-release ClawHub browser/download acceptance, the 112-finding platform comparison, and bounded native tool acceptance with their actual coverage limits.
+
 ## [0.10.0] - 2026-10-02
 
 ### Added

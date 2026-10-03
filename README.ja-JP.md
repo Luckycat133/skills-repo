@@ -8,7 +8,7 @@
 
 > Languages: [English](README.md) · [中文](README.zh-CN.md) · **日本語** · [Español](README.es.md)
 
-バージョンは **0.10.0** です。[変更履歴](CHANGELOG.md#0100---2026-10-02)を参照してください。下の GitHub インストール例は対応するリリースタグ `v0.10.0` を使用します。
+次のバージョンは **0.10.1**（未公開）です。[公開予定の変更](CHANGELOG.md#unreleased)を参照してください。下の GitHub インストール例は公開済みの `v0.10.0` タグを使用します。
 
 **Cursor、Claude Code、Codex、Cline、Windsurf、Copilot、Gemini CLI** など、多数の AI コーディングツール間で Skills、ルール/指示、MCP 設定を**オフライン・プレビュー可能・ロールバック安全**に移行・バックアップ・復元します。
 

@@ -8,7 +8,7 @@
 
 > Languages: **English** · [中文](README.zh-CN.md) · [日本語](README.ja-JP.md) · [Español](README.es.md)
 
-Version: **0.10.0**. See the [changes](CHANGELOG.md#0100---2026-10-02). The GitHub installation example below pins the matching `v0.10.0` release tag.
+Next release: **0.10.1** (unreleased). See the [pending changes](CHANGELOG.md#unreleased). The GitHub installation example below pins the released `v0.10.0` tag.
 
 Offline, previewed, and rollback-safe migration of AI coding context (Skills, Rules, Instructions, and MCP) across **Cursor, Claude Code, Codex, Cline, Windsurf, Copilot, Gemini CLI**, and dozens of supported AI coding tools.
 
