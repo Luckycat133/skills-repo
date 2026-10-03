@@ -43,12 +43,12 @@ for ide in sorted(data.keys()):
         if isinstance(val, dict):
             val = val.get(os_key, "")
             if os_key == "windows":
-                val = val.replace("%USERPROFILE%", os.environ["HOME"])
+                # The public lookup renders USERPROFILE-relative paths with ~.
+                # MSYS can translate HOME to backslashes for native Python,
+                # so compare this form without round-tripping through HOME.
+                val = val.replace("%USERPROFILE%", "~")
                 val = val.replace("%APPDATA%", os.environ["APPDATA"])
                 val = val.replace("\\", "/")
-                home = os.environ["HOME"].rstrip("/")
-                if val.startswith(home + "/"):
-                    val = "~" + val[len(home):]
         print(f"{ide}\t{jk}\t{keymap[jk]}\t{val}")
 PYEOF
 }
