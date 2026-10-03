@@ -4,6 +4,25 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-10-03
+
+### Fixed
+
+- Hold generated signing-key file descriptors through pair completion. Failed POSIX operations preserve outputs for review; Windows cleanup uses only the original creation handles. Errors retain their original cause and report any outputs needing review.
+- Replace profile-directory placeholder links with the concrete profile index so published Skill navigation reaches a file viewer.
+
+### Changed
+
+- Run the five previously excluded legacy suites under native Windows Python and isolated user directories. Keep all original assertions and correct platform-specific fixture paths.
+- Name opt-in plugin packages and reviewed handoff explicitly in the Skill description.
+- Record post-release ClawHub browser/download acceptance, the 112-finding platform comparison, and bounded native tool acceptance with their actual coverage limits.
+- Pin CI Python setup to the supported Node 24 action revision.
+
+### Upgrade notes
+
+- If signing-key generation fails, do not use its outputs. Inspect any reported paths before removing them; POSIX outputs are preserved for review. Successful generation and signing interfaces are unchanged.
+- Security scan findings and incomplete analysis remain visible in the [0.10.1 review](docs/agent-skills-setup/verification/security-v0.10.1.md).
+
 ## [0.10.0] - 2026-10-02
 
 ### Added

@@ -8,7 +8,7 @@
 
 > Languages: [English](README.md) · [中文](README.zh-CN.md) · [日本語](README.ja-JP.md) · **Español**
 
-Versión: **0.10.0**. Consulta los [cambios](CHANGELOG.md#0100---2026-10-02). El ejemplo de instalación desde GitHub usa la etiqueta de lanzamiento correspondiente `v0.10.0`.
+Versión: **0.10.1**. Consulta los [cambios de la versión](CHANGELOG.md#0101---2026-10-03). La instalación desde GitHub usa la etiqueta `v0.10.1`.
 
 Migración, respaldo y restauración de contexto de asistentes de IA (Skills, Reglas/Instrucciones y MCP) entre **Cursor, Claude Code, Codex, Cline, Windsurf, Copilot, Gemini CLI** y decenas de herramientas de programación con IA — **completamente offline, con vista previa y seguro ante rollback**.
 
@@ -27,7 +27,7 @@ openclaw skills install @luckycat133/agent-skills-setup
 O instala directamente desde GitHub:
 
 ```bash
-git clone --depth 1 --branch v0.10.0 https://github.com/Luckycat133/skills-repo.git
+git clone --depth 1 --branch v0.10.1 https://github.com/Luckycat133/skills-repo.git
 
 openclaw skills install \
   ./skills-repo/skills/agent-skills-setup \

@@ -17,6 +17,15 @@ _POINTER = ctypes.c_void_p
 _INVALID_HANDLE = ctypes.c_void_p(-1).value
 
 
+class KeyFileCreationError(OSError):
+    """A creation guard failed and cleanup also needs caller review."""
+
+    def __init__(self, error: Exception, path: Path, cleanup_errors: list[str]) -> None:
+        super().__init__(str(error))
+        self.outputs_requiring_review = [str(path)]
+        self.cleanup_errors = cleanup_errors
+
+
 class _SecurityAttributes(ctypes.Structure):
     _fields_ = [
         ("nLength", _DWORD),
@@ -233,7 +242,7 @@ class _WindowsAPI:
     def delete_created_handle(self, handle: int) -> None:
         disposition = _FileDisposition(True)
         if not self.set_file_information(handle, 4, ctypes.byref(disposition), ctypes.sizeof(disposition)):
-            _raise_windows_error("removing the empty private signing key after creation failed")
+            _raise_windows_error("removing a created signing key after generation failed")
 
 
 def _read_limited(descriptor: int) -> bytes:
@@ -264,20 +273,66 @@ def create_key_file(path: Path) -> int:
         file_descriptor = msvcrt.open_osfhandle(handle, os.O_WRONLY | os.O_BINARY)
         os.set_inheritable(file_descriptor, False)
         return file_descriptor
-    except BaseException:
+    except BaseException as error:
+        cleanup_errors: list[str] = []
         if handle is not None:
             try:
                 api.delete_created_handle(handle)
-            finally:
+            except Exception as cleanup_error:
+                cleanup_errors.append(str(cleanup_error))
+            try:
                 if file_descriptor is not None:
                     os.close(file_descriptor)
-                else:
-                    api.close_handle(handle)
+                elif not api.close_handle(handle):
+                    _raise_windows_error("closing a created signing key handle")
+            except Exception as cleanup_error:
+                cleanup_errors.append(str(cleanup_error))
+        if cleanup_errors and isinstance(error, Exception):
+            raise KeyFileCreationError(error, path, cleanup_errors) from error
         raise
     finally:
         # user_buffer keeps the SID pointer alive until every ACL check ends.
         del user_buffer
         api.local_free(descriptor)
+
+
+def assert_created_key_file(path: Path, descriptor: int) -> None:
+    """Check a generated output while its original creation FD is still held."""
+    if os.name != "nt":
+        original = os.fstat(descriptor)
+        current = path.lstat()
+        if (
+            not stat.S_ISREG(current.st_mode)
+            or (current.st_dev, current.st_ino) != (original.st_dev, original.st_ino)
+        ):
+            raise ValueError("created key output path changed during key generation")
+        if stat.S_IMODE(original.st_mode) & 0o077:
+            raise ValueError("created key output became group/world accessible")
+        return
+    import msvcrt
+
+    api = _WindowsAPI()
+    user_buffer, user_sid, _ = api.current_user()
+    try:
+        handle = msvcrt.get_osfhandle(descriptor)
+        api.assert_regular_handle(handle)
+        api.assert_private_handle(handle, user_sid)
+    finally:
+        del user_buffer
+
+
+def discard_created_key_file(descriptor: int) -> bool:
+    """Delete through a held Windows handle; preserve POSIX outputs for review.
+
+    POSIX cannot atomically bind path-based unlink to the creating descriptor.
+    Comparing an inode before unlink would still allow replacement in between.
+    """
+    if os.name != "nt":
+        return False
+    import msvcrt
+
+    _WindowsAPI().delete_created_handle(msvcrt.get_osfhandle(descriptor))
+    return True
 
 
 def read_private_file(path: Path) -> bytes:

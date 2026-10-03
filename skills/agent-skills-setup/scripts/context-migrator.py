@@ -75,7 +75,12 @@ from acb.bundle import (
     validate_path_containment,
     write_bundle,
 )
-from acb.key_security import create_key_file
+from acb.key_security import (
+    KeyFileCreationError,
+    assert_created_key_file,
+    create_key_file,
+    discard_created_key_file,
+)
 from detect.probes import (
     InstallState,
     ProbeResult,
@@ -990,6 +995,8 @@ def run_bundle_sign(args: argparse.Namespace) -> int:
 
 def run_bundle_keygen(args: argparse.Namespace) -> int:
     """Generate Ed25519 keypair for signing and verifying ACBs."""
+    outputs_requiring_review: list[str] = []
+    cleanup_errors: list[str] = []
     try:
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
         from cryptography.hazmat.primitives import serialization
@@ -1011,19 +1018,38 @@ def run_bundle_keygen(args: argparse.Namespace) -> int:
             raise ValueError("key outputs already exist; choose new paths")
         out_priv.parent.mkdir(parents=True, exist_ok=True)
         out_pub.parent.mkdir(parents=True, exist_ok=True)
-        written: list[Path] = []
+        written: list[tuple[Path, int]] = []
         try:
             for destination, data in ((out_priv, priv_bytes), (out_pub, pub_bytes)):
                 descriptor = create_key_file(destination)
-                written.append(destination)
-                with os.fdopen(descriptor, "wb") as handle:
-                    handle.write(data)
-                    handle.flush()
-                    os.fsync(handle.fileno())
+                written.append((destination, descriptor))
+                pending = memoryview(data)
+                while pending:
+                    count = os.write(descriptor, pending)
+                    if count <= 0:
+                        raise OSError("key output write made no progress")
+                    pending = pending[count:]
+                os.fsync(descriptor)
+            for destination, descriptor in written:
+                assert_created_key_file(destination, descriptor)
         except BaseException:
-            for destination in written:
-                destination.unlink(missing_ok=True)
+            for destination, descriptor in written:
+                try:
+                    if not discard_created_key_file(descriptor):
+                        outputs_requiring_review.append(str(destination))
+                except Exception as cleanup_error:
+                    outputs_requiring_review.append(str(destination))
+                    cleanup_errors.append(str(cleanup_error))
             raise
+        finally:
+            for destination, descriptor in reversed(written):
+                try:
+                    os.close(descriptor)
+                except OSError as close_error:
+                    outputs_requiring_review.append(str(destination))
+                    cleanup_errors.append(str(close_error))
+        if cleanup_errors:
+            raise OSError("closing generated key outputs failed")
         emit(
             {
                 "ok": True,
@@ -1034,7 +1060,15 @@ def run_bundle_keygen(args: argparse.Namespace) -> int:
         )
         return 0
     except Exception as error:
-        emit({"ok": False, "error": str(error)}, args.json)
+        if isinstance(error, KeyFileCreationError):
+            outputs_requiring_review.extend(error.outputs_requiring_review)
+            cleanup_errors.extend(error.cleanup_errors)
+        result: dict[str, Any] = {"ok": False, "error": str(error)}
+        if outputs_requiring_review:
+            result["outputs_requiring_review"] = list(dict.fromkeys(outputs_requiring_review))
+        if cleanup_errors:
+            result["cleanup_errors"] = cleanup_errors
+        emit(result, args.json)
         return 1
 
 
