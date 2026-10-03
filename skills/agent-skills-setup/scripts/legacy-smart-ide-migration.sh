@@ -339,7 +339,7 @@ Usage: smart-ide-migration.sh legacy --source <ide> --target <ide> [options]
   --strategy skip|backup|overwrite   Existing-object handling (default: backup)
   --source-mcp-file <file>      Reviewed JSON/JSONC MCP input
   --opencode-version v1|v2      OpenCode target MCP schema
-  --report <file>               Save report
+  --report <file>               Save report outside dry-run; previews use stdout
   --json                        Emit JSON evidence
   --print-path <ide> <object>   Read-only path lookup
   --dry-run                     Parse and preview without writes
@@ -4091,11 +4091,15 @@ main() {
     echo "$report"
 
     if [[ -n "$REPORT_FILE" ]]; then
-        echo "$report" > "$REPORT_FILE"
-        if [[ "${MIGRATE_JSON:-}" == "1" ]]; then
-            echo "Report saved to: $REPORT_FILE" >&2
+        if [[ $DRY_RUN -eq 1 ]]; then
+            echo "Dry-run: report remains on stdout; --report does not save a file." >&2
         else
-            echo "Report saved to: $REPORT_FILE"
+            printf '%s\n' "$report" > "$REPORT_FILE"
+            if [[ "${MIGRATE_JSON:-}" == "1" ]]; then
+                echo "Report saved to: $REPORT_FILE" >&2
+            else
+                echo "Report saved to: $REPORT_FILE"
+            fi
         fi
     fi
 

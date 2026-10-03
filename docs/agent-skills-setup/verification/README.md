@@ -23,3 +23,8 @@ transaction correction to the actual 120-file runtime candidate and records
 all 101 local scan findings, preserved warnings and incomplete coverage.
 The v0.10.0 native and browser records remain evidence for that earlier payload;
 they do not certify native application behavior of v0.10.1.
+
+The [v0.10.2 candidate review](security-v0.10.2.md) binds the legacy dry-run
+report correction to a frozen 120-file runtime, 69 local suites, and 32
+independent macOS calls. Its single no-LLM scan retains all 101 warnings and
+incomplete analysis. This record precedes final native CI and publication.

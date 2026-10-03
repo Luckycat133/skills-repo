@@ -8,7 +8,7 @@
 
 > Languages: [English](README.md) · [中文](README.zh-CN.md) · **日本語** · [Español](README.es.md)
 
-バージョン：**0.10.1**。[リリースの変更](CHANGELOG.md#0101---2026-10-03)を参照してください。GitHub インストール例は `v0.10.1` タグを使用します。
+バージョン：**0.10.2**。[リリースの変更](CHANGELOG.md#0102---2026-10-03)を参照してください。GitHub インストール例は `v0.10.2` タグを使用します。
 
 **Cursor、Claude Code、Codex、Cline、Windsurf、Copilot、Gemini CLI** など、多数の AI コーディングツール間で Skills、ルール/指示、MCP 設定を**オフライン・プレビュー可能・ロールバック安全**に移行・バックアップ・復元します。
 
@@ -27,7 +27,7 @@ openclaw skills install @luckycat133/agent-skills-setup
 または GitHub から直接インストール:
 
 ```bash
-git clone --depth 1 --branch v0.10.1 https://github.com/Luckycat133/skills-repo.git
+git clone --depth 1 --branch v0.10.2 https://github.com/Luckycat133/skills-repo.git
 
 openclaw skills install \
   ./skills-repo/skills/agent-skills-setup \

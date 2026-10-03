@@ -30,6 +30,10 @@ remote-host surfaces remain experimental.
 | `doctor` | Complete recorded requirements, executable PATH checks, and reauthentication/rebuild actions. |
 | `legacy` | Explicit lookup or zero-write dry-run compatibility only. |
 
+Legacy preview reports stay on stdout, including when `--report` is supplied;
+the named file is neither created nor changed. Use `plan --output` to save a
+profile-aware plan for review and execution.
+
 `--json` emits one JSON document on stdout; diagnostics go to stderr. Inspect
 exit status, item statuses, and applied counts, not merely `ok`. Use
 `bash "$migrator" <command> --help` for that command's accepted flags.
