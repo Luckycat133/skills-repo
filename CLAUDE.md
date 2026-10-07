@@ -16,4 +16,10 @@
 
 ## Guardrails
 
-Edit the canonical Skill, then regenerate the root pointer. Keep whole IDE config and opaque project migrations manual; preserve redaction, deterministic plans, exact target resolution, backup manifests, and guarded rollback. Run `bash validate-all.sh` before proposing a change.
+Edit the canonical Skill, then regenerate the root pointer. Keep whole IDE config and opaque project migrations manual; preserve redaction, deterministic plans, exact target resolution, backup manifests, and guarded rollback. Start with checks relevant to the changed rule, mapper, or script; run `bash validate-all.sh` before a PR or release and for broad migration/registry changes. Documentation-only proposals use focused content and link checks.
+
+@AGENTS.md
+
+## 项目技能入口
+
+按当前任务从 `.agents/SKILLS.md` 选择技能；`.claude/skills` 仅提供发现入口，正文维护在项目现有真源。不要一次加载全部技能。
