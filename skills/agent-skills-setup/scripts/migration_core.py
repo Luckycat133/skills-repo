@@ -4,11 +4,13 @@
 from __future__ import annotations
 
 import difflib
+import errno
 import hashlib
 import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -53,6 +55,7 @@ KNOWN_COMMANDS = {
     "apply",
     "verify",
     "rollback",
+    "recover",
     "migrate",
     "snapshot",
     "bundle-verify",
@@ -2726,6 +2729,16 @@ def json_sha256(value: Any) -> str:
     return hashlib.sha256(canonical_json(value).encode("utf-8")).hexdigest()
 
 
+def mode_hash(path: Path) -> str:
+    """Hash permissions separately, preserving the public content hash format."""
+    ensure_no_symlinks(path)
+    entries = [path, *sorted(path.rglob("*"))] if path.is_dir() else [path]
+    return json_sha256([
+        [entry.relative_to(path).as_posix(), stat.S_IMODE(entry.stat().st_mode)]
+        for entry in entries
+    ])
+
+
 def path_state(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {"exists": False, "kind": None, "sha256": None}
@@ -2734,6 +2747,7 @@ def path_state(path: Path) -> dict[str, Any]:
         "exists": True,
         "kind": "directory" if path.is_dir() else "file",
         "sha256": hash_path(path),
+        "mode_sha256": mode_hash(path),
     }
 
 
@@ -3295,6 +3309,7 @@ def begin_change(
         "kind": None,
         "backup": str(backup) if backup else None,
         "backup_sha256": hash_path(backup) if backup else None,
+        "backup_mode_sha256": mode_hash(backup) if backup else None,
         "created": backup is None,
         "post_sha256": None,
     }
@@ -3307,6 +3322,7 @@ def finish_change(change: dict[str, Any], target: Path) -> None:
         raise ValueError(f"migration target was not written safely: {target}")
     change["kind"] = "directory" if target.is_dir() else "file"
     change["post_sha256"] = hash_path(target)
+    change["post_mode_sha256"] = mode_hash(target)
 
 
 def restore_transaction_change(change: dict[str, Any]) -> None:
@@ -3458,6 +3474,97 @@ def _build_manifest(
         }
     )
     return manifest
+
+
+def recovery_container(target: Path, boundary: Path, backup_root: Path) -> Path:
+    """Reserve same-device staging outside the live target's parent directory."""
+    device = target.parent.stat().st_dev
+    for base in (backup_root, boundary, Path(tempfile.gettempdir())):
+        if base == target.parent or paths_overlap(base, target):
+            # Ancestor boundaries are safe, except the immediate discovery root.
+            if base == target.parent or target in base.parents:
+                continue
+        if base.is_dir() and base.stat().st_dev == device:
+            resolve_output_path(base)
+            try:
+                return Path(tempfile.mkdtemp(prefix=".agent-context-recovery-", dir=base))
+            except OSError as error:
+                if error.errno not in {errno.EACCES, errno.EROFS, errno.ENOENT}:
+                    raise
+                continue
+    raise ValueError(f"no same-filesystem recovery directory outside live target root: {target}")
+
+
+def write_recovery_journal(path: Path, journal: dict[str, Any]) -> None:
+    payload = {key: value for key, value in journal.items() if key != "sha256"}
+    journal["sha256"] = json_sha256(payload)
+    atomic_write(path, json.dumps(journal, indent=2, sort_keys=True) + "\n")
+
+
+def recover_transaction(path: Path) -> int:
+    """Restore a hard-interrupted apply, refusing edited targets or backups.
+
+    Keep the journal and backup copies: retrying recovery after another hard
+    exit must remain possible. This handles process death, not power loss.
+    """
+    path = resolve_output_path(path)
+    journal = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(journal, dict) or journal.get("schema_version") != 1:
+        raise ValueError("unsupported recovery journal")
+    payload = {key: value for key, value in journal.items() if key != "sha256"}
+    if journal.get("sha256") != json_sha256(payload):
+        raise ValueError("recovery journal checksum mismatch")
+    if journal.get("status") == "recovered":
+        return 0
+    manifest_path = Path(journal["manifest"])
+    if manifest_path.exists():
+        manifest = load_manifest(manifest_path)
+        if manifest.get("operation_id") == journal["operation_id"]:
+            raise ValueError(f"transaction committed; use rollback --manifest {manifest_path}")
+        raise ValueError("recovery manifest path is occupied")
+    if journal.get("status") != "pending":
+        raise ValueError("transaction is not pending recovery")
+    entries = journal["entries"]
+    # Preflight the whole transaction before changing any target.
+    for entry in entries:
+        target, boundary = Path(entry["path"]), Path(entry["boundary"])
+        if not target.is_absolute() or not boundary.is_absolute() or target == boundary:
+            raise ValueError("unsafe recovery target")
+        ensure_no_symlink_components(target, boundary)
+        current = path_state(target)
+        if current not in (entry["before"], entry["after"], {"exists": False, "kind": None, "sha256": None}):
+            raise ValueError(f"recovery refused; target changed: {target}")
+        if entry["backup"]:
+            backup = Path(entry["backup"])
+            ensure_no_symlink_components(backup, path.parent)
+            if backup == path.parent or path_state(backup) != entry["before"]:
+                raise ValueError(f"recovery refused; backup changed: {backup}")
+    restored = 0
+    for entry in reversed(entries):
+        target = Path(entry["path"])
+        if path_state(target) == entry["before"]:
+            continue
+        backup = Path(entry["backup"]) if entry["backup"] else None
+        # Never remove the sole backup; prepare a complete replacement first.
+        target.parent.mkdir(parents=True, exist_ok=True)
+        container = recovery_container(target, Path(entry["boundary"]), path.parent)
+        temporary = container / "restored"
+        if backup:
+            if backup.is_dir():
+                shutil.copytree(backup, temporary)
+            else:
+                shutil.copy2(backup, temporary)
+            if path_state(temporary) != entry["before"]:
+                raise ValueError(f"recovery copy changed: {target}")
+        if target.exists():
+            os.replace(target, container / "interrupted")
+        if backup:
+            os.replace(temporary, target)
+        shutil.rmtree(container)
+        restored += 1
+    journal["status"] = "recovered"
+    write_recovery_journal(path, journal)
+    return restored
 
 
 def apply_plan(
@@ -3895,6 +4002,21 @@ def apply_plan(
                     f"target changed while staging: {item.target.resolved_path}"
                 )
 
+        if any(paths_overlap(state_root, path) for path in protected_surfaces):
+            raise ValueError("migration state directory overlaps a planned surface")
+        # A later apply must not hide an earlier interrupted operation.
+        for pending_path in (state_root / "backups").glob("*/recovery.json"):
+            pending = json.loads(pending_path.read_text(encoding="utf-8"))
+            if pending.get("status") != "pending":
+                continue
+            recorded_manifest = Path(pending["manifest"])
+            if recorded_manifest.exists():
+                recorded = load_manifest(recorded_manifest)
+                if recorded.get("operation_id") == pending["operation_id"]:
+                    continue
+            if any(paths_overlap(destination, Path(entry["path"]))
+                   for destination in destinations for entry in pending["entries"]):
+                raise ValueError(f"interrupted transaction; recover --journal {pending_path} --yes")
         for index, operation in enumerate(operations):
             operation["backup"] = backup_path(
                 operation["destination"], backup_root, index
@@ -3912,6 +4034,19 @@ def apply_plan(
                     f"target changed before transaction commit: {item.target.resolved_path}"
                 )
 
+        journal_path = backup_root / "recovery.json"
+        journal = {
+            "schema_version": 1, "status": "pending", "operation_id": operation_id,
+            "manifest": str(manifest_path),
+            "entries": [{
+                "path": str(operation["destination"]),
+                "boundary": str(operation["boundary"]),
+                "backup": str(operation["backup"]) if operation["backup"] else None,
+                "before": path_state(operation["destination"]),
+                "after": path_state(operation["staged"]),
+            } for operation in operations],
+        }
+        write_recovery_journal(journal_path, journal)
         created_directories: list[Path] = []
         try:
             for operation in operations:
@@ -3931,13 +4066,12 @@ def apply_plan(
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 created_directories.extend(reversed(missing_parents))
                 if operation["kind"] == "directory":
-                    temporary = destination.parent / (
-                        f".{destination.name}.migration-{operation_id}"
-                    )
+                    container = recovery_container(destination, boundary, backup_root)
+                    temporary = container / "staged"
                     try:
                         shutil.copytree(operation["staged"], temporary)
                         ensure_no_symlinks(temporary)
-                        if hash_path(temporary) != hash_path(operation["staged"]):
+                        if path_state(temporary) != path_state(operation["staged"]):
                             raise ValueError(
                                 f"staged Skill hash changed during commit: {destination}"
                             )
@@ -3945,16 +4079,21 @@ def apply_plan(
                             raise ValueError(
                                 f"symbolic links are not allowed: {destination}"
                             )
-                        if destination.is_dir():
-                            shutil.rmtree(destination)
-                        else:
-                            destination.unlink(missing_ok=True)
+                        if destination.exists():
+                            # Retain the intact old tree across the rename gap.
+                            displaced = container / "previous"
+                            if os.path.lexists(displaced):
+                                raise ValueError(f"recovery path already exists: {displaced}")
+                            os.replace(destination, displaced)
                         os.replace(temporary, destination)
                     finally:
                         if temporary.is_symlink():
                             temporary.unlink()
                         elif temporary.exists():
                             shutil.rmtree(temporary)
+                        # The persistent backup is the recovery source; this
+                        # same-device staging container is no longer needed.
+                        shutil.rmtree(container)
                 else:
                     atomic_copy_file(operation["staged"], destination)
                 finish_change(change, destination)
@@ -4007,22 +4146,30 @@ def apply_plan(
             )
         except BaseException as error:
             rollback_errors: list[str] = []
-            for change in reversed(changes):
-                try:
-                    restore_transaction_change(change)
-                except (OSError, ValueError) as rollback_error:
-                    rollback_errors.append(str(rollback_error))
+            try:
+                recover_transaction(journal_path)
+            except (OSError, ValueError) as rollback_error:
+                rollback_errors.append(str(rollback_error))
             for directory in reversed(created_directories):
                 try:
                     directory.rmdir()
                 except OSError:
                     pass
+            if not rollback_errors:
+                journal["status"] = "recovered"
+                write_recovery_journal(journal_path, journal)
             if rollback_errors:
                 raise RuntimeError(
                     "transaction failed and automatic rollback was incomplete: "
                     + "; ".join(rollback_errors)
                 ) from error
             raise
+        # The manifest is the commit record. Cleanup failure must never undo
+        # an already committed transaction or leave an apparently failed apply.
+        try:
+            journal_path.unlink()
+        except OSError as error:
+            print(f"WARN: committed transaction; recovery journal retained at {journal_path}: {error}", file=sys.stderr)
     return manifest, manifest_path
 
 
@@ -4068,7 +4215,10 @@ def verify_manifest(path: Path) -> list[str]:
         except ValueError as error:
             errors.append(str(error))
             continue
-        if current != change.get("post_sha256"):
+        if (current != change.get("post_sha256") or (
+            change.get("post_mode_sha256") is not None
+            and mode_hash(target) != change["post_mode_sha256"]
+        )):
             errors.append(f"changed after apply: {target}")
     return errors
 
@@ -4089,7 +4239,10 @@ def rollback_manifest(path: Path) -> int:
             raise ValueError(f"missing rollback backup: {backup}")
         ensure_no_symlinks(backup)
         expected = change.get("backup_sha256")
-        if expected is not None and hash_path(backup) != expected:
+        if ((expected is not None and hash_path(backup) != expected) or (
+            change.get("backup_mode_sha256") is not None
+            and mode_hash(backup) != change["backup_mode_sha256"]
+        )):
             raise ValueError(f"changed rollback backup: {backup}")
     restored = 0
     for change in reversed(manifest["changes"]):
