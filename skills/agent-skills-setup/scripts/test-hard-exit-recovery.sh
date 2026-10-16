@@ -10,7 +10,9 @@ import sys
 import tempfile
 from pathlib import Path
 
-scripts = Path(sys.argv[1])
+# Canonicalize fixtures before constructing surfaces or fault checkpoints: macOS
+# /var and Windows short TEMP paths can otherwise differ from manifest paths.
+scripts = Path(sys.argv[1]).resolve()
 sys.path.insert(0, str(scripts))
 from migration_core import path_state, hash_path, recover_transaction, verify_manifest, rollback_manifest
 
@@ -19,7 +21,7 @@ import os,sys
 from pathlib import Path
 sys.path.insert(0, sys.argv[1])
 import migration_core as m
-root=Path(sys.argv[2]); phase=sys.argv[3]
+root=Path(sys.argv[2]).resolve(); phase=sys.argv[3]
 def surface(path):
     relative=path.relative_to(root).as_posix()
     return m.SurfacePath("fixture", "cli", "skills", "project", "directory", relative,
@@ -64,12 +66,12 @@ def setup(root):
 
 def run(root, phase):
     r=subprocess.run([sys.executable,"-c",child,str(scripts),str(root),phase],capture_output=True,text=True)
-    assert r.returncode == (0 if phase=="success" else 88 if phase=="rollback-copy" else 86), (r.stdout,r.stderr)
+    assert r.returncode == (0 if phase=="success" else 88 if phase=="rollback-copy" else 86), (phase,r.returncode,r.stdout,r.stderr)
     return next((root/".agent-context-migration/backups").iterdir()) / "recovery.json"
 
 for phase in ("gap","installed","manifest","success","rollback-copy"):
     with tempfile.TemporaryDirectory() as d:
-        root=Path(d);setup(root);before=path_state(root/"target/demo")
+        root=Path(d).resolve();setup(root);before=path_state(root/"target/demo")
         journal=run(root,phase)
         if phase in ("gap","installed","rollback-copy"):
             assert not (root/"manifest.json").exists()
@@ -93,7 +95,7 @@ for phase in ("gap","installed","manifest","success","rollback-copy"):
 
 # A first installation is undone to absence, without inventing an old tree.
 with tempfile.TemporaryDirectory() as d:
-    root=Path(d);setup(root);shutil.rmtree(root/"target/demo")
+    root=Path(d).resolve();setup(root);shutil.rmtree(root/"target/demo")
     journal=run(root,"installed")
     assert recover_transaction(journal)==1
     assert not (root/"target/demo").exists()
@@ -102,7 +104,7 @@ with tempfile.TemporaryDirectory() as d:
 # Changes after the interrupted apply must never be overwritten.
 for changed in ("target", "backup"):
     with tempfile.TemporaryDirectory() as d:
-        root=Path(d);setup(root);journal=run(root,"installed")
+        root=Path(d).resolve();setup(root);journal=run(root,"installed")
         data=json.loads(journal.read_text());entry=data["entries"][0]
         p=root/"target/demo" if changed=="target" else Path(entry["backup"])
         (p/"run.sh").write_text("edited after interruption")
@@ -115,7 +117,7 @@ for changed in ("target", "backup"):
 
 # A hard exit during recovery is itself recoverable.
 with tempfile.TemporaryDirectory() as d:
-    root=Path(d);setup(root);before=path_state(root/"target/demo");journal=run(root,"installed")
+    root=Path(d).resolve();setup(root);before=path_state(root/"target/demo");journal=run(root,"installed")
     recovery_child = r'''
 import os,sys
 from pathlib import Path
@@ -137,14 +139,14 @@ m.recover_transaction(Path(sys.argv[2]))
 if os.name != "nt":
     for phase in ("source-mode", "target-mode"):
         with tempfile.TemporaryDirectory() as d:
-            root=Path(d);setup(root)
+            root=Path(d).resolve();setup(root)
             result=subprocess.run([sys.executable,"-c",child,str(scripts),str(root),phase],capture_output=True,text=True)
             assert result.returncode != 0 and "changed while staging" in result.stderr, result.stderr
             assert not (root/"manifest.json").exists()
             assert (root/"target/demo/run.sh").read_text()=="echo old\n"
         print("OK staged plan refuses",phase)
     with tempfile.TemporaryDirectory() as d:
-        root=Path(d);setup(root);run(root,"success")
+        root=Path(d).resolve();setup(root);run(root,"success")
         target=root/"target/demo/run.sh";digest=hash_path(root/"target/demo");before=path_state(root/"target/demo")
         target.chmod(0o644)
         assert hash_path(root/"target/demo")==digest
