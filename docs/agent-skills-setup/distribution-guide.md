@@ -11,3 +11,14 @@ GitHub 是规范来源；ClawHub 提供版本化发布；Awesome Copilot 是可�
 公开材料应只说明可发布的 Skill；仓库级自动化、私有工作流和机器状态不随发行包传播。发行包使用显式运行时白名单，而不是“复制后排除已知文件”。仓库与 canonical Skill 使用 MIT；ClawHub bundle 单独生成 MIT-0 许可证并由 contributor authorization 阻断正式发布。
 
 安装只负责让目标 Agent 能读取 Skill，不接受 IDE 迁移参数，也不执行迁移脚本。`--source`、`--target`、`--objects` 和 `--workspace` 仅在用户之后要求迁移时由 Agent 传给运行时命令。
+
+### Interrupted repository import
+
+`python3 scripts/skill_package.py recover <destination>` restores an interrupted
+import or staging installation from its sibling `.install-recovery.json` journal.
+Stop other writers first. A pending journal blocks another installation of that
+destination. Recovery refuses changed destination/backup trees, including mode
+changes, and preserves recovery evidence outside the live Skill root for review. It does not import
+or execute any Skill. This handles process termination, not power loss. If the
+journal is incomplete but the original destination is intact, preserve both and
+inspect them before manually clearing the journal.

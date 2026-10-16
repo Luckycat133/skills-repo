@@ -82,3 +82,28 @@ servers or connect to endpoints as part of this offline skill. State any
 unperformed product/runtime acceptance; authentication and network checks need
 their own authorization. For manual remote reconstruction, use
 [mcp-transport.md](mcp-transport.md), not invented protocol headers.
+
+## Interrupted process recovery
+
+A new apply writes a checksummed recovery journal before changing any target:
+`<workspace>/.agent-context-migration/backups/<operation-id>/recovery.json`.
+A successful apply removes its journal after committing the manifest.
+If the process exits before writing its apply manifest, stop all writers and
+run `recover --journal <recovery.json> --yes --json` only with authorization to
+undo that interrupted operation. Recovery preflights every target and backup,
+restores the pre-apply state, and refuses unrecognized content or mode changes.
+A second interrupted recovery can be retried. If the apply manifest exists,
+use normal `rollback` instead. A later overlapping apply refuses a pending
+journal rather than overwriting the interrupted state.
+
+Backup copies, journals, and `.agent-context-recovery-` containers outside the
+live target directory may remain as recovery evidence after a hard exit. Review
+them after verification; do not remove the only copy of user changes. This protects against
+process termination, including hard exits; it does not claim power-loss
+atomicity, filesystem durability, or coordination with concurrent writers.
+
+New plans record a separate `mode_sha256` for files and directory trees; new
+manifests also bind target and backup modes. Content `sha256` values keep their
+existing format. Regenerate older saved plans before applying them. Older
+manifests remain readable but cannot detect mode-only drift. POSIX mode checks
+do not verify Windows ACLs, ownership, or extended attributes.
