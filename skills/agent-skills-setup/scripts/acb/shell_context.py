@@ -38,6 +38,8 @@ def collect_shell_context(path: Path, source: dict) -> tuple[dict[str, bytes], l
         if not isinstance(marker, str) or not marker or "\n" in marker:
             raise ValueError("shell PATH markers must be literal single-line text")
         matches = [line for line in lines if marker in line and re.match(r"^\s*export\s+PATH=", line)]
+        if not matches:
+            tasks.append({"marker": marker, "reason": "shell-path-marker-not-present"})
         for line in matches:
             try:
                 if any(operator in line for operator in (";", "&&", "||", "`", "$(")):

@@ -1090,7 +1090,8 @@
           "kind": "shell-context",
           "scope": "user",
           "path_markers": [
-            ".antigravity-ide/bin"
+            ".antigravity-ide/bin",
+            ".antigravity-ide/antigravity-ide/bin"
           ]
         },
         {

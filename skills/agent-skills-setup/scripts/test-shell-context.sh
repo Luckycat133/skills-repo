@@ -13,5 +13,10 @@ files,tasks=collect_shell_context(path,{'functions':['claude'],'path_markers':['
 assert not tasks and set(files)=={'functions/claude.sh','path-bindings.sh'}
 assert b'SYNTHETIC_PRIVATE_SIBLING' not in b''.join(files.values());assert not (root/'DO_NOT_EXECUTE').exists();assert before==hashlib.sha256(path.read_bytes()).hexdigest()
 path.write_text(text+'claude() {\n  exit 1\n}\n');files,tasks=collect_shell_context(path,{'functions':['claude']});assert not files and tasks[0]['reason']=='shell-function-absent-or-ambiguous'
+path.write_text('export PATH="/example/.antigravity-ide/antigravity-ide/bin:$PATH"\n')
+files,tasks=collect_shell_context(path,{'path_markers':['.antigravity-ide/antigravity-ide/bin']})
+assert not tasks and 'path-bindings.sh' in files
+files,tasks=collect_shell_context(path,{'path_markers':['missing-marker']})
+assert not files and tasks[0]['reason']=='shell-path-marker-not-present'
 print('OK named shell functions/PATH captured inertly; private siblings excluded, duplicates rejected and source unchanged')
 PY
