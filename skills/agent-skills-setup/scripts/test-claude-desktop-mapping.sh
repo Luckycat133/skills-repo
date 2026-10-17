@@ -89,7 +89,7 @@ for route in (
     "references/ides/<target>.md",
 ):
     assert route in skill, f"canonical Skill lost safe profile/reference routing: {route}"
-assert "Cloud/UI and remote MCP remain manual" in skill
+assert "Cloud/UI require native reconstruction" in skill
 assert "(ides/claude-desktop.md)" in index
 for boundary in (
     "Settings → Extensions",

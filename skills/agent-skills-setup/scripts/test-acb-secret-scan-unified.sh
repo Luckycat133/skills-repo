@@ -13,7 +13,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TMP_ROOT="$(mktemp -d /tmp/acb-secret-scan.XXXXXX)"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 
-python3 - "$SCRIPT_DIR" "$TMP_ROOT" <<'PY'
+PYTHONDONTWRITEBYTECODE=1 "${ACB_SECRET_SCAN_PYTHON:-python3}" - "$SCRIPT_DIR" "$TMP_ROOT" <<'PY'
 import sys
 from pathlib import Path
 
@@ -75,6 +75,24 @@ leak_cases = {
     "private key": b"-----BEGIN " + b"RSA PRIVATE KEY-----\n" + b"MIIEowIBAAKCAQEA0\n" + b"-----END " + b"RSA PRIVATE KEY-----\n",
 }
 
+# Provider prefixes must start a token. A left boundary fixes ordinary words
+# without making real credentials in filenames, paths or assignments invisible.
+provider_key = b"sk-" + b"A1b2C3d4E5f6G7h8J9k0L1m2N3p4"
+for label, prefix, suffix in (
+    ("sk raw beginning", b"", b""),
+    ("sk whitespace boundary", b"value ", b"\n"),
+    ("sk quoted boundary", b'{"value":"', b'"}'),
+    ("sk single quote boundary", b"value '", b"'"),
+    ("sk POSIX path component", b"/backup/", b"/config.txt"),
+    ("sk Windows path component", b"C:\\backup\\", b"\\config.txt"),
+    ("sk underscore filename separator", b"backup_", b".txt"),
+    ("sk hyphen filename separator", b"backup-", b".txt"),
+    ("sk assignment boundary", b"API_KEY=", b"\n"),
+    ("sk Bearer boundary", b"Authorization: Bearer ", b"\n"),
+):
+    leak_cases[label] = prefix + provider_key + suffix
+leak_cases["credential assignment still rejected for slug-shaped value"] = b'token="task-specification-for-agent"\n'
+
 for label, payload in leak_cases.items():
     # (a) scan_object_bytes must raise on raw object bytes
     try:
@@ -99,6 +117,13 @@ benign_cases = {
     "computed key path JSON field": b'{"private_key": str(output_path)}\n',
     "computed token": b'token = token.strip().lower()\n',
     "quoted field-name translation": b'{"clientSecret": "client_secret"}\n',
+    "ordinary task slug": b'task-specification-for-agent',
+    "ordinary task filename": b'task-specification-for-agent.md',
+    "ordinary task package path": b'skills/task-specification-for-agent/SKILL.md',
+    "ordinary task absolute path": b'/home/fixture/skills/task-specification-for-agent/SKILL.md',
+    "ordinary task Windows path": b'C:\\fixture\\skills\\task-specification-for-agent\\SKILL.md',
+    "ordinary mask filename": b'mask-description-for-agent-guide.md',
+    "ordinary task JSON filename": b'{"filename":"task-specification-for-agent.md"}',
 }
 for label, payload in benign_cases.items():
     reason = skill_secret_scanner.finding_reason(payload)
@@ -106,6 +131,23 @@ for label, payload in benign_cases.items():
     # scan_object_bytes should also accept (png is allowlisted binary)
     scan_object_bytes(payload, f"skills/x/{label}.txt" if not label.endswith("png") else "skills/x/icon.png")
     print(f"OK #6 [{label}] accepted as safe")
+
+slug_path = "skills/fixture/cli/user/task-specification-for-agent/SKILL.md"
+slug_bundle = tmp / "legitimate-task-slug.acb"
+slug_args = blank()
+slug_args.update(
+    bundle_root=slug_bundle,
+    manifest=manifest(extra_objects=[{
+        "surface": "skills", "product": "fixture", "profile": "cli",
+        "scope": "user", "status": "ready",
+    }]),
+    objects_dir_files={slug_path: b"---\nname: task-specification-for-agent\ndescription: A legitimate task specification Skill.\n---\n# Review task scope\n"},
+    object_file_map={"skills/fixture/cli/user": [slug_path]},
+)
+write_bundle(**slug_args)
+assert verify_bundle(slug_bundle) == []
+assert (slug_bundle / "objects" / slug_path).is_file()
+print("OK #6 legitimate task slug survives real bundle filename metadata and payload scanning")
 
 # --- #7: verify_bundle re-scans injected object secrets --------------------
 inj = tmp / "secret-injected.acb"

@@ -35,7 +35,9 @@ from registry.exceptions import (
 
 
 SENSITIVE_NAME = re.compile(
-    r"(?:^|[_-])(token|secret|password|passwd|api[_-]?key|authorization|cookie)(?:$|[_-])",
+    r"(?:^|[_-])(token|secret|password|passwd|api[_-]?key|access[_-]?key|"
+    r"access[_-]?token|auth[_-]?token|key|authorization|authentication|auth|"
+    r"credentials?|session|signature|sig|cookie)(?:$|[_-])",
     re.IGNORECASE,
 )
 PLACEHOLDER = re.compile(r"^(?:\$\{[^}]+\}|\$[A-Za-z_][A-Za-z0-9_]*|<[^>]+>)$")
@@ -1122,6 +1124,39 @@ def parse_instruction(
     )
 
 
+def _render_instruction_source(
+    source: SurfacePath, target: SurfacePath, path: Path,
+) -> tuple[str, LossReport]:
+    """Preserve a matching native file's container semantics and original bytes.
+
+    Format-only emission cannot describe hierarchy supplied by a native file's
+    unchanged registry placement. This exception is deliberately file-scoped:
+    differing products, profiles, scopes, layouts or compatibility paths retain
+    normal conversion/loss checks, as do unsupported frontmatter fields.
+    """
+    raw = path.read_bytes().decode("utf-8")
+    # Retain the existing universal-newline parsing for conversion paths; only
+    # the matching native-file case below returns the original line endings.
+    text = raw.replace("\r\n", "\n").replace("\r", "\n")
+    instruction = parse_instruction(text, source.source_format, source.scope, source.storage)
+    rendered, report = emit_instruction(instruction, target.source_format)
+    same_native_file = (
+        source.resolved_path.is_file() and path == source.resolved_path
+        and _instruction_target_is_file(target)
+        and source.storage not in {"config-subobject", "config", "database"}
+        and all(getattr(source, field) == getattr(target, field) for field in (
+            "product", "profile", "source_format", "scope", "storage",
+            "canonical_path", "path", "location_role", "precedence",
+        ))
+    )
+    if same_native_file and all(
+        item.field == "hierarchy" and item.reason == f"{target.source_format} cannot represent this field"
+        for item in report.items
+    ):
+        return raw, LossReport()
+    return rendered, report
+
+
 def emit_instruction(
     instruction: InstructionIR,
     target_format: str,
@@ -1532,14 +1567,17 @@ SECRET_FLAGS = {
 
 
 def _safe_secret_value(name: str, value: str) -> tuple[str, bool]:
+    normalized_name = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", name)
+    normalized_name = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", normalized_name)
+    normalized_name = re.sub(r"[^A-Za-z0-9_]", "_", normalized_name)
     if (
-        not SENSITIVE_NAME.search(name)
+        not SENSITIVE_NAME.search(normalized_name)
         and not PROVIDER_SECRET.search(value)
         and not URL_CREDENTIAL.search(value)
         and not BEARER_LITERAL.search(value)
     ) or PLACEHOLDER.fullmatch(value) or SAFE_BEARER_REFERENCE.fullmatch(value):
         return value, False
-    placeholder_name = re.sub(r"[^A-Za-z0-9_]", "_", name).upper()
+    placeholder_name = normalized_name.upper()
     return f"${{{placeholder_name}}}", True
 
 
@@ -1573,6 +1611,34 @@ def _safe_args(args: list[str], server_name: str, report: LossReport) -> list[st
             report.add(
                 "mcp", f"{server_name}.args[{index}]", "provider credential removed", None
             )
+        elif re.match(r"^https?://", argument, re.IGNORECASE) or (
+            flag.startswith("-") and separator and re.match(r"^https?://", inline_value, re.IGNORECASE)
+        ):
+            url_value = argument if re.match(r"^https?://", argument, re.IGNORECASE) else inline_value
+            safe_url = _safe_url(url_value, server_name, report)
+            safe[index] = safe_url if url_value == argument else f"{flag}={safe_url}"
+        elif flag.startswith("-"):
+            # Named credential flags need the same camelCase/header-name
+            # handling as env, headers and URL query parameters. Ordinary
+            # arguments such as --region and --path retain their values.
+            if separator:
+                safe_value, redacted = _safe_secret_value(flag.lstrip("-"), inline_value)
+                if redacted and inline_value:
+                    safe[index] = f"{flag}={safe_value}"
+                    report.add("mcp", f"{server_name}.args[{index}]", "literal secret removed", None)
+            elif index + 1 < len(safe):
+                safe_value, redacted = _safe_secret_value(flag.lstrip("-"), safe[index + 1])
+                if redacted:
+                    safe[index + 1] = safe_value
+                    report.add("mcp", f"{server_name}.args[{index + 1}]", "literal secret removed", None)
+                    index += 1
+        else:
+            assignment = re.fullmatch(r"([A-Za-z][A-Za-z0-9_.-]*)(\s*[:=]\s*)(.+)", argument)
+            if assignment:
+                safe_value, redacted = _safe_secret_value(assignment.group(1), assignment.group(3))
+                if redacted:
+                    safe[index] = assignment.group(1) + assignment.group(2) + safe_value
+                    report.add("mcp", f"{server_name}.args[{index}]", "literal secret removed", None)
         index += 1
     return safe
 
@@ -2158,6 +2224,94 @@ def _ignore_skill_environment_files(_directory: str, names: list[str]) -> list[s
     return [name for name in names if _is_skill_environment_file(name)]
 
 
+def _skill_metadata_scalar(value: str, children: list[str]) -> str:
+    """Read string-only Skill YAML scalars without changing instruction parsing."""
+    value = value.strip()
+    if any("\t" in line[:len(line) - len(line.lstrip())] for line in children):
+        raise ValueError("Skill metadata indentation must use spaces")
+    block = re.fullmatch(r"([>|])([+-]?[1-9]?|[1-9][+-]?)(?:[ \t]+#.*)?", value)
+    if block:
+        nonempty = [line for line in children if line.strip()]
+        explicit_indent = re.search(r"[1-9]", block.group(2))
+        indentation = int(explicit_indent.group()) if explicit_indent else (
+            len(nonempty[0]) - len(nonempty[0].lstrip(" ")) if nonempty else 1
+        )
+        if any(len(line) - len(line.lstrip(" ")) < indentation for line in nonempty):
+            raise ValueError("invalid Skill block scalar indentation")
+        lines = [line[indentation:] if line.strip() else "" for line in children]
+        if block.group(1) == "|":
+            parsed = "\n".join(lines)
+        else:
+            parsed = ""
+            for index, line in enumerate(lines):
+                if index:
+                    previous = lines[index - 1]
+                    if previous and line and not previous.startswith(" ") and not line.startswith(" "):
+                        parsed += " "
+                    elif previous or not line or line.startswith(" ") or not any(lines[:index]):
+                        parsed += "\n"
+                parsed += line
+        if "-" in block.group(2):
+            return parsed.rstrip("\n")
+        if "+" in block.group(2):
+            return parsed + "\n" if children else ""
+        return parsed.rstrip("\n") + "\n" if nonempty else ""
+
+    content = [_strip_frontmatter_comment(line.strip()) for line in children
+               if line.strip() and not line.lstrip().startswith("#")]
+    value = _strip_frontmatter_comment(value)
+    value = " ".join(part for part in [value, *content] if part)
+    if value.startswith("'"):
+        quoted = re.fullmatch(r"'((?:[^']|'')*)'", value)
+        if quoted:
+            return quoted.group(1).replace("''", "'")
+    elif value.startswith('"'):
+        try:
+            decoded = json.loads(value)
+            if isinstance(decoded, str):
+                return decoded
+        except ValueError:
+            pass
+    else:
+        non_string = re.fullmatch(
+            r"(?ix)(?:true|false|yes|no|on|off|null|~|"
+            r"[-+]?(?:[0-9][0-9_]*(?:\.[0-9_]*)?|\.[0-9_]+)(?:e[-+]?[0-9]+)?|"
+            r"[-+]?0[xob][0-9a-f_]+|[-+]?\.(?:inf|nan)|[0-9]{4}-[0-9]{2}-[0-9]{2})",
+            value,
+        )
+        if (value and not non_string and not re.match(r"[-?:](?:\s|$)", value)
+                and not value.startswith(("[", "{", "!", "&", "*", "|", ">", "`", "@"))
+                and not re.search(r":\s", value)):
+            return value
+    raise ValueError("Skill name and description must be YAML strings")
+
+
+def _skill_metadata(body: str) -> dict[str, str]:
+    """Select root name/description scalars, preserving nested metadata scope."""
+    lines = body.splitlines()
+    metadata: dict[str, str] = {}
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        index += 1
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        match = re.fullmatch(r"([A-Za-z0-9_-]+)[ \t]*:[ \t]*(.*)", line)
+        if not match:
+            raise ValueError("invalid Skill metadata field")
+        key, value = match.groups()
+        children: list[str] = []
+        while index < len(lines) and (not lines[index].strip() or lines[index].startswith((" ", "\t"))):
+            children.append(lines[index])
+            index += 1
+        if key not in {"name", "description"}:
+            continue
+        if key in metadata:
+            raise ValueError("duplicate Skill metadata field")
+        metadata[key] = _skill_metadata_scalar(value, children)
+    return metadata
+
+
 def preflight_skill_source(skill_dir: Path) -> None:
     """Fail closed before copying a Skill that may contain literal credentials."""
     skill_document = skill_dir / "SKILL.md"
@@ -2168,17 +2322,15 @@ def preflight_skill_source(skill_dir: Path) -> None:
     match = FRONTMATTER.match(text)
     if not match:
         raise ValueError(f"invalid Skill metadata for {skill_dir.name}: missing frontmatter")
-    metadata: dict[str, str] = {}
-    for line in match.group(1).splitlines():
-        if not line or line.startswith((" ", "\t")) or ":" not in line:
-            continue
-        key, value = line.split(":", 1)
-        metadata[key.strip()] = parse_scalar(value)
+    try:
+        metadata = _skill_metadata(match.group(1))
+    except ValueError as error:
+        raise ValueError(f"invalid Skill metadata for {skill_dir.name}: {error}") from error
     name = metadata.get("name", "")
     description = metadata.get("description", "")
     if not SKILL_NAME.fullmatch(name) or len(name) > 64:
         raise ValueError(f"invalid Skill metadata for {skill_dir.name}: invalid name")
-    if not description or len(description) > 1024:
+    if not description.strip() or len(description) > 1024:
         raise ValueError(
             f"invalid Skill metadata for {skill_dir.name}: invalid description"
         )
@@ -2400,7 +2552,7 @@ def _build_plan_for_scope(
                 PlanItem(
                     object_type,
                     "invalid",
-                    f"source path does not exist: {source.resolved_path}",
+                    f"source path does not exist: {source.canonical_path}",
                     source,
                     target,
                 )
@@ -2514,13 +2666,7 @@ def _build_plan_for_scope(
             try:
                 for instruction_path in instruction_paths:
                     preflight_instruction_source(instruction_path)
-                    instruction = parse_instruction(
-                        instruction_path.read_text(encoding="utf-8"),
-                        source.source_format,
-                        source.scope,
-                        source.storage,
-                    )
-                    _, report = emit_instruction(instruction, target.source_format)
+                    _, report = _render_instruction_source(source, target, instruction_path)
                     losses.items.extend(report.items)
                     conversion_lossy = conversion_lossy or report.lossy
             except (OSError, UnicodeError, ValueError) as error:
@@ -2845,13 +2991,7 @@ def _preview_plan_item(item: PlanItem) -> dict[str, Any] | None:
         sources = _instruction_sources(source)
         used_targets: set[Path] = set()
         for index, instruction_path in enumerate(sources):
-            instruction = parse_instruction(
-                instruction_path.read_text(encoding="utf-8"),
-                source.source_format,
-                source.scope,
-                source.storage,
-            )
-            rendered, _ = emit_instruction(instruction, target.source_format)
+            rendered, _ = _render_instruction_source(source, target, instruction_path)
             if _instruction_target_is_file(target):
                 destination = target.resolved_path
             else:
@@ -3113,11 +3253,20 @@ def _normalize_target_for_comparison(
 def _core_plan_items(serialized_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     result = []
     for item in serialized_items:
+        reason = item.get("reason")
+        source = item.get("source")
+        # Old bundle plans included their temporary staging path in this
+        # diagnostic. Compare its logical surface instead; source_state and
+        # target_state checks below still reject real content/target drift.
+        missing = re.fullmatch(r"((?:[^:\n]+: )?)source path does not exist: (.*)", reason) if isinstance(reason, str) else None
+        if (isinstance(source, dict) and missing is not None
+                and missing.group(2) in {source.get("resolved_path"), source.get("canonical_path")}):
+            reason = missing.group(1) + "source path does not exist: " + str(source.get("canonical_path"))
         result.append(
             {
                 "object_type": item.get("object_type"),
                 "status": item.get("status"),
-                "reason": item.get("reason"),
+                "reason": reason,
                 "source": _normalize_surface_for_comparison(item.get("source")),
                 "target": _normalize_target_for_comparison(item.get("target")),
                 "manual_actions": item.get("manual_actions"),
@@ -3697,15 +3846,7 @@ def apply_plan(
                     )
                 for index, instruction_path in enumerate(sources):
                     preflight_instruction_source(instruction_path)
-                    instruction = parse_instruction(
-                        instruction_path.read_text(encoding="utf-8"),
-                        source.source_format,
-                        source.scope,
-                        source.storage,
-                    )
-                    rendered, report = emit_instruction(
-                        instruction, target.source_format
-                    )
+                    rendered, report = _render_instruction_source(source, target, instruction_path)
                     loss_report.items.extend(report.items)
                     if _instruction_target_is_file(target):
                         destination = target.resolved_path

@@ -4,6 +4,42 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ## [Unreleased]
 
+### Fixed
+
+- Capture selected Hook/notify definitions and bounded script dependencies independently of management/trust state; restore only after native/dependency review while preserving target settings and unrelated events. Include safe global behavior/provider fields, Skill overrides and explicit global helper sources.
+- Default device discovery/export to user configuration; include project/local context only through explicit scope selection, preserving requested project migration support.
+- Map Claude Code user instructions at `~/.claude/CLAUDE.md` for reviewed cross-IDE conversion, including Codex in both directions. Preserve explicit precedence/format-loss review.
+- Validate local rollback backups before writes and preserve concurrent destination changes during failed mapped restoration. Same-server MCP merges preserve credential siblings and reject credential rebinding to changed endpoints/executables.
+- Exclude generated caches from reviewed Skill staging with explicit omissions, so Python bytecode cannot discard an otherwise safe package.
+- Require a provider-token start boundary for `sk-` scans, preserving rejection of real keys while allowing ordinary Skill names such as `task-specification-for-agent`.
+- Replay saved same-product bundle restore plans when some default source surfaces are absent. Missing-source diagnostics use logical paths instead of temporary staging directories; source and destination drift checks remain enforced.
+- Recognize camel-case and custom credential field names during MCP redaction. Inert reconstruction copies replace literal environment/header values and omit URL query values; rejected provider entries cannot leave credential metadata in safe siblings.
+- Parse valid multiline Skill descriptions and isolate malformed or conflicted packages before automatic restore. Preserve original bytes for matching native instruction files instead of reporting a false hierarchy conversion loss; genuine conversion losses still require acceptance.
+
+### Added
+
+- Explicit client-source discovery for six client families, including namespace Skills, reviewed linked assets, scoped project ownership, source gaps and SQLite MCP-definition candidates without copying application databases.
+- Dependency-free bounded YAML model/preferences capture, model role arrays, source hashes and stable read-only SQLite/WAL snapshots. Review staging can redact precise credential literals while retaining safe files, provenance and missing-reference tasks.
+- `review-restore.py` provides destination mapping templates, selected JSON/JSONC/TOML/YAML field merges, Skill/text copies, saved-plan application, file verification and guarded rollback; no captured code execution or native trust changes.
+- Explicit selected-client exports through `device-export.py` and reusable inert source capture through `capture-review-sources.py`; coverage records configured sources separately from supported native restore, with scalar/model-catalog preferences and no implicit all-installed expansion.
+- Checksummed `recovery.json` and `NEXT-AGENT.md` in new ACB snapshots, with per-profile/scope coverage, payload hashes, unselected or unsaved surfaces, failed profiles, per-file exclusions, and actionable destination-agent tasks. Older bundles remain readable with an explicit incomplete-coverage fallback.
+- `snapshot --include-review-materials` preserves eligible standalone prompt, command, agent, hook, and workflow text plus registry-allowlisted scalar preferences as inert `objects/review/` payloads. Secrets, unsafe links, binary/unsupported content, and collection-limit exclusions remain recorded recovery work. Review copies are never automatic restore targets or activation instructions.
+- Recovery metadata in `doctor` and `remaining_work` / `acceptance_layers` in restore results, separating configuration writes from native discovery and runtime/connectivity acceptance.
+- `prepare-skill-source.py` stages scanned linked Skill packages from explicitly reviewed roots, preserving source/link provenance, file modes and exclusion reports without changing the source or installing packages.
+- `device-restore.py` verifies device-packet checksums and recipe contracts, lists explicit same-product recipes, saves destination plans and replays only their bound original plans. State and evidence stay outside the packet; project recipes require an explicit existing destination workspace. Reused/interrupted apply attempts require review before a fresh state is planned.
+- Inert per-server MCP review for supported JSON/JSONC containers and Codex TOML, with credential placeholders, omission/credential-name checklists and destination path-remapping work. Codex provider review selects allowlisted `model_providers` and model-related `profiles` fields; sensitive headers are redacted, URL credentials removed and unsafe entries excluded independently. Neither reader copies shared-config siblings or adds automatic writers.
+- AI-directed same-product restore argv recipes, optional source-workspace identity, explicit destination mappings and `agent-review` / `user-auth` task ownership. Review-only profiles remain explicitly nonautomatic.
+
+### Changed
+
+- Keep cross-IDE context migration explicit in the Skill entrypoint; matching-product restrictions apply only to the device-packet replay helper, while general migration and bundle restore retain independent source/target selection.
+- Guide comprehensive computer-switching requests through review-material capture and a self-contained new-agent handoff. Document source-device inventories for settings, models/providers, plugin/extension IDs and versions, credentials/reauthentication, dependencies/path remapping, cloud/unregistered tools, history/memory/trust boundaries, and projects outside the selected workspace.
+- Prefer explicit matching product/profile restore plans for a new device; explain that all-installed restore can distribute source context across eligible products. Keep task status and evidence outside immutable bundles, and require manual field merging/reconstruction for review copies.
+
+### Validation boundary
+
+- Isolated helper regressions cover scoped staging, credential redaction, inert review material, packet verification, destination planning and saved-plan replay. These checks do not establish native IDE discovery, login, model access or MCP execution on a destination Mac; those acceptance results require evidence from that device.
+
 ## [0.10.2] - 2026-10-03
 
 ### Fixed

@@ -48,6 +48,7 @@ ACB_REAUTH_NAME = "reauth.json"
 ACB_REBUILD_NAME = "rebuild.json"
 ACB_CHECKSUMS_NAME = "checksums.json"
 ACB_OBJECTS_DIR = "objects"
+ACB_RECOVERY_FILES = ("recovery.json", "NEXT-AGENT.md")
 
 ACB_JSON_FILES = (
     ACB_MANIFEST_NAME,
@@ -358,6 +359,8 @@ def validate_path_containment(relative_path: str | Path, base_dir: Path) -> Path
 
 def sanitize_inventory_for_bundle(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Sanitize inventory rows for portable bundles by stripping machine-specific paths and local user info."""
+    from acb.review import _canonical
+
     clean_rows: list[dict[str, Any]] = []
     for row in rows:
         clean_row = {
@@ -365,7 +368,7 @@ def sanitize_inventory_for_bundle(rows: list[dict[str, Any]]) -> list[dict[str, 
             "profile": row.get("profile", "default"),
             "object_type": row.get("object_type", ""),
             "scope": row.get("scope", ""),
-            "canonical_path": row.get("canonical_path", ""),
+            "canonical_path": _canonical(row),
             "format": row.get("format", ""),
             "policy": row.get("policy", ""),
             "content_hash": row.get("content_hash", ""),
@@ -560,6 +563,7 @@ def write_bundle(
     adapter_versions: dict[str, str] | None = None,
     object_file_map: dict[str, list[str]] | None = None,
     object_file_modes: dict[str, int] | None = None,
+    recovery: dict[str, Any] | None = None,
 ) -> Path:
     """Write a fully-formed, closed-world ACB at ``bundle_root`` atomically.
 
@@ -619,6 +623,15 @@ def write_bundle(
                 encoding="utf-8",
             )
 
+        if recovery is not None:
+            from acb.recovery import render_recovery
+
+            assert_no_lateral_secrets(recovery)
+            (staging_dir / "recovery.json").write_text(
+                json.dumps(recovery, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            )
+            (staging_dir / "NEXT-AGENT.md").write_text(render_recovery(recovery), encoding="utf-8")
+
         # Verify and write raw object files with byte-level scanning
         total_bytes = 0
         file_count = 0
@@ -650,6 +663,9 @@ def write_bundle(
         checksums: dict[str, str] = {}
         for name in ACB_JSON_FILES:
             checksums[name] = sha256_file(staging_dir / name)
+        if recovery is not None:
+            for name in ACB_RECOVERY_FILES:
+                checksums[name] = sha256_file(staging_dir / name)
         for relative_path in sorted((objects_dir_files or {}).keys()):
             norm_path = Path(relative_path).as_posix()
             checksums[f"{ACB_OBJECTS_DIR}/{norm_path}"] = sha256_file(
@@ -704,6 +720,7 @@ def collect_source_objects(
     include_plugins: bool = False,
     include_session: bool = False,
     object_file_modes: dict[str, int] | None = None,
+    collection_details: list[dict[str, Any]] | None = None,
 ) -> tuple[dict[str, bytes], dict[str, int], dict[str, list[str]]]:
     """Walk plan items and copy source files into stable paths under ``objects/``.
 
@@ -750,8 +767,14 @@ def collect_source_objects(
     # two distinct sources collapse to the same bundle-relative path.
     seen_relative_sources: dict[str, set[str]] = {}
 
+    current_source: dict[str, Any] = {}
+
     def _record(status: str) -> None:
         summary[status] = summary.get(status, 0) + 1
+        if status != "captured" and collection_details is not None:
+            from acb.review import _canonical
+
+            collection_details.append({**current_source, "canonical_path": _canonical(current_source), "reason": status, "next_action": "Review the source surface before retiring the old device; no complete payload was saved for this outcome."})
 
     def _collect_handoff(source: Path, relative: str, obj_key: str) -> None:
         from migration_core import serialize_portable_handoff
@@ -769,6 +792,63 @@ def collect_source_objects(
             if object_file_modes is not None:
                 object_file_modes[destination] = stat.S_IMODE(candidate.stat().st_mode) & 0o777
             object_file_map.setdefault(obj_key, []).append(destination)
+
+    def _collect_skill_packages(source: Path, relative: str, obj_key: str) -> None:
+        # A bad package must not abort other independent Skills or leave a
+        # partially copied package whose credential-bearing file disappeared.
+        candidates = [source] if (source / "SKILL.md").is_file() else sorted(source.iterdir())
+        for candidate in candidates:
+            destination = relative if candidate == source else f"{relative}/{candidate.name}"
+            if candidate.is_symlink():
+                if collection_details is not None:
+                    collection_details.append({**current_source, "relative_path": destination, "reason": "symlink-not-followed", "next_action": "Review and export the linked Skill source explicitly; this link was not copied."})
+                continue
+            staged: dict[str, bytes] = {}
+            staged_modes: dict[str, int] = {}
+            omissions: list[dict[str, Any]] = []
+            if candidate.is_dir():
+                _collect_tree(candidate, destination, staged, file_modes=staged_modes, exclusions=omissions)
+            elif candidate.is_file():
+                staged[destination] = candidate.read_bytes()
+                staged_modes[destination] = stat.S_IMODE(candidate.stat().st_mode) & 0o777
+            else:
+                omissions.append({"relative_path": destination, "reason": "non-regular-file", "next_action": "Recreate this runtime resource on the destination."})
+            try:
+                for path, data in staged.items():
+                    scan_object_bytes(data, path)
+            except ACBSecretLeak:
+                summary["secret_rejected"] += 1
+                if collection_details is not None:
+                    collection_details.append({**current_source, "relative_path": destination, "reason": "skill-package-rejected", "next_action": "This entire package was excluded after secret/binary preflight. Review a separate sanitized copy before capturing it; source bytes were preserved."})
+                continue
+            skill_document = staged.get(f"{destination}/SKILL.md")
+            if skill_document is not None:
+                from migration_core import FRONTMATTER, SKILL_NAME, _skill_metadata
+
+                # Validate the exact scanned bytes, not the source tree again:
+                # omitted links do not invalidate otherwise safe siblings.
+                try:
+                    match = FRONTMATTER.match(skill_document.decode("utf-8"))
+                    if not match:
+                        raise ValueError("missing Skill frontmatter")
+                    metadata = _skill_metadata(match.group(1))
+                    name = metadata.get("name", "")
+                    description = metadata.get("description", "")
+                    if not SKILL_NAME.fullmatch(name) or len(name) > 64:
+                        raise ValueError("invalid Skill name")
+                    if not description.strip() or len(description) > 1024:
+                        raise ValueError("invalid Skill description")
+                except (UnicodeError, ValueError):
+                    summary["metadata_rejected"] = summary.get("metadata_rejected", 0) + 1
+                    if collection_details is not None:
+                        collection_details.append({**current_source, "relative_path": destination, "reason": "skill-metadata-rejected", "next_action": "This entire package was excluded from automatic Skills because its metadata is invalid. Source bytes were preserved; export a separate inert copy for agent-reviewed repair before recapturing. No content was installed or activated."})
+                    continue
+            objects.update(staged)
+            if object_file_modes is not None:
+                object_file_modes.update(staged_modes)
+            object_file_map.setdefault(obj_key, []).extend(sorted(staged))
+            if collection_details is not None:
+                collection_details.extend(omissions)
 
     # Build (product, profile, object_type, scope) -> inventory row index.
     # Serialized plan surfaces take precedence; inventory rows provide
@@ -791,6 +871,8 @@ def collect_source_objects(
         scope = src.get("scope") or ""
         resolved_path = src.get("resolved_path")
         item_status = item.get("status") or ""
+        current_source.clear()
+        current_source.update({"product": prod, "profile": prof, "scope": scope, "object_type": obj_type, "canonical_path": src.get("canonical_path", "")})
 
         obj_key = f"{obj_type}/{prod}/{prof}/{scope}"
 
@@ -893,10 +975,13 @@ def collect_source_objects(
                     objects[relative] = source_path.read_bytes()
                     object_file_map.setdefault(obj_key, []).append(relative)
             elif source_path.is_dir():
-                start_keys = set(objects.keys())
-                _collect_tree(source_path, relative, objects, depth=0, file_modes=object_file_modes)
-                new_keys = set(objects.keys()) - start_keys
-                object_file_map.setdefault(obj_key, []).extend(sorted(new_keys))
+                if obj_type == "skills":
+                    _collect_skill_packages(source_path, relative, obj_key)
+                else:
+                    start_keys = set(objects.keys())
+                    _collect_tree(source_path, relative, objects, depth=0, file_modes=object_file_modes, exclusions=collection_details)
+                    new_keys = set(objects.keys()) - start_keys
+                    object_file_map.setdefault(obj_key, []).extend(sorted(new_keys))
             else:
                 _record("parse_failed")
                 return
@@ -1041,13 +1126,20 @@ def _collect_tree(
     out: dict[str, bytes],
     depth: int = 0,
     file_modes: dict[str, int] | None = None,
+    exclusions: list[dict[str, Any]] | None = None,
 ) -> None:
-    if depth > MAX_DIR_DEPTH:
+    if depth > MAX_DIR_DEPTH or len(Path(prefix).parts) >= MAX_DIR_DEPTH:
+        if exclusions is not None:
+            exclusions.append({"relative_path": prefix, "reason": "depth-limit", "next_action": "Export this deep directory separately after reviewing its contents."})
         return
     for item in sorted(dir_path.iterdir()):
         if item.is_symlink():
+            if exclusions is not None:
+                exclusions.append({"relative_path": f"{prefix}/{item.name}", "reason": "symlink-not-followed", "next_action": "Review and export the linked source separately, then rebuild the link on the new device."})
             continue
         if _SENSITIVE_FILENAME_HINT.search(item.name):
+            if exclusions is not None:
+                exclusions.append({"relative_path": f"{prefix}/{item.name}", "reason": "sensitive-filename", "next_action": "Recreate required secrets locally using a password manager or keychain; do not add their values to the bundle."})
             continue
         rel = f"{prefix}/{item.name}"
         if item.is_file():
@@ -1055,7 +1147,9 @@ def _collect_tree(
             if file_modes is not None:
                 file_modes[rel] = stat.S_IMODE(item.stat().st_mode) & 0o777
         elif item.is_dir():
-            _collect_tree(item, rel, out, depth + 1, file_modes)
+            _collect_tree(item, rel, out, depth + 1, file_modes, exclusions)
+        elif exclusions is not None:
+            exclusions.append({"relative_path": rel, "reason": "non-regular-file", "next_action": "Recreate this runtime resource locally; no payload was saved."})
 
 
 def _path_for_object(
@@ -1211,6 +1305,27 @@ def verify_bundle(bundle_root: Path) -> list[str]:
                 assert_no_lateral_secrets(payload)
             except Exception as error:
                 errors.append(f"invalid JSON payload in {json_name}: {error}")
+
+    # Optional handoff metadata is checksummed and re-scanned just like payloads.
+    # Its absence remains compatible with existing ACB schema v1 bundles.
+    for name in ACB_RECOVERY_FILES:
+        target = bundle_root / name
+        if not target.is_file() or target.is_symlink():
+            continue
+        try:
+            data = target.read_bytes()
+            if len(data) > MAX_FILE_SIZE:
+                raise ValueError("recovery metadata exceeds file size limit")
+            scan_object_bytes(data, name)
+            if name.endswith(".json"):
+                payload = json.loads(data)
+                if not isinstance(payload, dict) or payload.get("schema_version") != 1:
+                    raise ValueError("unsupported recovery report schema")
+                if payload.get("bundle_id") != json.loads((bundle_root / ACB_MANIFEST_NAME).read_text(encoding="utf-8")).get("bundle_id"):
+                    raise ValueError("recovery report belongs to another bundle")
+                assert_no_lateral_secrets(payload)
+        except Exception as error:
+            errors.append(f"invalid recovery metadata {name}: {error}")
 
     # 3b. Re-scan every stored object with the same strict secret/binary
     # scanner used at write time (audit #7). A bundle that passed write-time

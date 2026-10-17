@@ -1,0 +1,1583 @@
+{
+  "schema_version": 1,
+  "selection": "Explicit client IDs only; installation does not select clients. Paths are candidates, existence does not prove native loading.",
+  "clients": {
+    "trae": {
+      "label": "TRAE",
+      "native_profiles": [
+        "trae/cn-ide"
+      ],
+      "sources": [
+        {
+          "path": "~/.trae/skills",
+          "kind": "skills",
+          "scope": "user"
+        },
+        {
+          "path": "~/.trae/rules",
+          "kind": "text",
+          "scope": "user",
+          "category": "rules"
+        },
+        {
+          "path": "~/.trae/agents",
+          "kind": "text",
+          "scope": "user",
+          "category": "agents"
+        },
+        {
+          "path": "~/.trae/commands",
+          "kind": "text",
+          "scope": "user",
+          "category": "commands"
+        },
+        {
+          "path": "~/.trae/hooks",
+          "kind": "text",
+          "scope": "user",
+          "category": "hooks"
+        },
+        {
+          "path": "~/.trae/mcp.json",
+          "kind": "mcp",
+          "scope": "user"
+        },
+        {
+          "path": "~/.trae/mcp_config.json",
+          "kind": "mcp",
+          "scope": "user"
+        },
+        {
+          "path": "~/.trae-cn/skills",
+          "kind": "skills",
+          "scope": "user"
+        },
+        {
+          "path": "~/.trae-cn/rules",
+          "kind": "text",
+          "scope": "user",
+          "category": "rules"
+        },
+        {
+          "path": "~/.trae-cn/agents",
+          "kind": "text",
+          "scope": "user",
+          "category": "agents"
+        },
+        {
+          "path": "~/.trae-cn/commands",
+          "kind": "text",
+          "scope": "user",
+          "category": "commands"
+        },
+        {
+          "path": "~/.trae-cn/hooks",
+          "kind": "text",
+          "scope": "user",
+          "category": "hooks"
+        },
+        {
+          "path": "~/.trae-cn/mcp.json",
+          "kind": "mcp",
+          "scope": "user"
+        },
+        {
+          "path": "~/.trae-cn/mcp_config.json",
+          "kind": "mcp",
+          "scope": "user"
+        },
+        {
+          "path": ".trae/skills",
+          "kind": "skills",
+          "scope": "project"
+        },
+        {
+          "path": ".trae/rules",
+          "kind": "text",
+          "scope": "project",
+          "category": "rules"
+        },
+        {
+          "path": ".trae/agents",
+          "kind": "text",
+          "scope": "project",
+          "category": "agents"
+        },
+        {
+          "path": ".trae/commands",
+          "kind": "text",
+          "scope": "project",
+          "category": "commands"
+        },
+        {
+          "path": ".trae/hooks",
+          "kind": "text",
+          "scope": "project",
+          "category": "hooks"
+        },
+        {
+          "path": ".trae/mcp.json",
+          "kind": "mcp",
+          "scope": "project"
+        },
+        {
+          "path": ".trae/mcp_config.json",
+          "kind": "mcp",
+          "scope": "project"
+        },
+        {
+          "path": ".trae-cn/skills",
+          "kind": "skills",
+          "scope": "project"
+        },
+        {
+          "path": ".trae-cn/rules",
+          "kind": "text",
+          "scope": "project",
+          "category": "rules"
+        },
+        {
+          "path": ".trae-cn/agents",
+          "kind": "text",
+          "scope": "project",
+          "category": "agents"
+        },
+        {
+          "path": ".trae-cn/commands",
+          "kind": "text",
+          "scope": "project",
+          "category": "commands"
+        },
+        {
+          "path": ".trae-cn/hooks",
+          "kind": "text",
+          "scope": "project",
+          "category": "hooks"
+        },
+        {
+          "path": ".trae-cn/mcp.json",
+          "kind": "mcp",
+          "scope": "project"
+        },
+        {
+          "path": ".trae-cn/mcp_config.json",
+          "kind": "mcp",
+          "scope": "project"
+        },
+        {
+          "path": "~/Library/Application Support/Trae/User/settings.json",
+          "kind": "preferences",
+          "scope": "user",
+          "format": "jsonc",
+          "fields": [
+            [
+              "editor.fontSize"
+            ],
+            [
+              "editor.fontFamily"
+            ],
+            [
+              "editor.tabSize"
+            ],
+            [
+              "editor.wordWrap"
+            ],
+            [
+              "files.autoSave"
+            ],
+            [
+              "workbench.colorTheme"
+            ],
+            [
+              "python.languageServer"
+            ],
+            [
+              "AI.skills.enableAgentsDir"
+            ],
+            [
+              "AI.rules.importAgentsMd"
+            ],
+            [
+              "AI.rules.importClaudeMd"
+            ],
+            [
+              "AI.agent.v2.browserBuiltinEnabled"
+            ],
+            [
+              "claudeCode.preferredLocation"
+            ]
+          ]
+        },
+        {
+          "path": "~/Library/Application Support/Trae/User/mcp.json",
+          "kind": "mcp",
+          "scope": "user"
+        },
+        {
+          "path": "~/Library/Application Support/Trae/User/globalStorage/state.vscdb",
+          "kind": "mcp-sqlite",
+          "scope": "user"
+        },
+        {
+          "path": "~/Library/Application Support/Trae CN/User/settings.json",
+          "kind": "preferences",
+          "scope": "user",
+          "format": "jsonc",
+          "fields": [
+            [
+              "editor.fontSize"
+            ],
+            [
+              "editor.fontFamily"
+            ],
+            [
+              "editor.tabSize"
+            ],
+            [
+              "editor.wordWrap"
+            ],
+            [
+              "files.autoSave"
+            ],
+            [
+              "workbench.colorTheme"
+            ],
+            [
+              "python.languageServer"
+            ],
+            [
+              "AI.skills.enableAgentsDir"
+            ],
+            [
+              "AI.rules.importAgentsMd"
+            ],
+            [
+              "AI.rules.importClaudeMd"
+            ],
+            [
+              "AI.agent.v2.browserBuiltinEnabled"
+            ],
+            [
+              "claudeCode.preferredLocation"
+            ]
+          ]
+        },
+        {
+          "path": "~/Library/Application Support/Trae CN/User/mcp.json",
+          "kind": "mcp",
+          "scope": "user"
+        },
+        {
+          "path": "~/Library/Application Support/Trae CN/User/globalStorage/state.vscdb",
+          "kind": "mcp-sqlite",
+          "scope": "user"
+        },
+        {
+          "path": "~/Library/Application Support/TRAE SOLO CN/User/settings.json",
+          "kind": "preferences",
+          "scope": "user",
+          "format": "jsonc",
+          "fields": [
+            [
+              "editor.fontSize"
+            ],
+            [
+              "editor.fontFamily"
+            ],
+            [
+              "editor.tabSize"
+            ],
+            [
+              "editor.wordWrap"
+            ],
+            [
+              "files.autoSave"
+            ],
+            [
+              "workbench.colorTheme"
+            ],
+            [
+              "python.languageServer"
+            ],
+            [
+              "AI.skills.enableAgentsDir"
+            ],
+            [
+              "AI.rules.importAgentsMd"
+            ],
+            [
+              "AI.rules.importClaudeMd"
+            ],
+            [
+              "AI.agent.v2.browserBuiltinEnabled"
+            ],
+            [
+              "claudeCode.preferredLocation"
+            ]
+          ]
+        },
+        {
+          "path": "~/Library/Application Support/TRAE SOLO CN/User/mcp.json",
+          "kind": "mcp",
+          "scope": "user"
+        },
+        {
+          "path": "~/Library/Application Support/TRAE SOLO CN/User/globalStorage/state.vscdb",
+          "kind": "mcp-sqlite",
+          "scope": "user"
+        }
+      ],
+      "exclusions": [
+        "authentication and credentials",
+        "sessions, conversations and memory stores",
+        "opaque databases and account state",
+        "built-in Skill caches and downloaded runtimes",
+        "permissions, trust and automatic execution settings"
+      ],
+      "routing_notes": [
+        "The registry cn-ide and ide profiles currently share .trae paths. .trae-cn is a separate observed source and may be shared by CN and SOLO CN; preserve source identities and verify the destination variant before reconstruction."
+      ],
+      "inventories": [
+        {
+          "kind": "extensions",
+          "path": "~/.trae-cn/extensions"
+        }
+      ]
+    },
+    "codex": {
+      "label": "Codex",
+      "native_profiles": [
+        "codex/cli"
+      ],
+      "sources": [
+        {
+          "path": "~/.agents/skills",
+          "kind": "skills",
+          "scope": "user"
+        },
+        {
+          "path": "~/.codex/skills",
+          "kind": "skills",
+          "scope": "user"
+        },
+        {
+          "path": "~/.codex/agents",
+          "kind": "text",
+          "scope": "user",
+          "category": "agents"
+        },
+        {
+          "path": "~/.codex/commands",
+          "kind": "text",
+          "scope": "user",
+          "category": "commands"
+        },
+        {
+          "path": "~/.codex/rules",
+          "kind": "text",
+          "scope": "user",
+          "category": "permission-rules",
+          "classification": "activation-bearing"
+        },
+        {
+          "path": "~/.codex/scripts",
+          "kind": "text",
+          "scope": "user",
+          "category": "scripts"
+        },
+        {
+          "path": "~/.codex/hooks.json",
+          "kind": "hooks",
+          "scope": "user",
+          "category": "hooks.json",
+          "format": "json",
+          "fields": [
+            "hooks"
+          ],
+          "dependency_roots": [
+            "~/.codex/scripts",
+            "~/.codex/hooks"
+          ],
+          "classification": "activation-bearing"
+        },
+        {
+          "path": "~/.codex/config.toml",
+          "kind": "mcp",
+          "scope": "user",
+          "container": "mcp_servers"
+        },
+        {
+          "path": "~/.codex/config.toml",
+          "kind": "preferences",
+          "scope": "user",
+          "format": "toml",
+          "fields": [
+            [
+              "model"
+            ],
+            [
+              "model_provider"
+            ],
+            [
+              "model_reasoning_effort"
+            ],
+            [
+              "personality"
+            ],
+            [
+              "service_tier"
+            ],
+            [
+              "features",
+              "memories"
+            ],
+            [
+              "features",
+              "multi_agent"
+            ],
+            [
+              "features",
+              "chronicle"
+            ],
+            [
+              "features",
+              "js_repl"
+            ],
+            [
+              "features",
+              "local_thread_store_compression"
+            ],
+            [
+              "memories",
+              "generate_memories"
+            ],
+            [
+              "memories",
+              "use_memories"
+            ],
+            [
+              "memories",
+              "disable_on_external_context"
+            ]
+          ],
+          "map_fields": [
+            {
+              "path": [
+                "model_providers"
+              ],
+              "fields": [
+                [
+                  "name"
+                ],
+                [
+                  "base_url"
+                ],
+                [
+                  "wire_api"
+                ],
+                [
+                  "supports_websockets"
+                ],
+                [
+                  "request_max_retries"
+                ],
+                [
+                  "stream_max_retries"
+                ]
+              ]
+            }
+          ],
+          "records": [
+            {
+              "path": [
+                "skills",
+                "config"
+              ],
+              "fields": [
+                [
+                  "path"
+                ],
+                [
+                  "enabled"
+                ]
+              ]
+            }
+          ]
+        },
+        {
+          "path": "~/.codex/config.toml",
+          "kind": "hooks",
+          "scope": "user",
+          "format": "toml",
+          "fields": [
+            "hooks",
+            "notify"
+          ],
+          "dependency_roots": [
+            "~/.codex/scripts",
+            "~/.codex/hooks"
+          ],
+          "classification": "activation-bearing"
+        },
+        {
+          "path": ".agents/skills",
+          "kind": "skills",
+          "scope": "project"
+        },
+        {
+          "path": ".codex/skills",
+          "kind": "skills",
+          "scope": "project"
+        },
+        {
+          "path": ".codex/agents",
+          "kind": "text",
+          "scope": "project",
+          "category": "agents"
+        },
+        {
+          "path": ".codex/commands",
+          "kind": "text",
+          "scope": "project",
+          "category": "commands"
+        },
+        {
+          "path": ".codex/hooks.json",
+          "kind": "hooks",
+          "scope": "project",
+          "category": "hooks.json",
+          "format": "json",
+          "fields": [
+            "hooks"
+          ],
+          "dependency_roots": [
+            ".codex/scripts",
+            ".codex/hooks"
+          ],
+          "classification": "activation-bearing"
+        },
+        {
+          "path": ".codex/config.toml",
+          "kind": "mcp",
+          "scope": "project",
+          "container": "mcp_servers"
+        },
+        {
+          "path": ".codex/config.toml",
+          "kind": "preferences",
+          "scope": "project",
+          "format": "toml",
+          "fields": [
+            [
+              "model"
+            ],
+            [
+              "model_provider"
+            ],
+            [
+              "model_reasoning_effort"
+            ],
+            [
+              "personality"
+            ]
+          ]
+        },
+        {
+          "path": ".codex/config.toml",
+          "kind": "hooks",
+          "scope": "project",
+          "format": "toml",
+          "fields": [
+            "hooks",
+            "notify"
+          ],
+          "dependency_roots": [
+            ".codex/scripts",
+            ".codex/hooks"
+          ],
+          "classification": "activation-bearing"
+        },
+        {
+          "path": "~/.codex/AGENTS.md",
+          "kind": "text",
+          "scope": "user",
+          "category": "agents.md"
+        },
+        {
+          "path": "~/.codex/AGENTS.override.md",
+          "kind": "text",
+          "scope": "user",
+          "category": "agents.override.md"
+        },
+        {
+          "path": "AGENTS.md",
+          "kind": "text",
+          "scope": "project",
+          "category": "agents.md"
+        },
+        {
+          "path": "AGENTS.override.md",
+          "kind": "text",
+          "scope": "project",
+          "category": "agents.override.md"
+        },
+        {
+          "path": "~/.codex/mcp_config.json",
+          "kind": "mcp",
+          "scope": "user"
+        },
+        {
+          "kind": "authored-automations",
+          "path": "~/.codex/automations",
+          "scope": "user"
+        }
+      ],
+      "exclusions": [
+        "authentication and credentials",
+        "sessions, conversations and memory stores",
+        "opaque databases and account state",
+        "built-in Skill caches and downloaded runtimes",
+        "permissions, trust and automatic execution settings"
+      ],
+      "inventories": [
+        {
+          "kind": "plugins",
+          "path": "~/.codex/config.toml",
+          "format": "toml",
+          "container": [
+            "plugins"
+          ],
+          "enabled_field": "enabled"
+        }
+      ]
+    },
+    "antigravity": {
+      "label": "Antigravity",
+      "native_profiles": [],
+      "sources": [
+        {
+          "path": "~/.gemini/config/skills",
+          "kind": "skills",
+          "scope": "user"
+        },
+        {
+          "path": "~/.gemini/config/rules",
+          "kind": "text",
+          "scope": "user",
+          "category": "rules"
+        },
+        {
+          "path": "~/.gemini/config/agents",
+          "kind": "text",
+          "scope": "user",
+          "category": "agents"
+        },
+        {
+          "path": "~/.gemini/config/commands",
+          "kind": "text",
+          "scope": "user",
+          "category": "commands"
+        },
+        {
+          "path": "~/.gemini/config/hooks",
+          "kind": "text",
+          "scope": "user",
+          "category": "hooks"
+        },
+        {
+          "path": "~/.gemini/config/workflows",
+          "kind": "text",
+          "scope": "user",
+          "category": "workflows"
+        },
+        {
+          "path": "~/.gemini/config/mcp_config.json",
+          "kind": "mcp",
+          "scope": "user"
+        },
+        {
+          "path": ".agent/skills",
+          "kind": "skills",
+          "scope": "project"
+        },
+        {
+          "path": ".agent/rules",
+          "kind": "text",
+          "scope": "project",
+          "category": "rules"
+        },
+        {
+          "path": ".agent/agents",
+          "kind": "text",
+          "scope": "project",
+          "category": "agents"
+        },
+        {
+          "path": ".agent/commands",
+          "kind": "text",
+          "scope": "project",
+          "category": "commands"
+        },
+        {
+          "path": ".agent/hooks",
+          "kind": "text",
+          "scope": "project",
+          "category": "hooks"
+        },
+        {
+          "path": ".agent/workflows",
+          "kind": "text",
+          "scope": "project",
+          "category": "workflows"
+        },
+        {
+          "path": ".agent/mcp_config.json",
+          "kind": "mcp",
+          "scope": "project"
+        },
+        {
+          "path": "~/.gemini/config/config.json",
+          "kind": "preferences",
+          "scope": "user",
+          "format": "json",
+          "fields": [
+            [
+              "userSettings",
+              "themeMode"
+            ]
+          ]
+        },
+        {
+          "path": "~/Library/Application Support/Antigravity/User/settings.json",
+          "kind": "preferences",
+          "scope": "user",
+          "format": "jsonc",
+          "fields": [
+            [
+              "editor.fontSize"
+            ],
+            [
+              "editor.fontFamily"
+            ],
+            [
+              "editor.tabSize"
+            ],
+            [
+              "editor.wordWrap"
+            ],
+            [
+              "files.autoSave"
+            ],
+            [
+              "workbench.colorTheme"
+            ],
+            [
+              "python.languageServer"
+            ]
+          ]
+        },
+        {
+          "path": "~/Library/Application Support/Antigravity IDE/User/settings.json",
+          "kind": "preferences",
+          "scope": "user",
+          "format": "jsonc",
+          "fields": [
+            [
+              "editor.fontSize"
+            ],
+            [
+              "editor.fontFamily"
+            ],
+            [
+              "editor.tabSize"
+            ],
+            [
+              "editor.wordWrap"
+            ],
+            [
+              "files.autoSave"
+            ],
+            [
+              "workbench.colorTheme"
+            ],
+            [
+              "python.languageServer"
+            ]
+          ]
+        }
+      ],
+      "exclusions": [
+        "authentication and credentials",
+        "sessions, conversations and memory stores",
+        "opaque databases and account state",
+        "built-in Skill caches and downloaded runtimes",
+        "permissions, trust and automatic execution settings"
+      ],
+      "routing_notes": [
+        "The observed .gemini/config tree is Antigravity context; its presence does not select Gemini CLI. Antigravity and Antigravity IDE editor settings remain separate source identities."
+      ],
+      "inventories": [
+        {
+          "kind": "plugins",
+          "path": "~/.gemini/config/config.json",
+          "format": "json",
+          "container": [
+            "plugins"
+          ],
+          "installed_from_field": "installedFrom"
+        },
+        {
+          "kind": "extensions",
+          "path": "~/.antigravity/extensions"
+        },
+        {
+          "kind": "extensions",
+          "path": "~/.antigravity-ide/extensions"
+        }
+      ]
+    },
+    "claude-code": {
+      "label": "Claude Code",
+      "native_profiles": [
+        "claude/code-cli"
+      ],
+      "sources": [
+        {
+          "path": "~/.claude/skills",
+          "kind": "skills",
+          "scope": "user"
+        },
+        {
+          "path": "~/.claude/CLAUDE.md",
+          "kind": "text",
+          "scope": "user",
+          "category": "claude.md"
+        },
+        {
+          "path": "~/.claude/rules",
+          "kind": "text",
+          "scope": "user",
+          "category": "rules"
+        },
+        {
+          "path": "~/.claude/agents",
+          "kind": "text",
+          "scope": "user",
+          "category": "agents"
+        },
+        {
+          "path": "~/.claude/commands",
+          "kind": "text",
+          "scope": "user",
+          "category": "commands"
+        },
+        {
+          "path": "~/.claude/hooks.json",
+          "kind": "hooks",
+          "scope": "user",
+          "category": "hooks.json",
+          "format": "json",
+          "fields": [
+            "hooks"
+          ],
+          "dependency_roots": [
+            "~/.claude/scripts",
+            "~/.claude/hooks"
+          ],
+          "classification": "activation-bearing"
+        },
+        {
+          "path": "~/.claude/settings.json",
+          "kind": "preferences",
+          "scope": "user",
+          "format": "json",
+          "fields": [
+            [
+              "model"
+            ]
+          ]
+        },
+        {
+          "path": "~/.claude/settings.json",
+          "kind": "hooks",
+          "scope": "user",
+          "format": "json",
+          "fields": [
+            "hooks"
+          ],
+          "dependency_roots": [
+            "~/.claude/scripts",
+            "~/.claude/hooks"
+          ],
+          "classification": "activation-bearing"
+        },
+        {
+          "path": ".claude/skills",
+          "kind": "skills",
+          "scope": "project"
+        },
+        {
+          "path": ".claude/CLAUDE.md",
+          "kind": "text",
+          "scope": "project",
+          "category": "claude.md"
+        },
+        {
+          "path": ".claude/rules",
+          "kind": "text",
+          "scope": "project",
+          "category": "rules"
+        },
+        {
+          "path": ".claude/agents",
+          "kind": "text",
+          "scope": "project",
+          "category": "agents"
+        },
+        {
+          "path": ".claude/commands",
+          "kind": "text",
+          "scope": "project",
+          "category": "commands"
+        },
+        {
+          "path": ".claude/hooks.json",
+          "kind": "hooks",
+          "scope": "project",
+          "category": "hooks.json",
+          "format": "json",
+          "fields": [
+            "hooks"
+          ],
+          "dependency_roots": [
+            ".claude/scripts",
+            ".claude/hooks"
+          ],
+          "classification": "activation-bearing"
+        },
+        {
+          "path": ".claude/settings.json",
+          "kind": "preferences",
+          "scope": "project",
+          "format": "json",
+          "fields": [
+            [
+              "model"
+            ]
+          ]
+        },
+        {
+          "path": ".claude/settings.json",
+          "kind": "hooks",
+          "scope": "project",
+          "format": "json",
+          "fields": [
+            "hooks"
+          ],
+          "dependency_roots": [
+            ".claude/scripts",
+            ".claude/hooks"
+          ],
+          "classification": "activation-bearing"
+        },
+        {
+          "path": "CLAUDE.md",
+          "kind": "text",
+          "scope": "project",
+          "category": "claude.md"
+        },
+        {
+          "path": "CLAUDE.local.md",
+          "kind": "text",
+          "scope": "local",
+          "category": "claude.local.md"
+        },
+        {
+          "path": ".claude/settings.local.json",
+          "kind": "preferences",
+          "scope": "local",
+          "format": "json",
+          "fields": [
+            [
+              "model"
+            ]
+          ]
+        },
+        {
+          "path": "~/.claude.json",
+          "kind": "mcp",
+          "scope": "user"
+        },
+        {
+          "path": ".mcp.json",
+          "kind": "mcp",
+          "scope": "project"
+        }
+      ],
+      "exclusions": [
+        "authentication and credentials",
+        "sessions, conversations and memory stores",
+        "opaque databases and account state",
+        "built-in Skill caches and downloaded runtimes",
+        "permissions, trust and automatic execution settings"
+      ],
+      "inventories": [
+        {
+          "kind": "plugins",
+          "path": "~/.claude/settings.json",
+          "format": "json",
+          "container": [
+            "enabledPlugins"
+          ],
+          "enabled_field": "$value"
+        }
+      ]
+    },
+    "tuanjie": {
+      "label": "Tuanjie",
+      "native_profiles": [],
+      "sources": [
+        {
+          "path": "~/.codely-cli/skills",
+          "kind": "skills",
+          "scope": "user"
+        },
+        {
+          "path": "~/.codely-cli/CODELY.md",
+          "kind": "text",
+          "scope": "user",
+          "category": "codely.md"
+        },
+        {
+          "path": "~/.codely-cli/agents",
+          "kind": "text",
+          "scope": "user",
+          "category": "agents"
+        },
+        {
+          "path": "~/.codely-cli/commands",
+          "kind": "text",
+          "scope": "user",
+          "category": "commands"
+        },
+        {
+          "path": "~/.codely-cli/rules",
+          "kind": "text",
+          "scope": "user",
+          "category": "rules"
+        },
+        {
+          "path": "~/.codely-cli/hooks",
+          "kind": "text",
+          "scope": "user",
+          "category": "hooks"
+        },
+        {
+          "path": "~/.codely-cli/settings.json",
+          "kind": "mcp",
+          "scope": "user"
+        },
+        {
+          "path": "~/.codely-cli/settings.json",
+          "kind": "preferences",
+          "scope": "user",
+          "format": "json",
+          "fields": [
+            [
+              "modelOpenai"
+            ]
+          ]
+        },
+        {
+          "path": ".codely-cli/skills",
+          "kind": "skills",
+          "scope": "project"
+        },
+        {
+          "path": ".codely-cli/CODELY.md",
+          "kind": "text",
+          "scope": "project",
+          "category": "codely.md"
+        },
+        {
+          "path": ".codely-cli/agents",
+          "kind": "text",
+          "scope": "project",
+          "category": "agents"
+        },
+        {
+          "path": ".codely-cli/commands",
+          "kind": "text",
+          "scope": "project",
+          "category": "commands"
+        },
+        {
+          "path": ".codely-cli/rules",
+          "kind": "text",
+          "scope": "project",
+          "category": "rules"
+        },
+        {
+          "path": ".codely-cli/hooks",
+          "kind": "text",
+          "scope": "project",
+          "category": "hooks"
+        },
+        {
+          "path": ".codely-cli/settings.json",
+          "kind": "mcp",
+          "scope": "project"
+        },
+        {
+          "path": ".codely-cli/settings.json",
+          "kind": "preferences",
+          "scope": "project",
+          "format": "json",
+          "fields": [
+            [
+              "modelOpenai"
+            ]
+          ]
+        },
+        {
+          "path": "~/.codely/settings.json",
+          "kind": "preferences",
+          "scope": "user",
+          "format": "json",
+          "fields": [
+            [
+              "customModelProvider",
+              "baseUrl"
+            ]
+          ],
+          "records": [
+            {
+              "path": [
+                "customModels"
+              ],
+              "fields": [
+                [
+                  "id"
+                ],
+                [
+                  "name"
+                ],
+                [
+                  "provider"
+                ],
+                [
+                  "model"
+                ],
+                [
+                  "apiBase"
+                ],
+                [
+                  "roles"
+                ],
+                [
+                  "displayName"
+                ],
+                [
+                  "providerId"
+                ],
+                [
+                  "wireApi"
+                ],
+                [
+                  "supportsMultimodal"
+                ],
+                [
+                  "extra_body",
+                  "reasoning",
+                  "effort"
+                ]
+              ]
+            },
+            {
+              "path": [
+                "customModelProviders"
+              ],
+              "fields": [
+                [
+                  "id"
+                ],
+                [
+                  "name"
+                ],
+                [
+                  "baseUrl"
+                ],
+                [
+                  "apiBase"
+                ],
+                [
+                  "flashModelId"
+                ]
+              ]
+            }
+          ]
+        },
+        {
+          "path": "~/.codely/ide-settings.json",
+          "kind": "preferences",
+          "scope": "user",
+          "format": "json",
+          "fields": [
+            [
+              "codeWrap"
+            ],
+            [
+              "defaultChatModelTitle"
+            ]
+          ]
+        },
+        {
+          "path": "~/.codely/config.yaml",
+          "kind": "preferences",
+          "scope": "user",
+          "format": "yaml",
+          "fields": [
+            [
+              "name"
+            ],
+            [
+              "version"
+            ],
+            [
+              "schema"
+            ]
+          ],
+          "records": [
+            {
+              "path": [
+                "models"
+              ],
+              "fields": [
+                [
+                  "name"
+                ],
+                [
+                  "provider"
+                ],
+                [
+                  "model"
+                ],
+                [
+                  "apiBase"
+                ],
+                [
+                  "roles"
+                ]
+              ]
+            }
+          ]
+        },
+        {
+          "path": ".codely/settings.json",
+          "kind": "preferences",
+          "scope": "project",
+          "format": "json",
+          "fields": [
+            [
+              "customModelProvider",
+              "baseUrl"
+            ]
+          ],
+          "records": [
+            {
+              "path": [
+                "customModels"
+              ],
+              "fields": [
+                [
+                  "id"
+                ],
+                [
+                  "name"
+                ],
+                [
+                  "provider"
+                ],
+                [
+                  "model"
+                ],
+                [
+                  "apiBase"
+                ],
+                [
+                  "roles"
+                ],
+                [
+                  "displayName"
+                ],
+                [
+                  "providerId"
+                ],
+                [
+                  "wireApi"
+                ],
+                [
+                  "supportsMultimodal"
+                ],
+                [
+                  "extra_body",
+                  "reasoning",
+                  "effort"
+                ]
+              ]
+            },
+            {
+              "path": [
+                "customModelProviders"
+              ],
+              "fields": [
+                [
+                  "id"
+                ],
+                [
+                  "name"
+                ],
+                [
+                  "baseUrl"
+                ],
+                [
+                  "apiBase"
+                ],
+                [
+                  "flashModelId"
+                ]
+              ]
+            }
+          ]
+        },
+        {
+          "path": ".codely/ide-settings.json",
+          "kind": "preferences",
+          "scope": "project",
+          "format": "json",
+          "fields": [
+            [
+              "codeWrap"
+            ],
+            [
+              "defaultChatModelTitle"
+            ]
+          ]
+        },
+        {
+          "path": ".codely/config.yaml",
+          "kind": "preferences",
+          "scope": "project",
+          "format": "yaml",
+          "fields": [
+            [
+              "name"
+            ],
+            [
+              "version"
+            ],
+            [
+              "schema"
+            ]
+          ],
+          "records": [
+            {
+              "path": [
+                "models"
+              ],
+              "fields": [
+                [
+                  "name"
+                ],
+                [
+                  "provider"
+                ],
+                [
+                  "model"
+                ],
+                [
+                  "apiBase"
+                ],
+                [
+                  "roles"
+                ]
+              ]
+            }
+          ]
+        }
+      ],
+      "exclusions": [
+        "authentication and credentials",
+        "sessions, conversations and memory stores",
+        "opaque databases and account state",
+        "built-in Skill caches and downloaded runtimes",
+        "permissions, trust and automatic execution settings"
+      ]
+    },
+    "workbuddy": {
+      "label": "WorkBuddy",
+      "native_profiles": [],
+      "sources": [
+        {
+          "path": "~/.workbuddy/skills",
+          "kind": "skills",
+          "scope": "user"
+        },
+        {
+          "path": "~/.workbuddy/AGENTS.md",
+          "kind": "text",
+          "scope": "user",
+          "category": "agents.md"
+        },
+        {
+          "path": "~/.workbuddy/rules",
+          "kind": "text",
+          "scope": "user",
+          "category": "rules"
+        },
+        {
+          "path": "~/.workbuddy/agents",
+          "kind": "text",
+          "scope": "user",
+          "category": "agents"
+        },
+        {
+          "path": "~/.workbuddy/commands",
+          "kind": "text",
+          "scope": "user",
+          "category": "commands"
+        },
+        {
+          "path": "~/.workbuddy/hooks",
+          "kind": "text",
+          "scope": "user",
+          "category": "hooks"
+        },
+        {
+          "path": "~/.workbuddy/BOOTSTRAP.md",
+          "kind": "text",
+          "scope": "user",
+          "category": "bootstrap.md"
+        },
+        {
+          "path": "~/.workbuddy/IDENTITY.md",
+          "kind": "text",
+          "scope": "user",
+          "category": "identity.md"
+        },
+        {
+          "path": "~/.workbuddy/SOUL.md",
+          "kind": "text",
+          "scope": "user",
+          "category": "soul.md"
+        },
+        {
+          "path": "~/.workbuddy/USER.md",
+          "kind": "text",
+          "scope": "user",
+          "category": "user.md"
+        },
+        {
+          "path": "~/.workbuddy/mcp.json",
+          "kind": "mcp",
+          "scope": "user"
+        },
+        {
+          "path": "~/.workbuddy/settings.json",
+          "kind": "management-state",
+          "scope": "user",
+          "reason": "plugin-skill-overrides-and-permissions-require-explicit-safe-field-adapter"
+        },
+        {
+          "path": ".workbuddy/skills",
+          "kind": "skills",
+          "scope": "project"
+        },
+        {
+          "path": ".workbuddy/AGENTS.md",
+          "kind": "text",
+          "scope": "project",
+          "category": "agents.md"
+        },
+        {
+          "path": ".workbuddy/rules",
+          "kind": "text",
+          "scope": "project",
+          "category": "rules"
+        },
+        {
+          "path": ".workbuddy/agents",
+          "kind": "text",
+          "scope": "project",
+          "category": "agents"
+        },
+        {
+          "path": ".workbuddy/commands",
+          "kind": "text",
+          "scope": "project",
+          "category": "commands"
+        },
+        {
+          "path": ".workbuddy/hooks",
+          "kind": "text",
+          "scope": "project",
+          "category": "hooks"
+        },
+        {
+          "path": ".workbuddy/BOOTSTRAP.md",
+          "kind": "text",
+          "scope": "project",
+          "category": "bootstrap.md"
+        },
+        {
+          "path": ".workbuddy/IDENTITY.md",
+          "kind": "text",
+          "scope": "project",
+          "category": "identity.md"
+        },
+        {
+          "path": ".workbuddy/SOUL.md",
+          "kind": "text",
+          "scope": "project",
+          "category": "soul.md"
+        },
+        {
+          "path": ".workbuddy/USER.md",
+          "kind": "text",
+          "scope": "project",
+          "category": "user.md"
+        },
+        {
+          "path": ".workbuddy/mcp.json",
+          "kind": "mcp",
+          "scope": "project"
+        },
+        {
+          "path": ".workbuddy/settings.json",
+          "kind": "management-state",
+          "scope": "project",
+          "reason": "plugin-skill-overrides-and-permissions-require-explicit-safe-field-adapter"
+        }
+      ],
+      "exclusions": [
+        "authentication and credentials",
+        "sessions, conversations and memory stores",
+        "opaque databases and account state",
+        "built-in Skill caches and downloaded runtimes",
+        "permissions, trust and automatic execution settings"
+      ],
+      "inventories": [
+        {
+          "kind": "plugins",
+          "path": "~/.workbuddy/settings.json",
+          "format": "json",
+          "container": [
+            "enabledPlugins"
+          ],
+          "enabled_field": "$value"
+        }
+      ]
+    }
+  },
+  "provenance": "Registry paths are used where registered. Other paths are explicit bounded local-observation candidates; presence alone does not prove native discovery. Missing and unsupported sources remain visible in the report."
+}

@@ -21,7 +21,7 @@ SKILLS = ROOT / "skills"
 errors: list[str] = []
 
 SECRET = re.compile(
-    r"(?:sk-[A-Za-z0-9_-]{16,}"
+    r"(?:(?<![A-Za-z0-9])sk-[A-Za-z0-9_-]{16,}"
     r"|gh[pousr]_[A-Za-z0-9]{20,}"
     r"|github_pat_[A-Za-z0-9_]{20,}"
     r"|tvly-[A-Za-z0-9_-]{16,}"

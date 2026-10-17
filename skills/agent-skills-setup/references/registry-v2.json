@@ -353,10 +353,18 @@
           "sources": [
             "https://code.claude.com/docs/en/settings",
             "https://code.claude.com/docs/en/skills",
-            "https://code.claude.com/docs/en/mcp"
+            "https://code.claude.com/docs/en/mcp",
+            "https://code.claude.com/docs/en/memory"
           ],
           "surfaces": {
             "instructions": [
+              {
+                "format": "agents-md",
+                "path": "~/.claude/CLAUDE.md",
+                "policy": "semantic-ir-with-loss-report",
+                "scope": "user",
+                "storage": "file"
+              },
               {
                 "format": "agents-md",
                 "path": "CLAUDE.md",
@@ -379,6 +387,32 @@
                 "policy": "profile-version-adapter",
                 "scope": "project",
                 "storage": "file"
+              }
+            ],
+            "preferences": [
+              {
+                "format": "json",
+                "path": "~/.claude/settings.json",
+                "policy": "manual-template",
+                "scope": "user",
+                "storage": "config-subobject",
+                "review_fields": [
+                  [
+                    "model"
+                  ]
+                ]
+              },
+              {
+                "format": "json",
+                "path": ".claude/settings.json",
+                "policy": "manual-template",
+                "scope": "project",
+                "storage": "config-subobject",
+                "review_fields": [
+                  [
+                    "model"
+                  ]
+                ]
               }
             ],
             "skills": [
@@ -909,6 +943,50 @@
                 "policy": "manual-template",
                 "scope": "project",
                 "storage": "config-subobject"
+              }
+            ],
+            "preferences": [
+              {
+                "format": "toml",
+                "path": "~/.codex/config.toml",
+                "policy": "manual-template",
+                "scope": "user",
+                "storage": "config-subobject",
+                "review_fields": [
+                  [
+                    "model"
+                  ],
+                  [
+                    "model_provider"
+                  ],
+                  [
+                    "model_reasoning_effort"
+                  ],
+                  [
+                    "personality"
+                  ]
+                ]
+              },
+              {
+                "format": "toml",
+                "path": ".codex/config.toml",
+                "policy": "manual-template",
+                "scope": "project",
+                "storage": "config-subobject",
+                "review_fields": [
+                  [
+                    "model"
+                  ],
+                  [
+                    "model_provider"
+                  ],
+                  [
+                    "model_reasoning_effort"
+                  ],
+                  [
+                    "personality"
+                  ]
+                ]
               }
             ],
             "rules": [
@@ -1865,6 +1943,34 @@
                 "policy": "profile-version-adapter",
                 "scope": "project",
                 "storage": "file"
+              }
+            ],
+            "preferences": [
+              {
+                "format": "json",
+                "path": "~/.gemini/settings.json",
+                "policy": "manual-template",
+                "scope": "user",
+                "storage": "config-subobject",
+                "review_fields": [
+                  [
+                    "model",
+                    "name"
+                  ]
+                ]
+              },
+              {
+                "format": "json",
+                "path": ".gemini/settings.json",
+                "policy": "manual-template",
+                "scope": "project",
+                "storage": "config-subobject",
+                "review_fields": [
+                  [
+                    "model",
+                    "name"
+                  ]
+                ]
               }
             ],
             "skills": [

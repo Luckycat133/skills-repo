@@ -51,7 +51,18 @@
           "type": "array",
           "items": {"type": "string"}
         },
-        "compatibility_behavior": {"enum": ["alternative", "precedence"]}
+        "compatibility_behavior": {"enum": ["alternative", "precedence"]},
+        "review_fields": {
+          "description": "Exact scalar field paths for inert review-only preferences; dots within a component are literal.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string", "minLength": 1, "pattern": "^[A-Za-z][A-Za-z0-9_.-]*$"}
+          }
+        }
       },
       "additionalProperties": true
     },

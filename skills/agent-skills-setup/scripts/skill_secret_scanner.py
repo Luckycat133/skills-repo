@@ -12,7 +12,9 @@ from typing import Sequence
 
 
 PROVIDER_PATTERNS = (
-    re.compile(rb"sk-[A-Za-z0-9_-]{20,}"),
+    # A provider prefix starts a token, not the tail of a word like "task-".
+    # Punctuation/underscore separators still expose keys in filenames/paths.
+    re.compile(rb"(?<![A-Za-z0-9])sk-[A-Za-z0-9_-]{20,}"),
     re.compile(rb"gh[pousr]_[A-Za-z0-9]{20,}"),
     re.compile(rb"AKIA[0-9A-Z]{16}"),
     re.compile(rb"ASIA[0-9A-Z]{16}"),

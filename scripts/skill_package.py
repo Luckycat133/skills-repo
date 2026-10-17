@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import json
 import os
 import shutil
 import subprocess
@@ -17,13 +18,6 @@ from types import ModuleType
 import validate_skills as validator
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-RUNTIME_FILES = (
-    "common.sh", "context-migrator.py", "ide-paths.tsv",
-    "legacy-smart-ide-migration.sh", "migration_core.py",
-    "scan-skill-secrets.py", "skill_secret_scanner.py", "smart-ide-migration.sh",
-    "acb/__init__.py", "acb/bundle.py", "acb/key_security.py", "detect/__init__.py", "detect/probes.py",
-    "registry/__init__.py", "registry/alias_resolver.py", "registry/exceptions.py",
-)
 CACHE_NAMES = {"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".DS_Store"}
 
 
@@ -118,7 +112,13 @@ def stage_runtime(source: Path, destination: Path, version: str) -> None:
         raise ValueError(f"invalid release version: {version}")
     source, destination = checked_paths(source, destination, replace=False)
     validate_source(source, source.name)
-    required = [source / "assets/LICENSE.clawhub", *(source / "scripts" / name for name in RUNTIME_FILES)]
+    catalog = json.loads((source / "assets/runtime-files.json").read_text(encoding="utf-8"))
+    if (not isinstance(catalog, list) or not catalog or not all(isinstance(name, str) for name in catalog)
+            or len(set(catalog)) != len(catalog)
+            or any(Path(name).is_absolute() or ".." in Path(name).parts or not name for name in catalog)):
+        raise ValueError("invalid runtime file catalog")
+    runtime_files = tuple(catalog)
+    required = [source / "assets/LICENSE.clawhub", *(source / "scripts" / name for name in runtime_files)]
     missing = [str(path.relative_to(source)) for path in required if not path.is_file() or path.is_symlink()]
     if missing:
         raise ValueError("missing runtime dependencies: " + ", ".join(missing))
@@ -131,7 +131,7 @@ def stage_runtime(source: Path, destination: Path, version: str) -> None:
         for directory in ("assets", "references"):
             if (source / directory).is_dir():
                 shutil.copytree(source / directory, staging / directory, symlinks=True, ignore=ignored_artifacts)
-        for name in RUNTIME_FILES:
+        for name in runtime_files:
             target = staging / "scripts" / name
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source / "scripts" / name, target, follow_symlinks=False)

@@ -81,6 +81,7 @@ from acb.key_security import (
     create_key_file,
     discard_created_key_file,
 )
+from acb.recovery import build_recovery, read_recovery
 from detect.probes import (
     InstallState,
     ProbeResult,
@@ -292,6 +293,11 @@ def create_parser() -> argparse.ArgumentParser:
             "--include-plugins and 'handoff' with --include-session to round-trip "
             "those opt-in objects through an ACB."
         ),
+    )
+    snapshot.add_argument(
+        "--include-review-materials",
+        action="store_true",
+        help="Save scanned standalone manual surfaces and allowlisted preference fields as inert review material, never auto-installed.",
     )
     snapshot.add_argument(
         "--include-plugins",
@@ -721,14 +727,14 @@ def run_snapshot(args: argparse.Namespace) -> int:
         failed_products: list[dict[str, str]] = []
         for selector in sorted(detected_selectors):
             try:
-                doc = build_plan_document(
+                snapshot_items, _ = build_plan(
                     registry,
                     selector,
                     selector,
                     sorted(allowed_object_types),
                     args.scope,
                 )
-                plan_rows.extend(doc.get("items", []))
+                plan_rows.extend(item.to_dict() for item in snapshot_items)
             except Exception as error:
                 # Audit P1-2: never silently swallow per-product plan build
                 # failures. Capture and surface them so the snapshot summary
@@ -740,32 +746,37 @@ def run_snapshot(args: argparse.Namespace) -> int:
                 )
     else:
         src_sel = args.source or "cline/ide"
-        document = build_plan_document(
+        snapshot_items, _ = build_plan(
             registry,
             src_sel,
             args.target or src_sel,
             sorted(allowed_object_types),
             args.scope,
         )
-        plan_rows = document.get("items", [])
-    installed_products_list = (
-            sorted(detected_selectors)
-            if all_installed
-            else sorted({row["product"] for row in detect_rows})
-        )
+        plan_rows = [item.to_dict() for item in snapshot_items]
+    selected_profiles = (
+        set(detected_selectors) if all_installed
+        else {"/".join(registry.profile(args.source)[:2])}
+    )
+    # Only the selected profiles/scopes enter the portable inventory and reports.
+    inventory_rows = [
+        row for row in inventory_rows
+        if f"{row.get('product')}/{row.get('profile')}" in selected_profiles
+        and scope_matches(row.get("scope", ""), args.scope)
+    ]
+    requested_scopes.update(row["scope"] for row in inventory_rows if row.get("scope"))
     inventory_summary = {
-        "installed_products": installed_products_list,
+        "installed_products": sorted(selected_profiles),
         "surface_count": sum(
             1 for row in inventory_rows if row.get("object_type")
         ),
         "detection_status": detection_status if all_installed else {},
         "failed_products": failed_products if all_installed else [],
     }
-    requested_scopes = {
-        source["scope"] for item in plan_rows
-        if (source := item.get("source")) and scope_matches(source["scope"], args.scope)
-    }
-    validate_artifact_output(bundle_root, registry, {"items": plan_rows})
+    validate_artifact_output(
+        bundle_root, registry, {"items": plan_rows},
+        [Path(row["resolved_path"]) for row in inventory_rows if row.get("resolved_path")],
+    )
 
     # Only include authorized, planned objects in manifest
     manifest_objects = []
@@ -808,6 +819,7 @@ def run_snapshot(args: argparse.Namespace) -> int:
 
     collect_summary = {"captured": 0, "manual_rebuild": 0, "excluded_by_policy": 0, "parse_failed": 0, "secret_rejected": 0, "conflict": 0}
     object_file_modes: dict[str, int] = {}
+    collection_details: list[dict[str, Any]] = []
     try:
         objects_dir_files, collect_summary, object_file_map = collect_source_objects(
             registry,
@@ -822,6 +834,7 @@ def run_snapshot(args: argparse.Namespace) -> int:
             include_plugins=bool(getattr(args, "include_plugins", False)),
             include_session=bool(getattr(args, "include_session", False)),
             object_file_modes=object_file_modes,
+            collection_details=collection_details,
         )
     except ACBError as error:
         # Parse failure during object collection - emit failure with summary
@@ -836,6 +849,35 @@ def run_snapshot(args: argparse.Namespace) -> int:
             args.json,
         )
         return 1
+
+    for obj in manifest.objects:
+        key = "/".join(str(obj.get(field, "")) for field in ("surface", "product", "profile", "scope"))
+        if obj.get("status") in {"ready", "ready-lossy"} and not object_file_map.get(key):
+            obj.update(status="excluded", reason="No safe source payload was captured; consult recovery exclusions.", secret_status="not-captured")
+
+    review_tasks: list[dict[str, Any]] = []
+    if args.include_review_materials:
+        from acb.review import collect_review_materials
+        from acb.preferences import collect_preferences
+        from acb.mcp_review import collect_mcp_review
+        from acb.provider_review import collect_provider_review
+
+        for review_files, review_objects, review_map, tasks in (
+            collect_review_materials(inventory_rows, selected_profiles=selected_profiles, scopes=requested_scopes),
+            collect_preferences(registry, selected_profiles=selected_profiles, scopes=requested_scopes),
+            collect_mcp_review(inventory_rows, selected_profiles=selected_profiles, scopes=requested_scopes),
+            collect_provider_review(registry, selected_profiles=selected_profiles, scopes=requested_scopes),
+        ):
+            if objects_dir_files.keys() & review_files.keys():
+                raise ValueError("review payload path conflict")
+            objects_dir_files.update(review_files)
+            for key, paths in review_map.items():
+                object_file_map.setdefault(key, []).extend(paths)
+            for obj in review_objects:
+                identity = (obj.get("surface"), obj.get("product"), obj.get("profile"), obj.get("scope"))
+                if not any((old.get("surface"), old.get("product"), old.get("profile"), old.get("scope")) == identity for old in manifest.objects):
+                    manifest.objects.append(obj)
+            review_tasks.extend(tasks)
 
     # compatibility: source_product x target_product matrix sourced from
     # Registry v2 migration_policy and support_level. Audit P1-2: check
@@ -889,6 +931,20 @@ def run_snapshot(args: argparse.Namespace) -> int:
     )
     reauth = collect_reauth(plan_rows)
     rebuild = collect_rebuild(plan_rows)
+    rebuild.extend(review_tasks)
+    recovery = build_recovery(
+        bundle_id=manifest.bundle_id, platform=manifest.source_platform,
+        profiles=selected_profiles, scopes=requested_scopes,
+        requested_objects=allowed_object_types, inventory=inventory_rows,
+        objects=manifest.objects, files=objects_dir_files, file_map=object_file_map,
+        review_tasks=review_tasks, exclusions=collection_details,
+        detection=inventory_summary["detection_status"], failures=inventory_summary["failed_products"],
+        requirements=requirements, reauth=reauth, review_requested=args.include_review_materials,
+        registry_sha256=hashlib.sha256(args.registry.read_bytes()).hexdigest(),
+        workspace_identity={"display_name": workspace.name, "source_path": str(workspace)},
+    )
+    recovery["required_features"] = ["device-recovery-v1", "review-materials-v1"]
+    recovery["capture_runtime_sha256"] = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
     # secrets_required: each entry is a non-secret description of a
     # credential the user must re-supply on the target device. The name
     # is derived from the MCP server's command / package, not the
@@ -929,6 +985,7 @@ def run_snapshot(args: argparse.Namespace) -> int:
             adapter_versions=ADAPTER_VERSIONS,
             object_file_map=object_file_map,
             object_file_modes=object_file_modes,
+            recovery=recovery,
         )
     except ACBSecretLeak as error:
         print(f"ERROR: ACB secret leak: {error}", file=sys.stderr)
@@ -944,6 +1001,10 @@ def run_snapshot(args: argparse.Namespace) -> int:
             "objects_dir": str(bundle_root / ACB_OBJECTS_DIR),
             "objects_captured": sum(bool(files) for files in object_file_map.values()),
             "files_captured": len(objects_dir_files),
+            "recovery_report": str(bundle_root / "recovery.json"),
+            "next_agent": str(bundle_root / "NEXT-AGENT.md"),
+            "complete_environment": False,
+            "remaining_tasks": len(recovery["tasks"]),
             "detected": detect_rows[:50],
             "summary": inventory_summary,
             "collection_summary": collect_summary,
@@ -1969,6 +2030,11 @@ def _apply_restore(
         restore_result = restore_bundle_objects(
             bundle_root, args.restore_root, dry_run=False
         )
+    remaining_work = read_recovery(bundle_root).get("tasks", []) + [
+        {**entry, "category": "destination-deferred", "status": "pending", "next_action": "Resolve this destination plan outcome and review a fresh plan before applying; consult the transaction manifest for exact target and loss details."}
+        for entry in manifest_obj.get("items", [])
+        if entry.get("outcome") not in {"applied", "applied-lossy", "draft-written"}
+    ]
     emit(
         {
             "ok": not verify_errors,
@@ -1981,6 +2047,9 @@ def _apply_restore(
             "stale_targets": [],
             "detected": detected[:50],
             "summary": manifest_obj.get("summary", {}),
+            "recovery_report": str(bundle_root / "recovery.json") if (bundle_root / "recovery.json").is_file() else None,
+            "remaining_work": remaining_work,
+            "acceptance_layers": {"bundle_integrity": "passed", "configuration_write": "verified" if not verify_errors else "failed", "native_discovery": "not-run", "runtime_and_connectivity": "not-run"},
             "errors": verify_errors,
             "failed_targets": document.get("failed_targets", []),
         },
@@ -2022,6 +2091,7 @@ def run_doctor(args: argparse.Namespace) -> int:
             "reauth_actions": reauth.get("items", []),
             "rebuild_actions": rebuild.get("items", []),
             "platform_notes": requirements.get("platform_notes", []),
+            "recovery": read_recovery(bundle_root),
         },
         args.json,
     )

@@ -50,10 +50,14 @@ providers = {
 }
 for label, val in providers.items():
     check(f"SECRET matches {label} value", bool(vs.SECRET.search(val)))
+for prefix in ('', ' ', '"', "'", '/', '\\', '_', '-', 'API_KEY=', 'Bearer '):
+    check(f"SECRET retains provider separator {prefix!r}", bool(vs.SECRET.search(prefix + providers['sk-'])))
 
 for benign in [
     "sk-",
     "sk-short",
+    "task-specification-for-agent",
+    "/skills/task-specification-for-agent/SKILL.md",
     "my api key is secret but this is long prose",
     "https://example.com",
     "AKIA",

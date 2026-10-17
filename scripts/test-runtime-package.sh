@@ -106,11 +106,17 @@ fi
 find "$PACKAGE_ROOT/scripts" -maxdepth 1 -type f -exec basename {} \; \
     | LC_ALL=C sort >"$TMP_ROOT/runtime-scripts.actual"
 printf '%s\n' \
+    capture-review-sources.py \
     common.sh \
     context-migrator.py \
+    device-export.py \
+    device-restore.py \
+    discover-context-sources.py \
     ide-paths.tsv \
     legacy-smart-ide-migration.sh \
     migration_core.py \
+    prepare-skill-source.py \
+    review-restore.py \
     scan-skill-secrets.py \
     skill_secret_scanner.py \
     smart-ide-migration.sh \
@@ -178,6 +184,19 @@ PY
     }
     bash scripts/smart-ide-migration.sh snapshot --help >/dev/null || {
         echo "FAIL: staged smart-ide-migration.sh snapshot --help failed" >&2
+        exit 1
+    }
+    # Exercise lazy review/preference imports from the staged package rather
+    # than relying on the source checkout or merely parsing --help.
+    mkdir -p "$SMOKE_WORKSPACE/.cline/agents"
+    printf '%s\n' 'Review this change before activation.' > "$SMOKE_WORKSPACE/.cline/agents/reviewer.md"
+    AGENT_SKILLS_PLATFORM=linux python3 -I -B scripts/context-migrator.py snapshot \
+        --source cline/ide --target cline/ide --scope project \
+        --workspace "$SMOKE_WORKSPACE" --registry "$SMOKE_REGISTRY" \
+        --include-review-materials --output "$TMP_ROOT/staged-smoke.acb" --json >/dev/null
+    python3 -I -B scripts/context-migrator.py bundle-verify "$TMP_ROOT/staged-smoke.acb" --json >/dev/null
+    [[ -f "$TMP_ROOT/staged-smoke.acb/NEXT-AGENT.md" ]] || {
+        echo "FAIL: staged package did not produce the next-agent handoff" >&2
         exit 1
     }
     bash scripts/smart-ide-migration.sh restore --help >/dev/null || {
