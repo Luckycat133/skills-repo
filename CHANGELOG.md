@@ -6,6 +6,7 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ### Fixed
 
+- Complete reviewed global preference selection with explicit string arrays and identity-keyed maps; capture marketplace/version provenance, secondary configuration roots, locale and CLI shell-routing snippets without whole-profile or credential export.
 - Capture selected Hook/notify definitions and bounded script dependencies independently of management/trust state; restore only after native/dependency review while preserving target settings and unrelated events. Include safe global behavior/provider fields, Skill overrides and explicit global helper sources.
 - Default device discovery/export to user configuration; include project/local context only through explicit scope selection, preserving requested project migration support.
 - Map Claude Code user instructions at `~/.claude/CLAUDE.md` for reviewed cross-IDE conversion, including Codex in both directions. Preserve explicit precedence/format-loss review.

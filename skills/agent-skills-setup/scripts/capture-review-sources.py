@@ -22,7 +22,7 @@ if _SCRIPT_DIR not in sys.path:
     sys.path.insert(0, _SCRIPT_DIR)
 from acb.bundle import ACBError, ACBSecretLeak, MAX_BUNDLE_FILES, MAX_FILE_SIZE, MAX_TOTAL_SIZE, scan_object_bytes
 from acb.mcp_review import _safe_review_url, collect_mcp_review
-from acb.preferences import UnsupportedYAML, _decode_preferences, valid_review_fields, valid_review_value
+from acb.preferences import UnsupportedYAML, _decode_preferences, valid_review_fields, valid_review_map_key, valid_review_value
 from acb.recovery import _safe_metadata
 from acb.review import collect_review_materials
 from migration_core import LossReport
@@ -96,7 +96,7 @@ def validate_spec(spec: Any) -> list[dict[str, Any]]:
         for source in client["sources"]:
             if (not isinstance(source, dict) or not isinstance(source.get("id"), str)
                     or not IDENTIFIER.fullmatch(source["id"]) or source["id"] in source_ids
-                    or source.get("kind") not in {"skills", "text", "mcp", "mcp-sqlite", "preferences", "hooks"}):
+                    or source.get("kind") not in {"skills", "text", "mcp", "mcp-sqlite", "preferences", "hooks", "installation-inventory", "shell-context"}):
                 raise ValueError("source requires a unique safe ID and supported kind")
             source_ids.add(source["id"])
             expand(source.get("path"))
@@ -112,10 +112,27 @@ def validate_spec(spec: Any) -> list[dict[str, Any]]:
                     expand(root)
             if source["kind"] == "preferences":
                 fields, records = source.get("fields", []), source.get("records", [])
+                arrays, maps = source.get("string_arrays", []), source.get("maps", [])
                 if (source.get("format") not in {"json", "jsonc", "toml", "yaml", "yml"}
                         or not isinstance(fields, list) or (fields and not valid_review_fields(fields))
-                        or not isinstance(records, list) or not (fields or records)):
+                        or not isinstance(records, list) or not isinstance(maps, list)
+                        or not isinstance(arrays, list) or (arrays and not valid_review_fields(arrays))
+                        or not (fields or records or arrays or maps)):
                     raise ValueError("preferences require a format and explicit safe field-path arrays")
+                map_paths: set[tuple[str, ...]] = set()
+                for selected_map in maps:
+                    if (not isinstance(selected_map, dict)
+                            or set(selected_map) - {"path", "scalar_values", "fields"}
+                            or (selected_map.get("path") != [] and not valid_review_fields([selected_map.get("path")]))
+                            or (selected_map.get("scalar_values") is not True
+                                and not valid_review_fields(selected_map.get("fields")))
+                            or (selected_map.get("scalar_values") is True
+                                and ("fields" in selected_map or selected_map.get("path") == []))):
+                        raise ValueError("maps require a safe path and explicit scalar values or leaf fields")
+                    identity = tuple(selected_map["path"])
+                    if identity in map_paths:
+                        raise ValueError("duplicate preference map path")
+                    map_paths.add(identity)
                 record_paths: set[tuple[str, ...]] = set()
                 for record in records:
                     if (not isinstance(record, dict) or not valid_review_fields([record.get("path")])
@@ -155,6 +172,20 @@ def preferences(path: Path, source: dict[str, Any], payload: Path, report: dict[
     source_bytes = path.read_bytes()
     report["source_content_sha256"] = hashlib.sha256(source_bytes).hexdigest()
     document = _decode_preferences(source_bytes, source["format"])
+    if source["format"] in {"json", "jsonc"}:
+        from migration_core import _strip_jsonc
+
+        def unique_keys(pairs: list) -> dict:
+            result = {}
+            for key, value in pairs:
+                if key in result:
+                    raise ValueError("duplicate-preference-key")
+                result[key] = value
+            return result
+
+        text = source_bytes.decode("utf-8")
+        json.loads(_strip_jsonc(text) if source["format"] == "jsonc" else text,
+                   object_pairs_hook=unique_keys)
     tasks: list[dict[str, Any]] = []
 
     def locate(data: Any, field: list[str]) -> tuple[bool, Any]:
@@ -165,7 +196,7 @@ def preferences(path: Path, source: dict[str, Any], payload: Path, report: dict[
             value = value[part]
         return True, value
 
-    def select(data: dict[str, Any], wanted: list[list[str]], context: dict[str, Any]) -> tuple[list[dict[str, Any]], bool]:
+    def select(data: dict[str, Any], wanted: list[list[str]], context: dict[str, Any], allow_arrays: bool = False) -> tuple[list[dict[str, Any]], bool]:
         selected: list[dict[str, Any]] = []
         invalid = False
         for field in wanted:
@@ -173,7 +204,7 @@ def preferences(path: Path, source: dict[str, Any], payload: Path, report: dict[
             if not exists:
                 tasks.append({**context, "path": field, "reason": "field-not-present"})
                 continue
-            if not valid_review_value(value, field):
+            if not valid_review_value(value, field, allow_string_array=allow_arrays and field in source.get("string_arrays", [])):
                 tasks.append({**context, "path": field, "reason": "field-not-scalar-or-finite"})
                 invalid = True
                 continue
@@ -204,7 +235,8 @@ def preferences(path: Path, source: dict[str, Any], payload: Path, report: dict[
             selected.append(candidate)
         return selected, invalid
 
-    fields, _ = select(document, source.get("fields", []), {})
+    wanted = source.get("fields", []) + [p for p in source.get("string_arrays", []) if p not in source.get("fields", [])]
+    fields, _ = select(document, wanted, {}, allow_arrays=True)
     records: list[dict[str, Any]] = []
     examined = 0
     for requested in source.get("records", []):
@@ -232,13 +264,47 @@ def preferences(path: Path, source: dict[str, Any], payload: Path, report: dict[
                 tasks.append({**context, "reason": "record-item-rejected", "next_action": "Review this omitted array item separately; other array entries retain their original indexes."})
                 continue
             items.append({"index": index, "fields": selected})
-    if fields or records:
+    maps: list[dict[str, Any]] = []
+    for requested in source.get("maps", []):
+        parts = requested["path"]
+        if not parts and requested.get("scalar_values") is True:
+            raise ValueError("root preference maps require explicit safe leaf fields")
+        exists, raw_map = locate(document, parts)
+        if not exists or not isinstance(raw_map, dict):
+            tasks.append({"map_path": parts, "reason": "map-not-present" if not exists else "map-source-not-object"})
+            continue
+        entries: list[dict[str, Any]] = []
+        maps.append({"path": parts, "entries": entries})
+        for index, (key, raw) in enumerate(raw_map.items()):
+            context = {"map_path": parts, "index": index}
+            if examined >= MAX_BUNDLE_FILES:
+                tasks.append({**context, "reason": "map-item-count-limit"})
+                break
+            examined += 1
+            if not valid_review_map_key(key, root=not parts):
+                tasks.append({**context, "reason": "unsafe-map-identity-not-captured"})
+                continue
+            if requested.get("scalar_values") is True:
+                if isinstance(raw, (dict, list)):
+                    tasks.append({**context, "reason": "map-value-not-scalar"})
+                    continue
+                selected, _ = select({"value": raw}, [["value"]], context)
+                if selected:
+                    entries.append({"key": key, "value": selected[0]["value"]})
+            elif not isinstance(raw, dict):
+                tasks.append({**context, "reason": "map-entry-not-object"})
+            else:
+                selected, _ = select(raw, requested["fields"], context)
+                if selected:
+                    entries.append({"key": key, "fields": selected})
+    if fields or records or maps:
         payload.mkdir(mode=0o700)
         write_json(payload / "preferences.json", {"schema_version": 1, "review_only": True, "fields": fields,
-                                                   "records": records,
+                                                   "records": records, "maps": maps,
+                                                   "string_arrays": source.get("string_arrays", []),
                                                    "source_content_sha256": report["source_content_sha256"],
                                                    "next_action": "The destination AI manually merges only reviewed field paths into the matching native client, preserving siblings, then checks native settings and runtime. This is not an importable replacement settings file."})
-    return tasks, bool(fields or records)
+    return tasks, bool(fields or records or maps)
 
 
 def sqlite_mcp(path: Path, source: dict[str, Any], client_id: str,
@@ -402,6 +468,23 @@ def capture(spec_path: Path, output: Path) -> dict[str, Any]:
                         relative = Path(name)
                         if relative.is_absolute() or ".." in relative.parts:
                             raise ValueError("invalid captured hook payload path")
+                        target = payload / relative
+                        target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+                        with target.open("xb") as writer:
+                            writer.write(data)
+                    report["tasks"] = tasks
+                    report["status"] = ("partial" if tasks else "captured-review") if files else "excluded"
+                elif source["kind"] in {"installation-inventory", "shell-context"}:
+                    if source["kind"] == "installation-inventory":
+                        from acb.install_inventory import collect_install_inventory
+                        files, tasks = collect_install_inventory(path, source)
+                    else:
+                        from acb.shell_context import collect_shell_context
+                        files, tasks = collect_shell_context(path, source)
+                    for name, data in files.items():
+                        relative = Path(name)
+                        if relative.is_absolute() or ".." in relative.parts:
+                            raise ValueError("invalid inert payload path")
                         target = payload / relative
                         target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
                         with target.open("xb") as writer:

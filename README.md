@@ -59,6 +59,9 @@ Shared Hook definitions, notification bindings and bounded script dependencies
 are captured separately from trust state. Restoration requires native definition
 and dependency review; repository audit distinguishes an existing remote from
 actually synchronized local configuration.
+Additional adapters preserve selected disabled-Skill arrays, identity-keyed
+preferences, marketplace/version inventories and inert shell-routing snippets.
+Consequential behavior and installation provenance require target-native review.
 For explicitly reviewed linked Skills, `prepare-skill-source.py` creates a
 scanned staging source and exclusion report without changing the live tree.
 For a device packet with `device-index.json` and `PACKET-SHA256.json`, the

@@ -270,10 +270,21 @@ def render(data: dict, format_name: str) -> bytes:
 
 
 def merge_preferences(document: dict, payload: dict, entry: dict, pending: list) -> None:
+    from acb.preferences import valid_review_map_key, valid_review_value
+    arrays = payload.get("string_arrays", [])
+    if not isinstance(arrays, list) or (arrays and not valid_review_fields(arrays)):
+        fail("unsafe string-array selection")
+
+    def safe_value(value: Any, path: list, allow_array: bool = False) -> None:
+        if not valid_review_value(value, path, allow_string_array=allow_array):
+            fail("unsafe preference value")
+        scan_object_bytes(json.dumps({"path": path, "value": value}, allow_nan=False).encode(), "preferences.json")
+
     replace = entry.get("conflict", "error") == "replace"
     for field in payload.get("fields", []):
         if not valid_review_fields([field["path"]]):
             fail("unsafe preference field")
+        safe_value(field["value"], field["path"], field["path"] in arrays)
         put(document, field["path"], field["value"], replace)
     for record in payload.get("records", []):
         parts = record["path"]
@@ -316,6 +327,46 @@ def merge_preferences(document: dict, payload: dict, entry: dict, pending: list)
                 items.append(target)
         if len(record["items"]) != record.get("source_length", len(record["items"])):
             pending.append({"reason": "excluded-source-model-items", "path": parts})
+
+    map_paths = set()
+    for selected_map in payload.get("maps", []):
+        if (not isinstance(selected_map, dict) or set(selected_map) != {"path", "entries"}
+                or (selected_map.get("path") != [] and not valid_review_fields([selected_map.get("path")]))
+                or not isinstance(selected_map["entries"], list)):
+            fail("unsafe preference map")
+        parts = selected_map["path"]
+        if tuple(parts) in map_paths:
+            fail("duplicate preference map path")
+        map_paths.add(tuple(parts))
+        exists, current = get(document, parts)
+        if exists and not isinstance(current, dict):
+            fail("target preference map is not an object")
+        seen_keys = set()
+        for item in selected_map["entries"]:
+            if not isinstance(item, dict) or not valid_review_map_key(item.get("key"), root=not parts):
+                fail("unsafe preference map identity")
+            key = item["key"]
+            if key in seen_keys:
+                fail("duplicate preference map identity")
+            seen_keys.add(key)
+            if set(item) == {"key", "value"}:
+                if not parts:
+                    fail("root preference maps require explicit safe leaf fields")
+                if isinstance(item["value"], (dict, list)):
+                    fail("preference map value must be scalar")
+                safe_value(item["value"], ["value"])
+                put(document, parts + [key], item["value"], replace)
+            elif set(item) == {"key", "fields"} and isinstance(item["fields"], list):
+                paths = [field.get("path") for field in item["fields"] if isinstance(field, dict)]
+                if len(paths) != len(item["fields"]) or not valid_review_fields(paths):
+                    fail("unsafe preference map leaves")
+                for field in item["fields"]:
+                    if set(field) != {"path", "value"} or isinstance(field["value"], (dict, list)):
+                        fail("preference map leaf must be scalar")
+                    safe_value(field["value"], field["path"])
+                    put(document, parts + [key] + field["path"], field["value"], replace)
+            else:
+                fail("unsafe preference map entry")
 
 
 def build_plan(packet: Path, mapping_path: Path) -> tuple[dict, dict[str, bytes]]:
@@ -367,6 +418,12 @@ def build_plan(packet: Path, mapping_path: Path) -> tuple[dict, dict[str, bytes]
             pending.append({"client": key[0], "source": key[1], "reason": "no-captured-payload"})
             continue
         kind = source["kind"]
+        if kind == "preferences" and source.get("classification") in {"activation-bearing", "installation-provenance"} and entry.get("behavior_reviewed") is not True:
+            pending.append({"client": key[0], "source": key[1], "reason": "behavior-or-installation-source-needs-native-review"})
+            continue
+        if kind == "installation-inventory":
+            pending.append({"client": key[0], "source": key[1], "reason": "installation-provenance-captured-not-installed"})
+            continue
         if kind in {"preferences", "mcp", "mcp-sqlite", "hooks"}:
             if kind == "hooks" and entry.get("activation_reviewed") is not True:
                 pending.append({"client": key[0], "source": key[1], "reason": "hook-definition-captured-needs-native-review"})
@@ -517,7 +574,7 @@ def build_plan(packet: Path, mapping_path: Path) -> tuple[dict, dict[str, bytes]
                                    "before": before, "after_sha256": sha(data), "mode": before["mode"] or 0o600,
                                    "status": "unchanged" if before["sha256"] == sha(data) else "ready"})
             output_bytes[str(target_root)] = data
-        elif kind in {"skills", "text"}:
+        elif kind in {"skills", "text", "shell-context"}:
             source_path = Path(source.get("canonical") or source.get("source_root") or "")
             activation_path = (source.get("classification") == "activation-bearing"
                                or bool(set(source_path.parts) & {"hooks", "automations", ".hooks"})
@@ -568,7 +625,12 @@ def build_plan(packet: Path, mapping_path: Path) -> tuple[dict, dict[str, bytes]
                     mode = package_modes.get(relative_name, 0o600) & 0o777
                 else:
                     custom = entry.get("files", {})
-                    if name in custom:
+                    if kind == "shell-context":
+                        allowed_staging = [root / ".ai-ide-migration" / "pending" for root in roots]
+                        if not any(beneath(target_root, root) for root in allowed_staging):
+                            fail("shell context may only be staged under an authorized root's .ai-ide-migration/pending")
+                        relative_name = name.split("/payload/", 1)[1]
+                    elif name in custom:
                         relative_name = relative(custom[name])
                     elif entry.get("layout") == "file" and len(captured) == 1:
                         relative_name = ""
@@ -597,6 +659,8 @@ def build_plan(packet: Path, mapping_path: Path) -> tuple[dict, dict[str, bytes]
                                    "before": before, "after_sha256": sha(data), "mode": before["mode"] or mode,
                                    "status": "unchanged" if before["sha256"] == sha(data) else "ready"})
                 output_bytes[str(target)] = data
+            if kind == "shell-context":
+                pending.append({"client": key[0], "source": key[1], "reason": "shell-snippets-staged-not-sourced-review-routing-dependencies"})
         else:
             fail("unsupported captured kind")
     deduplicated = {}
@@ -805,6 +869,10 @@ def mapping_template(packet: Path, home: Path, workspace_map: Path | None) -> di
                 pending.append({"client": client["id"], "source": source["id"], "reason": "explicit-native-target-or-project-mapping-required"})
                 continue
             entry = {"client": client["id"], "source": source["id"], "target": str(target), "conflict": "error"}
+            if source["kind"] == "shell-context":
+                entry["target"] = str(home / ".ai-ide-migration/pending/shell" / client["id"] / source["id"])
+            if source.get("classification") in {"activation-bearing", "installation-provenance"} and source["kind"] == "preferences":
+                entry["behavior_reviewed"] = False
             if source["kind"] in {"preferences", "hooks"}:
                 entry["format"] = original.get("format")
                 if source["kind"] == "hooks":

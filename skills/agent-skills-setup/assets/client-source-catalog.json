@@ -325,6 +325,188 @@
           "path": "~/Library/Application Support/TRAE SOLO CN/User/globalStorage/state.vscdb",
           "kind": "mcp-sqlite",
           "scope": "user"
+        },
+        {
+          "path": "~/.trae-cn/argv.json",
+          "kind": "preferences",
+          "scope": "user",
+          "format": "jsonc",
+          "fields": [
+            [
+              "locale"
+            ]
+          ]
+        },
+        {
+          "path": "~/Library/Application Support/Trae/User/settings.json",
+          "kind": "preferences",
+          "scope": "user",
+          "format": "jsonc",
+          "fields": [
+            [
+              "git.autofetch"
+            ],
+            [
+              "AI.toolcall.v2.ide.command.mode"
+            ],
+            [
+              "AI.toolcall.v2.solo.command.mode"
+            ]
+          ],
+          "id_suffix": "execution-preferences",
+          "classification": "activation-bearing"
+        },
+        {
+          "path": "~/Library/Application Support/Trae CN/User/settings.json",
+          "kind": "preferences",
+          "scope": "user",
+          "format": "jsonc",
+          "fields": [
+            [
+              "git.autofetch"
+            ],
+            [
+              "AI.toolcall.v2.ide.command.mode"
+            ],
+            [
+              "AI.toolcall.v2.solo.command.mode"
+            ]
+          ],
+          "id_suffix": "execution-preferences",
+          "classification": "activation-bearing"
+        },
+        {
+          "path": "~/Library/Application Support/TRAE SOLO CN/User/settings.json",
+          "kind": "preferences",
+          "scope": "user",
+          "format": "jsonc",
+          "fields": [
+            [
+              "git.autofetch"
+            ],
+            [
+              "AI.toolcall.v2.ide.command.mode"
+            ],
+            [
+              "AI.toolcall.v2.solo.command.mode"
+            ]
+          ],
+          "id_suffix": "execution-preferences",
+          "classification": "activation-bearing"
+        },
+        {
+          "path": "~/.trae-cn/skill-config.json",
+          "kind": "preferences",
+          "scope": "user",
+          "format": "json",
+          "fields": [
+            [
+              "disabledSkills"
+            ],
+            [
+              "deletedSkills"
+            ]
+          ],
+          "string_arrays": [
+            [
+              "disabledSkills"
+            ],
+            [
+              "deletedSkills"
+            ]
+          ],
+          "maps": [
+            {
+              "path": [
+                "builtinSkillStatus"
+              ],
+              "scalar_values": true
+            },
+            {
+              "path": [
+                "managedSkills"
+              ],
+              "scalar_values": true
+            }
+          ]
+        },
+        {
+          "path": "~/.trae-cn/plugin-config.json",
+          "kind": "preferences",
+          "scope": "user",
+          "format": "json",
+          "fields": [],
+          "maps": [
+            {
+              "path": [
+                "plugins"
+              ],
+              "fields": [
+                [
+                  "user_enabled"
+                ],
+                [
+                  "app_origin_enabled"
+                ]
+              ]
+            }
+          ],
+          "classification": "installation-provenance"
+        },
+        {
+          "path": "~/.trae-cn/installed-plugins.json",
+          "kind": "installation-inventory",
+          "scope": "user",
+          "format": "json",
+          "selectors": [
+            {
+              "path": [
+                "data",
+                "marketplaces",
+                "*",
+                "marketplace"
+              ],
+              "fields": [
+                [
+                  "registry"
+                ],
+                [
+                  "name"
+                ]
+              ]
+            },
+            {
+              "path": [
+                "data",
+                "marketplaces",
+                "*",
+                "plugins",
+                "*"
+              ],
+              "fields": [
+                [
+                  "plugin_id"
+                ],
+                [
+                  "registry"
+                ],
+                [
+                  "name"
+                ],
+                [
+                  "version"
+                ],
+                [
+                  "source",
+                  "type"
+                ],
+                [
+                  "source",
+                  "path"
+                ]
+              ]
+            }
+          ]
         }
       ],
       "exclusions": [
@@ -458,6 +640,50 @@
             [
               "memories",
               "disable_on_external_context"
+            ],
+            [
+              "desktop",
+              "preventSleepWhileRunning"
+            ],
+            [
+              "desktop",
+              "keepRemoteControlAwakeWhilePluggedIn"
+            ],
+            [
+              "desktop",
+              "followUpQueueMode"
+            ],
+            [
+              "desktop",
+              "git-show-sidebar-pr-icons"
+            ],
+            [
+              "desktop",
+              "git-pull-request-merge-method"
+            ],
+            [
+              "desktop",
+              "selected-avatar-id"
+            ],
+            [
+              "desktop",
+              "avatar-overlay-mascot-width-px"
+            ],
+            [
+              "desktop",
+              "dock-icon-preference"
+            ],
+            [
+              "desktop",
+              "conversationDetailMode"
+            ],
+            [
+              "desktop",
+              "enabled-reasoning-efforts"
+            ],
+            [
+              "desktop",
+              "default-workspace-full-view"
             ]
           ],
           "map_fields": [
@@ -502,6 +728,12 @@
                 ]
               ]
             }
+          ],
+          "string_arrays": [
+            [
+              "desktop",
+              "enabled-reasoning-efforts"
+            ]
           ]
         },
         {
@@ -630,6 +862,48 @@
           "kind": "authored-automations",
           "path": "~/.codex/automations",
           "scope": "user"
+        },
+        {
+          "path": "~/.codex/config.toml",
+          "kind": "preferences",
+          "scope": "user",
+          "format": "toml",
+          "fields": [
+            [
+              "desktop",
+              "git-always-force-push"
+            ],
+            [
+              "desktop",
+              "appshotAlwaysSendToMini"
+            ]
+          ],
+          "id_suffix": "consequential-preferences",
+          "classification": "activation-bearing"
+        },
+        {
+          "path": "~/.codex/config.toml",
+          "kind": "preferences",
+          "scope": "user",
+          "format": "toml",
+          "fields": [],
+          "maps": [
+            {
+              "path": [
+                "marketplaces"
+              ],
+              "fields": [
+                [
+                  "source_type"
+                ],
+                [
+                  "source"
+                ]
+              ]
+            }
+          ],
+          "id_suffix": "marketplace-sources",
+          "classification": "installation-provenance"
         }
       ],
       "exclusions": [
@@ -773,6 +1047,9 @@
             ],
             [
               "python.languageServer"
+            ],
+            [
+              "securecoder.enabled"
             ]
           ]
         },
@@ -802,7 +1079,96 @@
             ],
             [
               "python.languageServer"
+            ],
+            [
+              "securecoder.enabled"
             ]
+          ]
+        },
+        {
+          "path": "~/.zshrc",
+          "kind": "shell-context",
+          "scope": "user",
+          "path_markers": [
+            ".antigravity-ide/bin"
+          ]
+        },
+        {
+          "path": "~/.antigravity/argv.json",
+          "kind": "preferences",
+          "scope": "user",
+          "format": "jsonc",
+          "fields": [
+            [
+              "locale"
+            ]
+          ]
+        },
+        {
+          "path": "~/.antigravity-ide/argv.json",
+          "kind": "preferences",
+          "scope": "user",
+          "format": "jsonc",
+          "fields": [
+            [
+              "locale"
+            ]
+          ]
+        },
+        {
+          "path": "~/Library/Application Support/Antigravity/User/settings.json",
+          "kind": "preferences",
+          "scope": "user",
+          "format": "jsonc",
+          "fields": [
+            [
+              "explorer.confirmDelete"
+            ]
+          ],
+          "id_suffix": "native-preferences",
+          "classification": "activation-bearing"
+        },
+        {
+          "path": "~/Library/Application Support/Antigravity IDE/User/settings.json",
+          "kind": "preferences",
+          "scope": "user",
+          "format": "jsonc",
+          "fields": [
+            [
+              "explorer.confirmDelete"
+            ]
+          ],
+          "id_suffix": "native-preferences",
+          "classification": "activation-bearing"
+        },
+        {
+          "path": "~/.gemini/config/config.json",
+          "kind": "preferences",
+          "scope": "user",
+          "format": "json",
+          "fields": [
+            [
+              "userSettings",
+              "useAiCredits"
+            ]
+          ],
+          "id_suffix": "resource-preferences",
+          "classification": "activation-bearing"
+        },
+        {
+          "path": "~/Library/Application Support/Antigravity IDE/User/settings.json",
+          "kind": "installation-inventory",
+          "scope": "user",
+          "format": "jsonc",
+          "selectors": [
+            {
+              "path": [],
+              "fields": [
+                [
+                  "google.cloud.project"
+                ]
+              ]
+            }
           ]
         }
       ],
@@ -894,6 +1260,12 @@
           "fields": [
             [
               "model"
+            ],
+            [
+              "autoUpdatesChannel"
+            ],
+            [
+              "tui"
             ]
           ]
         },
@@ -1012,6 +1384,121 @@
           "path": ".mcp.json",
           "kind": "mcp",
           "scope": "project"
+        },
+        {
+          "path": "~/.claude/settings.json",
+          "kind": "preferences",
+          "scope": "user",
+          "format": "json",
+          "fields": [],
+          "maps": [
+            {
+              "path": [
+                "extraKnownMarketplaces"
+              ],
+              "fields": [
+                [
+                  "source",
+                  "source"
+                ],
+                [
+                  "source",
+                  "repo"
+                ],
+                [
+                  "source",
+                  "url"
+                ]
+              ]
+            }
+          ],
+          "id_suffix": "marketplace-sources",
+          "classification": "installation-provenance"
+        },
+        {
+          "path": "~/.claude/plugins/known_marketplaces.json",
+          "kind": "preferences",
+          "scope": "user",
+          "format": "json",
+          "fields": [],
+          "maps": [
+            {
+              "path": [],
+              "fields": [
+                [
+                  "source",
+                  "source"
+                ],
+                [
+                  "source",
+                  "repo"
+                ],
+                [
+                  "source",
+                  "url"
+                ],
+                [
+                  "source",
+                  "path"
+                ],
+                [
+                  "manifestName"
+                ],
+                [
+                  "type"
+                ],
+                [
+                  "autoUpdate"
+                ],
+                [
+                  "isBuiltIn"
+                ]
+              ]
+            }
+          ],
+          "classification": "installation-provenance"
+        },
+        {
+          "path": "~/.claude/plugins/installed_plugins.json",
+          "kind": "installation-inventory",
+          "scope": "user",
+          "format": "json",
+          "selectors": [
+            {
+              "path": [
+                "plugins",
+                "*",
+                "*"
+              ],
+              "fields": [
+                [
+                  "scope"
+                ],
+                [
+                  "version"
+                ],
+                [
+                  "gitCommitSha"
+                ]
+              ]
+            }
+          ]
+        },
+        {
+          "path": "~/.zshrc",
+          "kind": "shell-context",
+          "scope": "user",
+          "functions": [
+            "claude"
+          ]
+        },
+        {
+          "path": "~/.bashrc",
+          "kind": "shell-context",
+          "scope": "user",
+          "functions": [
+            "claude"
+          ]
         }
       ],
       "exclusions": [
@@ -1085,6 +1572,28 @@
           "fields": [
             [
               "modelOpenai"
+            ],
+            [
+              "unityInsight",
+              "enabled"
+            ],
+            [
+              "agents",
+              "disabled"
+            ],
+            [
+              "skills",
+              "disabled"
+            ]
+          ],
+          "string_arrays": [
+            [
+              "agents",
+              "disabled"
+            ],
+            [
+              "skills",
+              "disabled"
             ]
           ]
         },
@@ -1404,6 +1913,74 @@
               ]
             }
           ]
+        },
+        {
+          "path": "~/.codely/ide-settings.json",
+          "kind": "preferences",
+          "scope": "user",
+          "format": "json",
+          "fields": [
+            [
+              "yoloUserRequestTimeout"
+            ]
+          ],
+          "id_suffix": "execution-timeout",
+          "classification": "activation-bearing"
+        },
+        {
+          "path": "~/.codely/cowork-settings.json",
+          "kind": "preferences",
+          "scope": "user",
+          "format": "json",
+          "fields": [
+            [
+              "keepAwake"
+            ]
+          ]
+        },
+        {
+          "path": "~/.codely/cowork-settings.json",
+          "kind": "preferences",
+          "scope": "user",
+          "format": "json",
+          "fields": [
+            [
+              "enableTunnel"
+            ]
+          ],
+          "id_suffix": "tunnel-preference",
+          "classification": "activation-bearing"
+        },
+        {
+          "path": "~/.codely/Default/.codely-cli/settings.json",
+          "kind": "mcp",
+          "scope": "user"
+        },
+        {
+          "path": "~/.codely-cli/model-config.json",
+          "kind": "installation-inventory",
+          "scope": "user",
+          "format": "json",
+          "selectors": [
+            {
+              "path": [
+                "providers",
+                "*",
+                "models",
+                "*"
+              ],
+              "fields": [
+                [
+                  "id"
+                ],
+                [
+                  "detected",
+                  "limit",
+                  "context"
+                ]
+              ]
+            }
+          ]
         }
       ],
       "exclusions": [
@@ -1557,6 +2134,132 @@
           "kind": "management-state",
           "scope": "project",
           "reason": "plugin-skill-overrides-and-permissions-require-explicit-safe-field-adapter"
+        },
+        {
+          "path": "~/.workbuddy/plugins/known_marketplaces.json",
+          "kind": "preferences",
+          "scope": "user",
+          "format": "json",
+          "fields": [],
+          "maps": [
+            {
+              "path": [],
+              "fields": [
+                [
+                  "source",
+                  "source"
+                ],
+                [
+                  "source",
+                  "repo"
+                ],
+                [
+                  "source",
+                  "url"
+                ],
+                [
+                  "source",
+                  "path"
+                ],
+                [
+                  "manifestName"
+                ],
+                [
+                  "type"
+                ],
+                [
+                  "autoUpdate"
+                ],
+                [
+                  "isBuiltIn"
+                ]
+              ]
+            }
+          ],
+          "classification": "installation-provenance"
+        },
+        {
+          "path": "~/.workbuddy/plugins/installed_plugins.json",
+          "kind": "installation-inventory",
+          "scope": "user",
+          "format": "json",
+          "selectors": [
+            {
+              "path": [
+                "plugins",
+                "*",
+                "*"
+              ],
+              "fields": [
+                [
+                  "scope"
+                ],
+                [
+                  "version"
+                ],
+                [
+                  "gitCommitSha"
+                ]
+              ]
+            }
+          ]
+        },
+        {
+          "path": "~/.workbuddy/settings.json",
+          "kind": "preferences",
+          "scope": "user",
+          "format": "json",
+          "fields": [],
+          "maps": [
+            {
+              "path": [
+                "skillOverrides"
+              ],
+              "scalar_values": true
+            }
+          ]
+        },
+        {
+          "path": "~/.workbuddy/plugins/configured-plugins.json",
+          "kind": "installation-inventory",
+          "scope": "user",
+          "format": "json",
+          "selectors": [
+            {
+              "path": [
+                "builtInMarketPlugins",
+                "*"
+              ],
+              "fields": [
+                [
+                  "name"
+                ],
+                [
+                  "marketplaceName"
+                ],
+                [
+                  "scope"
+                ]
+              ]
+            },
+            {
+              "path": [
+                "builtInMarketPluginsMerge",
+                "*"
+              ],
+              "fields": [
+                [
+                  "name"
+                ],
+                [
+                  "marketplaceName"
+                ],
+                [
+                  "scope"
+                ]
+              ]
+            }
+          ]
         }
       ],
       "exclusions": [

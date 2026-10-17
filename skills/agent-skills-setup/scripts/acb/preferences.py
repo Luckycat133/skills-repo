@@ -232,13 +232,28 @@ def valid_review_fields(value: Any) -> bool:
     return True
 
 
-def valid_review_value(value: Any, field: list[str]) -> bool:
-    """Finite scalars plus explicitly selected, bounded string-array roles."""
-    if field and field[-1] == "roles" and isinstance(value, list):
+def valid_review_value(value: Any, field: list[str], allow_string_array: bool = False) -> bool:
+    """Finite scalars and bounded string arrays only when explicitly selected."""
+    if (allow_string_array or (field and field[-1] == "roles")) and isinstance(value, list):
         return len(value) <= 128 and all(isinstance(item, str) and len(item) <= 1024 for item in value)
     return (value is None or isinstance(value, (str, bool, int, float))) and not (
         isinstance(value, float) and not math.isfinite(value)
     )
+
+
+def valid_review_map_key(value: Any, *, root: bool = False) -> bool:
+    """Dynamic identities are data keys, never paths or executable expressions."""
+    if (not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:/@+-]{0,1023}", value)
+            or re.search(r"(?i)(credential|secret|token|password|api.?key|authorization|authentication)", value)
+            or re.match(r"^[A-Za-z][A-Za-z0-9+.-]*://[^/]*@", value)):
+        return False
+    if root and (_UNSAFE_FIELD.search(value) or value == "shell_environment_policy"):
+        return False
+    try:
+        scan_object_bytes(json.dumps({"identity": value}).encode(), "preference-map-key.json")
+    except ACBSecretLeak:
+        return False
+    return True
 
 
 def _decode_preferences(data: bytes, format_name: str) -> dict[str, Any]:

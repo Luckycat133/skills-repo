@@ -52,6 +52,24 @@ outputs must lie under explicit `roots`, outside the packet. Example:
   bounded YAML subset described in the bundle workflow. Only captured safe fields
   are merged. Model lists match stable `id`, `name`, or model/provider identity;
   existing credential siblings and unrelated models survive.
+- Explicit `string_arrays` preserve bounded disabled-Skill lists and similar
+  selected data. `maps` preserve typed identity-keyed settings, including plugin
+  IDs containing `:` or `@`; each map selects scalar values or named leaves.
+  Dedicated marketplace files may select the root map with `path: []`, but never
+  copy unknown siblings or whole shared objects. URLs remain sanitized.
+- Preferences marked as installation provenance or consequential behavior stay
+  pending until `behavior_reviewed: true`. Review source versions, target native
+  schema and installation paths before applying; restoring a preference does not
+  execute Git, open a tunnel, spend credits or install a plugin.
+- `installation-inventory` sources preserve selected marketplace/plugin identity,
+  version, commit and source fields using a bounded read-only selector. They are
+  never native configuration files or proof of installation. Use them with the
+  target's native installer, preserving authentication and trust boundaries.
+- `shell-context` sources preserve only named functions and selected PATH lines.
+  The helper stages them under `.ai-ide-migration/pending/shell/`; it never copies
+  an entire shell profile or sources the snippets. The AI installs/rebinds the
+  referenced CLI first, reviews the captured function and safely merges it into
+  the correct destination profile while preserving unrelated shell content.
 - `conflict: "error"` preserves conflicting values. Choose `"replace"` only after
   reviewing which selected fields/files should adopt the source. This does not
   replace whole shared settings or unrelated destination fields.
@@ -103,3 +121,5 @@ selection and MCP execution on that machine. Record these as separate evidence.
 A source-machine isolated rehearsal proves file behavior only. Unsupported
 formats, source omissions and authentication remain actionable tasks; they are
 not counted as successful restores.
+
+Root preference maps require explicit safe leaf fields. Whole-root scalar maps and root identities naming hooks, trust, permissions, sandbox or environment policy are rejected during both capture and restore.

@@ -18,6 +18,8 @@
   "acb/mcp_review.py",
   "acb/provider_review.py",
   "acb/hook_review.py",
+  "acb/shell_context.py",
+  "acb/install_inventory.py",
   "detect/__init__.py",
   "detect/probes.py",
   "registry/__init__.py",

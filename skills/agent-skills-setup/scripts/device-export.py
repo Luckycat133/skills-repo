@@ -60,7 +60,7 @@ def public_scope(spec: dict) -> dict:
                                       for row in client.get("native_profiles", [])]
     result["review"] = {"schema_version": 1, "clients": []}
     for row in spec.get("review", {}).get("clients", []):
-        sources = [select(source, ("id", "kind", "path", "linked_roots", "dependency_roots", "container", "format", "fields", "records", "sqlite_key", "layout", "sanitize_review", "scope", "workspace", "restore_target", "classification", "activation"))
+        sources = [select(source, ("id", "kind", "path", "linked_roots", "dependency_roots", "container", "format", "fields", "records", "maps", "string_arrays", "selectors", "functions", "path_markers", "sqlite_key", "layout", "sanitize_review", "scope", "workspace", "restore_target", "classification", "activation"))
                    for source in row["sources"]]
         for source in sources:
             if "restore_target" in source:
@@ -284,6 +284,8 @@ def export(spec: dict, output: Path) -> dict:
         "The helper merges selected native fields and copies reviewed Skill/text files without executing captured code. "
         "Do not treat shared Skills as a different selected product or blindly overwrite shared settings. Preserve files and permissions; "
         "remap source paths as data, never shell commands. Do not activate hooks or execute scripts merely because they were captured.\n\n"
+        "Installation inventories record sources and pinned versions, not completed installs. Consequential preference sources require behavior_reviewed only after native review. "
+        "Shell snippets are staged under .ai-ide-migration/pending/shell; the AI reviews routing dependencies and merges named snippets into the correct profile without sourcing captured code.\n\n"
         "Credentials, login/2FA, native trust/approval, raw chat/generated memory, binaries/caches and source repositories are excluded. "
         "The user performs authentication/native decisions; the AI handles ordinary reconstruction and records pending work/evidence "
         "outside this packet. Resolve each source exclusion before retiring the source machine. File verification, native discovery and "

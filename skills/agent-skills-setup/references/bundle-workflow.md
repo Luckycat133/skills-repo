@@ -46,6 +46,18 @@ trees. Record external runtimes, app bindings and required project path mappings
 as destination-agent work. Non-secret environment/path reconstruction belongs to
 the AI; actual credentials and native trust belong to the user.
 
+Check installed marketplace registrations and pinned plugin metadata, not only
+enabled plugin IDs. Use `installation-inventory` with explicit terminal scalar
+field selectors for nested native inventories; wildcard traversal belongs only
+to this inert reader, not automatic settings writers. Locale, Skill disable maps,
+provider sources and selected UI settings use reviewed preference adapters.
+Keep network/execution preferences as separate review-bearing sources. Inspect
+secondary profile roots where actually present. Empty snippets and absent
+keybindings/profiles are evidence of no source content, not missing payloads.
+For CLI launch differences, capture named shell functions/PATH bindings with the
+`shell-context` reader and inventory their routing dependencies; never copy the
+entire shell profile, credentials or bypass-permission settings.
+
 Run `python3 -B scripts/device-export.py --spec /path/to/scope.json --output /path/to/fresh-packet`
 from the installed Skill (or use its absolute script path). `--dry-run` validates
 scope and output containment without writing. Example scope structure:

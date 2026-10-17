@@ -518,9 +518,15 @@ def discover(selected: list[str], workspaces: list[dict[str, str]], scopes: set[
                     continue
                 base: dict[str, Any] = {"id": source_id(path, kind, workspace), "kind": kind, "path": name,
                                         "scope": candidate["scope"], "workspace": workspace}
+                if candidate.get("id_suffix"):
+                    base["id"] += "-" + candidate["id_suffix"]
                 for metadata in ("classification", "activation", "layout"):
                     if metadata in candidate:
                         base[metadata] = candidate[metadata]
+                if kind in {"installation-inventory", "shell-context"}:
+                    review["sources"].append({**base, **{key: candidate[key] for key in ("format", "selectors", "functions", "path_markers") if key in candidate}})
+                    entry["status"] = "inert-source-declared-not-installed"
+                    continue
                 if kind == "hooks":
                     review["sources"].append({**base, "format": candidate.get("format", "jsonc"),
                                               "fields": candidate.get("fields", ["hooks"]),
@@ -569,13 +575,15 @@ def discover(selected: list[str], workspaces: list[dict[str, str]], scopes: set[
                                     if valid_review_fields([field]) and locate(document, field)[0] and field not in fields:
                                         fields.append(field)
                         records = [row for row in candidate.get("records", []) if locate(document, row["path"])[0]]
+                        maps = [row for row in candidate.get("maps", []) if not row["path"] or locate(document, row["path"])[0]]
                         entry["present_field_paths"] = fields
                         entry["present_record_paths"] = [row["path"] for row in records]
-                        if not fields and not records:
+                        if not fields and not records and not maps:
                             entry["status"] = "no-selected-preference-fields"
                             continue
                         review["sources"].append({**base, "format": format_name, **({"fields": fields} if fields else {}),
-                                                  **({"records": records} if records else {})})
+                                                  **({"records": records} if records else {}), **({"maps": maps} if maps else {}),
+                                                  **({"string_arrays": candidate["string_arrays"]} if candidate.get("string_arrays") else {})})
                 elif kind == "text":
                     review["sources"].append(base)
                 else:
