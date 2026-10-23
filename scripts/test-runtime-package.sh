@@ -116,6 +116,8 @@ printf '%s\n' \
     legacy-smart-ide-migration.sh \
     migration_core.py \
     prepare-skill-source.py \
+    private-provider-crypto.js \
+    private-provider-transfer.py \
     review-restore.py \
     scan-skill-secrets.py \
     skill_secret_scanner.py \

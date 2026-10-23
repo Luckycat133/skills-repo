@@ -28,5 +28,7 @@
   "capture-review-sources.py",
   "device-export.py",
   "discover-context-sources.py",
-  "review-restore.py"
+  "review-restore.py",
+  "private-provider-transfer.py",
+  "private-provider-crypto.js"
 ]

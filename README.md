@@ -81,7 +81,8 @@ recipes require an explicit destination workspace. See the
 | **Review Copies** | Eligible standalone Prompts, Commands, Agents, Hooks, Workflows; allowlisted preferences; supported MCP definitions and Codex provider/profile fields | `snapshot --include-review-materials` saves scanned reconstruction material under `objects/review/`. The destination AI reviews and merges supported native fields. No automatic settings merge, connection or activation. |
 | **Mapped Reconstruction** | Selected captured Skills/text, JSON/JSONC/TOML/YAML preference fields and complete MCP definitions | `review-restore.py` binds explicit target mappings to a saved plan, preserves unrelated settings/credentials, verifies file changes and supports local rollback. Native loading and runtime require separate acceptance. |
 | **Manual Checklist** | Remote MCP (HTTP/SSE), Cloud/UI configurations, other settings, dependencies, extension IDs/versions, paths, unsupported surfaces and tools | Records next actions and acceptance tasks; source inventories/exports may still be needed before leaving the old device. |
-| **Never Moved** | API keys, OAuth tokens, credentials, trust state, raw chat history, generated memory | Strict secret scanning, subobject isolation, and fail-closed exclusions. Literal credentials are rejected or redacted before migration. |
+| **Authorized Encrypted Supplement** | Explicitly selected provider definitions and API credentials | Separate `private-provider-transfer.py` channel using AES-256-GCM and scrypt; requires user authorization, local password file and Node.js. Ordinary ACB/device captures remain redacted. See [private provider transfer](skills/agent-skills-setup/references/private-provider-transfer.md). |
+| **Excluded** | Trust state, approvals, raw chat history, generated memory; credentials in ordinary bundles | Strict secret scanning, subobject isolation and fail-closed exclusions. Native OAuth/account authentication requires destination login. |
 
 ---
 
@@ -97,6 +98,7 @@ recipes require an explicit destination workspace. See the
 - **`capture-review-sources.py`**: Collect explicitly selected Skills, standalone context, MCP definitions and safe preference fields into inert review material, including clients without native adapters.
 - **`device-restore.py`**: Verify a device packet and execute one explicit same-product `plan` / saved-plan `apply` recipe with external state and manifest verification.
 - **`discover-context-sources.py`**: Produce a scope from explicitly selected clients and workspaces, preserving namespace Skills, link provenance and unresolved native/cloud sources.
+- **`private-provider-transfer.py`**: Export explicitly selected provider/API credentials through a separate encrypted artifact, merge selected JSON fields or SQLite rows, preserve unrelated target settings, verify exact values and roll back failed imports. Credentials never enter ordinary captures; Node.js is required for this optional channel.
 - **`review-restore.py`**: Generate destination mappings, plan reviewed field/file restoration, apply atomically with backups, verify and roll back without executing captured code. See [mapped restoration](skills/agent-skills-setup/references/review-restoration.md).
 
 Another agent can recover from the complete ACB directory and an installed copy
@@ -111,9 +113,9 @@ file merges and path repair; missing software goes to an already-authorized
 installation workflow. These offline helpers install nothing.
 
 ACB is a partial configuration backup. It does not capture every IDE setting,
-install models/dependencies, transfer accounts or credentials, or preserve raw
+install models/dependencies, transfer accounts, or preserve raw
 chats/generated memory/trust. One selected workspace does not cover other
-projects. See the [computer-switching checklist](skills/agent-skills-setup/references/bundle-workflow.md)
+projects. Explicit credential migration uses the separate encrypted supplement above. See the [computer-switching checklist](skills/agent-skills-setup/references/bundle-workflow.md)
 for what to capture separately and how a new agent continues.
 
 ACB captures ordinary file permissions, including executable bits, and still

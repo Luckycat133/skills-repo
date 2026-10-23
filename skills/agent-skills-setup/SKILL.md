@@ -1,12 +1,12 @@
 ---
 name: agent-skills-setup
 license: MIT
-compatibility: Requires local Bash, Python 3, environment lookup, and filesystem access; optional signing needs installed cryptography; no network access.
+compatibility: Bash/Python 3; signing needs cryptography; encrypted credentials need POSIX/Node.js. Filesystem access; no network.
 metadata:
   version: "0.10.2"
-  permissions.shell: "bundled offline Bash/Python scripts plus local read-only detection commands"
+  permissions.shell: "bundled offline Bash/Python/Node scripts plus local read-only detection commands"
   permissions.env: "read environment variables to resolve product paths"
-  permissions.file_read: "selected product surfaces, workspace, bundles, named signing keys, bundled references"
+  permissions.file_read: "selected product surfaces, workspace, bundles, named key/password files, bundled references"
   permissions.file_write: "authorized plan targets, named artifact/key outputs, local transaction state"
   permissions.network: "denied"
 description: >-
@@ -18,16 +18,17 @@ description: >-
   records omissions and next-agent recovery tasks; reviewed field merges
   and context-file restoration cover selected reconstruction material.
   Compatible plugin packages and reviewed handoff require explicit opt-in.
+  Authorized provider/API credentials use a separate encrypted supplement.
 ---
 
 # Agent Skills Setup
 
-Move context between requested IDEs; computer backup and recovery are additional workflows.
+Move context across requested IDEs and computers.
 
 ## Permissions
 
 - Run bundled local helpers; network access is forbidden. No downloads, installations, or connections.
-- Read selected products/scopes, workspace, bundles, and named keys. Device-wide discovery requires that scope.
+- Read selected products/scopes, workspace, bundles and named keys. Device-wide discovery requires authorization.
 - Write authorized targets/artifacts and transaction state. `--yes` records existing authorization; it grants none.
 
 ## Choose the workflow
@@ -51,15 +52,16 @@ Resolve both product profiles through [registry-v2.json](references/registry-v2.
 
 ## Computer switching
 
-- Discover explicit clients with `scripts/discover-context-sources.py --clients <ids> --output <fresh-directory>`; default to user scope. Include project/local context only when requested. Inspect scope, links and exclusions; installation traces cannot expand selection.
+- Discover explicit clients with `scripts/discover-context-sources.py --clients <ids> --output <fresh-directory>`; default to user scope. Include project/local context only when requested. Inspect scope, links and exclusions.
 - Export with `scripts/device-export.py --spec <scope.json> --output <fresh-directory>`; see the [workflow](references/bundle-workflow.md). Include the bundled runtime. Resolve missing sources before retiring the old machine.
 - Native recipes use `scripts/device-restore.py verify/list`, then `plan` → review → `apply --yes`. Cross-IDE requests retain independent source/target selection in general migration/restore.
-- Restore review material with `scripts/review-restore.py template` → `plan` → review → `apply --yes` → `verify`; see [mapped restoration](references/review-restoration.md). The AI handles file copies/field merges; reserve authentication and native trust for the user.
+- Restore review material with `scripts/review-restore.py template` → `plan` → review → `apply --yes` → `verify`; see [mapped restoration](references/review-restoration.md). The AI handles merges; reserve authentication/native trust for users.
+- For explicitly authorized provider/API-key transfer, use the separate [encrypted channel](references/private-provider-transfer.md); ordinary bundles remain redacted.
 - Read coverage/exclusions and checksummed recovery guides. Use Python 3.11+ for TOML. Keep state/evidence outside packets. Verify configuration writes, native discovery and runtime separately.
 
 ## Supported boundaries
 
 - Automatic: `skills`, `instructions`, reviewed local stdio `mcp`. Plugins require `--include-plugins`; reviewed handoff requires `--include-session`.
-- Review first: prompts, commands, agents, hooks, workflows, allowlisted preferences and MCP. Mapped restoration never executes code or activates incomplete MCP; Hooks require native/dependency review. Never transfer credentials, trust, approvals, raw history, or generated memory. Shared configs use selected subobjects only. Cloud/UI require native reconstruction.
+- Review first: prompts, commands, agents, hooks, workflows, allowlisted preferences and MCP. Mapped restoration never executes code or activates incomplete MCP; Hooks require native/dependency review. Ordinary bundles exclude credentials; the authorized encrypted channel is separate. Never transfer trust, approvals, raw history, or generated memory. Shared configs use selected subobjects only. Cloud/UI require native reconstruction.
 - Use the explicit `legacy` subcommand for lookup/dry-run compatibility only; legacy writes are disabled.
-- Deliver artifacts, counts, backups, verification, and remaining work. Report `remaining_work` / `acceptance_layers`: configuration writes, native discovery, and runtime/connectivity require separate evidence.
+- Deliver artifacts, counts, backups, verification and remaining work. Separate configuration, native-discovery and runtime evidence.

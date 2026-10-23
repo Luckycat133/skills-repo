@@ -19,6 +19,7 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ### Added
 
+- An explicitly authorized encrypted provider/API-credential supplement using Node.js AES-256-GCM/scrypt and local password files. It selects JSON roots or nested fields and exact SQLite/WAL rows, maps only declared HOME-path leaves, preserves unrelated target data, verifies values and keeps encrypted rollback backups. Ordinary ACB/device material remains redacted; native login and runtime acceptance remain separate.
 - Explicit client-source discovery for six client families, including namespace Skills, reviewed linked assets, scoped project ownership, source gaps and SQLite MCP-definition candidates without copying application databases.
 - Dependency-free bounded YAML model/preferences capture, model role arrays, source hashes and stable read-only SQLite/WAL snapshots. Review staging can redact precise credential literals while retaining safe files, provenance and missing-reference tasks.
 - `review-restore.py` provides destination mapping templates, selected JSON/JSONC/TOML/YAML field merges, Skill/text copies, saved-plan application, file verification and guarded rollback; no captured code execution or native trust changes.
