@@ -46,6 +46,7 @@ from migration_core import (
     path_state,
     paths_overlap,
     rollback_manifest,
+    recover_transaction,
     resolve_output_path,
     scope_matches,
     validate_plan_document,
@@ -263,6 +264,11 @@ def create_parser() -> argparse.ArgumentParser:
     verify = subparsers.add_parser("verify")
     verify.add_argument("--manifest", type=Path, required=True)
     verify.add_argument("--json", action="store_true")
+
+    recover = subparsers.add_parser("recover")
+    recover.add_argument("--journal", type=Path, required=True)
+    recover.add_argument("--yes", action="store_true")
+    recover.add_argument("--json", action="store_true")
 
     rollback = subparsers.add_parser("rollback")
     rollback.add_argument("--manifest", type=Path, required=True)
@@ -2188,6 +2194,11 @@ def run_new_cli(argv: list[str]) -> int:
         result = {"ok": not errors, "errors": errors, "manifest": str(args.manifest)}
         emit(result, args.json)
         return 0 if not errors else 1
+    if args.command == "recover":
+        if not args.yes:
+            raise ValueError("recover requires --yes")
+        emit({"restored": recover_transaction(args.journal)}, args.json)
+        return 0
     if args.command == "rollback":
         if not args.yes:
             raise ValueError("rollback requires --yes")

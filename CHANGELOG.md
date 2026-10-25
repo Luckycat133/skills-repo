@@ -4,6 +4,15 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ## [Unreleased]
 
+### Fixed
+
+- Persist recovery journals before migration or Skill installation replaces directories; retain complete old trees across the rename gap. Add explicit, conservative recovery for interrupted processes and reject overlapping retries until recovery is resolved.
+- Bind new migration plans, verification, and rollback guards to file/directory modes separately from unchanged content hashes. Regenerate old plans; old manifests retain content-only checks.
+
+### Validation
+
+- Add subprocess hard-exit regressions at directory replacement and manifest boundaries, installation recovery, and mode-only target/backup drift checks. Recovery retains evidence and refuses post-interruption edits.
+
 ## [0.10.2] - 2026-10-03
 
 ### Fixed

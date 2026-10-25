@@ -4,6 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import errno
+import hashlib
+import json
+import stat
 import importlib.util
 import os
 import shutil
@@ -41,21 +45,25 @@ def validate_source(source: Path, name: str, *, include_test_files: bool = False
         raise ValueError("Skill validation failed:\n" + "\n".join(sorted(set(findings))))
 
 
+def check_path_components(path: Path) -> None:
+    current = Path(path.anchor)
+    for part in path.parts[1:]:
+        current = current / part
+        if not current.is_symlink():
+            continue
+        system_aliases = {
+            Path("/tmp"): Path("/private/tmp"),
+            Path("/var"): Path("/private/var"),
+            Path("/etc"): Path("/private/etc"),
+        }
+        if sys.platform == "darwin" and current in system_aliases and current.resolve() == system_aliases[current]:
+            continue
+        raise ValueError(f"Skill path cannot traverse a symbolic link: {current}")
+
+
 def checked_paths(source: Path, destination: Path, replace: bool) -> tuple[Path, Path]:
     for path in (source, destination):
-        current = Path(path.anchor)
-        for part in path.parts[1:]:
-            current = current / part
-            if not current.is_symlink():
-                continue
-            system_aliases = {
-                Path("/tmp"): Path("/private/tmp"),
-                Path("/var"): Path("/private/var"),
-                Path("/etc"): Path("/private/etc"),
-            }
-            if sys.platform == "darwin" and current in system_aliases and current.resolve() == system_aliases[current]:
-                continue
-            raise ValueError(f"Skill path cannot traverse a symbolic link: {current}")
+        check_path_components(path)
     if source.is_symlink() or not source.is_dir():
         raise ValueError(f"source Skill must be a regular directory: {source}")
     if destination.is_symlink() or destination.parent.is_symlink():
@@ -69,25 +77,118 @@ def checked_paths(source: Path, destination: Path, replace: bool) -> tuple[Path,
     return source, destination
 
 
+def tree_state(path: Path) -> str | None:
+    if not os.path.lexists(path):
+        return None
+    digest = hashlib.sha256()
+    if path.is_symlink() or not path.is_dir():
+        raise ValueError(f"expected a regular Skill directory: {path}")
+    for entry in [path, *sorted(path.rglob("*"))]:
+        if entry.is_symlink() or not (entry.is_file() or entry.is_dir()):
+            raise ValueError(f"unsupported Skill entry: {entry}")
+        digest.update(json.dumps([
+            entry.relative_to(path).as_posix(), entry.is_dir(),
+            stat.S_IMODE(entry.stat().st_mode),
+            entry.stat().st_size if entry.is_file() else None,
+        ]).encode("utf-8"))
+        if entry.is_file():
+            with entry.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    digest.update(chunk)
+    return digest.hexdigest()
+
+
+def install_recovery_container(destination: Path) -> Path:
+    device = destination.parent.stat().st_dev
+    for base in (destination.parent.parent, Path(tempfile.gettempdir())):
+        check_path_components(base)
+        if base != destination.parent and base.is_dir() and base.stat().st_dev == device:
+            try:
+                return Path(tempfile.mkdtemp(prefix=".skill-install-recovery-", dir=base))
+            except OSError as error:
+                if error.errno not in {errno.EACCES, errno.EROFS, errno.ENOENT}:
+                    raise
+                continue
+    raise ValueError("no same-filesystem recovery directory outside live Skill root")
+
+
+def recovery_path(destination: Path) -> Path:
+    return destination.with_name(f".{destination.name}.install-recovery.json")
+
+
+def recover_install(destination: Path) -> None:
+    """Roll back an interrupted install, preserving unrecognized changes."""
+    destination = destination.absolute()
+    check_path_components(destination)
+    journal_path = recovery_path(destination)
+    if journal_path.is_symlink():
+        raise ValueError("recovery journal cannot be a symbolic link")
+    journal = json.loads(journal_path.read_text(encoding="utf-8"))
+    if journal.get("destination") != str(destination):
+        raise ValueError("recovery journal destination mismatch")
+    backup = Path(journal["backup"]) if journal["backup"] else None
+    if backup:
+        check_path_components(backup)
+        if backup.name != "previous" or not backup.parent.name.startswith(".skill-install-recovery-"):
+            raise ValueError("invalid recovery backup path")
+    current = tree_state(destination)
+    if current not in (None, journal["before"], journal["after"]):
+        raise ValueError("recovery refused: destination changed after interruption")
+    if backup and tree_state(backup) != journal["before"]:
+        # An interruption before the old tree was moved needs no backup.
+        if current == journal["before"] and not os.path.lexists(backup):
+            journal_path.unlink()
+            return
+        raise ValueError("recovery refused: backup missing or changed")
+    if current != journal["before"]:
+        container = install_recovery_container(destination)
+        temporary = container / "restored"
+        if backup:
+            shutil.copytree(backup, temporary)
+            if tree_state(temporary) != journal["before"]:
+                raise ValueError("recovery copy does not match backup")
+        if current is not None:
+            os.replace(destination, container / "interrupted")
+        if backup:
+            os.replace(temporary, destination)
+        shutil.rmtree(container)
+    journal_path.unlink()
+
+
 def install_staging(staging: Path, destination: Path, replace: bool) -> None:
-    """Commit a staged directory, restoring the old tree if the commit fails."""
+    """Commit a staged tree with a persistent, explicit hard-exit recovery path."""
+    staging, destination = staging.absolute(), destination.absolute()
     backup: Path | None = None
+    journal_path = recovery_path(destination)
+    if os.path.lexists(journal_path):
+        raise ValueError(f"interrupted install: run skill_package.py recover {destination}")
     if os.path.lexists(destination):
         if not replace or destination.is_symlink() or not destination.is_dir():
             raise ValueError(f"destination changed while staging: {destination}")
-        backup = destination.with_name(f".{destination.name}.backup-{uuid.uuid4().hex}")
-        os.replace(destination, backup)
+        backup = install_recovery_container(destination) / "previous"
+    journal = {"destination": str(destination), "backup": str(backup) if backup else None,
+               "before": tree_state(destination), "after": tree_state(staging)}
+    # O_EXCL serializes installs of this destination and preserves pending recovery.
+    with journal_path.open("x", encoding="utf-8") as handle:
+        json.dump(journal, handle)
+        handle.flush()
+        os.fsync(handle.fileno())
     try:
+        if backup:
+            os.replace(destination, backup)
         if os.path.lexists(destination):
             raise ValueError(f"destination changed while staging: {destination}")
         os.replace(staging, destination)
     except BaseException:
-        if backup is not None:
-            os.replace(backup, destination)
+        recover_install(destination)
+        if backup is not None and backup.exists():
+            shutil.rmtree(backup.parent)
         raise
+    # The new tree is committed. The backup can be cleaned independently.
+    journal_path.unlink()
     if backup is not None:
         try:
-            shutil.rmtree(backup)
+            shutil.rmtree(backup.parent)
         except OSError as error:
             print(f"WARN: installed Skill; old tree retained at {backup}: {error}", file=sys.stderr)
 
@@ -160,11 +261,15 @@ def main() -> int:
         command.add_argument("destination", type=Path)
         if name == "stage":
             command.add_argument("version")
+    recover = commands.add_parser("recover")
+    recover.add_argument("destination", type=Path)
     version = commands.add_parser("version")
     version.add_argument("version")
     args = parser.parse_args()
     try:
-        if args.command == "import":
+        if args.command == "recover":
+            recover_install(args.destination)
+        elif args.command == "import":
             import_skill(args.source.absolute(), args.destination.absolute())
         elif args.command == "stage":
             stage_runtime(args.source.absolute(), args.destination.absolute(), args.version)

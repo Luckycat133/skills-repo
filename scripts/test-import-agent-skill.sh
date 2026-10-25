@@ -148,3 +148,69 @@ else:
 PY
 
 echo "Skill import test passed"
+
+# Hard process death bypasses Python exception handlers. Recover from each
+# rename boundary using only the persisted journal and old directory.
+python3 - "$SCRIPT_DIR" "$TMP_ROOT" <<'PY'
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+import skill_package as package
+
+script = r'''
+import os, sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+import skill_package as package
+root=Path(sys.argv[2]); phase=sys.argv[3]; original=os.replace
+def crash(a,b):
+    original(a,b)
+    if (phase=="old-moved" and Path(a)==root/"destination") or (phase=="installed" and Path(b)==root/"destination"):
+        os._exit(86)
+package.os.replace=crash
+package.install_staging(root/"staging",root/"destination",True)
+'''
+for phase in ("old-moved", "installed"):
+    root=Path(sys.argv[2])/phase;root.mkdir()
+    for directory, contents in (("destination","old"),("staging","new")):
+        path=root/directory;path.mkdir();(path/"entry").write_text(contents)
+    before=package.tree_state(root/"destination")
+    result=subprocess.run([sys.executable,"-c",script,sys.argv[1],str(root),phase])
+    assert result.returncode==86
+    extra=root/"extra";extra.mkdir()
+    try: package.install_staging(extra,root/"destination",True)
+    except ValueError as error: assert "interrupted" in str(error)
+    else: raise AssertionError("pending recovery was overwritten")
+    if phase=="installed":
+        (root/"destination/entry").write_text("user edit")
+        try: package.recover_install(root/"destination")
+        except ValueError as error: assert "changed" in str(error)
+        else: raise AssertionError("edited destination was overwritten")
+        (root/"destination/entry").write_text("new")
+    package.recover_install(root/"destination")
+    assert package.tree_state(root/"destination")==before
+    assert not package.recovery_path(root/"destination").exists()
+    print("OK install hard-exit recovery:",phase)
+PY
+
+python3 - "$SCRIPT_DIR" "$TMP_ROOT" <<'PY'
+import os
+import sys
+from pathlib import Path
+sys.path.insert(0,sys.argv[1])
+import skill_package as package
+root=Path(sys.argv[2])/"readonly-ancestor";root.mkdir()
+parent=root/"skills";parent.mkdir()
+for name,text in (("demo","old"),("staging","new")):
+    (parent/name).mkdir();(parent/name/"entry").write_text(text)
+root.chmod(0o555)
+try:
+    package.install_staging(parent/"staging",parent/"demo",True)
+    assert (parent/"demo/entry").read_text()=="new"
+finally:
+    root.chmod(0o755)
+print("OK install can use safe fallback outside an unwritable ancestor")
+PY
