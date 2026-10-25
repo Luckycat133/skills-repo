@@ -7,4 +7,4 @@ This ID is ForgeCode, not an unrelated product named Forge.
 - Skills resolve in precedence order from `.forge/skills/`, `~/.agents/skills/`, `~/forge/skills/`, then built-ins.
 - `AGENTS.md`, commands, agents, and permissions are distinct surfaces. Skills can be copied after validation; instructions use IR; agents and permissions require manual templates.
 
-Sources: [Skills](https://forgecode.dev/docs/skills/), [MCP](https://forgecode.dev/docs/mcp-integration/), [configuration](https://forgecode.dev/docs/forgecode-config/).
+Sources: [Skills](https://github.com/tailcallhq/forgecode/tree/main/.forge/skills), [MCP](https://github.com/tailcallhq/forgecode#mcp-configuration), [configuration](https://github.com/tailcallhq/forgecode#forgeyaml-configuration-options).
