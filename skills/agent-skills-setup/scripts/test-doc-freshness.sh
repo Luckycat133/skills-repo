@@ -10,7 +10,7 @@ trap 'rm -rf "$TMP_ROOT"' EXIT
 python3 "$SCRIPT_DIR/check-doc-freshness.py" \
     --registry "$SKILL_DIR/references/registry-v2.json" \
     --checks "$SKILL_DIR/references/doc-freshness-checks.json" \
-    --today 2026-08-17 \
+    --today 2026-10-25 \
     --report "$TMP_ROOT/report.json" > "$TMP_ROOT/stdout.json"
 
 python3 - "$TMP_ROOT/report.json" <<'PY'
@@ -67,7 +67,7 @@ import doc_freshness
 registry_path = root / "fixture-registry.json"
 checks_path = root / "fixture-checks.json"
 report_path = root / "fixture-report.json"
-today = "2026-08-17"
+today = "2026-10-25"
 source = {
     "schema_version": 2,
     "products": {

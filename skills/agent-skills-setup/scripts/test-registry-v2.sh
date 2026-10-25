@@ -12,7 +12,7 @@ python3 "$SCRIPT_DIR/validate-registry-v2.py" \
     --registry "$REFERENCES_DIR/registry-v2.json" \
     --index "$REFERENCES_DIR/ide-registry.md" \
     --references "$REFERENCES_DIR/ides" \
-    --today 2026-08-17
+    --today 2026-10-25
 
 python3 - "$REFERENCES_DIR/registry-v2.json" <<'PY'
 import json
@@ -116,7 +116,7 @@ if python3 "$SCRIPT_DIR/validate-registry-v2.py" \
     --registry "$POLLUTED" \
     --index "$REFERENCES_DIR/ide-registry.md" \
     --references "$REFERENCES_DIR/ides" \
-    --today 2026-08-17 >"$TMP_ROOT/polluted.log" 2>&1; then
+    --today 2026-10-25 >"$TMP_ROOT/polluted.log" 2>&1; then
     echo "FAIL: polluted registry (stray top-level product) passed validation" >&2
     exit 1
 fi
