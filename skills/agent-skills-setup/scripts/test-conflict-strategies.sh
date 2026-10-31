@@ -4,16 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Native Windows Python ignores MSYS-style env values; convert HOME
-# fixtures so $HOME resolution sees a real directory on every platform.
-
-# Pin surface resolution to the POSIX layout the fixtures create;
-# otherwise windows-latest would resolve $APPDATA-style overrides.
-export AGENT_SKILLS_PLATFORM=linux
-
-native_path() {
-    if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
-}
+source "$SCRIPT_DIR/test-support/legacy-fixture.sh"
 
 # shasum(1) is macOS-only; Git Bash ships sha256sum, and python3 is the
 # portable last resort.
@@ -30,10 +21,11 @@ sha256_file() {
 # public entry point is covered separately by test-legacy-registry-gate.sh.
 MIGRATION_SCRIPT="$SCRIPT_DIR/legacy-smart-ide-migration.sh"
 export AGENT_SKILLS_SETUP_INTERNAL_LEGACY=1
-TMP_ROOT="$(mktemp -d /tmp/conflict-strategies-test.XXXXXX)"
+TMP_ROOT="$(native_path "$(mktemp -d /tmp/conflict-strategies-test.XXXXXX)")"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 
 TEST_HOME="$TMP_ROOT/home"
+legacy_fixture_init "$TMP_ROOT"
 SOURCE_FILE="$TMP_ROOT/cursor-mcp.json"
 mkdir -p "$TEST_HOME/.config/opencode"
 
@@ -168,3 +160,4 @@ if find "$TEST_HOME/.config/opencode" -maxdepth 1 -name 'opencode.json.bak.*' -p
 fi
 
 echo "PASS: MCP backup/overwrite conflict strategies preserve their documented boundaries"
+legacy_fixture_assert_public_boundary "$SCRIPT_DIR" "$TMP_ROOT"

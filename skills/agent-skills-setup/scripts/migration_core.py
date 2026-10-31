@@ -4,11 +4,13 @@
 from __future__ import annotations
 
 import difflib
+import errno
 import hashlib
 import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -53,6 +55,7 @@ KNOWN_COMMANDS = {
     "apply",
     "verify",
     "rollback",
+    "recover",
     "migrate",
     "snapshot",
     "bundle-verify",
@@ -356,6 +359,27 @@ class SurfacePath:
     canonical_path: str
     precedence: int
 
+    @classmethod
+    def from_dict(cls, value: dict[str, Any]) -> "SurfacePath":
+        try:
+            return cls(
+                product=value["product"],
+                profile=value["profile"],
+                object_type=value["object_type"],
+                scope=value["scope"],
+                storage=value["storage"],
+                path=value["path"],
+                resolved_path=Path(value["resolved_path"]),
+                boundary=Path(value["boundary"]),
+                source_format=value["source_format"],
+                policy=value["policy"],
+                location_role=value.get("location_role", "canonical"),
+                canonical_path=value.get("canonical_path", value["path"]),
+                precedence=value.get("precedence", 0),
+            )
+        except (KeyError, TypeError) as error:
+            raise ValueError("invalid serialized migration surface") from error
+
     def to_dict(self) -> dict[str, Any]:
         value = asdict(self)
         value["resolved_path"] = str(self.resolved_path)
@@ -375,6 +399,21 @@ class PlanItem:
     acb_uri: str | None = field(default=None, repr=False)
     expected_source_state: dict[str, Any] | None = field(default=None, repr=False)
     expected_target_state: dict[str, Any] | None = field(default=None, repr=False)
+
+    @classmethod
+    def from_dict(cls, value: dict[str, Any]) -> "PlanItem":
+        source = value.get("source")
+        target = value.get("target")
+        return cls(
+            object_type=value["object_type"],
+            status=value["status"],
+            reason=value["reason"],
+            source=SurfacePath.from_dict(source) if source else None,
+            target=SurfacePath.from_dict(target) if target else None,
+            manual_actions=value.get("manual_actions", []),
+            object_id=value.get("object_id", ""),
+            acb_uri=value.get("acb_uri"),
+        )
 
     def __post_init__(self) -> None:
         # Compute a stable object_id from the resolved source when not
@@ -464,9 +503,10 @@ def _expand_path_vars(raw_path: str, home: Path) -> str:
 class Registry:
     """Resolve registry v2 products, profiles, and concrete surface paths."""
 
-    def __init__(self, path: Path, workspace: Path, home: Path | None = None) -> None:
+    def __init__(self, path: Path, workspace: Path, home: Path | None = None, *, portable_source: bool = False) -> None:
         self.path = path
         self.workspace = workspace.resolve()
+        self.portable_source = portable_source
         # Honor $HOME when it points at a real directory: Path.home() on
         # native Windows Python reads USERPROFILE only, which silently
         # ignored HOME-injected test fixtures and cross-device restores.
@@ -646,6 +686,14 @@ class Registry:
 
     def resolve_path(self, entry: dict[str, Any]) -> tuple[Path, Path]:
         raw_path = str(entry["path"])
+        if self.portable_source:
+            relative = raw_path.strip("/\\").replace("~", "home").replace("..", "_")
+            relative = re.sub(r"[/\\:]+", "/", relative)
+            if relative.startswith("home/"):
+                return self.home / relative[5:], self.home
+            if entry.get("scope") in {"user", "shared-user"}:
+                return self.home / relative, self.home
+            return self.workspace / relative, self.workspace
         override = entry.get("override_env")
         if override and os.environ.get(str(override)):
             base = Path(os.environ[str(override)]).expanduser()
@@ -2007,14 +2055,28 @@ def serialize_portable_handoff(
         raw_files = raw_data.get("selected_files")
         if isinstance(raw_files, list):
             for f in raw_files:
-                if isinstance(f, str) and not f.startswith("/") and ".." not in f:
-                    selected_files.append(f)
+                if not isinstance(f, str):
+                    continue
+                portable_path = f.replace("\\", "/")
+                if (
+                    portable_path
+                    and not portable_path.startswith("/")
+                    and not re.match(r"^[A-Za-z]:", portable_path)
+                    and ".." not in Path(portable_path).parts
+                ):
+                    selected_files.append(portable_path)
         raw_patch = raw_data.get("patch")
         if isinstance(raw_patch, str):
             patch = raw_patch
 
     git_branch: str | None = None
-    if workspace is not None:
+    if isinstance(raw_data, dict):
+        branch = raw_data.get("git_branch")
+        if isinstance(branch, str) and branch.strip() and not any(
+            character.isspace() for character in branch
+        ):
+            git_branch = branch
+    if git_branch is None and workspace is not None:
         git_info = git_provenance(workspace)
         if git_info and git_info.get("branch"):
             git_branch = str(git_info["branch"])
@@ -2084,12 +2146,19 @@ def _skill_sources(surface: SurfacePath) -> list[Path]:
     )
 
 
+def _is_skill_environment_file(name: str) -> bool:
+    return name == ".env" or name.startswith(".env.")
+
+
 def _skill_environment_files(skill_dir: Path) -> list[Path]:
-    return sorted(path for path in skill_dir.rglob(".env*") if path.is_file())
+    return sorted(
+        path for path in skill_dir.rglob(".env*")
+        if path.is_file() and _is_skill_environment_file(path.name)
+    )
 
 
 def _ignore_skill_environment_files(_directory: str, names: list[str]) -> list[str]:
-    return [name for name in names if name.startswith(".env")]
+    return [name for name in names if _is_skill_environment_file(name)]
 
 
 def preflight_skill_source(skill_dir: Path) -> None:
@@ -2208,6 +2277,8 @@ def _build_plan_for_scope(
     items: list[PlanItem] = []
     losses = LossReport()
     for object_type in object_types:
+        # Mandatory Skill environment exclusions do not require loss acceptance.
+        conversion_lossy = False
         source_error: ValueError | None = None
         try:
             source = choose_surface(
@@ -2454,6 +2525,7 @@ def _build_plan_for_scope(
                     )
                     _, report = emit_instruction(instruction, target.source_format)
                     losses.items.extend(report.items)
+                    conversion_lossy = conversion_lossy or report.lossy
             except (OSError, UnicodeError, ValueError) as error:
                 items.append(
                     PlanItem(
@@ -2532,6 +2604,7 @@ def _build_plan_for_scope(
                 )
                 _, report = emit_mcp_document(servers, target.source_format, existing)
                 losses.items.extend(report.items)
+                conversion_lossy = report.lossy
             except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as error:
                 items.append(
                     PlanItem(
@@ -2543,7 +2616,19 @@ def _build_plan_for_scope(
                     )
                 )
                 continue
-        items.append(PlanItem(object_type, "ready", "review before apply", source, target))
+        items.append(
+            PlanItem(
+                object_type,
+                "ready-lossy" if conversion_lossy else "ready",
+                (
+                    "conversion has reported losses; explicit loss acceptance required"
+                    if conversion_lossy
+                    else "review before apply"
+                ),
+                source,
+                target,
+            )
+        )
     return items, losses
 
 
@@ -2613,10 +2698,16 @@ def build_plan(
     return combined_items, combined_losses
 
 
+def _update_file_hash(digest: Any, path: Path) -> None:
+    with path.open("rb") as reader:
+        for chunk in iter(lambda: reader.read(1024 * 1024), b""):
+            digest.update(chunk)
+
+
 def hash_path(path: Path) -> str:
     digest = hashlib.sha256()
     if path.is_file():
-        digest.update(path.read_bytes())
+        _update_file_hash(digest, path)
         return digest.hexdigest()
     if path.is_dir():
         for child in sorted(path.rglob("*")):
@@ -2625,7 +2716,7 @@ def hash_path(path: Path) -> str:
             if child.is_file():
                 digest.update(str(child.relative_to(path)).encode("utf-8"))
                 digest.update(b"\0")
-                digest.update(child.read_bytes())
+                _update_file_hash(digest, child)
         return digest.hexdigest()
     raise ValueError(f"cannot hash missing path: {path}")
 
@@ -2638,6 +2729,16 @@ def json_sha256(value: Any) -> str:
     return hashlib.sha256(canonical_json(value).encode("utf-8")).hexdigest()
 
 
+def mode_hash(path: Path) -> str:
+    """Hash permissions separately, preserving the public content hash format."""
+    ensure_no_symlinks(path)
+    entries = [path, *sorted(path.rglob("*"))] if path.is_dir() else [path]
+    return json_sha256([
+        [entry.relative_to(path).as_posix(), stat.S_IMODE(entry.stat().st_mode)]
+        for entry in entries
+    ])
+
+
 def path_state(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {"exists": False, "kind": None, "sha256": None}
@@ -2646,6 +2747,7 @@ def path_state(path: Path) -> dict[str, Any]:
         "exists": True,
         "kind": "directory" if path.is_dir() else "file",
         "sha256": hash_path(path),
+        "mode_sha256": mode_hash(path),
     }
 
 
@@ -2657,6 +2759,26 @@ def paths_overlap(first: Path, second: Path) -> bool:
         or first_resolved in second_resolved.parents
         or second_resolved in first_resolved.parents
     )
+
+
+def resolve_output_path(path: Path) -> Path:
+    """Resolve output paths after rejecting user-controlled symlink components."""
+    absolute = path.expanduser().absolute()
+    system_aliases = {
+        Path("/tmp"): Path("/private/tmp"),
+        Path("/var"): Path("/private/var"),
+        Path("/etc"): Path("/private/etc"),
+    }
+    for candidate in (*reversed(absolute.parents), absolute):
+        if not candidate.is_symlink():
+            continue
+        if (
+            sys.platform == "darwin" and candidate in system_aliases
+            and candidate.resolve() == system_aliases[candidate]
+        ):
+            continue
+        raise ValueError(f"symbolic links are not allowed in output paths: {candidate}")
+    return absolute.resolve(strict=False)
 
 
 def _git_output(workspace: Path, *arguments: str) -> str | None:
@@ -2711,7 +2833,7 @@ def _unified_diff(existing: str, rendered: str, target: Path) -> str:
 
 
 def _preview_plan_item(item: PlanItem) -> dict[str, Any] | None:
-    if item.status != "ready" or item.source is None or item.target is None:
+    if item.status not in {"ready", "ready-lossy"} or item.source is None or item.target is None:
         return None
     source = item.source
     target = item.target
@@ -2735,6 +2857,7 @@ def _preview_plan_item(item: PlanItem) -> dict[str, Any] | None:
     if item.object_type == "instructions":
         previews = []
         sources = _instruction_sources(source)
+        used_targets: set[Path] = set()
         for index, instruction_path in enumerate(sources):
             instruction = parse_instruction(
                 instruction_path.read_text(encoding="utf-8"),
@@ -2746,9 +2869,18 @@ def _preview_plan_item(item: PlanItem) -> dict[str, Any] | None:
             if _instruction_target_is_file(target):
                 destination = target.resolved_path
             else:
-                destination = _instruction_target_path(
-                    target, instruction_path, item.object_id
+                file_object_id = compute_object_id(
+                    product=source.product,
+                    profile=source.profile,
+                    scope=source.scope,
+                    canonical_path=canonical_relative_path(
+                        instruction_path, source.boundary
+                    ),
                 )
+                destination = _instruction_target_path(
+                    target, instruction_path, file_object_id, used_targets
+                )
+            used_targets.add(destination)
             existing = (
                 destination.read_text(encoding="utf-8")
                 if destination.is_file()
@@ -2777,16 +2909,42 @@ def _preview_plan_item(item: PlanItem) -> dict[str, Any] | None:
             target.source_format,
             existing or None,
         )
-        old_servers: set[str] = set()
+        old_servers: dict[str, MCPServerIR] = {}
+        old_definitions: dict[str, Any] = {}
         if existing:
             try:
                 old_servers = {
-                    server.name
+                    server.name: server
                     for server in parse_mcp_document(existing, target.source_format)
                 }
+                _, old_definitions = _server_container(
+                    _decode_mcp_document(existing, target.source_format),
+                    target.source_format,
+                )
             except ValueError:
-                old_servers = set()
-        new_servers = {server.name for server in servers}
+                old_servers = {}
+        new_servers = {
+            server.name: server
+            for server in parse_mcp_document(rendered, target.source_format)
+        }
+        _, new_definitions = _server_container(
+            _decode_mcp_document(rendered, target.source_format),
+            target.source_format,
+        )
+        before_names = set(old_servers)
+        after_names = set(new_servers)
+        shared_names = before_names & after_names
+        updated = sorted(
+            name for name in shared_names if old_servers[name] != new_servers[name]
+        )
+        changed_fields = {
+            name: sorted(
+                field for field in old_definitions[name].keys() | new_definitions[name].keys()
+                if field not in old_definitions[name] or field not in new_definitions[name]
+                or old_definitions[name][field] != new_definitions[name][field]
+            )
+            for name in updated
+        }
         return {
             "kind": "mcp-semantic-diff",
             "changes": [
@@ -2799,14 +2957,48 @@ def _preview_plan_item(item: PlanItem) -> dict[str, Any] | None:
                         else None
                     ),
                     "post_sha256": hashlib.sha256(rendered.encode("utf-8")).hexdigest(),
-                    "server_names_before": sorted(old_servers),
-                    "server_names_after": sorted(new_servers),
-                    "added": sorted(new_servers - old_servers),
-                    "removed": sorted(old_servers - new_servers),
+                    "server_names_before": sorted(before_names),
+                    "server_names_after": sorted(after_names),
+                    "added": sorted(after_names - before_names),
+                    "removed": sorted(before_names - after_names),
+                    "updated": updated,
+                    "unchanged": sorted(shared_names - set(updated)),
+                    "changed_fields": changed_fields,
                     "credential_values_included": False,
                 }
             ],
         }
+    if item.object_type == "plugins":
+        changes = []
+        for child in sorted(source.resolved_path.iterdir()):
+            destination = target.resolved_path / child.name
+            changes.append({
+                "path": str(destination),
+                "action": "replace" if destination.exists() else "create",
+                "source_sha256": hash_path(child),
+                "target_sha256": hash_path(destination) if destination.exists() else None,
+            })
+        return {"kind": "file-list", "changes": changes}
+    if item.object_type == "handoff":
+        files = [source.resolved_path] if source.resolved_path.is_file() else sorted(
+            path for path in source.resolved_path.iterdir() if path.is_file()
+        )
+        changes = []
+        for path in files:
+            try:
+                raw = json.loads(path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                raw = {"reviewed_summary": "Reviewed handoff snapshot"}
+            rendered = json.dumps(serialize_portable_handoff(raw, target.boundary), indent=2, sort_keys=True) + "\n"
+            destination = target.resolved_path if source.resolved_path.is_file() else target.resolved_path / path.name
+            existing = destination.read_text(encoding="utf-8") if destination.is_file() else ""
+            changes.append({
+                "path": str(destination),
+                "action": "replace" if destination.exists() else "create",
+                "post_sha256": hashlib.sha256(rendered.encode("utf-8")).hexdigest(),
+                "diff": _unified_diff(existing, rendered, destination),
+            })
+        return {"kind": "unified-diff", "changes": changes}
     return None
 
 
@@ -2987,56 +3179,7 @@ def validate_plan_document(
     if source_sel in ("all-installed", "auto") or target_sel in ("all-installed", "auto"):
         items: list[PlanItem] = []
         for stored in stored_items:
-            src_dict = stored.get("source")
-            tgt_dict = stored.get("target")
-            src_surf = (
-                SurfacePath(
-                    product=src_dict["product"],
-                    profile=src_dict["profile"],
-                    object_type=src_dict["object_type"],
-                    scope=src_dict["scope"],
-                    storage=src_dict["storage"],
-                    path=src_dict["path"],
-                    resolved_path=Path(src_dict["resolved_path"]),
-                    boundary=Path(src_dict["boundary"]),
-                    source_format=src_dict["source_format"],
-                    policy=src_dict["policy"],
-                    location_role=src_dict.get("location_role", "canonical"),
-                    canonical_path=src_dict.get("canonical_path", src_dict["path"]),
-                    precedence=src_dict.get("precedence", 0),
-                )
-                if src_dict
-                else None
-            )
-            tgt_surf = (
-                SurfacePath(
-                    product=tgt_dict["product"],
-                    profile=tgt_dict["profile"],
-                    object_type=tgt_dict["object_type"],
-                    scope=tgt_dict["scope"],
-                    storage=tgt_dict["storage"],
-                    path=tgt_dict["path"],
-                    resolved_path=Path(tgt_dict["resolved_path"]),
-                    boundary=Path(tgt_dict["boundary"]),
-                    source_format=tgt_dict["source_format"],
-                    policy=tgt_dict["policy"],
-                    location_role=tgt_dict.get("location_role", "canonical"),
-                    canonical_path=tgt_dict.get("canonical_path", tgt_dict["path"]),
-                    precedence=tgt_dict.get("precedence", 0),
-                )
-                if tgt_dict
-                else None
-            )
-            item = PlanItem(
-                object_type=stored["object_type"],
-                status=stored["status"],
-                reason=stored["reason"],
-                source=src_surf,
-                target=tgt_surf,
-                manual_actions=stored.get("manual_actions", []),
-                object_id=stored.get("object_id", ""),
-                acb_uri=stored.get("acb_uri"),
-            )
+            item = PlanItem.from_dict(stored)
             # P0-1 (0.9.3): items carrying an acb:// URI are backed by
             # bundle objects, not the original /tmp staging path. The
             # replay path re-stages them from the verified bundle into a
@@ -3112,11 +3255,29 @@ def atomic_write(path: Path, text: str) -> None:
     descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     temporary = Path(temporary_name)
     try:
-        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="") as handle:
             handle.write(text)
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def atomic_copy_file(source: Path, target: Path) -> None:
+    """Copy bytes and executable permissions without a text conversion."""
+    target.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{target.name}.", dir=target.parent
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb") as handle, source.open("rb") as reader:
+            shutil.copyfileobj(reader, handle)
+            handle.flush()
+            os.fsync(handle.fileno())
+        shutil.copystat(source, temporary)
+        os.replace(temporary, target)
     finally:
         temporary.unlink(missing_ok=True)
 
@@ -3147,6 +3308,8 @@ def begin_change(
         "boundary": str(boundary),
         "kind": None,
         "backup": str(backup) if backup else None,
+        "backup_sha256": hash_path(backup) if backup else None,
+        "backup_mode_sha256": mode_hash(backup) if backup else None,
         "created": backup is None,
         "post_sha256": None,
     }
@@ -3159,6 +3322,7 @@ def finish_change(change: dict[str, Any], target: Path) -> None:
         raise ValueError(f"migration target was not written safely: {target}")
     change["kind"] = "directory" if target.is_dir() else "file"
     change["post_sha256"] = hash_path(target)
+    change["post_mode_sha256"] = mode_hash(target)
 
 
 def restore_transaction_change(change: dict[str, Any]) -> None:
@@ -3289,7 +3453,7 @@ def _build_manifest(
         "provenance": provenance,
         "changes": changes,
         "loss_report": loss_report.to_dict(),
-        "items": items,
+        "items": sorted(items, key=lambda item: item["plan_index"]),
         "blockers": [
             {
                 "target_group": group,
@@ -3310,6 +3474,97 @@ def _build_manifest(
         }
     )
     return manifest
+
+
+def recovery_container(target: Path, boundary: Path, backup_root: Path) -> Path:
+    """Reserve same-device staging outside the live target's parent directory."""
+    device = target.parent.stat().st_dev
+    for base in (backup_root, boundary, Path(tempfile.gettempdir())):
+        if base == target.parent or paths_overlap(base, target):
+            # Ancestor boundaries are safe, except the immediate discovery root.
+            if base == target.parent or target in base.parents:
+                continue
+        if base.is_dir() and base.stat().st_dev == device:
+            resolve_output_path(base)
+            try:
+                return Path(tempfile.mkdtemp(prefix=".agent-context-recovery-", dir=base))
+            except OSError as error:
+                if error.errno not in {errno.EACCES, errno.EROFS, errno.ENOENT}:
+                    raise
+                continue
+    raise ValueError(f"no same-filesystem recovery directory outside live target root: {target}")
+
+
+def write_recovery_journal(path: Path, journal: dict[str, Any]) -> None:
+    payload = {key: value for key, value in journal.items() if key != "sha256"}
+    journal["sha256"] = json_sha256(payload)
+    atomic_write(path, json.dumps(journal, indent=2, sort_keys=True) + "\n")
+
+
+def recover_transaction(path: Path) -> int:
+    """Restore a hard-interrupted apply, refusing edited targets or backups.
+
+    Keep the journal and backup copies: retrying recovery after another hard
+    exit must remain possible. This handles process death, not power loss.
+    """
+    path = resolve_output_path(path)
+    journal = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(journal, dict) or journal.get("schema_version") != 1:
+        raise ValueError("unsupported recovery journal")
+    payload = {key: value for key, value in journal.items() if key != "sha256"}
+    if journal.get("sha256") != json_sha256(payload):
+        raise ValueError("recovery journal checksum mismatch")
+    if journal.get("status") == "recovered":
+        return 0
+    manifest_path = Path(journal["manifest"])
+    if manifest_path.exists():
+        manifest = load_manifest(manifest_path)
+        if manifest.get("operation_id") == journal["operation_id"]:
+            raise ValueError(f"transaction committed; use rollback --manifest {manifest_path}")
+        raise ValueError("recovery manifest path is occupied")
+    if journal.get("status") != "pending":
+        raise ValueError("transaction is not pending recovery")
+    entries = journal["entries"]
+    # Preflight the whole transaction before changing any target.
+    for entry in entries:
+        target, boundary = Path(entry["path"]), Path(entry["boundary"])
+        if not target.is_absolute() or not boundary.is_absolute() or target == boundary:
+            raise ValueError("unsafe recovery target")
+        ensure_no_symlink_components(target, boundary)
+        current = path_state(target)
+        if current not in (entry["before"], entry["after"], {"exists": False, "kind": None, "sha256": None}):
+            raise ValueError(f"recovery refused; target changed: {target}")
+        if entry["backup"]:
+            backup = Path(entry["backup"])
+            ensure_no_symlink_components(backup, path.parent)
+            if backup == path.parent or path_state(backup) != entry["before"]:
+                raise ValueError(f"recovery refused; backup changed: {backup}")
+    restored = 0
+    for entry in reversed(entries):
+        target = Path(entry["path"])
+        if path_state(target) == entry["before"]:
+            continue
+        backup = Path(entry["backup"]) if entry["backup"] else None
+        # Never remove the sole backup; prepare a complete replacement first.
+        target.parent.mkdir(parents=True, exist_ok=True)
+        container = recovery_container(target, Path(entry["boundary"]), path.parent)
+        temporary = container / "restored"
+        if backup:
+            if backup.is_dir():
+                shutil.copytree(backup, temporary)
+            else:
+                shutil.copy2(backup, temporary)
+            if path_state(temporary) != entry["before"]:
+                raise ValueError(f"recovery copy changed: {target}")
+        if target.exists():
+            os.replace(target, container / "interrupted")
+        if backup:
+            os.replace(temporary, target)
+        shutil.rmtree(container)
+        restored += 1
+    journal["status"] = "recovered"
+    write_recovery_journal(path, journal)
+    return restored
 
 
 def apply_plan(
@@ -3348,6 +3603,7 @@ def apply_plan(
     When ``strict`` is set, any non-``ready`` item aborts the whole plan
     (legacy behavior preserved for callers that want it).
     """
+    strict = strict or not apply_safe
     if strict:
         blocked = [item for item in plan if item.status_enum is not ItemStatus.READY]
         if blocked:
@@ -3370,10 +3626,11 @@ def apply_plan(
     deferred_items: list[PlanItem] = []
     blocked_items: list[PlanItem] = []
     manifest_items: list[dict[str, Any]] = []
+    plan_indices = {id(item): index for index, item in enumerate(plan)}
     for index, item in enumerate(plan):
         status = item.status_enum
         item_id = f"{index}:{item.object_type}"
-        if status is ItemStatus.READY and item.target_group in target_groups_blocked:
+        if status in {ItemStatus.READY, ItemStatus.READY_LOSSY, ItemStatus.DRAFT_DISABLED} and item.target_group in target_groups_blocked:
             blocked_items.append(item)
             manifest_items.append(
                 _manifest_entry(item, item_id, "blocked-by-group", index)
@@ -3437,10 +3694,22 @@ def apply_plan(
         state_root = workspace_resolved / ".agent-context-migration"
         ensure_no_symlink_components(state_root, workspace_resolved)
         manifest_path_resolved = (
-            manifest_path.resolve(strict=False)
+            resolve_output_path(manifest_path)
             if manifest_path is not None
             else state_root / "manifests" / f"{operation_id}.json"
         )
+        if manifest_path_resolved.exists() or manifest_path_resolved.is_symlink():
+            raise ValueError(f"manifest path already exists: {manifest_path_resolved}")
+        if any(
+            paths_overlap(manifest_path_resolved, surface.resolved_path)
+            for item in plan
+            for surface in (item.source, item.target)
+            if surface is not None
+        ):
+            raise ValueError(
+                "manifest path overlaps a planned source or target surface: "
+                f"{manifest_path_resolved}"
+            )
         manifest = _build_manifest(
             operation_id=operation_id,
             workspace=workspace_resolved,
@@ -3469,7 +3738,7 @@ def apply_plan(
     ensure_no_symlink_components(state_root, workspace)
     backup_root = state_root / "backups" / operation_id
     manifest_path = (
-        manifest_path.resolve(strict=False)
+        resolve_output_path(manifest_path)
         if manifest_path is not None
         else state_root / "manifests" / f"{operation_id}.json"
     )
@@ -3733,6 +4002,21 @@ def apply_plan(
                     f"target changed while staging: {item.target.resolved_path}"
                 )
 
+        if any(paths_overlap(state_root, path) for path in protected_surfaces):
+            raise ValueError("migration state directory overlaps a planned surface")
+        # A later apply must not hide an earlier interrupted operation.
+        for pending_path in (state_root / "backups").glob("*/recovery.json"):
+            pending = json.loads(pending_path.read_text(encoding="utf-8"))
+            if pending.get("status") != "pending":
+                continue
+            recorded_manifest = Path(pending["manifest"])
+            if recorded_manifest.exists():
+                recorded = load_manifest(recorded_manifest)
+                if recorded.get("operation_id") == pending["operation_id"]:
+                    continue
+            if any(paths_overlap(destination, Path(entry["path"]))
+                   for destination in destinations for entry in pending["entries"]):
+                raise ValueError(f"interrupted transaction; recover --journal {pending_path} --yes")
         for index, operation in enumerate(operations):
             operation["backup"] = backup_path(
                 operation["destination"], backup_root, index
@@ -3750,6 +4034,19 @@ def apply_plan(
                     f"target changed before transaction commit: {item.target.resolved_path}"
                 )
 
+        journal_path = backup_root / "recovery.json"
+        journal = {
+            "schema_version": 1, "status": "pending", "operation_id": operation_id,
+            "manifest": str(manifest_path),
+            "entries": [{
+                "path": str(operation["destination"]),
+                "boundary": str(operation["boundary"]),
+                "backup": str(operation["backup"]) if operation["backup"] else None,
+                "before": path_state(operation["destination"]),
+                "after": path_state(operation["staged"]),
+            } for operation in operations],
+        }
+        write_recovery_journal(journal_path, journal)
         created_directories: list[Path] = []
         try:
             for operation in operations:
@@ -3769,13 +4066,12 @@ def apply_plan(
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 created_directories.extend(reversed(missing_parents))
                 if operation["kind"] == "directory":
-                    temporary = destination.parent / (
-                        f".{destination.name}.migration-{operation_id}"
-                    )
+                    container = recovery_container(destination, boundary, backup_root)
+                    temporary = container / "staged"
                     try:
                         shutil.copytree(operation["staged"], temporary)
                         ensure_no_symlinks(temporary)
-                        if hash_path(temporary) != hash_path(operation["staged"]):
+                        if path_state(temporary) != path_state(operation["staged"]):
                             raise ValueError(
                                 f"staged Skill hash changed during commit: {destination}"
                             )
@@ -3783,26 +4079,29 @@ def apply_plan(
                             raise ValueError(
                                 f"symbolic links are not allowed: {destination}"
                             )
-                        if destination.is_dir():
-                            shutil.rmtree(destination)
-                        else:
-                            destination.unlink(missing_ok=True)
+                        if destination.exists():
+                            # Retain the intact old tree across the rename gap.
+                            displaced = container / "previous"
+                            if os.path.lexists(displaced):
+                                raise ValueError(f"recovery path already exists: {displaced}")
+                            os.replace(destination, displaced)
                         os.replace(temporary, destination)
                     finally:
                         if temporary.is_symlink():
                             temporary.unlink()
                         elif temporary.exists():
                             shutil.rmtree(temporary)
+                        # The persistent backup is the recovery source; this
+                        # same-device staging container is no longer needed.
+                        shutil.rmtree(container)
                 else:
-                    atomic_write(
-                        destination,
-                        operation["staged"].read_text(encoding="utf-8"),
-                    )
+                    atomic_copy_file(operation["staged"], destination)
                 finish_change(change, destination)
 
             # Record each actually applied eligible item in the manifest
             # alongside the deferred/blocked entries from dispatch.
-            for index, item in enumerate(eligible_items):
+            for item in eligible_items:
+                index = plan_indices[id(item)]
                 status = item.status_enum
                 item_id = f"{index}:{item.object_type}"
                 if status is ItemStatus.DRAFT_DISABLED:
@@ -3847,22 +4146,30 @@ def apply_plan(
             )
         except BaseException as error:
             rollback_errors: list[str] = []
-            for change in reversed(changes):
-                try:
-                    restore_transaction_change(change)
-                except (OSError, ValueError) as rollback_error:
-                    rollback_errors.append(str(rollback_error))
+            try:
+                recover_transaction(journal_path)
+            except (OSError, ValueError) as rollback_error:
+                rollback_errors.append(str(rollback_error))
             for directory in reversed(created_directories):
                 try:
                     directory.rmdir()
                 except OSError:
                     pass
+            if not rollback_errors:
+                journal["status"] = "recovered"
+                write_recovery_journal(journal_path, journal)
             if rollback_errors:
                 raise RuntimeError(
                     "transaction failed and automatic rollback was incomplete: "
                     + "; ".join(rollback_errors)
                 ) from error
             raise
+        # The manifest is the commit record. Cleanup failure must never undo
+        # an already committed transaction or leave an apparently failed apply.
+        try:
+            journal_path.unlink()
+        except OSError as error:
+            print(f"WARN: committed transaction; recovery journal retained at {journal_path}: {error}", file=sys.stderr)
     return manifest, manifest_path
 
 
@@ -3908,7 +4215,10 @@ def verify_manifest(path: Path) -> list[str]:
         except ValueError as error:
             errors.append(str(error))
             continue
-        if current != change.get("post_sha256"):
+        if (current != change.get("post_sha256") or (
+            change.get("post_mode_sha256") is not None
+            and mode_hash(target) != change["post_mode_sha256"]
+        )):
             errors.append(f"changed after apply: {target}")
     return errors
 
@@ -3918,6 +4228,22 @@ def rollback_manifest(path: Path) -> int:
     errors = verify_manifest(path)
     if errors:
         raise ValueError("rollback refused: " + "; ".join(errors))
+    # Check every backup before removing any target. A missing or altered
+    # later backup must not leave an earlier item partially rolled back.
+    for change in manifest["changes"]:
+        backup_value = change.get("backup")
+        if not backup_value:
+            continue
+        backup = Path(backup_value)
+        if not backup.exists():
+            raise ValueError(f"missing rollback backup: {backup}")
+        ensure_no_symlinks(backup)
+        expected = change.get("backup_sha256")
+        if ((expected is not None and hash_path(backup) != expected) or (
+            change.get("backup_mode_sha256") is not None
+            and mode_hash(backup) != change["backup_mode_sha256"]
+        )):
+            raise ValueError(f"changed rollback backup: {backup}")
     restored = 0
     for change in reversed(manifest["changes"]):
         target = Path(change["path"])
@@ -3928,8 +4254,6 @@ def rollback_manifest(path: Path) -> int:
             target.unlink(missing_ok=True)
         if backup_value:
             backup = Path(backup_value)
-            if not backup.exists():
-                raise ValueError(f"missing rollback backup: {backup}")
             target.parent.mkdir(parents=True, exist_ok=True)
             if backup.is_dir():
                 shutil.copytree(backup, target)

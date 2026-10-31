@@ -11,6 +11,16 @@ Use for the profile-aware `mcp` object. The automatic core accepts the reviewed 
 
 Validate command/args/env or URL/headers, apply [migration-safety.md](migration-safety.md), convert only target-supported fields, preserve unrelated settings, parse the target, and emit a credential-free diff. Ambiguous transport, OAuth/session state, unknown schema, and non-automatic adapters remain manual.
 
+Ordinary migration replaces the selected destination server map with the
+reviewed source map while preserving sibling settings. Target-only servers are
+removed, and same-name definitions are replaced rather than merged. Review
+`added`, `removed`, and same-name configuration changes in the semantic preview.
+`loss_report` records conversion/redaction losses; an empty report does not mean
+existing servers or definitions were retained. The transaction backs up the
+original file for rollback. Bulk restore merges its selected bundle sources by
+server name and reports conflicts before writing; it does not implicitly
+include the current destination map as another source.
+
 ## Sensitive configuration handling
 
 User-level agent config files are treated as sensitive inputs:
@@ -23,7 +33,8 @@ User-level agent config files are treated as sensitive inputs:
   never read into plans, bundles, or reports.
 - **Trust sections are hard-denied.** Surfaces registered with the
   `never-migrate` policy (e.g. the trust block of a host config file) are
-  excluded before disk collection; no code path can inventory or copy them.
+  excluded before content collection and have no writer. Inventory may report
+  their path, policy, and existence as forbidden surface metadata.
 - **Least-privilege reads.** A config file is opened only when its product is
   an explicitly named migration source or target. There is no startup scan of
   installed products.

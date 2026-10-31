@@ -14,12 +14,16 @@ from pathlib import Path
 
 sys.path.insert(0, sys.argv[1])
 from migration_core import (
+    PlanItem,
     Registry,
+    apply_plan,
     build_plan,
     build_plan_document,
     emit_mcp_document,
     mcp_adapter,
     parse_mcp_document,
+    rollback_manifest,
+    verify_manifest,
 )
 
 jsonc = r'''
@@ -120,6 +124,58 @@ remote = build_plan_document(
 assert remote["items"][0]["status"] == "manual-rebuild"
 assert "dedicated target-profile transport adapter" in remote["items"][0]["reason"]
 assert "literal-secret" not in json.dumps(remote)
+
+# Claude project MCP was present in the legacy path map but absent from v2.
+# Exercise both profiles, safe previews, round-trip mapping, and rollback.
+for profile_name in ("code-cli", "desktop-code"):
+    project = (Path(sys.argv[3]) / profile_name).resolve()
+    project.mkdir()
+    cline_file = project / ".cline" / "mcp.json"
+    cline_file.parent.mkdir()
+    source_bytes = b'{"mcpServers":{"demo":{"command":"demo","args":["--safe"]}}}\n'
+    cline_file.write_bytes(source_bytes)
+    claude_file = project / ".mcp.json"
+    original_target = b'{"keep":true,"mcpServers":{"retained":{"command":"retain"}}}\n'
+    claude_file.write_bytes(original_target)
+    scoped = Registry(Path(sys.argv[2]), project, home)
+    selector = f"claude/{profile_name}"
+    preview = build_plan_document(scoped, "cline/ide", selector, ["mcp"], "project")
+    assert len(preview["items"]) == 1, preview
+    assert preview["items"][0]["status"] == "ready", preview
+    assert preview["items"][0]["target"]["resolved_path"] == str(claude_file)
+    changes = preview["items"][0]["review_preview"]["changes"]
+    assert changes[0]["added"] == ["demo"] and changes[0]["removed"] == ["retained"]
+    assert claude_file.read_bytes() == original_target
+    assert not (project / ".agent-context-migration").exists()
+
+    forward = [PlanItem.from_dict(item) for item in preview["items"]]
+    _, forward_manifest = apply_plan(forward, project)
+    result = json.loads(claude_file.read_bytes())
+    assert result["keep"] is True
+    assert set(result["mcpServers"]) == {"demo"}, result
+    assert verify_manifest(forward_manifest) == []
+    assert cline_file.read_bytes() == source_bytes
+
+    reverse, _ = build_plan(scoped, selector, "cline/ide", ["mcp"], "project")
+    assert len(reverse) == 1 and reverse[0].status == "ready", reverse
+    _, reverse_manifest = apply_plan(reverse, project)
+    assert set(json.loads(cline_file.read_bytes())["mcpServers"]) == {"demo"}
+    assert verify_manifest(reverse_manifest) == []
+    assert rollback_manifest(reverse_manifest) == 1
+    assert cline_file.read_bytes() == source_bytes
+    assert rollback_manifest(forward_manifest) == 1
+    assert claude_file.read_bytes() == original_target
+
+    claude_file.write_text("{broken", encoding="utf-8")
+    invalid, _ = build_plan(scoped, selector, "cline/ide", ["mcp"], "project")
+    assert invalid[0].status == "invalid", invalid
+    try:
+        apply_plan(invalid, project, strict=True)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("invalid Claude project MCP was applied")
+    assert cline_file.read_bytes() == source_bytes
 PY
 
-echo "MCP adapter and cloud rebuild tests passed"
+echo "MCP adapter, Claude project round-trip, and cloud rebuild tests passed"

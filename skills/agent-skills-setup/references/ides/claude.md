@@ -14,7 +14,7 @@
 
 <!-- END GENERATED: ide-paths.json summary -->
 - Settings include project `.claude/settings.json` and local `.claude/settings.local.json`; local scopes are manual.
-- User/local MCP is `~/.claude.json`; shared project MCP is `.mcp.json`, both with `mcpServers`. The mapper handles user MCP and reports project scope for review.
+- User/local MCP is `~/.claude.json`; shared project MCP is `.mcp.json`, both with `mcpServers`. The `code-cli` and `desktop-code` profiles map user and shared project MCP through the reviewed JSON adapter. Per-project entries inside `~/.claude.json` remain local and require manual review. Project MCP mapping was checked against the official MCP documentation on 2026-10-02; writing a configuration does not grant server trust or verify connection.
 - Rules include `CLAUDE.md`, `.claude/CLAUDE.md`, `.claude/rules/`, and local `CLAUDE.local.md`. Project/user Skills are standard directories.
 - `.claude/commands/*.md` is **legacy compatibility**; prefer Skills. Agents and hooks are schema-bound and manual. Do not auto-migrate auto memory from `~/.claude/projects/.../memory/`.
 

@@ -143,18 +143,14 @@ done
 [[ -d "$SKILL_DIR" ]] || die "Skill directory not found: $SKILL_DIR"
 [[ -f "$SKILL_DIR/SKILL.md" ]] || die "Missing SKILL.md in $SKILL_DIR"
 
-if command_exists realpath; then
-    SKILL_DIR_ABS="$(realpath "$SKILL_DIR")"
-else
-    SKILL_DIR_ABS="$(cd "$SKILL_DIR" && pwd)"
-fi
+SKILL_DIR_ABS="$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).absolute())' "$SKILL_DIR")"
 
 if [[ -n "$CHANGELOG_FILE" ]]; then
     [[ -f "$CHANGELOG_FILE" ]] || die "Changelog file not found: $CHANGELOG_FILE"
     CHANGELOG_TEXT="$(cat "$CHANGELOG_FILE")"
 fi
 
-[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9]+)?$ ]] || die "Version must look like semver: $VERSION"
+python3 "$SCRIPT_DIR/skill_package.py" version "$VERSION"
 [[ "$SLUG" =~ ^[a-z0-9-]+$ ]] || die "Slug must contain only lowercase letters, numbers, and hyphens"
 
 SOURCE_PROVENANCE_COUNT=0
@@ -168,29 +164,24 @@ if [[ -n "$SOURCE_COMMIT" && ! "$SOURCE_COMMIT" =~ ^[0-9a-fA-F]{40}$ ]]; then
     die "--source-commit must be a full 40-character Git commit SHA"
 fi
 
-command_exists clawhub || die "clawhub is not installed"
-
-if ! clawhub whoami >/dev/null 2>&1; then
-    if [[ $RUN_PUBLISH -eq 1 ]]; then
-        die "Not logged in to ClawHub. Run: clawhub login"
-    fi
-    echo "WARN: Not logged in to ClawHub. Run 'clawhub login' before using --publish." >&2
-fi
-
-case "$PACKAGE_DIR" in
-    /*) PACKAGE_DIR_ABS="$PACKAGE_DIR" ;;
-    *) PACKAGE_DIR_ABS="$(pwd)/$PACKAGE_DIR" ;;
-esac
-[[ ! -e "$PACKAGE_DIR_ABS" ]] || die "Package directory already exists: $PACKAGE_DIR_ABS"
-bash "$REPO_ROOT/scripts/stage-runtime-skill.sh" \
-    "$SKILL_DIR_ABS" "$PACKAGE_DIR_ABS" "$VERSION"
-
 if [[ $RUN_PUBLISH -eq 1 && $MIT0_ACKNOWLEDGED -ne 1 ]]; then
     die "ClawHub publishes under MIT-0; rerun with --acknowledge-mit0 only after contributor authorization is confirmed"
 fi
 if [[ $RUN_PUBLISH -eq 1 && $SOURCE_PROVENANCE_COUNT -ne 4 ]]; then
     die "ClawHub publish requires complete source attribution; pass --source-repo, --source-commit, --source-ref, and --source-path"
 fi
+
+if [[ $RUN_PUBLISH -eq 1 ]]; then
+    command_exists clawhub || die "clawhub is not installed"
+    if ! clawhub whoami >/dev/null 2>&1; then
+        die "Not logged in to ClawHub. Run: clawhub login"
+    fi
+fi
+
+PACKAGE_DIR_ABS="$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).absolute())' "$PACKAGE_DIR")"
+[[ ! -e "$PACKAGE_DIR_ABS" ]] || die "Package directory already exists: $PACKAGE_DIR_ABS"
+bash "$REPO_ROOT/scripts/stage-runtime-skill.sh" \
+    "$SKILL_DIR_ABS" "$PACKAGE_DIR_ABS" "$VERSION"
 
 PUBLISH_CMD=(clawhub publish "$PACKAGE_DIR_ABS" --slug "$SLUG" --name "$DISPLAY_NAME" --version "$VERSION" --tags "$TAGS")
 

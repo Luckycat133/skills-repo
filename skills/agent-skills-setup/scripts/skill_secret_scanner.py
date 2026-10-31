@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import ast
 import os
 import re
 import sys
@@ -26,10 +27,10 @@ PRIVATE_KEY = re.compile(
     rb"-----BEGIN (?:OPENSSH |RSA |EC |DSA )?PRIVATE KEY-----"
 )
 # Credentials embedded in a connection-string userinfo component:
-#   postgres://user:pass@host:5432/db
-#   redis://:secret@cache:6379/
-#   amqp://guest:guest@broker/
-# The username component is optional (redis://:pass@host);
+#   postgres:// with user:pass@host:5432/db userinfo
+#   redis:// with :secret@cache:6379/ userinfo
+#   amqp:// with guest:guest@broker/ userinfo
+# The username component is optional (a colon can precede the password);
 # the colon separating userinfo from password is required so that a plain
 # email-style URL (https://user@example.com) is NOT flagged.
 CONNECTION_STRING_USERINFO = re.compile(
@@ -40,6 +41,12 @@ SECRET_ASSIGNMENT = re.compile(
     r"authorization|bearer|client[_-]?secret|private[_-]?key)(?![A-Za-z0-9_])"
     r"[\"']?[ \t]*[=:][ \t]*[\"']?"
     r"([^\s\"'`,;]{12,})"
+)
+SECRET_CALL_ASSIGNMENT = re.compile(
+    r"(?im)(?<![A-Za-z0-9_])(?:api[_-]?key|token|secret|password|passwd|"
+    r"authorization|bearer|client[_-]?secret|private[_-]?key)(?![A-Za-z0-9_])"
+    r"[\"']?[ \t]*[=:][ \t]*"
+    r"([A-Za-z_][A-Za-z0-9_.]*[ \t]*\([^\r\n]*)"
 )
 PLACEHOLDER_WORDS = (
     "example",
@@ -57,6 +64,70 @@ SAFE_REFERENCE = re.compile(
     r"^(?:\$\(.+\)|\$[A-Za-z_][A-Za-z0-9_]*|\$\{[A-Za-z_][A-Za-z0-9_]*\}|"
     r"env:[A-Za-z_][A-Za-z0-9_]*)$"
 )
+CREDENTIAL_FIELD_NAME = re.compile(
+    r"(?i)^(?:api[_-]?key|token|secret|password|passwd|authorization|bearer|"
+    r"client[_-]?secret|private[_-]?key)"
+)
+
+
+def is_computed_assignment(value: str) -> bool:
+    """Only calls whose arguments contain no literals are safe source expressions."""
+    try:
+        expression = ast.parse(value.rstrip("]}"), mode="eval").body
+        return isinstance(expression, ast.Call) and not any(
+            isinstance(node, ast.Constant) for node in ast.walk(expression)
+        )
+    except (SyntaxError, ValueError, RecursionError):
+        return False
+
+
+def call_expression(value: str) -> ast.AST | None:
+    """Parse a call prefix without consuming adjacent JSON fields or statements."""
+    quote: str | None = None
+    escaped = False
+    depth = 0
+    end = 0
+    for index, char in enumerate(value):
+        if quote:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+        elif char in {"'", '"'}:
+            quote = char
+        elif char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth == 0:
+                end = index + 1
+                if not re.match(r"\s*\.[A-Za-z_]\w*\s*\(", value[end:]):
+                    break
+    if not end:
+        return None
+    for candidate in (value.rstrip("]},;"), value[:end]):
+        try:
+            return ast.parse(candidate, mode="eval").body
+        except (SyntaxError, ValueError, RecursionError):
+            continue
+    return None
+
+
+def is_field_alias(match: re.Match[str], text: str) -> bool:
+    """Recognize quoted field-name translations such as clientSecret -> client_secret."""
+    if text[match.start(1) - 1:match.start(1)] not in {"'", '"'}:
+        return False
+    field = CREDENTIAL_FIELD_NAME.match(match.group(0))
+    if field is None:
+        return False
+    key_quote = text[match.start() - 1:match.start()]
+    if key_quote not in {"'", '"'} or match.group(0)[len(field.group()):len(field.group()) + 1] != key_quote:
+        return False
+    normalized_field = re.sub(r"[_-]", "", field.group()).lower()
+    normalized_value = re.sub(r"[_-]", "", match.group(1)).lower()
+    return normalized_field == normalized_value
 
 
 def is_placeholder(value: str) -> bool:
@@ -74,12 +145,25 @@ def finding_reason(data: bytes) -> str | None:
     if b"\x00" in data[:8192]:
         return None
     text = data.decode("utf-8", errors="replace")
+    # A short wrapper such as str("...") can otherwise hide a long literal
+    # from the plain assignment regex, whose value stops at the inner quote.
+    for match in SECRET_CALL_ASSIGNMENT.finditer(text):
+        expression = call_expression(match.group(1))
+        if expression is None:
+            continue
+        for node in ast.walk(expression):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str) and len(node.value) >= 12:
+                if not SAFE_REFERENCE.fullmatch(node.value) and not is_placeholder(node.value):
+                    return "literal value assigned to a credential field"
     for match in SECRET_ASSIGNMENT.finditer(text):
         value = match.group(1)
+        quoted = text[match.start(1) - 1:match.start(1)] in {"'", '"'}
         if (
             not value.startswith("$(")
             and not SAFE_REFERENCE.fullmatch(value)
             and not is_placeholder(value)
+            and not is_field_alias(match, text)
+            and not (not quoted and is_computed_assignment(value))
         ):
             return "literal value assigned to a credential field"
     return None

@@ -59,8 +59,12 @@ print("OK canonical_relative_path normalizes")
 # Alias equivalence: vscode resolves to copilot/vscode; the planner
 # emits the same object_id for both selectors because it uses the
 # resolved source surface.
-ws = Path(tempfile.mkdtemp(prefix="oid-test-ws-"))
-home = Path(tempfile.mkdtemp(prefix="oid-test-home-"))
+temporary = tempfile.TemporaryDirectory(prefix="oid-tests-")
+test_root = Path(temporary.name)
+ws = test_root / "workspace"
+home = test_root / "home"
+ws.mkdir()
+home.mkdir()
 # Pin the POSIX layout the fixtures create; on win32 the registry would
 # otherwise resolve cline surfaces to %APPDATA% and miss the tree.
 import os as _os
@@ -118,7 +122,7 @@ print("OK apply preserves source basename on the target tree")
 # Same-name collision: stage two instructions with the same basename
 # at different scopes; the apply must produce distinct target paths via
 # the object_id short suffix.
-collision_ws = Path(tempfile.mkdtemp(prefix="oid-coll-"))
+collision_ws = test_root / "collision"
 (collision_ws / ".cline/rules").mkdir(parents=True, exist_ok=True)
 (collision_ws / ".cline/rules/shared.md").write_text(
     "---\npaths:\n  - 'src/**/*.ts'\n---\nfirst\n", encoding="utf-8",
@@ -128,15 +132,27 @@ collision_ws = Path(tempfile.mkdtemp(prefix="oid-coll-"))
     "---\npaths:\n  - 'lib/**/*.ts'\n---\nsecond\n", encoding="utf-8",
 )
 registry2 = Registry(registry_path, collision_ws, home)
-plan_coll, _ = build_plan(registry2, "cline/ide", "cline/ide", ["instructions"], "project")
+plan_coll, collision_losses = build_plan(registry2, "cline/ide", "cline/ide", ["instructions"], "project")
+assert len(plan_coll) == 1 and plan_coll[0].status == "ready-lossy", plan_coll
+assert "hierarchy" in {
+    loss.field for loss in collision_losses.items
+}, collision_losses.to_dict()
 # All items should have distinct object_ids.
 ids = [item.object_id for item in plan_coll]
 assert len(set(ids)) == len(ids), f"collisions in ids: {ids}"
-# Apply; verify both target files exist (no overwrite of first by second).
-manifest2, _ = apply_plan(plan_coll, collision_ws, collision_ws / "manifest2.json")
+# Accept this fixture's reviewed flattening; verify neither body is overwritten.
+manifest2, _ = apply_plan(
+    plan_coll, collision_ws, collision_ws / "manifest2.json",
+    accept_loss_ids={"0:instructions"},
+)
+assert manifest2["summary"].get("applied-lossy") == 1, manifest2["summary"]
 target_dir = collision_ws / ".cline" / "rules"
 written = sorted(p.name for p in target_dir.iterdir() if p.is_file())
 assert len(written) >= 2, f"expected both collision files, got {written}"
+assert len(manifest2["changes"]) == 2, manifest2["changes"]
+contents = [Path(change["path"]).read_text(encoding="utf-8") for change in manifest2["changes"]]
+assert any("\nfirst\n" in text and "src/**/*.ts" in text for text in contents), contents
+assert any("\nsecond\n" in text and "lib/**/*.ts" in text for text in contents), contents
 print(f"OK collision pathnames produced distinct files: {written}")
 
 # Cross-scope separation: user vs project scopes yield different ids.
@@ -155,15 +171,16 @@ proj_id = compute_object_id(
 assert user_id != proj_id
 print("OK cross-scope ids do not collide")
 
-# Stale-target detection: verify reports stale entries when target tree
-# has files that are not in the current plan.
-stale_ws = Path(tempfile.mkdtemp(prefix="oid-stale-"))
+# Unselected target siblings remain intact; migration does not prune them.
+stale_ws = test_root / "stale-target"
 (stale_ws / ".cline/skills").mkdir(parents=True, exist_ok=True)
-(stale_ws / ".cline/skills/stale-skill").mkdir(parents=True)
-(stale_ws / ".cline/skills/stale-skill/SKILL.md").write_text(
+stale_target = stale_ws / ".forge/skills/stale-skill/SKILL.md"
+stale_target.parent.mkdir(parents=True)
+stale_target.write_text(
     "---\nname: stale-skill\ndescription: stale.\nmetadata:\n  version: '1'\n---\n",
     encoding="utf-8",
 )
+stale_before = stale_target.read_bytes()
 # Plan with a *different* skill so stale-skill is not part of the run.
 (stale_ws / ".cline/skills/fresh-skill/SKILL.md").parent.mkdir(parents=True, exist_ok=True)
 (stale_ws / ".cline/skills/fresh-skill/SKILL.md").write_text(
@@ -173,13 +190,12 @@ stale_ws = Path(tempfile.mkdtemp(prefix="oid-stale-"))
 registry3 = Registry(registry_path, stale_ws, home)
 plan_stale, _ = build_plan(registry3, "cline/ide", "forge/cli", ["skills"], "project")
 manifest3, mp3 = apply_plan(plan_stale, stale_ws, stale_ws / "manifest3.json")
-# verify_manifest exists; we just confirm the fresh skill landed and
-# the stale one did not. Stale-target removal requires explicit
-# --prune-stale which is not yet wired; record the contract instead.
 fresh_dst = stale_ws / ".forge" / "skills" / "fresh-skill" / "SKILL.md"
 assert fresh_dst.exists()
-print("OK fresh skill landed; stale-target handling is recorded but not destructive")
+assert stale_target.read_bytes() == stale_before
+print("OK fresh skill landed and the unselected target sibling remained intact")
 
+temporary.cleanup()
 print()
 print("Stable object id tests passed")
 PYEOF

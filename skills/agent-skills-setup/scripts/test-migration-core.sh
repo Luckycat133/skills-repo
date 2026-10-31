@@ -107,7 +107,7 @@ from pathlib import Path
 plan = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 assert plan["schema_version"] == 1
 assert len(plan["plan_sha256"]) == 64
-assert [item["status"] for item in plan["items"]] == ["ready", "ready", "ready"]
+assert [item["status"] for item in plan["items"]] == ["ready", "ready-lossy", "ready-lossy"]
 assert all(item["review_preview"] for item in plan["items"])
 assert {item["field"] for item in plan["loss_report"]["items"]} >= {
     "example.env.API_TOKEN",
@@ -127,6 +127,7 @@ fi
 
 if HOME="$(native_path "$TEST_HOME")" bash "$CLI" apply "$PLAN_FILE" \
     --manifest "$WORKSPACE/AGENTS.md" \
+    --include lossy \
     --yes > "$TMP_ROOT/manifest-overlap.log" 2>&1; then
     echo "FAIL: manifest path overlapped a migration surface" >&2
     exit 1
@@ -140,6 +141,7 @@ MANIFEST="$TMP_ROOT/manifest.json"
 HOME="$(native_path "$TEST_HOME")" bash "$CLI" apply \
     "$PLAN_FILE" \
     --manifest "$MANIFEST" \
+    --accept-loss '1:instructions,2:mcp' \
     --yes \
     --json > "$TMP_ROOT/apply.json"
 

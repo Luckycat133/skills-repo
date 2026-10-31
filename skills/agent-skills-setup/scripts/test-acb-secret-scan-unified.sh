@@ -62,6 +62,12 @@ def blank():
 leak_cases = {
     "password=": b'config.toml: password = "' + b"super" + b"secret" + b"password123" + b'"\n',
     "client_secret:": b'{"client_secret": "' + b"abc123" + b"def456" + b"ghi789" + b"jklmno" + b'"}\n',
+    "unquoted dotenv password": b'PASSWORD=' + b"literal" + b"Credential" + b"123456" + b'\n',
+    "quoted expression-shaped password": b'password="load_sensitive_config()"\n',
+    "literal in short wrapper call": b'password=str("production-secret-123")\n',
+    "nested literal in call": b'token=wrapper(decode("literalCredential123456"))\n',
+    "literal appended to symbolic call": b'token=get_token() + "literalCredential123456"\n',
+    "unknown-extension assignment": b'token: ' + b"abcdef" + b"123456" + b"7890abcdef" + b'\n',
     "DATABASE_URL userinfo": b"DATABASE_URL=postgres://admin:" + b"s3cr3t" + b"P@ss" + b"@db.host:5432/app\n",
     "redis userinfo": b"redis://:" + b"top" + b"secret" + b"@cache.example:6379/0\n",
     "Bearer token": b"Authorization: Bearer " + b"eyJhbGciOi" + b"JIUzI1NiIsInR5cCI6IkpXVCJ9xxxx" + b"\n",
@@ -89,6 +95,10 @@ benign_cases = {
     "plain prose": b'This skill reminds you to rotate your password every 90 days.\n',
     "allowlisted png": b"\x89PNG\r\n\x1a\n" + b"\x00" * 48,
     "normal json": b'{"name": "demo", "version": "1.0.0", "scope": "user"}\n',
+    "computed private key": b'private_key = Ed25519PrivateKey.from_private_bytes(read_key(path))\n',
+    "computed key path JSON field": b'{"private_key": str(output_path)}\n',
+    "computed token": b'token = token.strip().lower()\n',
+    "quoted field-name translation": b'{"clientSecret": "client_secret"}\n',
 }
 for label, payload in benign_cases.items():
     reason = skill_secret_scanner.finding_reason(payload)

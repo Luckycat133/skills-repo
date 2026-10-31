@@ -4,21 +4,13 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Native Windows Python ignores MSYS-style env values; convert HOME
-# fixtures so $HOME resolution sees a real directory on every platform.
-
-# Pin surface resolution to the POSIX layout the fixtures create;
-# otherwise windows-latest would resolve $APPDATA-style overrides.
-export AGENT_SKILLS_PLATFORM=linux
-
-native_path() {
-    if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
-}
-TMP_ROOT="$(mktemp -d /tmp/agent-skills-antigravity-test.XXXXXX)"
+source "$SCRIPT_DIR/test-support/legacy-fixture.sh"
+TMP_ROOT="$(native_path "$(mktemp -d /tmp/agent-skills-antigravity-test.XXXXXX)")"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 
 TEST_HOME="$TMP_ROOT/home"
 WORKSPACE="$TMP_ROOT/workspace"
+legacy_fixture_init "$TMP_ROOT"
 CURSOR_MCP="$TEST_HOME/.cursor/mcp.json"
 ANTIGRAVITY_MCP="$TEST_HOME/.gemini/config/mcp_config.json"
 
@@ -111,4 +103,5 @@ assert server["serverUrl"] == "https://example.invalid/mcp"
 assert "url" not in server
 PYEOF
 
+legacy_fixture_assert_public_boundary "$SCRIPT_DIR" "$TMP_ROOT"
 echo "Antigravity IDE migration test passed"

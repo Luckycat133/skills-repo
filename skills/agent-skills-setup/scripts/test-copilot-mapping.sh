@@ -5,22 +5,14 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Native Windows Python ignores MSYS-style env values; convert HOME
-# fixtures so $HOME resolution sees a real directory on every platform.
-
-# Pin surface resolution to the POSIX layout the fixtures create;
-# otherwise windows-latest would resolve $APPDATA-style overrides.
-export AGENT_SKILLS_PLATFORM=linux
-
-native_path() {
-    if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
-}
+source "$SCRIPT_DIR/test-support/legacy-fixture.sh"
 MIGRATION_SCRIPT="${SCRIPT_DIR}/legacy-smart-ide-migration.sh"
 export AGENT_SKILLS_SETUP_INTERNAL_LEGACY=1
-TMP_ROOT="$(mktemp -d /tmp/copilot-mapping-test.XXXXXX)"
+TMP_ROOT="$(native_path "$(mktemp -d /tmp/copilot-mapping-test.XXXXXX)")"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 
 TEST_HOME="$TMP_ROOT/home"
+legacy_fixture_init "$TMP_ROOT"
 WORKSPACE="$TMP_ROOT/workspace"
 CURSOR_MCP="$TEST_HOME/.cursor/mcp.json"
 
@@ -111,4 +103,5 @@ if "servers" in config:
     raise SystemExit("VS Code MCP root key leaked into CLI config")
 PY
 
+legacy_fixture_assert_public_boundary "$SCRIPT_DIR" "$TMP_ROOT"
 echo "Copilot CLI mapping fixture passed"

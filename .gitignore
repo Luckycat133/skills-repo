@@ -7,6 +7,8 @@
 .workbuddy/
 .superpowers/
 .claude/
+.gemini/prompts.json
+.gemini/.prompts.json.lock
 .agent-context-migration/
 /datasets/
 

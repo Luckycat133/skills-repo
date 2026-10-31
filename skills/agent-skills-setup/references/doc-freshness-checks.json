@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "verified_at": "2026-08-15",
+  "verified_at": "2026-10-25",
   "checks": [
     {
       "id": "agent-skills-spec",
@@ -21,7 +21,7 @@
     },
     {
       "id": "forgecode-docs",
-      "url": "https://forgecode.dev/docs/",
+      "url": "https://github.com/tailcallhq/forgecode/tree/main/docs",
       "required_terms": [
         "forge",
         "agent"
@@ -112,7 +112,7 @@
     },
     {
       "id": "rovodev-cli-skills",
-      "url": "https://support.atlassian.com/rovo/docs/use-agent-skills-in-rovo-dev-cli/",
+      "url": "https://support.atlassian.com/rovo/docs/extend-rovo-dev-cli-with-agent-skills/",
       "required_terms": [
         "rovo",
         "skill"

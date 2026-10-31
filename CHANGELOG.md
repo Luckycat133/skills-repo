@@ -2,6 +2,88 @@
 
 This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Persist recovery journals before migration or Skill installation replaces directories; retain complete old trees across the rename gap. Add explicit, conservative recovery for interrupted processes and reject overlapping retries until recovery is resolved.
+- Bind new migration plans, verification, and rollback guards to file/directory modes separately from unchanged content hashes. Regenerate old plans; old manifests retain content-only checks.
+
+### Validation
+
+- Add subprocess hard-exit regressions at directory replacement and manifest boundaries, installation recovery, and mode-only target/backup drift checks. Recovery retains evidence and refuses post-interruption edits.
+
+## [0.10.2] - 2026-10-03
+
+### Fixed
+
+- Keep legacy dry-run reports on stdout even when `--report` names a file. Existing files, source assets, and nonexistent report paths remain untouched through both the Python facade and the no-Python Bash fallback.
+- Preserve machine-readable preview output and explain the ignored report path on stderr. Explicit report saving outside dry-run remains available to the internal compatibility engine.
+
+### Validation
+
+- Add 12 public-entry regressions covering both entry paths, text/JSON output, and existing, new, or source-asset report paths. Preserve the surrounding source, destination, and workspace trees. Use an LF-only Bash hook and assert Python discovery selects the intended route on every platform.
+- Record 69 local suites and 32 independent macOS calls passed, along with the unchanged warning-bearing scanner verdict and analysis limits in the [candidate security review](docs/agent-skills-setup/verification/security-v0.10.2.md).
+
+## [0.10.1] - 2026-10-03
+
+### Fixed
+
+- Hold generated signing-key file descriptors through pair completion. Failed POSIX operations preserve outputs for review; Windows cleanup uses only the original creation handles. Errors retain their original cause and report any outputs needing review.
+- Replace profile-directory placeholder links with the concrete profile index so published Skill navigation reaches a file viewer.
+
+### Changed
+
+- Run the five previously excluded legacy suites under native Windows Python and isolated user directories. Keep all original assertions and correct platform-specific fixture paths.
+- Name opt-in plugin packages and reviewed handoff explicitly in the Skill description.
+- Record post-release ClawHub browser/download acceptance, the 112-finding platform comparison, and bounded native tool acceptance with their actual coverage limits.
+- Pin CI Python setup to the supported Node 24 action revision.
+
+### Upgrade notes
+
+- If signing-key generation fails, do not use its outputs. Inspect any reported paths before removing them; POSIX outputs are preserved for review. Successful generation and signing interfaces are unchanged.
+- Security scan findings and incomplete analysis remain visible in the [0.10.1 review](docs/agent-skills-setup/verification/security-v0.10.1.md).
+
+## [0.10.0] - 2026-10-02
+
+### Added
+
+- ACB ordinary file-permission metadata, preserved through snapshot, named/bulk restore, saved-plan apply, and explicit extraction. Older bundles without it remain readable; malformed metadata is rejected before writes.
+- Named restore plans bound to the exact bundle manifest and stable `acb://` object URIs. Replay rejects mismatched sources and preserves the saved plan bytes.
+- MCP semantic previews showing added, removed, updated, and unchanged servers, with changed field names and no credential values.
+- Complete offline `doctor` requirements for executables, packages, extensions, local-script installation, and platforms; PATH checks remain separate from runtime acceptance.
+- An optional isolated scale benchmark covering migration, saved-plan restore, exact contents, rollback, and source preservation, plus persistent scale/hash-allocation regressions. Independent forward tests exercise the packaged Skill.
+
+### Changed
+
+- Instruction/MCP conversions with reported field losses now require explicit acceptance. Lossy previews remain reviewable and bulk restore replay retains conversion evidence; strict mode rejects them before writes.
+- Unify discovery for `detect`, bulk snapshot, and bulk restore; resolve inherited and alias profiles, expand environment paths, retain project evidence beneath HOME, and verify exact macOS app identifiers without failing on inaccessible or malformed plists.
+- Simplify the Skill entrypoint and route migration, bundles/signing, and verification to focused references. Preserve scoped authorization across stages; align behavioral and trigger evals with the public profile-aware CLI.
+- Classify compatibility per object, scope, and actual runtime adapter. Index directional execution evidence conservatively; previews, legacy calls, unrelated objects, and ignored failures no longer imply end-to-end coverage.
+- Validate complete staged Skill trees before import/release packaging and commit them atomically with failure recovery. Require runtime dependencies, reject overlapping trees/unsafe links, and exclude environment files/caches. Local release preparation no longer needs ClawHub login or network access.
+- Refresh multilingual command guides and maintenance/release guidance. Add Python syntax checks to full validation and pin CI signing/schema/official-validator dependencies so optional checks run. Isolate command-runner fixtures and respect native filename constraints in cross-platform regressions.
+- Stream file and directory hashing with unchanged SHA-256 semantics to bound allocation for large assets.
+
+### Fixed
+
+- Keep named migration/snapshot inventories within selected products. Preserve requested manual objects in migration previews, permit all-scope planning without apply consent, and validate report paths before any write.
+- Restore the documented Claude Code project MCP surface (`.mcp.json`) in CLI and desktop-code profiles, with bidirectional JSON mapping and transactional regression coverage.
+- Make restore previews reviewable, honor strict apply, preserve the replayed plan path, and require approved extraction. Rebind each child Skill and reconstruct merged MCP sources on cross-process bundle-plan replay.
+- Complete plugin and reviewed handoff opt-in through snapshot and restore, retaining package-copy and field-whitelist boundaries.
+- Validate every rollback backup before removing a target; preserve file bytes and executable permissions, original plan indices, and conflict isolation in apply manifests.
+- Validate standard Skill metadata, scalar types, and complete local link closure; use the shared secret scanner for computed source assignments without exposing values.
+- Create and read signing keys with owner-only file permissions on each platform: POSIX mode `0600` or a protected Windows ACL. Windows signing no longer misinterprets POSIX permission bits; unsafe keys remain rejected before their contents are read.
+- Preserve rendered UTF-8 bytes during atomic text writes on Windows, so instruction/MCP/handoff preview hashes match the applied files instead of differing after automatic newline translation.
+- Report captured bundle objects separately from payload files and retain legitimate `.environment-*` Skill assets while excluding `.env` and `.env.*`.
+- Keep failed freshness reports available and make explicitly requested stale-profile demotion reachable. Validate the proposed registry before atomic replacement; malformed provenance and checks still fail without changing the registry.
+
+### Upgrade notes
+
+- Review instruction/MCP losses and record acceptance before replaying automation that previously applied lossy items; `--yes` alone does not accept losses. See [migration safety](skills/agent-skills-setup/references/migration-safety.md).
+- Replay saved restore plans with their original verified `--bundle`; changed manifest/object identities require a new reviewed plan. Older ACB bundles without permission metadata remain supported.
+- Use distinct output paths for plans, reports, manifests, and bundles. Paths overlapping sources, targets, the Registry, or each other now fail before writes.
+- Runtime and native IDE acceptance remain separate from file validation; cross-platform claims require actual CI/native evidence. GitHub installation examples pin the matching `v0.10.0` release tag.
+
 ## [0.9.3] - 2026-09-11
 
 ### Fixed

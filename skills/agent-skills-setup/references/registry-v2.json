@@ -372,6 +372,13 @@
                 "policy": "profile-version-adapter",
                 "scope": "user",
                 "storage": "file"
+              },
+              {
+                "format": "json:mcpServers",
+                "path": ".mcp.json",
+                "policy": "profile-version-adapter",
+                "scope": "project",
+                "storage": "file"
               }
             ],
             "skills": [
@@ -444,6 +451,13 @@
                 "path": "~/.claude.json",
                 "policy": "profile-version-adapter",
                 "scope": "user",
+                "storage": "file"
+              },
+              {
+                "format": "json:mcpServers",
+                "path": ".mcp.json",
+                "policy": "profile-version-adapter",
+                "scope": "project",
                 "storage": "file"
               }
             ],
@@ -974,7 +988,7 @@
             "wsl": "~/.continue"
           },
           "sources": [
-            "https://continue.dev/docs/skills"
+            "https://docs.continue.dev/cli/quickstart"
           ],
           "surfaces": {
             "instructions": [
@@ -1003,8 +1017,8 @@
               }
             ]
           },
-          "verified_at": "2026-08-16",
-          "version_range": "current as of 2026-08-16"
+          "verified_at": "2026-10-25",
+          "version_range": "current as of 2026-10-25"
         }
       }
     },
@@ -1537,7 +1551,7 @@
             "linux": "~/.factory"
           },
           "sources": [
-            "https://factory.ai/docs/plugins"
+            "https://docs.factory.com/harness/skills"
           ],
           "surfaces": {
             "agents": [
@@ -1637,8 +1651,8 @@
               }
             ]
           },
-          "verified_at": "2026-08-16",
-          "version_range": "current as of 2026-08-16"
+          "verified_at": "2026-10-25",
+          "version_range": "current as of 2026-10-25"
         }
       }
     },
@@ -1722,9 +1736,9 @@
             "built-in"
           ],
           "sources": [
-            "https://forgecode.dev/docs/skills/",
-            "https://forgecode.dev/docs/mcp-integration/",
-            "https://forgecode.dev/docs/forgecode-config/"
+            "https://github.com/tailcallhq/forgecode/tree/main/.forge/skills",
+            "https://github.com/tailcallhq/forgecode#mcp-configuration",
+            "https://github.com/tailcallhq/forgecode#forgeyaml-configuration-options"
           ],
           "surfaces": {
             "config": [
@@ -1785,8 +1799,8 @@
               }
             ]
           },
-          "verified_at": "2026-08-12",
-          "version_range": "current as of 2026-08-12"
+          "verified_at": "2026-10-25",
+          "version_range": "current as of 2026-10-25"
         }
       }
     },
@@ -1923,7 +1937,7 @@
             "windows": "%APPDATA%/JetBrains/GeminiCodeAssist"
           },
           "sources": [
-            "https://plugins.jetbrains.com/plugin/gemini-code-assist"
+            "https://plugins.jetbrains.com/plugin/24198-gemini-code-assist"
           ],
           "surfaces": {
             "mcp": [
@@ -1991,8 +2005,8 @@
               }
             ]
           },
-          "verified_at": "2026-08-16",
-          "version_range": "current as of 2026-08-16"
+          "verified_at": "2026-10-25",
+          "version_range": "current as of 2026-10-25"
         },
         "vscode": {
           "detection": [
@@ -2386,7 +2400,7 @@
             "wsl": "~/.hermes"
           },
           "sources": [
-            "https://github.com/hermes-agent/hermes"
+            "https://hermes-agent.nousresearch.com/docs/user-guide/features/skills"
           ],
           "surfaces": {
             "acp": [
@@ -2486,8 +2500,8 @@
               }
             ]
           },
-          "verified_at": "2026-08-16",
-          "version_range": "current as of 2026-08-16"
+          "verified_at": "2026-10-25",
+          "version_range": "current as of 2026-10-25"
         }
       }
     },
@@ -2978,7 +2992,7 @@
             "wsl": "~/.letta"
           },
           "sources": [
-            "https://docs.letta.com/agents/skills"
+            "https://docs.letta.com/configuration/skills"
           ],
           "surfaces": {
             "agentfile": [
@@ -3062,8 +3076,8 @@
               }
             ]
           },
-          "verified_at": "2026-08-16",
-          "version_range": "current as of 2026-08-16"
+          "verified_at": "2026-10-25",
+          "version_range": "current as of 2026-10-25"
         }
       }
     },
@@ -3091,7 +3105,7 @@
             "wsl": "~/.letta"
           },
           "sources": [
-            "https://docs.letta.ai/agent-file"
+            "https://docs.letta.com/configuration/subagents"
           ],
           "surfaces": {
             "agent_file": [
@@ -3111,8 +3125,8 @@
               }
             ]
           },
-          "verified_at": "2026-08-16",
-          "version_range": "current as of 2026-08-16"
+          "verified_at": "2026-10-25",
+          "version_range": "current as of 2026-10-25"
         },
         "cloud": {
           "kind": "cloud-ui",
@@ -3153,7 +3167,7 @@
             "wsl": "~/.letta"
           },
           "sources": [
-            "https://docs.letta.ai/letta-code"
+            "https://docs.letta.com/letta-code/cli"
           ],
           "surfaces": {
             "instructions": [
@@ -3221,8 +3235,8 @@
               }
             ]
           },
-          "verified_at": "2026-08-16",
-          "version_range": "current as of 2026-08-16"
+          "verified_at": "2026-10-25",
+          "version_range": "current as of 2026-10-25"
         }
       }
     },
@@ -3451,7 +3465,7 @@
             "wsl": "~/.openhands"
           },
           "sources": [
-            "https://docs.openhands.dev/modules/skills"
+            "https://docs.openhands.dev/overview/skills"
           ],
           "surfaces": {
             "instructions": [
@@ -3494,8 +3508,8 @@
               }
             ]
           },
-          "verified_at": "2026-08-16",
-          "version_range": "current as of 2026-08-16"
+          "verified_at": "2026-10-25",
+          "version_range": "current as of 2026-10-25"
         }
       }
     },
@@ -3682,7 +3696,7 @@
             "linux": "~/.qoder"
           },
           "sources": [
-            "https://docs.qoder.com/cli"
+            "https://docs.qoder.com/zh/cli/Skills"
           ],
           "surfaces": {
             "skills": [
@@ -3702,8 +3716,8 @@
               }
             ]
           },
-          "verified_at": "2026-08-17",
-          "version_range": "current as of 2026-08-16"
+          "verified_at": "2026-10-25",
+          "version_range": "current as of 2026-10-25"
         },
         "cn-ide": {
           "detection": [
@@ -4075,7 +4089,7 @@
           "kind": "cli",
           "migration_policy": "bidirectional-reviewed",
           "sources": [
-            "https://support.atlassian.com/rovo/docs/use-agent-skills-in-rovo-dev-cli/"
+            "https://support.atlassian.com/rovo/docs/extend-rovo-dev-cli-with-agent-skills/"
           ],
           "surfaces": {
             "instructions": [
@@ -4183,8 +4197,8 @@
               }
             ]
           },
-          "verified_at": "2026-08-15",
-          "version_range": "current as of 2026-08-15"
+          "verified_at": "2026-10-25",
+          "version_range": "current as of 2026-10-25"
         }
       }
     },
@@ -4223,7 +4237,7 @@
             "wsl": "~/.amp"
           },
           "sources": [
-            "https://ampcode.com/docs/skills"
+            "https://ampcode.com/docs/customize/skills"
           ],
           "surfaces": {
             "instructions": [
@@ -4266,8 +4280,8 @@
               }
             ]
           },
-          "verified_at": "2026-08-16",
-          "version_range": "current as of 2026-08-16"
+          "verified_at": "2026-10-25",
+          "version_range": "current as of 2026-10-25"
         }
       }
     },
@@ -4508,7 +4522,7 @@
             "windows": "%APPDATA%/Warp"
           },
           "sources": [
-            "https://docs.warp.dev/agents/skills"
+            "https://docs.warp.dev/agents/capabilities/skills/"
           ],
           "surfaces": {
             "instructions": [
@@ -4592,8 +4606,8 @@
               }
             ]
           },
-          "verified_at": "2026-08-16",
-          "version_range": "current as of 2026-08-16"
+          "verified_at": "2026-10-25",
+          "version_range": "current as of 2026-10-25"
         },
         "oz-cli": {
           "detection": [
@@ -4622,7 +4636,7 @@
             "linux": "~/.warp"
           },
           "sources": [
-            "https://docs.warp.dev/warp-oz"
+            "https://docs.warp.dev/agents/cli/oz-cli/skills/"
           ],
           "surfaces": {
             "instructions": [
@@ -4699,8 +4713,8 @@
               }
             ]
           },
-          "verified_at": "2026-08-16",
-          "version_range": "current as of 2026-08-16"
+          "verified_at": "2026-10-25",
+          "version_range": "current as of 2026-10-25"
         }
       }
     },
@@ -4877,7 +4891,7 @@
             "wsl": "~/.config/zed"
           },
           "sources": [
-            "https://zed.dev/docs/skills"
+            "https://zed.dev/docs/ai/skills"
           ],
           "surfaces": {
             "instructions": [
@@ -4906,8 +4920,8 @@
               }
             ]
           },
-          "verified_at": "2026-08-16",
-          "version_range": "current as of 2026-08-16"
+          "verified_at": "2026-10-25",
+          "version_range": "current as of 2026-10-25"
         }
       }
     },
@@ -4946,7 +4960,7 @@
             "wsl": "~/.zencoder"
           },
           "sources": [
-            "https://docs.zencoder.ai/skills"
+            "https://docs.zencoder.ai/features/skills"
           ],
           "surfaces": {
             "agents": [
@@ -5087,8 +5101,8 @@
               }
             ]
           },
-          "verified_at": "2026-08-16",
-          "version_range": "current as of 2026-08-16"
+          "verified_at": "2026-10-25",
+          "version_range": "current as of 2026-10-25"
         }
       }
     },
@@ -5127,7 +5141,7 @@
             "wsl": "~/.zenflow"
           },
           "sources": [
-            "https://docs.zenflow.ai/skills"
+            "https://docs.zencoder.ai/zenflow/skills"
           ],
           "surfaces": {
             "agents": [
@@ -5259,8 +5273,8 @@
               }
             ]
           },
-          "verified_at": "2026-08-16",
-          "version_range": "current as of 2026-08-16"
+          "verified_at": "2026-10-25",
+          "version_range": "current as of 2026-10-25"
         }
       }
     }

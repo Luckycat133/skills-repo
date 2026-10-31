@@ -12,7 +12,7 @@ python3 "$SCRIPT_DIR/validate-registry-v2.py" \
     --registry "$REFERENCES_DIR/registry-v2.json" \
     --index "$REFERENCES_DIR/ide-registry.md" \
     --references "$REFERENCES_DIR/ides" \
-    --today 2026-08-17
+    --today 2026-10-25
 
 python3 - "$REFERENCES_DIR/registry-v2.json" <<'PY'
 import json
@@ -22,6 +22,12 @@ from pathlib import Path
 registry = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 products = registry["products"]
 
+for profile_name in ("code-cli", "desktop-code"):
+    assert {(entry["scope"], entry["path"], entry["format"])
+            for entry in products["claude"]["profiles"][profile_name]["surfaces"]["mcp"]} == {
+        ("user", "~/.claude.json", "json:mcpServers"),
+        ("project", ".mcp.json", "json:mcpServers"),
+    }
 assert products["cline"]["profiles"]["ide"]["surfaces"]["mcp"][0]["path"] == "~/.cline/data/settings/cline_mcp_settings.json"
 assert products["cline"]["profiles"]["ide"]["surfaces"]["mcp"][0]["override_relative_path"] == "settings/cline_mcp_settings.json"
 cline_rules = products["cline"]["profiles"]["ide"]["surfaces"]["instructions"]
@@ -110,7 +116,7 @@ if python3 "$SCRIPT_DIR/validate-registry-v2.py" \
     --registry "$POLLUTED" \
     --index "$REFERENCES_DIR/ide-registry.md" \
     --references "$REFERENCES_DIR/ides" \
-    --today 2026-08-17 >"$TMP_ROOT/polluted.log" 2>&1; then
+    --today 2026-10-25 >"$TMP_ROOT/polluted.log" 2>&1; then
     echo "FAIL: polluted registry (stray top-level product) passed validation" >&2
     exit 1
 fi
@@ -120,4 +126,3 @@ grep -Fq "letta' was unexpected" "$TMP_ROOT/polluted.log" || {
 }
 
 echo "Registry pollution gate test passed"
-

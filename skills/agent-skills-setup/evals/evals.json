@@ -3,56 +3,59 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "Preview moving Cursor skills and project rules to Claude Code for /tmp/acme-app. No writes or unrelated discovery. Give the exact first command.",
-      "expected_output": "A scoped Cursor-to-Claude dry run for the named workspace.",
+      "prompt": "Preview moving Cursor project skills and rules to Claude Code for /tmp/acme-app. No writes or unrelated discovery. Give the exact first command.",
+      "expected_output": "A scoped profile-aware project plan with no artifact or target writes.",
       "files": [],
       "assertions": [
-        "Starts with a read-only dry run and does not claim migration.",
-        "Names cursor, claude, /tmp/acme-app, and --dry-run.",
-        "Inspects only the named IDEs and workspace.",
-        "Defaults to skills/rules/prompts, excluding MCP, config, agents, hooks, and memory."
+        "Uses plan --source cursor/ide --target claude/code-cli --workspace /tmp/acme-app --scope project --objects skills,instructions --json.",
+        "Omits --output and --yes because this request forbids all writes.",
+        "Inspects only selected products, project surfaces, and the named workspace.",
+        "Preserves rule activation/hierarchy and reports conflicts or reconstruction instead of flattening them."
       ]
     },
     {
       "id": 2,
-      "prompt": "Preview Cursor project MCP from evals/files/cursor-project-mcp.json to OpenCode for /tmp/acme-mcp. Show target shape and separate preview/apply commands. Preserve behavior; never copy literal credentials.",
-      "expected_output": "An explicit-source, zero-write Cursor-to-OpenCode MCP conversion plan.",
-      "files": ["evals/files/cursor-project-mcp.json"],
+      "prompt": "In an isolated project workspace, preview Cursor MCP from evals/files/cursor-project-mcp.json to Cline. Show the saved-plan preview and apply commands, preserving unrelated target settings and removing literal credentials.",
+      "expected_output": "An exact Cursor-to-Cline project MCP plan and a separate reviewed-plan execution command.",
+      "files": [
+        "evals/files/cursor-project-mcp.json"
+      ],
       "assertions": [
-        "Uses OpenCode mcp, not mcpServers.",
-        "Uses local type, command array, and environment rather than env.",
-        "Preserves local command configurations and environment mappings without guessing transport.",
-        "Converts exact ${env:NAME} to {env:NAME} and blanks literal credentials.",
-        "Uses --dry-run first and --yes only in a separate apply command.",
-        "Both commands select project MCP, /tmp/acme-mcp, and the supplied --source-mcp-file.",
-        "Explains that --source cursor selects schema while the file only selects input."
+        "Stages the supplied fixture in the isolated workspace at .cursor/mcp.json rather than using unsupported --source-mcp-file.",
+        "Uses plan --source cursor/ide --target cline/ide --scope project --objects mcp --output and apply <same-plan> --manifest --yes.",
+        "The proposed apply command uses --accept-loss for the reviewed MCP item when credential redaction makes it ready-lossy; --yes alone does not accept conversion losses.",
+        "Shows target mcpServers and preserves unrelated sibling settings; explains that the selected server map is replaced, removing target-only servers and replacing same-name definitions.",
+        "Reports added, removed, and changed same-name servers separately from conversion/redaction losses; an empty loss_report does not prove preservation of existing servers.",
+        "Redacts credential-looking values into references/loss reports without printing them.",
+        "Does not request repeated confirmation after the user explicitly authorizes applying the reviewed plan."
       ]
     },
     {
       "id": 3,
-      "prompt": "Preview moving user Continue YAML mcpServers from ~/.continue/config.yaml into trusted Codex project config at /tmp/atlas. Do not read or write real files. Give only safe diagnostics and the next step.",
-      "expected_output": "A preview that rejects generic YAML-to-Codex-TOML conversion and recommends reviewed reconstruction.",
+      "prompt": "Preview moving user Continue YAML MCP into Codex project config at /tmp/atlas. Do not read or write real files. Give only safe diagnostics and the next step.",
+      "expected_output": "A manual reconstruction route for unsupported YAML-to-TOML MCP without filesystem inspection.",
       "files": [],
       "assertions": [
-        "Identifies Continue user YAML and /tmp/atlas/.codex/config.toml mcp_servers.",
-        "States automatic conversion is unsafe and fabricates no target config.",
-        "Uses only --dry-run or --print-path diagnostics.",
-        "Uses no --yes, remote installer, or completion claim.",
-        "Recommends manual TOML reconstruction and validation."
+        "Identifies Continue YAML and Codex TOML as requiring dedicated reviewed adapters.",
+        "Does not execute detection, inventory, or file reads because the user forbids real inspection.",
+        "Fabricates no JSON fallback or writable target snippet.",
+        "Explains native reconstruction and credential resupply without claiming migration or requesting installation."
       ]
     },
     {
       "id": 4,
-      "prompt": "In an isolated workspace, run Cursor-to-OpenCode project MCP migration using evals/files/cursor-project-mcp.json. Prove dry-run reads it without a target, then apply with --yes. Keep source bytes unchanged and save opencode.json.",
-      "expected_output": "Execution evidence for zero-write preview, valid converted target, redaction, and source immutability.",
-      "files": ["evals/files/cursor-project-mcp.json"],
+      "prompt": "In an isolated workspace, run Cursor-to-Cline project MCP migration using evals/files/cursor-project-mcp.json. Save and review a plan, then apply it with --yes and verify. I approve replacing literal tokens with environment references; keep the source bytes unchanged and save the manifest.",
+      "expected_output": "Execution evidence for scoped preview, exact-plan apply, target validity, source integrity, and verification.",
+      "files": [
+        "evals/files/cursor-project-mcp.json"
+      ],
       "assertions": [
-        "Shows dry-run exit 0, supplied fixture path, and validated source summary.",
-        "Proves opencode.json is absent after dry-run and appears only after apply.",
-        "Produces mcp.local-search with local type, command array, and environment.",
-        "Converts ${env:NAME}, blanks LITERAL_TOKEN, and preserves command configuration without guessing transport.",
-        "Uses --json and reports evidence.mcp paths, hashes, validation, and status.",
-        "Proves unchanged source and recorded target digest."
+        "Uses real profile-aware commands against isolated temporary project surfaces, never real agent settings.",
+        "Proves target absence after planning and appearance only after authorized apply.",
+        "Replays the exact saved plan with a fresh manifest output path.",
+        "Accepts only the explicitly authorized credential-redaction losses using the saved plan item ID; reports or defers any other unapproved conversion losses.",
+        "Runs verify --manifest and reports applied counts, parse/hash results, losses, backups, and unchanged source.",
+        "Does not invent legacy evidence.mcp fields or pause for redundant approval."
       ]
     },
     {
@@ -61,7 +64,7 @@
       "expected_output": "A concise informational answer outside the migration workflow.",
       "files": [],
       "assertions": [
-        "Treats this as explanation, not migration authority.",
+        "Treats the request as explanation rather than migration authority.",
         "Identifies mcpServers as the root key.",
         "Claims no local read or script execution.",
         "Provides no --yes/apply command or unrelated discovery."
@@ -69,41 +72,121 @@
     },
     {
       "id": 6,
-      "prompt": "Explain --strategy skip, backup, and overwrite for Cursor project MCP into existing OpenCode config with unrelated theme, same-name, and other servers. Do not execute.",
-      "expected_output": "Exact non-executing conflict semantics for a shared OpenCode JSON file.",
+      "prompt": "My saved Cursor-to-Cline project MCP plan targets an existing config with unrelated theme, a same-name server, and other servers. Explain the diff and backup/rollback behavior without executing.",
+      "expected_output": "Accurate profile-aware shared-config and guarded rollback semantics.",
       "files": [],
       "assertions": [
-        "Says skip preserves the existing target without renamed entries.",
-        "Says backup snapshots the complete file, merges non-conflicts, and activates same-name source.",
-        "Says overwrite replaces only selected MCP map and retains theme.",
-        "Does not claim <name>_migrated or whole-config deletion.",
+        "Explains preservation of unrelated sibling settings, removal of target-only servers, and replacement of same-name definitions with the reviewed source configuration.",
+        "Reviews additions, removals, and same-name configuration changes even when loss_report is empty.",
+        "Identifies transaction backups and the exact checksummed apply manifest.",
+        "Does not invent public --strategy skip/backup/overwrite support or renamed fallback entries.",
+        "Explains that rollback refuses targets changed after apply.",
         "Does not execute or claim migration."
       ]
     },
     {
       "id": 7,
       "prompt": "Preview Claude Code user MCP to VS Code with a named Profile whose directory I did not provide. Do not guess a path or write. Give the safe next step and project alternative.",
-      "expected_output": "A fail-closed VS Code profile plan with a documented workspace alternative.",
+      "expected_output": "A bounded VS Code profile reconstruction path with a documented workspace alternative.",
       "files": [],
       "assertions": [
-        "Does not guess a user VS Code MCP path.",
-        "Uses MCP: Open User Configuration or asks for resolved target path.",
-        "Identifies .vscode/mcp.json as project alternative.",
-        "Uses --dry-run for any project preview.",
-        "Does not claim completion."
+        "Distinguishes claude/code-cli, copilot/vscode, and copilot/cli.",
+        "Does not guess a user VS Code MCP path; uses MCP: Open User Configuration or asks for the resolved profile location.",
+        "Identifies .vscode/mcp.json as the project alternative with servers.",
+        "Keeps all actions within preview scope and reports unsupported user-surface reconstruction."
       ]
     },
     {
       "id": 8,
-      "prompt": "Preview Cursor project MCP from evals/files/cursor-project-mcp.json into native OpenCode V2 for /tmp/opencode-v2. No writes or mixed V1/V2 layout. Show schema and command.",
-      "expected_output": "An explicit-source OpenCode V2 dry run using native mcp.servers only.",
-      "files": ["evals/files/cursor-project-mcp.json"],
+      "prompt": "Preview Cursor project MCP from evals/files/cursor-project-mcp.json into native OpenCode V2 for /tmp/opencode-v2. No writes or mixed V1/V2 layout. Show the safe command and reconstruction boundary.",
+      "expected_output": "A truthful OpenCode V2 manual route where the public Registry has no writable MCP surface.",
+      "files": [
+        "evals/files/cursor-project-mcp.json"
+      ],
       "assertions": [
-        "Command includes --opencode-version v2, --dry-run, project-mcp, workspace, and source file.",
-        "Uses mcp.servers without a V1 sibling map.",
-        "Explains enabled/disabled, timeout, and OAuth field transforms when present.",
-        "Preserves server behavior and redaction policy without unsupported fields.",
-        "Uses no --yes or completion claim."
+        "Checks opencode/cli surface eligibility before promising automatic MCP apply.",
+        "Uses a profile-aware plan or explicit read-only legacy dry-run; never an implicit legacy write.",
+        "Does not advertise --opencode-version or --source-mcp-file as public plan/apply flags.",
+        "Explains native mcp.servers reconstruction with no V1 sibling map and no unvalidated target write.",
+        "Reports that product format knowledge does not prove an implemented automatic adapter."
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "Back up Cursor project Skills, rules, and MCP from /tmp/old-project to /tmp/project.acb. Include no other products or user files; verify the backup.",
+      "expected_output": "A scoped portable ACB directory with collection and integrity evidence.",
+      "files": [],
+      "assertions": [
+        "Uses explicit source cursor/ide, scope project, object selection, and output path.",
+        "Captures complete eligible Skill packages and authorized instruction/MCP objects only.",
+        "Runs bundle-verify and reports files captured, exclusions/failures, and checksum/binding evidence.",
+        "Calls .acb a directory rather than claiming compressed archive output.",
+        "Requires neither target apply nor repeated approval for the explicitly requested backup artifact."
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "Restore this Cursor project ACB into Claude Code at /tmp/new-project. Save /tmp/restore-plan.json first, then apply that reviewed plan. There is no Cursor installation on the new computer.",
+      "expected_output": "A bundle-backed destination-side plan and verified restore independent of local source installation.",
+      "files": [],
+      "assertions": [
+        "Resolves source selectors from the bundle and target claude/code-cli.",
+        "Uses restore --plan-out --plan-only, reads destination diffs, then restore --plan-in --yes with the same selectors and scope.",
+        "Uses bundle bytes as the source and preserves destination state guards across processes.",
+        "Reviews the stable acb_uri and bundle_source manifest binding; rejects a different bundle and preserves the saved plan bytes on replay.",
+        "Defers or asks about unapproved conversion losses; --yes alone never authorizes them, and --include lossy is used only for approved losses.",
+        "Reports applied counts and verify evidence; extraction or zero-applied output alone is not completion.",
+        "Retains scoped restore authorization without asking again solely because planning finished."
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "Create a fresh signing keypair for this ACB, sign it, and verify it with my independently supplied public key. Everything must stay offline.",
+      "expected_output": "Offline signing artifacts and a separately reported trusted-key verification result.",
+      "files": [],
+      "assertions": [
+        "Uses bundle-keygen with distinct fresh outputs, bundle-sign --key, and bundle-verify --trusted-key.",
+        "Requires already installed cryptography and reports unavailable signing without downloading dependencies.",
+        "Protects the raw private key and avoids storing it inside the bundle.",
+        "Rejects a mismatched independently trusted public key instead of trusting the embedded key.",
+        "Distinguishes checksum integrity from authenticated signature verification."
+      ]
+    },
+    {
+      "id": 12,
+      "prompt": "Run doctor on this ACB and tell me what the new computer needs. Do not install, authenticate, or contact services.",
+      "expected_output": "Offline dependency, reauth, and reconstruction diagnostics within the bundle scope.",
+      "files": [],
+      "assertions": [
+        "Runs doctor on the selected bundle after integrity validation.",
+        "Reports missing executables and all recorded packages, extensions, manual_installs, and platform requirements, alongside reauth/rebuild actions.",
+        "Does not equate PATH availability with package installation or runtime acceptance.",
+        "Does not execute MCP commands, install packages, contact servers, or print credential values."
+      ]
+    },
+    {
+      "id": 13,
+      "prompt": "I am switching computers. Back up portable context for all detected installed IDEs, including configured-only profiles I explicitly selected, then review restoring onto installed target IDEs.",
+      "expected_output": "Device-wide detection, opt-in snapshot eligibility, and a reviewable multi-target restore plan.",
+      "files": [],
+      "assertions": [
+        "Treats this request as authorization for device-wide discovery and backup, not unrelated configuration changes.",
+        "Reviews detection evidence and uses --all-installed with explicitly authorized --include-configured.",
+        "Uses fresh bundle output and scopes appropriate to requested personal/project context.",
+        "Saves the multi-target restore plan, reports conflicts/failures and deferred/manual work, and does not claim restored from preview alone."
+      ]
+    },
+    {
+      "id": 14,
+      "prompt": "Back up a compatible plugin package and a reviewed handoff summary to ACB, then restore those selected objects. Exclude raw conversation, tokens, hooks activation, and generated memory.",
+      "expected_output": "Explicit plugin/handoff opt-ins with package preservation and whitelisted handoff fields.",
+      "files": [],
+      "assertions": [
+        "Requires plugins with --include-plugins and handoff with --include-session on snapshot and restore/apply.",
+        "Checks compatible Registry surfaces rather than inventing plugin or session paths.",
+        "Preserves package contents as units without installation or activation.",
+        "Serializes only reviewed summary, git branch, relative selected file list, and explicit patch; does not transfer raw state.",
+        "Reports unsupported objects as reconstruction/exclusion rather than silent success."
       ]
     }
   ]
