@@ -1,72 +1,79 @@
 ---
 name: maintain-agent-skills-setup
 description: >-
-  Develop and review Luckycat133/skills-repo after the agent-first scope reset.
-  Use for changing its migration guidance, verifying an IDE format, adding a
-  regression case, packaging the Skill, or completing the recorded acceptance
-  backlog. Do not use for migrating an end user's own context.
+  Maintain Luckycat133/skills-repo as an agent-first context-migration Skill.
+  Use for checking product documentation, improving format conversions, running
+  the repository's real-agent/client acceptance queue, updating evidence, or
+  packaging the guidance. Not for migrating an end user's context directly.
 license: MIT
 metadata:
-  version: "1.0"
+  version: "1.1"
 ---
 
-# Maintain the migration Skill, not a migration platform
+# Maintain guidance, not a migration platform
 
-The owner's decision is binding: the deliverable teaches an existing agent to
-migrate context. It must not grow back into an independent CLI/application.
-Runtime orchestration, ACB, key management, bulk autoinstall, background sync,
-telemetry, commercial dashboards and opaque state engines are out of scope.
-Do not propose them as prerequisites for good migration.
+The owner's scope reset is binding. Use host-agent tools to research, edit and
+verify context migrations. Do not reintroduce an orchestration CLI, ACB engine,
+auto-installer, signing service, background sync, telemetry or commercial platform.
+The user package contains only Markdown guidance/templates and LICENSE.
 
-## Before changing anything
+## Read first
 
-Read root AGENTS.md, the canonical Skill and only the affected conversion reference.
-Read [acceptance](references/acceptance.md) and [remaining work](references/remaining-work.md).
-Check the current branch and diff; do not assume the baseline is still current.
+Read root AGENTS.md, the canonical Skill and only the affected product/conversion
+references. Read [acceptance](references/acceptance.md),
+[remaining work](references/remaining-work.md) and the
+[real-client test procedure](references/client-tests.md).
+For current research decisions read [research method](references/research-method.md).
+Check the branch/diff before changing it; do not assume a historical SHA is current.
 
-Historical implementation at `880c5f58d310f5964963c88e685e0530a60e1757` is reference
-material, not a specification. Historical profile notes under `docs/history/` are
-unverified inputs. Do not re-add them to the published Skill without source checks.
-Do not execute old migration scripts or import its engine to avoid doing the work.
+The 2026-11-07 catalog covers all 87 historical identifiers plus new clients and
+profiles. It is documentation evidence, **not runtime certification**. The
+maintainer-only `docs/research/catalog-2026-11-07.json` records coverage and sources;
+`evals/client-matrix.json` is the pending acceptance queue, not an executable registry.
+Historical notes under docs/history remain unverified clues, not active contracts.
 
-## Work on one observable migration behavior
+## When asked to run the tests
 
-1. Write a realistic user request and before-files. Include the relevant failure
-   case: scope loss, missing dependency, conflict, private data, or unknown schema.
-2. Confirm the actual vendor/profile/version from official docs and, when available,
-   the installed client. Record path, fields, precedence, activation and evidence.
-3. Update a small reference and an expected example. Teach the host agent how to
-   inspect/convert/edit, not how to memorize a generic runtime's flags.
-4. Use native host tools in an isolated temporary fixture. Verify content, syntax,
-   positive/negative scope samples and unchanged neighboring settings. Never touch
-   the developer's real home directory during an eval.
-5. Run structural tests. Then run the real agent/host scenario when access exists.
-   Report these as separate levels. A check for a string in Markdown is not a
-   behavioral evaluation. Never mark an unavailable client as passed.
-6. Update evidence and the remaining-work status. Keep incomplete work precise.
+1. Run `bash validate-all.sh` for structural/examples checks. Do not call this a
+   client migration test. Do not weaken a test just to obtain a green result.
+2. Read `evals/cases.json` and `evals/catalog-cases.json`. Use isolated fixture roots,
+   safe synthetic content and the actual host agent with the Skill loaded.
+3. Record actual installed clients/harnesses/versions. Do not install products or
+   touch the operator's real HOME without separate authorization.
+4. Execute available rows in `evals/client-matrix.json` using client-tests.md.
+   Every requested category must be present/absent/unknown/not-applicable with
+   evidence. Unavailable clients are `blocked-environment`, never `pass`.
+5. For each run save a redacted trace, before/after diff, native discovery evidence,
+   activation negative case, unchanged neighbors and repeat-run outcome. Use
+   [result template](references/result-template.md). Never publish private data.
+6. Fix the smallest guidance/fixture issue. Re-run the failed case and its nearby
+   negative case. Do not build a converter engine instead of explaining semantics.
+7. Summarize passed, failed, blocked and not-run separately. Update the queue and
+   remaining-work evidence only for checks actually performed.
 
-## Scope rules
+## Editing and review rules
 
-- Preserve all requested categories in inventory. Missing code is not a reason to
-  drop commands, authored memory, agents or hooks. Explain conversions and limits.
-- Small deterministic helpers are allowed only after a repeated measured failure
-  shows existing host tools insufficient. One helper, one job, no migration engine.
-  Require owner agreement before adding a new runtime/dependency to the user package.
-- Do not count product-pair combinations as tested compatibility. Do not invent
-  disabled fields, command invocations, schema paths, or equal trigger semantics.
-- Publish only the explicit canonical package allowlist. Never ship this development
-  Skill, evals, historical notes, maintainer scripts or old runtime code.
-- Keep the legacy changelog/history accessible. Do not silently break installed
-  releases or claim to have updated ClawHub merely by changing GitHub files.
-- Retain safety around secrets, opt-in execution and unrelated-file preservation
-  without forcing repeated confirmations already granted by the user's request.
+- Select product/profile/version/OS/harness before choosing a path. Use primary
+  vendor docs and installed schemas; a third-party installer is discovery only.
+- Preserve all context categories, not just those a previous script understood.
+  Unknown native formats get a precise evidence gap, not a guessed file or blanket
+  unsupported label. Cloud/UI objects need supported reconstruction instructions.
+- Preserve instruction scope/activation, invocation IDs, imports, environment-name
+  mapping, package identity and target neighbors. Never transfer credentials,
+  grants, raw history or generated state by default. Executable content stays parked.
+- Product references are progressively loaded. Keep the main Skill below 150 lines;
+  do not make agents read the entire catalog. New family docs require package
+  allowlist, routing, source/evidence and coverage tests in the same change.
+- Small deterministic helpers require a measured repeated need and owner agreement
+  before they become runtime dependencies. Maintainer checks are not user runtime.
+- Never count product Cartesian pairs as tested compatibility. No fake enabled flags,
+  fake native support, or simulated Linux roots described as native Windows proof.
+- Preserve established authorization; do not ask again for the same safe scoped edit.
 
-## Done means
+## Done / publication
 
-A specific request is better served by the Skill; a focused regression is recorded;
-only intended files changed; structural checks pass; real behavior evidence is
-reported honestly; public descriptions match that evidence. Do not call it done
-because an architectural component or another large adapter registry was added.
-
-No release, tag, marketplace upload, account configuration, payment link change,
-or automatic schedule is authorized by this maintenance Skill alone.
+A real migration case improves, source/format evidence is explicit, intended diffs
+are small, structural checks pass and real-client results are reported honestly.
+Unverified rows stay pending. Publication, tags, marketplace uploads, account/payment
+changes and schedules require their own authorization; repository updates are not
+proof of a released or installed Skill.

@@ -87,3 +87,25 @@ Consulted 2026-11-07:
 [VS Code MCP](https://code.visualstudio.com/docs/agent-customization/mcp-servers),
 [Gemini CLI MCP](https://geminicli.com/docs/tools/mcp-server/),
 [Claude Code MCP](https://code.claude.com/docs/en/mcp).
+
+## Configuration is per client and harness
+
+Read the [catalog](products.md) before choosing a root key. Examples: Codex uses
+TOML `mcp_servers`; Local VS Code uses JSON `servers`; Zed uses `context_servers`;
+Continue uses YAML blocks/arrays; OpenCode has major-version-specific layouts.
+Gateway, node-host, CLI, IDE and cloud MCP belong to different scopes. A shared
+protocol does not make their configuration interchangeable.
+
+Normalize all selected servers before writing one destination file. Same name and
+same effective definition is a no-op; same name with different transport, command,
+arguments, working directory, environment, auth or exposure is a conflict. Preserve
+all independent servers and target neighbors. Do not silently drop timeout, disabled,
+tool allow/deny or trust-related fields: distinguish content losses from grants
+that must be reacquired. References to a secret must preserve both the host variable
+name and the server-visible name; record rebinding when that mapping cannot be kept.
+
+Current Pi scope overrides and ZCode native-versus-shared precedence are not generic
+merge semantics. Inspect effective configuration rather than concatenate files.
+For a remote Skill extension, keep server identity and do not assume filesystem
+Skill discovery implements the extension. Config validation is separate from any
+server connection, OAuth flow, tool call or dependency installation.

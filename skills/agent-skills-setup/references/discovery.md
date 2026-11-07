@@ -18,21 +18,17 @@ user-confirmed profile, and existing config are different evidence. A shared
 For an authorized all-tools request, list detected candidates and distinguish
 installed, configured, shared-only, and unknown before choosing targets.
 
-## Source-backed starting points
+## Source-backed product catalog
 
-| Product/profile | Useful starting point | Evidence |
-| --- | --- | --- |
-| Cursor project | `.cursor/rules/*.mdc`; `.cursor/skills/`; inspect MCP config separately | [Rules](https://cursor.com/docs/rules), [Skills](https://cursor.com/docs/skills), [MCP](https://cursor.com/docs/mcp) |
-| Claude Code | `CLAUDE.md`, `.claude/rules/*.md`, `.claude/skills/`, `.mcp.json` project MCP | [Memory](https://code.claude.com/docs/en/memory), [Skills](https://code.claude.com/docs/en/skills), [MCP](https://code.claude.com/docs/en/mcp) |
-| Codex CLI/local extension | hierarchical `AGENTS.md`; MCP tables in `~/.codex/config.toml` or project `.codex/config.toml` | [Instructions](https://developers.openai.com/codex/guides/agents-md), [MCP](https://developers.openai.com/codex/mcp) |
-| VS Code Copilot/local harness | `.github/instructions/*.instructions.md`; project `.vscode/mcp.json`; active user profile is separately resolved | [Instructions](https://code.visualstudio.com/docs/agent-customization/custom-instructions), [MCP](https://code.visualstudio.com/docs/agent-customization/mcp-servers) |
-| Gemini CLI | `GEMINI.md`; MCP is the `mcpServers` subobject of user/project `.gemini/settings.json` | [Configuration](https://geminicli.com/docs/get-started/configuration/), [MCP](https://geminicli.com/docs/tools/mcp-server/) |
+Use [the product catalog](products.md) for all historical tool identifiers and
+newly researched products/profiles. Load only the selected sections, not the whole
+catalog. Each section gives primary sources, known surfaces, compatibility traps,
+and what the local agent must verify. Documentation review date is 2026-11-07;
+all real-client results remain not-run until evidence is recorded.
 
-Do not infer the absence of commands, agents, hooks, memory, extensions, plugins,
-team policy, or cloud knowledge from this short table. Open the product's current
-customization index and enumerate those categories when the user requests all
-context. Do not copy a whole `.claude.json`, `settings.json`, `.codex`, or app-data
-tree. Shared settings may contain account state next to useful configuration.
+For a request covering all context, complete the catalog's category checklist even
+when a category has no public file contract. `unknown` needs native settings/schema
+inspection; it is not permission to guess a path or drop the category.
 
 ## Any other IDE or an uncertain path
 

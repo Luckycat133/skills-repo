@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Maintainer-only packaging. Does not read or modify any user IDE configuration."""
+"""Maintainer-only packaging; never reads or modifies user IDE configuration."""
 from __future__ import annotations
 import argparse
 import hashlib
@@ -8,11 +8,51 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILL = ROOT / "skills" / "agent-skills-setup"
+# Explicit reviewable allowlist; no filesystem-glob admission into the package.
+# 220 KB permits the requested on-demand vendor catalog, not a runtime platform.
+MAX_PACKAGE_BYTES = 220_000
 ALLOWED = frozenset({
-    "LICENSE", "SKILL.md", "references/discovery.md", "references/instructions.md",
-    "references/mcp.md", "references/other-context.md",
-    "references/device-transfer.md", "references/verification.md",
-    "assets/migration-report.md", "assets/device-readme.md",
+    'LICENSE',
+    'SKILL.md',
+    'references/device-transfer.md',
+    'references/discovery.md',
+    'references/instructions.md',
+    'references/mcp.md',
+    'references/other-context.md',
+    'references/products/alibaba.md',
+    'references/products/amp-openhands.md',
+    'references/products/anthropic.md',
+    'references/products/aws.md',
+    'references/products/blackbox-pieces.md',
+    'references/products/china-coding.md',
+    'references/products/china-discovery.md',
+    'references/products/cline-kilo-roo.md',
+    'references/products/cloud-builders.md',
+    'references/products/continue-zed.md',
+    'references/products/copilot.md',
+    'references/products/cursor.md',
+    'references/products/devin-windsurf.md',
+    'references/products/editor-plugins.md',
+    'references/products/enterprise.md',
+    'references/products/factory-augment.md',
+    'references/products/google-cli-assist.md',
+    'references/products/google-ide-cloud.md',
+    'references/products/jetbrains-xcode.md',
+    'references/products/legacy.md',
+    'references/products/letta.md',
+    'references/products/new-clients.md',
+    'references/products/openai.md',
+    'references/products/openclaw-hermes.md',
+    'references/products/opencode.md',
+    'references/products/tencent.md',
+    'references/products/terminal-agents.md',
+    'references/products/trae.md',
+    'references/products/warp.md',
+    'references/products/zencoder.md',
+    'references/products.md',
+    'references/verification.md',
+    'assets/device-readme.md',
+    'assets/migration-report.md',
 })
 
 def package_files(skill: Path = SKILL) -> list[Path]:
@@ -33,8 +73,8 @@ def package_files(skill: Path = SKILL) -> list[Path]:
     actual = {p.relative_to(skill).as_posix() for p in files}
     if actual != ALLOWED:
         raise ValueError(f"missing package files: {sorted(ALLOWED - actual)}")
-    if sum(p.stat().st_size for p in files) > 50000:
-        raise ValueError("Package exceeds 50 KB; review scope before raising the budget")
+    if sum(p.stat().st_size for p in files) > MAX_PACKAGE_BYTES:
+        raise ValueError("Package exceeds documentation budget; review scope before raising it")
     return files
 
 def build(output: Path, skill: Path = SKILL) -> str:
@@ -48,7 +88,6 @@ def build(output: Path, skill: Path = SKILL) -> str:
         raise ValueError("Output parent must already exist")
     created = False
     try:
-        # Exclusive creation prevents accidental replacement, including a race.
         stream = output.open("xb")
         created = True
         with stream, zipfile.ZipFile(stream, "w", compression=zipfile.ZIP_DEFLATED) as archive:
@@ -59,7 +98,6 @@ def build(output: Path, skill: Path = SKILL) -> str:
                 info.external_attr = 0o100644 << 16
                 archive.writestr(info, path.read_bytes())
     except Exception:
-        # Only remove the output created by this invocation, not a pre-existing file.
         if created and output.is_file():
             output.unlink()
         raise

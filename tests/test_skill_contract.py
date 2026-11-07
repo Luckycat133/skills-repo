@@ -20,7 +20,7 @@ spec.loader.exec_module(package)
 class SkillContract(unittest.TestCase):
     def test_package_is_guidance_only(self):
         files = package.package_files()
-        self.assertEqual(len(files), 10)
+        self.assertEqual(len(files), len(package.ALLOWED))
         self.assertTrue(all(p.suffix == ".md" or p.name == "LICENSE" for p in files))
         self.assertFalse((SKILL / "scripts").exists())
 

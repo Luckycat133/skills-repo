@@ -82,3 +82,27 @@ Product examples consulted 2026-11-07:
 [Claude Skills/commands](https://code.claude.com/docs/en/skills),
 [Cursor Skills migration](https://cursor.com/docs/skills).
 Other surfaces require product-specific verification through discovery.
+
+## Current host-specific traps
+
+Use the [catalog](products.md) for sources and installed-version checks. The base
+Skill format is shared, but these behaviors are not:
+
+| Source behavior | Migration requirement |
+| --- | --- |
+| Qwen `allowedTools` versus generic `allowed-tools` | Map only a field the destination actually enforces. Report a permission difference; never assume unknown metadata restricts execution. |
+| OpenCode V2 directory Skill ID versus display name | Preserve the invocable ID, casing and references; translate V1 permissions/invocation separately. |
+| OpenHands `paths` and `triggers` | Preserve path activation and its precedence, not just description text. |
+| Augment user rules always apply | Do not put a scoped rule in user storage expecting frontmatter to narrow it. |
+| CodeCompanion autoloaded Cursor MDC | Its loader can treat the whole file as always-included text; translate the scope or keep a reviewed manual rule. |
+| Zed first-match instructions | Check shadowing before writing a second instruction file. |
+| Plugin-scoped or Skill-scoped hooks | Inspect event/I/O semantics and park outside all live discovery roots; package import may activate code. |
+| Kiro CLI 2 versus CLI 3 agents | Match schema version; do not translate old allowlists as new blanket permissions. |
+| MCP-served Skill versus local Skill | Keep origin and trust boundaries; remote content must not silently become locally executable. |
+| Aider conventions | Bind the read-only file explicitly; a filename alone does not activate it. |
+
+For commands, retain arguments, file-relative bases and shell interpolation. For
+agents, retain delegation, isolated context, model intent, tools and permitted
+resources without importing approval grants. For specs/recipes/workflows, retain
+step ordering, artifacts and triggers. A valid Markdown/YAML document is not proof
+that the target invokes it in the intended way.

@@ -1,64 +1,39 @@
-# Remaining work after the 2026-11-07 reset
+# Remaining work after the 2026-11-07 documentation update
 
-Baseline inspected: `880c5f58d310f5964963c88e685e0530a60e1757` (canonical 0.10.2).
-This file records what still needs access/evidence. It is not a proposal to rebuild
-ACB or a multi-IDE automation platform.
+## Completed in this branch
 
-## R1 — Actual agent and IDE evaluation (release blocker)
+Agent-first scope reset remains intact. Product references route all 87 historical
+identifiers, add missing clients/profiles, record primary sources and version traps,
+and stay documentation-only. Main Skill remains short and loads selected profiles.
+Historical reference material is not reactivated as an automatic compatibility map.
 
-Status: NOT RUN. This editing environment has no authenticated local Cursor,
-Claude Code, Codex, VS Code or Gemini session and cannot observe their UI loading.
-Run the cases in root `evals/` using two real agent clients, first in fixture roots,
-then verify target discovery. Record model/client versions and tool traces without
-private data. Fix guidance when a case fails; do not add an engine as a shortcut.
-Acceptance: scenario evidence in `docs/validation-status.md`, including failures,
-positive/negative scopes, no target writes on preview, and no secret execution.
+## Pending: real behavior, not more architecture
 
-## R2 — Reverify the historical product catalogue
+1. Run client-tests.md with the Skill actually loaded. Execute available rows from
+   evals/client-matrix.json and all applicable fixture cases. Record unavailable
+   native clients as blocked; never claim their tests passed.
+2. Resolve discovery-required identities/contracts: iFlyCode, SenseTime Raccoon,
+   veCLI/Ark CLI distinction, exact International TRAE build, PearAI submodule and
+   Coder Xum version paths. Keep reviewed source content without guessed installs.
+3. Confirm document disagreements locally: Amazon Q global MCP, Forge home config,
+   Windsurf/Devin transition, Kiro major version, OpenCode major version, active
+   VS Code harness, Kimi root overrides, Bob IDE versus Shell MCP.
+4. Run Windows/WSL/remote-home and cloud/UI cases with actual supported clients.
+5. Add only the native examples a failed case demonstrates are missing. Commands,
+   agents, hooks, specs, workflows and authored memory remain in inventory; no
+   generic converter/runtime is required to prepare reviewed target definitions.
+6. Before publication, recheck changed vendor pages, run official Skill validation,
+   package only the allowlist, inspect archive, and separately authorize release /
+   license / marketplace operations and download-back verification.
 
-Status: NOT COMPLETED. The old `docs/history/profile-notes/` and registry snapshot
-are retained only as leads, not shipped or declared supported. Work one requested
-product/profile at a time. Locate current official source, inspect all context
-families and host-specific scope/precedence, add a small source-backed recipe and
-one fixture. Never turn all old rows into a generated green matrix.
-Acceptance: evidence URL/date, actual tested version or clearly marked docs-only,
-and per-surface migration decision. No unverified path becomes a default target.
+## Important evidence limits
 
-## R3 — Native Windows and remote hosts
+`documented-subset` means the cited primary material supports the described
+subset. It does not mean all listed URLs were fetched successfully, every feature
+has a file path, all possible IDEs are covered, or a client was exercised. Unknown
+fields/types and page-access conflicts stay explicit. The test queue is not a test
+result. Structural CI only certifies repository/package/example consistency.
 
-Status: NOT RUN on native hosts. Validate USERPROFILE/APPDATA, case collisions,
-symlinks/junctions, WSL/remote extension host roots and workspace remapping using
-the host agent's file tools. Linux fixture tests must not count as Windows evidence.
-Acceptance: a reviewed cross-device fixture with exact destination discovery,
-no old absolute paths, preserved context and unchanged unrelated settings.
-
-## R4 — Skill retrieval/trigger evaluation
-
-Status: RUBRIC ONLY. Test the installed package with Chinese and English natural
-requests: direct migration, scoped preview, export without a target, device restore,
-unknown IDE and irrelevant conversation. Verify relevant reference loading rather
-than the entire package. No duplicate approval questions after explicit scoped
-consent. Acceptance: observed traces and false-positive/false-negative results.
-
-## R5 — Marketplace replacement and user transition
-
-Status: NOT PUBLISHED. GitHub changes do not update ClawHub or installed copies.
-After R1, stage only the canonical Skill, inspect the exact file list, check the
-current marketplace license/metadata rules and prior MIT-0 authorization, then
-publish only with owner approval. Verify the downloaded package, not only source.
-No automatic marketplace authentication, license reassignment, tag, or release.
-Warn existing users that the old CLI is retired and preserve their old backups.
-
-## R6 — New recipes only when demand/evidence exists
-
-Commands, agents, hooks and memory now have a migration procedure but not every
-vendor's native template. Add concrete examples for actual user requests; retain
-unsupported fields and do not activate executable drafts. A tiny parser helper is
-permitted only after repeated fixture evidence and explicit scope review.
-
-## Not backlog
-
-Do not add a daemon, cloud sync, signing service, proprietary bundle protocol,
-enterprise dashboard, paid control plane, automatic app installation, product-count
-marketing, or repository-star prompts inside the runtime Skill. Those were scope
-creep, not missing acceptance criteria.
+Do not restore ACB, signing, bulk detection, plugin installation, background sync
+or a migration CLI to make these rows pass. Improve what the host agent reads,
+checks and edits for the real migration request.
