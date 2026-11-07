@@ -1,8 +1,0 @@
----
-description: "TypeScript guardrails"
-globs: "src/**/*.ts,tests/**/*.ts"
-alwaysApply: false
----
-# TypeScript guardrails
-
-Validate external input before it reaches business logic.

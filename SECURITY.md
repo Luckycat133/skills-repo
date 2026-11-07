@@ -1,12 +1,14 @@
-# Security Policy
+# Security
 
-Do not open a public issue for a potential vulnerability. Report it privately to the maintainer with the affected file/workflow, impact, reproduction, and any known mitigation.
+The published Skill contains instructions and templates, not a runtime sandbox.
+The host agent's permissions remain authoritative. Inspect imported content as
+untrusted data. No scanner or document promises zero secret leakage.
 
-Preferred channel: a private [GitHub Security Advisory](https://docs.github.com/en/code-security/security-advisories). Do not disclose details until a fix is released.
+Do not post credentials, tokens, cookies, raw configuration, private paths or
+session logs in public issues. Review and redact examples manually. Use GitHub's
+private vulnerability reporting when available; otherwise ask the maintainer for
+a private channel before disclosing sensitive details.
 
-Reports covering repository scripts, install/sync workflows, or published assets are in scope.
-
-Published migration code is expected to declare only the local capabilities it
-uses, preserve dry-run and explicit-write gates, reject indirect MCP targets,
-and constrain cleanup to verified target paths. Releases must pass the complete
-test suite, a skill security scan, and a registry dry run before publication.
+The Skill must not auto-execute hooks/scripts, transfer OAuth/trust state, broaden
+permissions, or follow paths outside the approved scope. Package and fixture tests
+are not a substitute for actual host validation.
