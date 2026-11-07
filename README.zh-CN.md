@@ -1,118 +1,41 @@
-# Agent Skills Setup（智能体技能配置）
+# Agent Skills Setup
 
-> 跨 Cursor、Claude Code、Codex、Cline、Windsurf、Copilot、Gemini CLI 等数十种 AI 编程工具的上下文迁移。
+**帮助现有 Agent 迁移上下文的 Skill，不是另一个迁移软件。**
 
-[![GitHub Repo](https://img.shields.io/badge/GitHub-Luckycat133%2Fskills--repo-181717?logo=github)](https://github.com/Luckycat133/skills-repo)
-[![License](https://img.shields.io/badge/License-MIT-b7285.svg)](LICENSE)
-[![OpenClaw Ready](https://img.shields.io/badge/OpenClaw-Ready-1f7a8c)](skills/agent-skills-setup/references/ides/openclaw.md)
+Agent 使用自己已有的读写、编辑、diff 和查资料能力，识别源与目标的真实格式，
+保留作用域、触发条件、权限边界，完成迁移并报告验证结果。用户不需要学习另一套 CLI。
 
-> Languages: [English](README.md) · **中文** · [日本語](README.ja-JP.md) · [Español](README.es.md)
+## 使用
 
-版本：**0.10.2**。变更见[发行记录](CHANGELOG.md#0102---2026-10-03)；GitHub 安装示例使用 `v0.10.2` 标签。
+只把 `skills/agent-skills-setup/` 安装到客户端官方支持的 Skill 目录；不要安装仓库根目录，
+也不要把开发 Skill 一起安装。用户包不要求 Bash、Python、签名依赖或后台服务。
 
-在 **Cursor、Claude Code、Codex、Cline、Windsurf、Copilot、Gemini CLI** 以及数十种主流 AI 编程工具之间，进行**离线、带预览、可回滚**的 Skills、规则/指令和 MCP 配置迁移与跨设备备份恢复。
+直接对 Agent 说：
 
-![Agent Skills Setup — 15-second demo: detect → plan → secret redaction → apply → verify](skills/agent-skills-setup/assets/demo.gif)
+> 把当前项目 Cursor 的规则和 Skills 迁到 Claude Code，保留原来的文件作用域。
 
----
+> 把这些 MCP 配置迁到 Codex，保留目标已有设置，不复制密钥。
 
-## ⚡ 快速安装
+> 我要换电脑，把我选定工具的上下文整理成普通文件夹和迁移说明。
 
-通过 ClawHub / OpenClaw 一键安装：
+> 在新电脑恢复这个文件夹，按实际工具配置，告诉我哪些语义不能保留。
 
-```bash
-openclaw skills install @luckycat133/agent-skills-setup
-```
+覆盖指导包括 Skills、Rules/Instructions、MCP、Prompts、Commands、Agents、Hooks、
+Workflows、Plugins 和用户手写 Memory。不是将脚本不认识的类型一律丢弃。
+可执行内容先作为非加载目录里的草稿；凭据、授权状态、原始聊天和数据库不整库复制。
 
-或直接从 GitHub 安装：
+## 当前状态
 
-```bash
-git clone --depth 1 --branch v0.10.2 https://github.com/Luckycat133/skills-repo.git
+这是未发布的 `0.11.0-dev` 收缩版本。旧 CLI、ACB、签名和自动执行引擎已退出工作树和
+用户发布目录，完整旧实现仍在 Git 历史中；用户已有文件与旧备份不会被自动删除。
+旧版市场安装没有被此次修改自动更新，也没有承诺全部 IDE 实机验证。
 
-openclaw skills install \
-  ./skills-repo/skills/agent-skills-setup \
-  --as agent-skills-setup
-```
+## 开发
 
----
+`bash validate-all.sh` 检查包边界、引用和示例；不冒充真实 Agent/IDE 行为测试。
+后续开发必须先读 [开发 Skill](dev/skills/maintain-agent-skills-setup/SKILL.md)。
+未完成任务有具体证据和验收标准，不再通过继续造平台来填补迁移质量问题。
 
-## 💬 对你的 Agent 说这些话
+[English](README.md) · [贡献](CONTRIBUTING.md) · [安全](SECURITY.md)
 
-> *“把当前项目 Cursor 的 Skills、规则和 MCP 迁到 Claude Code。”*
-
-> *“我要换电脑，备份所有已安装 AI 编程工具的可迁移上下文。”*
-
-> *“恢复这个 ACB 备份包到新电脑上已安装的 IDE。”*
-
----
-
-## 🛡️ 迁移安全边界
-
-| 分级 | 对象类型 | 行为说明 |
-|---|---|---|
-| **全自动迁移** | Skills、Instructions/Rules (`CLAUDE.md`, `.cursorrules`)、本地 stdio MCP | Skills 完整复制并验证，规则语义转换与损失报告，MCP 仅支持本地 stdio 子集安全转换。 |
-| **显式授权迁移** | 插件包复制 (`--include-plugins`)、会话总结交接 (`--include-session`) | 需显式传参；仅传输结构化白名单字段，拒绝未审查状态。 |
-| **手动核对清单** | 远程 MCP (HTTP/SSE)、云端/UI 配置、Prompts、Commands、Agents、Hooks | 生成具体的逐步重建清单；绝不自动写入未经验证的可执行脚本。 |
-| **绝对不迁移** | API Key、OAuth Token、凭据、信任状态、原始聊天历史、生成式记忆 | 严格密钥扫描、子对象隔离与 Fail-closed 排除；字面凭据在迁移前自动剔除或脱敏。 |
-
----
-
-## 🚀 核心命令
-
-- **`migrate`**：清点选定产品，保存计划，再应用并校验结果。
-- **`snapshot`**：捕获原子、便携的 **Agent Context Bundle (ACB)**，严格保持 1:1 清单文件绑定。
-- **`restore`**：基于 ACB 备份包在目标设备上生成双端计划并执行恢复，带 TOCTOU 防篡改保护。
-- **`bundle-keygen`、`bundle-sign` 和 `bundle-verify`**：生成 Ed25519 密钥、签名备份包，并通过可信公钥验证完整性。
-- **`doctor`**：离线诊断 ACB 运行依赖及缺失的可执行工具。
-
-ACB 保留普通文件权限（含可执行位），并兼容没有权限元数据的旧备份。
-保存的恢复计划绑定备份身份；MCP 预览列出新增、移除及同名服务的字段变化，不展示凭据值。
-指令/MCP 转换出现已报告损失时默认延后，明确接受后才应用。
-`doctor` 同时列出包、扩展、平台和手动安装需求，可执行文件检查不代表运行验收。
-
-`detect` / `inventory` 用于发现与清点，`plan` 保存预览，`apply` 执行已审阅计划，
-`verify` / `rollback` 校验与恢复。完整示例见[命令指南](skills/agent-skills-setup/references/cli-workflow.md)，
-各 profile 的验证范围见[兼容性矩阵](docs/agent-skills-setup/compatibility-matrix.md)。
-远程 MCP 和云端设置生成手动重建清单；插件与交接迁移各自需要显式 opt-in。
-
----
-
-## 🌟 支持与赞助
-
-如果 Agent Skills Setup 帮您节省了配置或换机时间，欢迎 ⭐ **在 GitHub 上给本项目点个 Star**，让更多开发者发现它！
-
-您也可以通过 [GitHub Sponsors](https://github.com/sponsors/Luckycat133) 或 [爱发电 (Afdian) / Ko-fi](https://afdian.com/a/Luckycat133) 支持持续开发。
-
----
-
-## 仓库结构
-
-```text
-skills-repo/
-├── docs/                         # 维护指南与发布检查清单
-├── scripts/                      # 仓库级验证工具
-└── skills/agent-skills-setup/    # 规范技能源码
-    ├── SKILL.md                  # Skill 描述与入口
-    ├── references/               # Profile 注册表 v2 与适配器规范
-    └── scripts/                  # 迁移核心引擎与 ACB 工具
-```
-
-## 开发与验证
-
-1. 请编辑 `skills/agent-skills-setup/`，不要直接修改根目录生成的仓库指针。
-2. 修改规范 Skill 后运行：`bash scripts/sync-root-mirror.sh` 更新根指针。
-3. 运行全量测试：`bash validate-all.sh`。
-4. 所有验证通过后再提交合并。
-
-规模测试使用 `python3 scripts/benchmark-scale.py --sizes 10,100,1000`，在隔离夹具中
-检查迁移、保存计划后的恢复、完整内容及回滚。耗时仅作实测记录，不设置 CI 时间阈值。
-可加 `--report /path/to/new-report.json` 和 `--keep-workspace` 保存证据；不读取真实 Agent 配置。
-
-## 项目资料
-
-- [更新记录](CHANGELOG.md)
-- [发布检查清单](docs/agent-skills-setup/release-checklist.md)
-- [贡献指南](CONTRIBUTING.md)
-- [安全策略](SECURITY.md)
-- [行为准则](CODE_OF_CONDUCT.md)
-- [开源协议](LICENSE)
+觉得有用可以 Star 或自愿支持；使用不要求收藏、支付或注册外部服务。

@@ -1,24 +1,24 @@
-# Repository Guidelines
+# Repository instructions
 
-## Layout
+This repository maintains a Skill that helps an existing agent migrate context.
+It is not a standalone migration application. Read
+[the development Skill](dev/skills/maintain-agent-skills-setup/SKILL.md) before changing it.
 
-`skills/agent-skills-setup/` is the canonical publishable skill: `SKILL.md` defines behavior, `references/` holds conditional guidance, `scripts/` holds migration tools and colocated `test-*.sh` suites, and `assets/` holds reusable templates. The root `SKILL.md` is generated; edit the canonical file and run `bash scripts/sync-root-mirror.sh`. Keep repository tooling in `scripts/` and only active, repository-owned guidance in `docs/agent-skills-setup/`.
+The publishable directory is `skills/agent-skills-setup/`. It contains only concise
+instructions, on-demand references, and templates. Do not add a runtime CLI,
+transaction engine, ACB protocol, key service, auto-installer, telemetry, or bulk
+self-copy. Existing host-agent tools do the editing. A tiny helper requires a
+repeated, measured need and a focused test; do not create one speculatively.
 
-## Validate
+Keep every requested context type in the inventory. Unknown formats require
+source verification, not fabricated paths or a blanket unsupported label.
+Preserve scope, activation, restrictions, user-authored memory and unrelated files.
+Never equate a listed product with full support.
 
-- `bash validate-all.sh` — required before a PR; runs syntax, validation, mirror checks, and focused suites.
-- `python3 scripts/validate_skills.py` — frontmatter, links, secrets, and private-path checks.
-- `bash scripts/sync-root-mirror.sh --check` — verify the generated mirror.
-- `bash skills/agent-skills-setup/scripts/test-<feature>.sh` — run a focused regression, for example `test-cursor-mapping.sh`.
+Validation: `bash validate-all.sh` (or the Python commands inside it).
+Maintainer tooling and behavior evals live outside the published Skill. Structural
+checks do not prove real agent/IDE behavior. Record unrun checks honestly.
 
-## Style
-
-Use portable Bash (`#!/usr/bin/env bash`, quoted variables, `set -euo pipefail`) and four-space indentation. Python uses type hints, `pathlib`, and preferably the standard library. Use lowercase kebab-case names and concise Markdown with relative links. Do not edit generated mirrors.
-
-## Changes
-
-Keep changes focused; add a nearby regression for changed behavior, including success and failure/dry-run paths. Tests must use isolated temporary directories and never touch real agent configuration. Use Conventional Commits. PRs explain scope, affected IDEs, and validation; update the README, docs, and changelog when behavior or release steps change.
-
-## Security
-
-Never commit credentials, private absolute paths, or machine-specific assumptions. Preserve dry-run and confirmation safeguards. Follow `SECURITY.md` for vulnerability reports.
+Make focused commits on a branch; preserve main protection. Do not publish a
+release, upload a marketplace package, change account settings or request payment
+unless separately authorized. Do not reintroduce the retired engine to fix a test.
