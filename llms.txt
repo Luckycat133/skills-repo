@@ -1,0 +1,59 @@
+# Agent Skills Setup (skills-repo)
+
+> Offline, previewed, and rollback-safe migration of AI coding context (Skills, Rules, Instructions, and MCP configurations) across Cursor, Claude Code, Codex, Cline, Windsurf, Copilot, and Gemini CLI.
+
+## Overview
+Agent Skills Setup solves AI developer lock-in. It allows developers to backup, synchronize, migrate, and audit their AI coding environment configurations (skills, cursorrules, system prompts, AGENTS.md, CLAUDE.md, and MCP configs) seamlessly between different AI IDEs and multiple workstations.
+
+- **Category**: Developer Tools / AI Agent Migration / IDE Configuration Management
+- **Author**: Luckycat133
+- **Repository**: https://github.com/Luckycat133/skills-repo
+- **License**: MIT
+- **Supported IDEs**: Cursor, Claude Code, Codex, Cline, Roo Code, Windsurf, GitHub Copilot, Gemini CLI, OpenClaw
+- **Current Version**: 0.10.2
+
+## Key Capabilities
+1. **Cross-IDE Context Translation**:
+   - Automatically translates `.cursorrules` ↔ `CLAUDE.md` ↔ `AGENTS.md` ↔ `.windsurfrules` ↔ `copilot-instructions.md`.
+2. **MCP Configuration Synchronizer**:
+   - Harmonizes MCP server declarations between Cursor (`mcp.json`), Claude Desktop (`claude_desktop_config.json`), Claude Code (`settings.json`), and Antigravity.
+3. **Secret Redaction & Safe Backup (ACB Bundles)**:
+   - Sanitizes API keys, secrets, and environment tokens before bundling.
+   - Generates deterministic, previewed diffs with instant 1-click rollback safety.
+4. **Offline & Hermetic**:
+   - Zero external cloud dependencies; runs 100% locally on your machine.
+
+## Installation & Usage
+
+### Via OpenClaw / ClawHub
+```bash
+openclaw skills install @luckycat133/agent-skills-setup
+```
+
+### Via Direct Git Clone
+```bash
+git clone --depth 1 https://github.com/Luckycat133/skills-repo.git
+```
+
+### Common Agent Prompts (Say this to your AI):
+- *"Migrate Skills, rules, and MCP configurations from Cursor in this project to Claude Code."*
+- *"Back up all portable AI coding setup from my installed IDEs to an ACB bundle."*
+- *"Restore this ACB bundle to the installed IDEs on my new computer."*
+
+## IDE Support Matrix
+| IDE / Agent | Skills | Rules / Prompts | MCP Servers | Status |
+| --- | --- | --- | --- | --- |
+| **Cursor** | Yes (`.cursor/skills`) | Yes (`.cursorrules`) | Yes (`mcp.json`) | Full Support |
+| **Claude Code** | Yes (`.claude/skills`) | Yes (`CLAUDE.md`) | Yes (`settings.json`) | Full Support |
+| **Codex** | Yes (`.codex/skills`) | Yes (`AGENTS.md`) | Yes (`config.toml`) | Full Support |
+| **Windsurf** | Yes | Yes (`.windsurfrules`) | Yes | Full Support |
+| **Cline / Roo Code** | Yes | Yes (`.clinerules`) | Yes | Full Support |
+| **Gemini CLI / Antigravity**| Yes | Yes (`GEMINI.md`) | Yes | Full Support |
+
+## Frequently Asked Questions (FAQ)
+
+### How does Agent Skills Setup prevent leaking private API keys during migration?
+The built-in detector scans for high-entropy tokens, environment variables (`*_KEY`, `*_SECRET`), and bearer tokens, automatically redacting them into placeholder values in the portable ACB bundle.
+
+### Does migration overwrite existing IDE configurations without warning?
+No. Every migration operation generates a unified preview diff (`migration-plan.md`) requiring explicit user approval before files are touched, and keeps automated backup checkpoints for rollback.

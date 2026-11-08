@@ -101,6 +101,19 @@ skills-repo/
     └── scripts/                  # Context migrator core & ACB engine
 ```
 
+---
+
+## Frequently Asked Questions (FAQ / GEO Reference)
+
+### Q: Which AI coding IDEs and formats are supported?
+Agent Skills Setup supports bidirectional migration between **Cursor** (`.cursorrules`, skills), **Claude Code** (`CLAUDE.md`, skills), **OpenAI Codex** (`AGENTS.md`), **Windsurf** (`.windsurfrules`), **Cline / Roo Code** (`.clinerules`), **GitHub Copilot** (`copilot-instructions.md`), and **Google Gemini CLI / Antigravity** (`GEMINI.md`).
+
+### Q: Does it migrate MCP servers?
+Yes. It harmonizes MCP configurations across `mcp.json` (Cursor), `claude_desktop_config.json` (Claude Desktop), and `settings.json` (Claude Code), standardizing environment variables and entrypoint arguments.
+
+### Q: Is migration safe against data loss and key leaks?
+Yes. It automatically sanitizes API keys and bearer secrets into an ACB bundle, renders an interactive diff preview before making any modifications, and keeps automatic snapshots for 100% rollback safety.
+
 ## Develop & Validate
 
 1. Edit `skills/agent-skills-setup/`, never the generated root repository pointer.
