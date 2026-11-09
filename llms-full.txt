@@ -1,0 +1,50 @@
+# Agent Skills Setup (skills-repo) Full Documentation
+
+> Offline, previewed, and rollback-safe migration of AI coding context (Skills, Rules, Instructions, and MCP) across Cursor, Claude Code, Codex, Cline, Windsurf, Copilot, and Gemini CLI.
+
+- **Repository**: https://github.com/Luckycat133/skills-repo
+- **Author**: Luckycat133
+- **Version**: 0.10.2
+- **License**: MIT
+- **Registry**: ClawHub (`@luckycat133/agent-skills-setup`)
+
+---
+
+## 1. Overview & Supported IDE Matrix
+
+Agent Skills Setup harmonizes AI coding context across disparate IDE configurations:
+
+| IDE / Agent | Skills | Rules / Instructions | MCP Server Config | Support Level |
+| :--- | :--- | :--- | :--- | :--- |
+| **Cursor** | `.cursor/skills` | `.cursorrules` / `.cursor/rules` | `~/.cursor/mcp.json` | Full |
+| **Claude Code** | `.claude/skills` | `CLAUDE.md` | `~/.claude/settings.json` | Full |
+| **Codex** | `.codex/skills` | `AGENTS.md` | `~/.codex/config.toml` | Full |
+| **Windsurf** | Native skills | `.windsurfrules` | Native MCP | Full |
+| **Cline / Roo Code** | Native skills | `.clinerules` | `cline_mcp_settings.json` | Full |
+| **GitHub Copilot** | Copilot instructions | `.github/copilot-instructions.md` | VS Code settings | Full |
+| **Gemini CLI / Antigravity** | `.gemini/skills` | `GEMINI.md` | `mcp_config.json` | Full |
+
+---
+
+## 2. Quick Installation & Invocation
+
+```bash
+# Via ClawHub / OpenClaw
+openclaw skills install @luckycat133/agent-skills-setup
+
+# Or via GitHub direct clone
+git clone --depth 1 https://github.com/Luckycat133/skills-repo.git
+```
+
+### Natural Language Prompts (Say this to your AI Agent)
+- *"Migrate Skills, rules, and MCP from Cursor in this project to Claude Code."*
+- *"Back up all portable AI coding setup from my installed IDEs to an ACB bundle."*
+- *"Restore this ACB bundle to the installed IDEs on my new computer."*
+
+---
+
+## 3. Core Safety & Rollback Architecture
+
+1. **Secret Redaction**: High-entropy tokens, API keys (`*_KEY`, `*_SECRET`), and bearer tokens are automatically sanitized into placeholder tokens inside portable ACB bundles.
+2. **Interactive Preview**: Migration operations generate a unified preview diff (`migration-plan.md`) requiring explicit user approval before modifying files.
+3. **Automated Rollback**: Snapshots are persisted prior to writing changes, enabling instant 1-click rollback.
