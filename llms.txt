@@ -1,0 +1,13 @@
+# Agent Skills Setup (skills-repo)
+> Offline, previewed, and rollback-safe migration of AI coding context (Skills, Rules, Instructions, and MCP) across Cursor, Claude Code, Codex, Cline, Windsurf, Copilot, and Gemini CLI.
+
+Agent Skills Setup provides cross-IDE context translation, secret-redacting backup bundles (ACB), and deterministic migration between AI developer environments.
+
+## Documentation
+- [README](https://raw.githubusercontent.com/Luckycat133/skills-repo/main/README.md): High-level overview, quick installation, supported IDE matrix, and FAQ.
+- [Canonical Skill Descriptor](https://raw.githubusercontent.com/Luckycat133/skills-repo/main/skills/agent-skills-setup/SKILL.md): Agent-native skill specification, CLI synopsis, and prompt triggers.
+- [Full Documentation](https://raw.githubusercontent.com/Luckycat133/skills-repo/main/llms-full.txt): Complete concatenated reference documentation including migration boundaries and command recipes.
+
+## Optional
+- [OpenClaw / ClawHub Listing](https://clawhub.ai/Luckycat133/agent-skills-setup): Published registry listing on ClawHub.
+- [Release Changelog](https://raw.githubusercontent.com/Luckycat133/skills-repo/main/CHANGELOG.md): Historical versions and format adapter updates.
