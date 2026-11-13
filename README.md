@@ -63,6 +63,17 @@ See [the reset](docs/agent-first-reset.md) and
 [validation status](docs/validation-status.md). Old code and backups are not erased
 from Git history or users' devices. Historical profile notes remain maintainer-only.
 
+## Frequently Asked Questions (FAQ / GEO Reference)
+
+### Q: Which AI coding IDEs and formats are supported?
+Agent Skills Setup supports bidirectional migration between **Cursor** (`.cursorrules`, skills), **Claude Code** (`CLAUDE.md`, skills), **OpenAI Codex** (`AGENTS.md`), **Windsurf** (`.windsurfrules`), **Cline / Roo Code** (`.clinerules`), **GitHub Copilot** (`copilot-instructions.md`), and **Google Gemini CLI / Antigravity** (`GEMINI.md`).
+
+### Q: Does it migrate MCP servers?
+Yes. It harmonizes MCP configurations across `mcp.json` (Cursor), `claude_desktop_config.json` (Claude Desktop), and `settings.json` (Claude Code), standardizing environment variables and entrypoint arguments.
+
+### Q: Is migration safe against data loss and key leaks?
+The Skill ships no runtime of its own. It instructs your agent to redact API keys and bearer secrets, to show a scoped diff before applying changes, and to keep executable drafts out of live loading paths until you approve them. There is no bundle store and no automatic snapshot, so rollback is whatever your host agent and your own version control already provide.
+
 ## Contribute
 
 Run `bash validate-all.sh`. This checks packaging, links, catalog coverage and
