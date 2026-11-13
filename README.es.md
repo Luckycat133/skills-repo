@@ -1,123 +1,15 @@
-# Agent Skills Setup (Configurador de Skills de Agentes)
+# Agent Skills Setup
 
-> Migración de contexto entre Cursor, Claude Code, Codex, Cline, Windsurf, Copilot, Gemini CLI y decenas de herramientas de IA compatibles.
+Un Skill para que tu agente existente migre contexto entre herramientas de
+programación. No es una aplicación de migración ni un servicio en segundo plano.
 
-[![GitHub Repo](https://img.shields.io/badge/GitHub-Luckycat133%2Fskills--repo-181717?logo=github)](https://github.com/Luckycat133/skills-repo)
-[![License](https://img.shields.io/badge/License-MIT-b7285.svg)](LICENSE)
-[![OpenClaw Ready](https://img.shields.io/badge/OpenClaw-Ready-1f7a8c)](skills/agent-skills-setup/references/ides/openclaw.md)
+Instala solo `skills/agent-skills-setup/` en una ubicación de Skills documentada
+por tu cliente, no la raíz del repositorio ni el Skill de desarrollo.
 
-> Languages: [English](README.md) · [中文](README.zh-CN.md) · [日本語](README.ja-JP.md) · **Español**
+Ejemplo: «Migra las reglas y Skills de este proyecto de Cursor a Claude Code,
+sin ampliar su ámbito de aplicación».
 
-Versión: **0.10.2**. Consulta los [cambios de la versión](CHANGELOG.md#0102---2026-10-03). La instalación desde GitHub usa la etiqueta `v0.10.2`.
+El rediseño agent-first es `0.11.0-dev`, todavía sin publicar. No afirma pruebas
+reales en todos los IDE. El motor anterior sigue disponible en el historial Git.
 
-Migración, respaldo y restauración de contexto de asistentes de IA (Skills, Reglas/Instrucciones y MCP) entre **Cursor, Claude Code, Codex, Cline, Windsurf, Copilot, Gemini CLI** y decenas de herramientas de programación con IA — **completamente offline, con vista previa y seguro ante rollback**.
-
-![Agent Skills Setup — 15-second demo: detect → plan → secret redaction → apply → verify](skills/agent-skills-setup/assets/demo.gif)
-
----
-
-## ⚡ Instalación Rápida
-
-Instala mediante ClawHub / OpenClaw:
-
-```bash
-openclaw skills install @luckycat133/agent-skills-setup
-```
-
-O instala directamente desde GitHub:
-
-```bash
-git clone --depth 1 --branch v0.10.2 https://github.com/Luckycat133/skills-repo.git
-
-openclaw skills install \
-  ./skills-repo/skills/agent-skills-setup \
-  --as agent-skills-setup
-```
-
----
-
-## 💬 Dile esto a tu agente
-
-> *"Migra los Skills, reglas y MCP de Cursor en este proyecto a Claude Code."*
-
-> *"Voy a cambiar de computadora. Respalda la configuración de mis IDEs instalados."*
-
-> *"Restaura este paquete ACB en los IDEs instalados de mi nueva computadora."*
-
----
-
-## 🛡️ Límites de Seguridad de la Migración
-
-| Nivel | Elementos | Comportamiento |
-|---|---|---|
-| **Automático** | Skills, Instructions/Rules (`CLAUDE.md`, `.cursorrules`), MCP local stdio | Copia verificada de Skills, conversión semántica con reporte de pérdidas, y conversión del subconjunto local stdio de MCP. |
-| **Opt-in Explícito** | Copia de paquetes de plugins (`--include-plugins`), traspaso de sesión (`--include-session`) | Conservación estructurada bajo consentimiento y lista blanca estricta. |
-| **Lista Manual** | MCP remoto (HTTP/SSE), configuración Cloud/UI, Prompts, Commands, Agents, Hooks | Genera lista de reconstrucción paso a paso (nunca escribe scripts ejecutables no revisados). |
-| **Nunca se Mueve** | Claves API, tokens OAuth, credenciales, estado de confianza, historial de chat, memoria | Escaneo estricto de secretos, aislamiento de subobjetos y exclusiones fail-closed. Las credenciales se rechazan o redactan antes de la migración. |
-
----
-
-## 🚀 Comandos Principales
-
-- **`migrate`**: Examina los productos seleccionados, guarda un plan, lo aplica y verifica el resultado.
-- **`snapshot`**: Captura un paquete atómico **Agent Context Bundle (ACB)** con enlace 1:1 estricto con el manifiesto.
-- **`restore`**: Reconstruye un plan de restauración dual desde un ACB hacia el dispositivo de destino con protección TOCTOU.
-- **`bundle-keygen`, `bundle-sign` y `bundle-verify`**: Genera claves Ed25519, firma paquetes ACB y verifica su integridad con una clave pública de confianza.
-- **`doctor`**: Diagnostica dependencias y ejecutables faltantes de forma offline.
-
-ACB conserva los permisos normales de archivos, incluidos los bits de ejecución,
-y admite paquetes antiguos sin estos metadatos. Los planes de restauración
-guardados se vinculan a la identidad del paquete; la vista previa de MCP muestra
-servidores añadidos, eliminados y modificados sin valores de credenciales.
-Las conversiones de instrucciones/MCP con pérdidas requieren aceptación explícita.
-`doctor` también enumera requisitos de paquetes, extensiones, plataforma e instalación manual.
-
-`detect` / `inventory` descubren y enumeran el contexto; `plan` guarda la vista
-previa; `apply` ejecuta el plan revisado; `verify` / `rollback` verifican y
-recuperan los cambios. Consulta la [guía de comandos](skills/agent-skills-setup/references/cli-workflow.md)
-y la [matriz de compatibilidad](docs/agent-skills-setup/compatibility-matrix.md)
-para los ejemplos y el alcance probado de cada perfil. MCP remoto y ajustes
-cloud requieren reconstrucción manual; plugins y traspasos requieren opt-in explícito.
-
----
-
-## 🌟 Apoya el Proyecto
-
-Si Agent Skills Setup te ahorró tiempo configurando o cambiando de equipo, ¡por favor ⭐ **danos una Estrella en GitHub**!
-
-También puedes apoyar el desarrollo mediante [GitHub Sponsors](https://github.com/sponsors/Luckycat133) o [Afdian / Ko-fi](https://afdian.com/a/Luckycat133).
-
----
-
-## Estructura
-
-```text
-skills-repo/
-├── docs/                         # Documentación de mantenimiento y listas de lanzamiento
-├── scripts/                      # Herramientas de validación del repositorio
-└── skills/agent-skills-setup/    # Skill canónico publicable
-    ├── SKILL.md                  # Descriptor del Skill y punto de entrada
-    ├── references/               # Registro de perfiles v2 y adaptadores
-    └── scripts/                  # Motor de migración y herramientas ACB
-```
-
-## Desarrollo y Validación
-
-1. Edita `skills/agent-skills-setup/`; no edites el puntero generado en la raíz.
-2. Tras modificar el Skill canónico, ejecuta `bash scripts/sync-root-mirror.sh` para actualizar el puntero raíz.
-3. Ejecuta la validación completa: `bash validate-all.sh`.
-4. Realiza el merge únicamente tras superar todas las validaciones.
-
-Para probar la escala en entornos aislados, ejecuta `python3 scripts/benchmark-scale.py --sizes 10,100,1000`.
-Comprueba migración, restauración del plan guardado, contenido exacto y rollback.
-Los tiempos son observaciones, no umbrales de CI. Usa `--report /path/to/new-report.json`
-y `--keep-workspace` para conservar las evidencias; no lee configuración real de agentes.
-
-## Documentos del Proyecto
-
-- [Historial de cambios](CHANGELOG.md)
-- [Lista de lanzamiento](docs/agent-skills-setup/release-checklist.md)
-- [Guía de contribución](CONTRIBUTING.md)
-- [Seguridad](SECURITY.md)
-- [Código de conducta](CODE_OF_CONDUCT.md)
-- [Licencia](LICENSE)
+[English](README.md) · [中文](README.zh-CN.md) · [Estado de validación](docs/validation-status.md)

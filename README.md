@@ -1,107 +1,67 @@
 # Agent Skills Setup
 
-> AI IDE Context Migration across Cursor, Claude Code, Codex, Cline, Windsurf, Copilot, Gemini CLI, and dozens of supported AI coding tools.
+A Skill that teaches your existing coding agent to move context between tools.
+It is **not a separate migration application**. The agent inspects your files,
+translates the actual formats, makes a scoped diff, and verifies what changed.
 
-[![GitHub Repo](https://img.shields.io/badge/GitHub-Luckycat133%2Fskills--repo-181717?logo=github)](https://github.com/Luckycat133/skills-repo)
-[![License](https://img.shields.io/badge/License-MIT-b7285.svg)](LICENSE)
-[![OpenClaw Ready](https://img.shields.io/badge/OpenClaw-Ready-1f7a8c)](skills/agent-skills-setup/references/ides/openclaw.md)
+[中文](README.zh-CN.md) · [日本語](README.ja-JP.md) · [Español](README.es.md)
 
-> Languages: **English** · [中文](README.zh-CN.md) · [日本語](README.ja-JP.md) · [Español](README.es.md)
+## Use it
 
-Version: **0.10.2**. See the [release changes](CHANGELOG.md#0102---2026-10-03). GitHub installation pins `v0.10.2`.
+Install only `skills/agent-skills-setup/` through your client's documented Skill
+installer or copy it to that client's confirmed Skill directory. Do not install
+the repository root or the development Skill. There is no required Bash, Python,
+cryptography package, background service, or migration CLI in the user package.
 
-Offline, previewed, and rollback-safe migration of AI coding context (Skills, Rules, Instructions, and MCP) across **Cursor, Claude Code, Codex, Cline, Windsurf, Copilot, Gemini CLI**, and dozens of supported AI coding tools.
+Then ask your agent:
 
-![Agent Skills Setup — 15-second demo: detect → plan → secret redaction → apply → verify](skills/agent-skills-setup/assets/demo.gif)
+> Move this project's Cursor rules and Skills to Claude Code, preserving file scope.
 
----
+> Move these MCP definitions to Codex; preserve my existing settings and don't copy keys.
 
-## ⚡ Quick Install
+> I'm changing computers. Put my selected tools' context in an ordinary reviewable folder.
 
-Install `agent-skills-setup` via ClawHub / OpenClaw:
+> Restore this folder into the tools on my new computer; explain any behavior that cannot survive.
 
-```bash
-openclaw skills install @luckycat133/agent-skills-setup
-```
+## What the Skill contributes
 
-Or install directly from GitHub:
+It teaches discovery by product/profile/version; rules and trigger conversion;
+Skills/resources; MCP JSON/JSONC/TOML/YAML and auth differences; prompts/commands;
+agent and hook definitions; authored memory; conflict handling; and evidence-based
+verification. Unknown formats are researched for the selected task, not guessed.
+Executable drafts stay outside live loading paths until separately approved.
 
-```bash
-git clone --depth 1 --branch v0.10.2 https://github.com/Luckycat133/skills-repo.git
+There is no claim that all IDEs, versions or formats are tested. The examples are
+source-backed guidance; actual target behavior must be checked. Documentation
+lookup may use public vendor pages without sending local configuration.
 
-openclaw skills install \
-  ./skills-repo/skills/agent-skills-setup \
-  --as agent-skills-setup
-```
+## Current product references and tests
 
----
+The [product catalog](skills/agent-skills-setup/references/products.md) routes every
+one of the 87 historical identifiers, plus new clients/profiles and aliases. Its
+90 profile/category sections are organized into 30 on-demand family references.
+This is documentation coverage, **not 90 certified IDEs**. Read only the selected
+source/target sections. The main Skill remains short and the package has no code.
 
-## 💬 Say this to your agent
+The [2026-11-07 research ledger](docs/research/catalog-2026-11-07.json) records
+sources, evidence levels and unresolved contracts. New coverage includes
+Codebuff/Freebuff, iFlow, CodeArts Agent, Ona, Avante, T3 Code and Coder Xum.
+Product renames and extra profiles are not counted as independent IDEs.
 
-> *"Migrate Skills, rules, and MCP from Cursor in this project to Claude Code."*
+For the developer agent, start with
+[the development Skill](dev/skills/maintain-agent-skills-setup/SKILL.md).
+[36 behavior scenarios](evals/README.md) and a
+[90-entry native-client queue](evals/client-matrix.json) await real runs.
+Record unavailable clients as blocked, not passed. Do not recreate the retired
+migration engine to execute these tests.
 
-> *"I am switching computers. Back up all portable AI coding setup from my installed IDEs."*
+## This development branch
 
-> *"Restore this ACB bundle to the installed IDEs on my new computer."*
-
----
-
-## 🛡️ Migration Boundary
-
-| Tier | Items | Behavior |
-|---|---|---|
-| **Automatic** | Skills, Instructions/Rules (`CLAUDE.md`, `.cursorrules`), Local stdio MCP | Verified copy for Skills, semantic conversion for instructions, and supported local stdio MCP subset conversion. |
-| **Explicit Opt-in** | Plugin package copy (`--include-plugins`), Session handoff summary (`--include-session`) | Preserved with structured whitelisting and consent. |
-| **Manual Checklist** | Remote MCP (HTTP/SSE), Cloud/UI configurations, Prompts, Commands, Agents, Hooks | Emits concrete reconstruction checklists; never writes unreviewed executable scripts. |
-| **Never Moved** | API keys, OAuth tokens, credentials, trust state, raw chat history, generated memory | Strict secret scanning, subobject isolation, and fail-closed exclusions. Literal credentials are rejected or redacted before migration. |
-
----
-
-## 🚀 Capabilities
-
-- **`migrate`**: Inspect the selected products, save a plan, apply it, and verify the results.
-- **`snapshot`**: Capture an atomic, portable **Agent Context Bundle (ACB)** with 1:1 manifest file binding.
-- **`restore`**: Dual-side restore planning from ACB bundles onto newly installed target tools with TOCTOU state guards.
-- **`bundle-keygen`, `bundle-sign` & `bundle-verify`**: Generate Ed25519 keys, sign ACB bundles, and verify integrity with a trusted public key.
-- **`doctor`**: Inspect bundle requirements and missing dependencies offline.
-
-ACB captures ordinary file permissions, including executable bits, and still
-reads older bundles without permission metadata. Saved restore plans bind to
-their bundle identity; MCP previews list added, removed, and changed servers
-without credential values. Instruction/MCP conversions with reported losses
-are deferred until explicitly accepted. `doctor` reports package, extension,
-platform, and manual-install requirements alongside executable checks.
-
-Use `detect` and `inventory` for discovery, `plan` for a saved preview,
-`apply` for the reviewed plan, and `verify` / `rollback` for evidence and
-recovery. See the [command guide](skills/agent-skills-setup/references/cli-workflow.md)
-for complete examples and the [compatibility matrix](docs/agent-skills-setup/compatibility-matrix.md)
-for each profile's tested scope. Remote MCP and cloud settings produce manual
-rebuild actions. Plugin and handoff transfer each require their explicit opt-in.
-
----
-
-## 🌟 Support the Project
-
-If Agent Skills Setup saved you setup or computer-switching time, please ⭐ **Star this repository on GitHub** to help other developers discover it!
-
-You can also sponsor development through [GitHub Sponsors](https://github.com/sponsors/Luckycat133) or [Afdian / Ko-fi](https://afdian.com/a/Luckycat133).
-
----
-
-## Layout
-
-```text
-skills-repo/
-├── docs/                         # Maintainer guidance & release checklists
-├── scripts/                      # Repository tooling
-└── skills/agent-skills-setup/    # Canonical publishable skill
-    ├── SKILL.md                  # Skill descriptor & entry point
-    ├── references/               # Profile registry v2 & format adapters
-    └── scripts/                  # Context migrator core & ACB engine
-```
-
----
+The agent-first reset is **unreleased** (`0.11.0-dev`). Published 0.10.x versions
+still contain the retired engine; they have not been changed by this branch.
+See [the reset](docs/agent-first-reset.md) and
+[validation status](docs/validation-status.md). Old code and backups are not erased
+from Git history or users' devices. Historical profile notes remain maintainer-only.
 
 ## Frequently Asked Questions (FAQ / GEO Reference)
 
@@ -112,25 +72,17 @@ Agent Skills Setup supports bidirectional migration between **Cursor** (`.cursor
 Yes. It harmonizes MCP configurations across `mcp.json` (Cursor), `claude_desktop_config.json` (Claude Desktop), and `settings.json` (Claude Code), standardizing environment variables and entrypoint arguments.
 
 ### Q: Is migration safe against data loss and key leaks?
-Yes. It automatically sanitizes API keys and bearer secrets into an ACB bundle, renders an interactive diff preview before making any modifications, and keeps automatic snapshots for 100% rollback safety.
+The Skill ships no runtime of its own. It instructs your agent to redact API keys and bearer secrets, to show a scoped diff before applying changes, and to keep executable drafts out of live loading paths until you approve them. There is no bundle store and no automatic snapshot, so rollback is whatever your host agent and your own version control already provide.
 
-## Develop & Validate
+## Contribute
 
-1. Edit `skills/agent-skills-setup/`, never the generated root repository pointer.
-2. Regenerate the root pointer after canonical-skill edits: `bash scripts/sync-root-mirror.sh`.
-3. Run `bash validate-all.sh`.
-4. Merge only after all validation passes.
+Run `bash validate-all.sh`. This checks packaging, links, catalog coverage and
+example fixtures; it does not substitute for running a real agent. Follow
+[behavior evaluation](evals/README.md) for actual tool traces, native discovery,
+negative activation, unchanged neighbors and repeat-run results.
+Please submit one reproducible migration case rather than an unverified product count.
 
-For isolated scale testing, run `python3 scripts/benchmark-scale.py --sizes 10,100,1000`.
-It checks migration, saved-plan restore, exact contents, and rollback; timings
-are observations, not CI thresholds. Add `--report /path/to/new-report.json`
-and `--keep-workspace` to retain evidence. No real agent configuration is used.
+[Security](SECURITY.md) · [Contributing](CONTRIBUTING.md) · [Support](SUPPORT.md)
 
-## Project
-
-- [Changelog](CHANGELOG.md)
-- [Release checklist](docs/agent-skills-setup/release-checklist.md)
-- [Contributing](CONTRIBUTING.md)
-- [Security](SECURITY.md)
-- [Code of conduct](CODE_OF_CONDUCT.md)
-- [License](LICENSE)
+If this saves setup time, a repository star or voluntary sponsorship helps.
+No star, payment or external account is required to use it.

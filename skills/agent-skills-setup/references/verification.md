@@ -1,109 +1,48 @@
-# Verification and evidence
+# Verify content and behavior separately
 
-Read for migration delivery, bundle evidence, or rollback. Before apply, retain
-the saved plan path and `plan_sha256`. The plan records each item's
-`source_state` and `target_state`; apply checks those states, Registry,
-adapters, and Git provenance before writing. Its checksummed manifest records
-applied destination hashes, backup paths/hashes, item outcomes, losses, and plan
-provenance. It does not contain a post-apply source check or parsing result.
+Use the host agent's existing tools. Do not install a verification service or run
+imported commands. Validate the smallest representative change before expanding.
 
-Run `verify --manifest <manifest.json> --json`. It validates the manifest and
-target boundaries, existence, and hashes against `changes[].post_sha256`.
-A zero exit code means the recorded applied targets still match; it does not
-recheck sources, reparse targets, or attest permissions or runtime behavior.
+## Before writing
 
-Report what the request needs: artifact locations, applied/deferred/blocked
-counts, source unchanged status, target parse/hash checks, backup locations,
-and remaining manual actions. Read the manifest when an orchestration summary
-does not include that evidence. Zero applied items, plan generation, successful
-extraction, or parse success alone do not prove a completed migration.
+Resolve every final destination and scope; inspect current content and imports.
+Do not place a backup under an auto-loaded rules/skills directory. A project Git
+diff is useful, but do not stage, commit, reset or discard unrelated user changes.
+For untracked/global settings, make an exact private backup of only the files to
+be changed; never put credential-bearing backups into a portable transfer folder.
 
-For live-file migration, record selected source hashes before apply and repeat
-after apply (and after rollback, if requested). Use the installed helper so
-large files and directory sources use the same bounded-memory hash as the plan:
+Re-read the target immediately before editing. If it changed, recompute the diff
+instead of overwriting concurrent edits. Reject unknown symlink destinations or
+path traversal; resolve the actual environment rather than mixing OS paths.
 
-```bash
-python3 - "$(dirname "$migrator")" /resolved/source <<'PY'
-from pathlib import Path
-import sys
-sys.path.insert(0, sys.argv[1])
-from migration_core import hash_path
-print(hash_path(Path(sys.argv[2])))
-PY
-```
+## After writing
 
-Use the source path from the plan and keep these outputs beside it, outside
-selected sources/targets. Compare both hashes with `source_state.sha256`.
-For bundle restore, source paths are managed temporary staging paths; retain
-the verified bundle's checksums instead of trying to inspect cleaned staging.
-Claim unchanged content only for the live sources or bundle bytes checked.
+| Check | Evidence to keep |
+| --- | --- |
+| Syntax | JSON/TOML/YAML/frontmatter parser result, with secret values omitted |
+| Content | Same intended instructions, Skill assets and approved server definitions |
+| Scope | Representative matching and non-matching files; user/project boundaries |
+| Imports | Referenced files exist and remain within approved roots |
+| Existing state | Unrelated keys, other Skills, disabled state and restrictions preserved |
+| Conflict handling | Conflicting objects left untouched; independent objects applied |
+| Idempotence | A repeat review finds no duplicate sections or needless overwrite |
+| Host discovery | Actual target UI/list evidence, when safely available |
+| Runtime | Only an explicitly approved execution/connection test can prove this |
 
-Record syntax acceptance separately for machine-readable targets. For JSON MCP,
-run `python3 -m json.tool /resolved/target/file >/dev/null` on the actual written
-file and retain its exit result; use a format-aware parser for JSONC or other
-formats. Do not infer parsing success from `verify`.
+Do not equate a valid config with host discovery, or discovery with a successful
+connection. Do not report simulated fixtures as real IDE tests. Status/list commands
+can start servers; inspect their side effects first.
 
-For MCP, report the reviewed server additions, removals, and same-name
-configuration changes alongside conversion/redaction losses. An empty
-`loss_report` can accompany replacement of an existing server map. Compare
-the applied server map and sibling settings with the reviewed preview and
-pre-apply state to assess what was retained or replaced. See
-[MCP migration](mcp-migration.md).
+## Report
 
-For a bundle, run `bundle-verify`; include its checksum/secret/binding result
-and collection exclusions or failures. Authenticate the signer only with
-`--trusted-key` from an independently trusted public-key file. An unsigned
-bundle can pass integrity checks; `signature_verified: false` must remain
-visible. `doctor` checks required executables on PATH and reports reauth/rebuild
-work; success does not prove packages are installed or services are usable.
-See [bundle-workflow.md](bundle-workflow.md).
+Use the report template when requested or when deferred work needs to travel.
+Otherwise a short summary is enough: changed paths, conversions, conflicts/losses,
+manual/auth steps, exact checks, and checks not run. Never say "all migrated" when
+requested prompts/agents/memory were not even inventoried.
 
-## Rollback
+## Recovery
 
-Use the exact apply manifest with `rollback --manifest <manifest.json> --yes
---json` when the user has authorized undoing those changes. The guard refuses
-to overwrite a target whose recorded post-apply hash no longer matches. If it
-refuses, preserve that target and review the current change with its recorded
-backup before proceeding.
-
-After rollback, confirm existing targets match their recorded pre-apply hashes
-(`target_state.sha256` in the saved plan, or `backup_sha256` in the manifest)
-and newly created targets are absent. Repeat the source-content comparison.
-Keep the manifest and backup paths as evidence. `verify` checks applied state,
-so it is not a rollback acceptance check after applied targets have been removed
-or restored to their previous contents.
-
-## Product acceptance
-
-File parsing proves syntax, not product discovery, transport compatibility,
-credentials, OAuth, permissions, or connectivity. Use a documented native local
-discovery panel or offline CLI when available and within scope. Do not launch
-servers or connect to endpoints as part of this offline skill. State any
-unperformed product/runtime acceptance; authentication and network checks need
-their own authorization. For manual remote reconstruction, use
-[mcp-transport.md](mcp-transport.md), not invented protocol headers.
-
-## Interrupted process recovery
-
-A new apply writes a checksummed recovery journal before changing any target:
-`<workspace>/.agent-context-migration/backups/<operation-id>/recovery.json`.
-A successful apply removes its journal after committing the manifest.
-If the process exits before writing its apply manifest, stop all writers and
-run `recover --journal <recovery.json> --yes --json` only with authorization to
-undo that interrupted operation. Recovery preflights every target and backup,
-restores the pre-apply state, and refuses unrecognized content or mode changes.
-A second interrupted recovery can be retried. If the apply manifest exists,
-use normal `rollback` instead. A later overlapping apply refuses a pending
-journal rather than overwriting the interrupted state.
-
-Backup copies, journals, and `.agent-context-recovery-` containers outside the
-live target directory may remain as recovery evidence after a hard exit. Review
-them after verification; do not remove the only copy of user changes. This protects against
-process termination, including hard exits; it does not claim power-loss
-atomicity, filesystem durability, or coordination with concurrent writers.
-
-New plans record a separate `mode_sha256` for files and directory trees; new
-manifests also bind target and backup modes. Content `sha256` values keep their
-existing format. Regenerate older saved plans before applying them. Older
-manifests remain readable but cannot detect mode-only drift. POSIX mode checks
-do not verify Windows ACLs, ownership, or extended attributes.
+If an edit fails validation, restore only the files changed in this task from the
+reviewed backup, and only if they have not subsequently changed. Do not restore an
+entire config tree or run `git reset --hard`. Explain any concurrent-edit conflict.
+The Skill teaches careful recovery; it does not claim a universal atomic rollback.
