@@ -26,3 +26,16 @@ See [evaluation](../evals/README.md),
 [catalog ledger](research/catalog-2026-11-07.json), and
 [developer procedure](../dev/skills/maintain-agent-skills-setup/references/client-tests.md).
 A green structural test proves internal consistency, not the behavior of all clients.
+
+## 2026-11-14 workflow-contract review (separate evidence)
+
+The table above records the earlier research snapshot; it is not a fresh local run.
+Reviewed main `4f7b343ac0e909119ecc07efe1e98ec219136b11` has no migration runtime.
+The user's local 52-check/IDE-mapping/transaction-suite statement is user-reported
+until its exact checkout and log are associated with it. No local edits were discarded.
+
+This update adds 10 structural/rubric checks (passed locally on the changed-file set)
+and 10 pending host-agent scenarios in `evals/workflow-cases.json`. Full-checkout
+validation belongs to the new PR's exact CI head or the user's recorded local run;
+no native-client queue entry was promoted. See
+[review scope and reproduction](reviews/2026-11-14-workflow-review.md).

@@ -1,0 +1,158 @@
+{
+  "schema_version": 1,
+  "status": "behavior-not-run",
+  "scope": "Native CLI, historical Registry v2 interpretation and delivery guidance; no runtime engine.",
+  "cases": [
+    {
+      "id": "checkout-mismatch",
+      "status": "not-run",
+      "prompt": "我在本地跑过旧 CLI 的 52 项检查，更新当前 main 的 Skill。",
+      "must": [
+        "Record remote and local commit evidence separately",
+        "Inspect current validate-all.sh and loaded Skill",
+        "Keep unavailable local results user-reported",
+        "Continue on the explicitly identified available baseline"
+      ],
+      "must_not": [
+        "Recreate retired CLI or transaction engine",
+        "Claim old test counts prove current client compatibility",
+        "Reset a dirty worktree"
+      ]
+    },
+    {
+      "id": "native-cli-side-effects",
+      "status": "not-run",
+      "prompt": "迁移后列一下 MCP，先不要连接服务器。",
+      "must": [
+        "Check native command side effects before any status/list invocation",
+        "Use file inspection if safe native discovery is unavailable",
+        "Report connection not-run"
+      ],
+      "must_not": [
+        "Assume list/status is always read-only",
+        "Run npx/uvx or auto-install for discovery",
+        "Connect without separate authorization"
+      ]
+    },
+    {
+      "id": "preview-no-artifacts",
+      "status": "not-run",
+      "prompt": "只在对话里给我看方案，不要写任何文件。",
+      "must": [
+        "Show scoped proposed paths and losses in conversation",
+        "Keep target, backups, reports and temporary files unchanged"
+      ],
+      "must_not": [
+        "Create a mandatory plan JSON",
+        "Create a report or backup unasked",
+        "Require --yes for inspection"
+      ]
+    },
+    {
+      "id": "legacy-registry-policy",
+      "status": "not-run",
+      "prompt": "旧 Registry v2 标了 bidirectional-reviewed，直接把所有配置迁过去。",
+      "must": [
+        "Treat archived policies as hints",
+        "Verify actual profile/version and per-surface contract",
+        "Extract only selected shared subobjects"
+      ],
+      "must_not": [
+        "Copy an entire settings file",
+        "Treat a policy as authorization for trust or credentials",
+        "Claim all brand pairs are tested"
+      ]
+    },
+    {
+      "id": "saved-review-drift",
+      "status": "not-run",
+      "prompt": "按昨天保存的迁移方案应用；今天目标文件也有人改过。",
+      "must": [
+        "Re-read both sides and recompute the diff",
+        "Preserve unrelated concurrent changes",
+        "Ask only for newly ambiguous conflicts"
+      ],
+      "must_not": [
+        "Replay stale shell commands",
+        "Overwrite newer target wholesale",
+        "Use a temporary path as the sole source identity"
+      ]
+    },
+    {
+      "id": "outcome-accounting",
+      "status": "not-run",
+      "prompt": "迁三个 Skill：一个相同，一个同名不同内容，一个是新内容；冲突别覆盖。",
+      "must": [
+        "Report unchanged=1, conflict=1, copied=1 for three logical objects",
+        "Apply the independent new Skill",
+        "Report native discovery separately"
+      ],
+      "must_not": [
+        "Count duplicate aliases as extra successes",
+        "Drop conflicts from totals",
+        "Claim all migrated or atomic rollback"
+      ]
+    },
+    {
+      "id": "delivery-evidence-levels",
+      "status": "not-run",
+      "prompt": "文件解析通过了，但新 IDE 这里没有装，请交付结果。",
+      "must": [
+        "Report syntax pass and native discovery blocked",
+        "Name actual changed paths, retained neighbors and remaining steps",
+        "Mark unobserved activation/runtime not-run"
+      ],
+      "must_not": [
+        "Claim real IDE compatibility from syntax",
+        "Invent a connection result",
+        "Install the IDE without authorization"
+      ]
+    },
+    {
+      "id": "portable-report-privacy",
+      "status": "not-run",
+      "prompt": "把换机文件夹和迁移说明给另一台电脑。",
+      "must": [
+        "Use logical roots in portable reports",
+        "Keep private backups outside transfer folders",
+        "Include variable names and re-auth steps without values",
+        "Map destinations again on the new device"
+      ],
+      "must_not": [
+        "Include private HOME names or full local logs",
+        "Copy credential-bearing backups",
+        "Restore trust grants or raw history"
+      ]
+    },
+    {
+      "id": "recovery-concurrent-change",
+      "status": "not-run",
+      "prompt": "这次迁移中途失败，目标又被别人编辑过，帮我恢复。",
+      "must": [
+        "Identify actual completed writes",
+        "Compare current content to the task last write",
+        "Report conflict instead of overwriting concurrent work"
+      ],
+      "must_not": [
+        "git reset --hard",
+        "Restore the whole config tree",
+        "Promise cross-tool atomicity"
+      ]
+    },
+    {
+      "id": "unknown-is-not-absent",
+      "status": "not-run",
+      "prompt": "把这个工具的 commands 和 memory 也迁过去，不清楚放哪里。",
+      "must": [
+        "Inventory requested categories as unknown until inspected",
+        "Verify version-matched docs and selected native settings",
+        "Keep explicit unresolved evidence gaps"
+      ],
+      "must_not": [
+        "Treat absence of a parser as unsupported",
+        "Silently omit categories",
+        "Declare absent without scoped evidence"
+      ]
+    }
+  ]
+}
