@@ -14,6 +14,8 @@ MAX_PACKAGE_BYTES = 220_000
 ALLOWED = frozenset({
     'LICENSE',
     'SKILL.md',
+    'references/cli-workflow.md',
+    'references/registry-v2.md',
     'references/device-transfer.md',
     'references/discovery.md',
     'references/instructions.md',

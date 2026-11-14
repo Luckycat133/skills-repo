@@ -7,7 +7,7 @@ description: >-
   packaging the guidance. Not for migrating an end user's context directly.
 license: MIT
 metadata:
-  version: "1.1"
+  version: "1.2"
 ---
 
 # Maintain guidance, not a migration platform
@@ -24,7 +24,10 @@ references. Read [acceptance](references/acceptance.md),
 [remaining work](references/remaining-work.md) and the
 [real-client test procedure](references/client-tests.md).
 For current research decisions read [research method](references/research-method.md).
-Check the branch/diff before changing it; do not assume a historical SHA is current.
+For CLI, Registry v2 or test-log claims read
+[checkout review](references/checkout-review.md). Record the branch/commit, dirty
+state and loaded Skill version; never infer the current runtime from an older log.
+Unavailable local results stay user-reported, not independently verified.
 
 The 2026-11-07 catalog covers all 87 historical identifiers plus new clients and
 profiles. It is documentation evidence, **not runtime certification**. The
@@ -34,10 +37,12 @@ Historical notes under docs/history remain unverified clues, not active contract
 
 ## When asked to run the tests
 
-1. Run `bash validate-all.sh` for structural/examples checks. Do not call this a
-   client migration test. Do not weaken a test just to obtain a green result.
-2. Read `evals/cases.json` and `evals/catalog-cases.json`. Use isolated fixture roots,
-   safe synthetic content and the actual host agent with the Skill loaded.
+1. Run `bash validate-all.sh` for structural/examples checks. Record command, exit
+   code, count and revision; distinguish missing optional skills-ref from a pass.
+   Do not call this a client migration test or weaken checks to obtain green results.
+2. Read `evals/cases.json`, `evals/catalog-cases.json` and `evals/workflow-cases.json`.
+   Use isolated fixture roots, safe synthetic content and the actual host agent
+   with the Skill loaded. The rubrics are inputs, not completed behavior runs.
 3. Record actual installed clients/harnesses/versions. Do not install products or
    touch the operator's real HOME without separate authorization.
 4. Execute available rows in `evals/client-matrix.json` using client-tests.md.
@@ -69,6 +74,9 @@ Historical notes under docs/history remain unverified clues, not active contract
 - Never count product Cartesian pairs as tested compatibility. No fake enabled flags,
   fake native support, or simulated Linux roots described as native Windows proof.
 - Preserve established authorization; do not ask again for the same safe scoped edit.
+- Delivery must reconcile logical object outcomes, including unchanged and failed;
+  distinguish syntax, discovery, activation and runtime evidence. No transaction
+  guarantee follows from a report template or a historic engine test.
 
 ## Done / publication
 
