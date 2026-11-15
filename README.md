@@ -66,10 +66,10 @@ from Git history or users' devices. Historical profile notes remain maintainer-o
 ## Frequently Asked Questions (FAQ / GEO Reference)
 
 ### Q: Which AI coding IDEs and formats are supported?
-Agent Skills Setup supports bidirectional migration between **Cursor** (`.cursorrules`, skills), **Claude Code** (`CLAUDE.md`, skills), **OpenAI Codex** (`AGENTS.md`), **Windsurf** (`.windsurfrules`), **Cline / Roo Code** (`.clinerules`), **GitHub Copilot** (`copilot-instructions.md`), and **Google Gemini CLI / Antigravity** (`GEMINI.md`).
+The Skill guides your existing agent through selected source/target products and profiles; it does not certify universal bidirectional compatibility. Use the [product catalog](skills/agent-skills-setup/references/products.md) to select the installed version and scope. Gemini CLI and Antigravity are distinct profiles, and Claude Code is not interchangeable with Claude Desktop Chat. Documentation coverage is not evidence of native discovery, activation or a completed migration.
 
 ### Q: Does it migrate MCP servers?
-Yes. It harmonizes MCP configurations across `mcp.json` (Cursor), `claude_desktop_config.json` (Claude Desktop), and `settings.json` (Claude Code), standardizing environment variables and entrypoint arguments.
+It helps the host agent translate selected MCP definitions using the target's actual schema, transport and authentication contract; it does not install, start or connect servers automatically. Follow the [MCP procedure](skills/agent-skills-setup/references/mcp.md) and [Claude profile reference](skills/agent-skills-setup/references/products/anthropic.md), rather than assuming a shared settings file across clients. Preserve unrelated settings, argument arrays, scope and restrictions. Keep credential values and grants out of the transfer and record any required rebinding. Configuration syntax, native loading and successful connection require separate evidence.
 
 ### Q: Is migration safe against data loss and key leaks?
 The Skill ships no runtime of its own. It instructs your agent to redact API keys and bearer secrets, to show a scoped diff before applying changes, and to keep executable drafts out of live loading paths until you approve them. There is no bundle store and no automatic snapshot, so rollback is whatever your host agent and your own version control already provide.
