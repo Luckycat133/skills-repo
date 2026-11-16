@@ -1,19 +1,13 @@
 # Cline, Kilo and Roo
 
-Documentation review: 2026-11-07. **Client/runtime checks: not run.**
-Read only the relevant profile below. Paths are discovery candidates, not permission
-to scan or overwrite them. Apply the [catalog contract](../products.md) and record
-the installed version, OS, active harness and path overrides before changing files.
+Review: 2026-11-07 · Client checks: not run · Contract: [products.md](../products.md).
 
 ## cline
 
 **Cline IDE, CLI and SDK** · Evidence: `documented-subset` · Runtime: `not-run`.
 
-Current shared configuration distinguishes `~/.cline/skills`, `rules`, `workflows`, `hooks`, `agents`, `plugins` and `cron` from private state in `~/.cline/data`. Project equivalents under `.cline/` and legacy `.clinerules`/Documents-based roots have different roles; inspect the selected version and overrides.
-
-The documented user MCP file is `~/.cline/data/settings/cline_mcp_settings.json`. Extract its MCP map only; never copy `.cline/data` or all settings because useful config sits next to private state. Track workflow invocation, rule activation, agent tools and plugin components separately.
-
-Check which aliases are actually enabled before merging duplicates. Use the IDE/CLI customization view to verify discovery. Do not infer installed Cline solely from a shared `.agents/skills` directory. Hooks, cron and plugins are executable/configuration state and must not activate during transfer.
+- **Candidate paths & schemas**: Rules `.clinerules` (file or `.clinerules/*.md`), `.cline/rules/*.md`, `~/.cline/rules/*.md`; Skills `.cline/skills/<name>/SKILL.md`, `~/.cline/skills/<name>/SKILL.md`; Workflows `.cline/workflows/*.md`, `~/.cline/workflows/*.md`; Hooks `.cline/hooks/`, `~/.cline/hooks/`; Agents/plugins/cron under `~/.cline/`; User MCP `~/.cline/data/settings/cline_mcp_settings.json` (`mcpServers` root key). Built-in profile: `cline`.
+- **Cautions & check**: Extract **only** `mcpServers` from `cline_mcp_settings.json` — strictly exclude `~/.cline/data/tasks`, `state`, histories, `alwaysAllow` grants, and active hooks/cron. Verify discovery in Cline's customization view.
 
 Official sources: [1](https://docs.cline.bot/getting-started/config) · [2](https://docs.cline.bot/features/skills) · [3](https://docs.cline.bot/features/cline-rules)
 
@@ -21,11 +15,8 @@ Official sources: [1](https://docs.cline.bot/getting-started/config) · [2](http
 
 **Kilo IDE and CLI** · Evidence: `documented-subset` · Runtime: `not-run`.
 
-Current Kilo uses `.kilo/skills` and `~/.kilo/skills`, with documented `.agents`/`.claude` compatibility roots and configurable Skill paths. Do not assume the old `.kilocode`/Roo fork structure is still canonical.
-
-Inventory native rules/instructions, commands/workflows, agents, hooks, Skills, MCP and plugins. Current custom-agent docs use `.kilo/agents/*.md`; old custom modes are a versioned input, not an identical schema. Workflows can collide with Skill commands. Dynamic shell content inside a Skill is executable.
-
-Kilo MCP uses its native configuration shape, including command arrays where documented, not arbitrary `mcpServers` text pasted into settings. Inspect `kilo.jsonc` and active project settings before edits. Preserve approved content but reauthorize tools and privileges. Check native agent/Skill discovery and the exact slash-command selected on collision.
+- **Candidate paths & schemas**: Skills `.kilo/skills/<name>/SKILL.md`, `~/.kilo/skills/<name>/SKILL.md` (plus `.agents`/`.claude` compatibility and legacy `.kilocode/skills`); Rules `.kilo/rules/*.md`, `~/.kilo/rules/*.md`, `AGENTS.md`; Agents `.kilo/agents/*.md`, `~/.kilo/agents/*.md` (legacy custom modes `.kilocodemodes` are a different schema); Workflows `.kilo/workflows/*.md`, `~/.kilo/workflows/*.md`; Config/MCP `kilo.jsonc` and `.kilo/mcp.json` / `~/.kilo/mcp.json` (`mcpServers` or native command arrays — inspect active file). Built-in profile: `kilocode` (`kilo`).
+- **Cautions & check**: Check workflow vs Skill slash-command collisions, keep dynamic shell blocks inactive, and strip tool auto-approvals.
 
 Official sources: [1](https://kilo.ai/docs/customize/skills) · [2](https://kilo.ai/docs/customize/custom-modes) · [3](https://kilo.ai/docs/customize/workflows) · [4](https://kilo.ai/articles/claude-code-to-kilo-code-migration-guide)
 
@@ -33,10 +24,6 @@ Official sources: [1](https://kilo.ai/docs/customize/skills) · [2](https://kilo
 
 **Roo Code archived upstream; installed forks remain version-specific** · Evidence: `legacy-source` · Runtime: `not-run`.
 
-The upstream repository is archived (2026-05-15). Treat existing installations as version-pinned sources; do not recommend fresh writes into an unmaintained target without the user's explicit choice of fork/build.
-
-Inventory `.roo/skills`, personal Skills, mode-specific Skills/rules, custom modes, commands, workflows and MCP using that build's UI/schema. Preserve mode scope: global/project and generic/mode-specific precedence can select different Skill bodies. Do not reinterpret custom mode permissions as portable grants.
-
-Export selected authored files and rebuild supported target objects. A maintained fork may differ from the final upstream release; inspect its documentation instead of inheriting upstream support automatically.
+Upstream `RooCodeInc/Roo-Code` archived 2026-05-15; treat existing `.roo/skills`, `~/.roo/skills`, `.roo/rules*`, `.roomodes`, `.roo/mcp.json`, and VS Code globalStorage `mcp_settings.json` as version-pinned **sources** unless the user names a maintained fork. Preserve mode-specific vs generic precedence and never map custom-mode tool groups as blanket target permissions.
 
 Official sources: [1](https://github.com/RooCodeInc/Roo-Code) · [2](https://roocodeinc.github.io/Roo-Code/features/skills/)

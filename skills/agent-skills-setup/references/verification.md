@@ -1,48 +1,38 @@
 # Verify content and behavior separately
 
-Use the host agent's existing tools. Do not install a verification service or run
-imported commands. Validate the smallest representative change before expanding.
+Validate syntax, permissions, and containment deterministically; never claim live IDE
+discovery or runtime server connectivity from static file checks alone.
 
 ## Before writing
 
-Resolve every final destination and scope; inspect current content and imports.
-Do not place a backup under an auto-loaded rules/skills directory. A project Git
-diff is useful, but do not stage, commit, reset or discard unrelated user changes.
-For untracked/global settings, make an exact private backup of only the files to
-be changed; never put credential-bearing backups into a portable transfer folder.
-
-Re-read the target immediately before editing. If it changed, recompute the diff
-instead of overwriting concurrent edits. Reject unknown symlink destinations or
-path traversal; resolve the actual environment rather than mixing OS paths.
+- Run `--dry-run` first when previewing; `--dry-run` performs zero target writes and
+  creates zero backup directories.
+- Reject `..` traversal and symlinks resolving outside `--workspace`, `--home`, or
+  `--input`.
+- Check Git tracking status before writing literal secrets: refuse silent writes into
+  Git-tracked files (or route Claude project secret MCP to `~/.claude.json`
+  `projects[workspace].mcpServers`), and warn when a new `0600` secret file is not yet
+  matched by `.gitignore`.
+- Back up any existing destination file before modification into a `0700` directory
+  with `0600` file permissions (`~/.agent-skills-setup-backups/<timestamp>-<pid>/`),
+  never inside an auto-loaded rules/skills tree or portable transfer folder.
 
 ## After writing
 
-| Check | Evidence to keep |
+| Check | Evidence |
 | --- | --- |
-| Syntax | JSON/TOML/YAML/frontmatter parser result, with secret values omitted |
-| Content | Same intended instructions, Skill assets and approved server definitions |
-| Scope | Representative matching and non-matching files; user/project boundaries |
-| Imports | Referenced files exist and remain within approved roots |
-| Existing state | Unrelated keys, other Skills, disabled state and restrictions preserved |
-| Conflict handling | Conflicting objects left untouched; independent objects applied |
-| Idempotence | A repeat review finds no duplicate sections or needless overwrite |
-| Host discovery | Actual target UI/list evidence, when safely available |
-| Runtime | Only an explicitly approved execution/connection test can prove this |
-
-Do not equate a valid config with host discovery, or discovery with a successful
-connection. Do not report simulated fixtures as real IDE tests. Status/list commands
-can start servers; inspect their side effects first.
-
-## Report
-
-Use the report template when requested or when deferred work needs to travel.
-Otherwise a short summary is enough: changed paths, conversions, conflicts/losses,
-manual/auth steps, exact checks, and checks not run. Never say "all migrated" when
-requested prompts/agents/memory were not even inventoried.
+| Syntax | `json.loads` / `load_jsonc` / `tomllib.loads` / frontmatter parse (zero secret values printed) |
+| Permissions | Secret-bearing files, backups, and `export-device` outputs have `0600` mode (`0700` dirs) |
+| Zero leak | `stdout`, `stderr`, and `MIGRATION.md` contain key names + `sha256[:8]` only, never secret values |
+| Scope & neighbors | Representative matching/non-matching paths; sibling keys (`theme`, `approval_policy`) intact |
+| Conflict isolation | Divergent same-name objects recorded as `conflict`; independent siblings applied |
+| Idempotence | Immediate re-run reports `noop` with zero duplicate sections or needless backups |
+| Host discovery | Native client list/UI evidence when available; otherwise `not-run` |
+| Runtime | Live MCP connection or hook execution only when separately authorized; otherwise `not-run` |
 
 ## Recovery
 
-If an edit fails validation, restore only the files changed in this task from the
-reviewed backup, and only if they have not subsequently changed. Do not restore an
-entire config tree or run `git reset --hard`. Explain any concurrent-edit conflict.
-The Skill teaches careful recovery; it does not claim a universal atomic rollback.
+If validation fails, restore only the files modified in this run from the private
+`0600` backup folder (`backups` array in `migrate_context.py` JSON output), provided no
+concurrent user edits occurred afterward. Never run `git reset --hard` or delete
+unrelated user files.

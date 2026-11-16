@@ -1,26 +1,21 @@
 # Migration report
 
-Request: <user's actual intent>
-Source / destination: <product, profile, version evidence, environment>
-Scope: <project/user/selected paths>
+- Request: `<user's intent>`
+- Source -> destination: `<product/profile/version evidence and OS/WSL/remote host>`
+- Scope & secret mode: `<project/user/all; 0600 out-of-band or --redact-secrets>`
 
-| Source object | Destination | Outcome | Semantic changes / unresolved fields |
+| Source object | Destination | Outcome | Notes / secret key names (`sha256[:8]` only) |
 | --- | --- | --- | --- |
-| <logical path, no secrets> | <selected path> | <copied/converted/conflict/draft/deferred/excluded> | <reason> |
+| `<$WORKSPACE/... or $HOME/...>` | `<target path>` | `<migrated/noop/conflict/parked_draft/deferred>` | `<scope/format note; never raw secret values>` |
 
 ## Verification
 
-Syntax: <what was parsed>
-Content / scope / imports: <checks and results>
-Unrelated destination content: <preserved checks>
-Host discovery: <observed, or not tested and why>
-Runtime / connection: <explicitly authorized result, or not tested>
+- Syntax & checksums: `<JSON/JSONC/TOML/frontmatter parse + 0600 file permissions>`
+- Scope & neighbor preservation: `<matching/non-matching globs; unrelated keys intact>`
+- Host discovery: `<observed in native client, or not-run and why>`
+- Runtime / live connection: `<explicitly authorized result, or not-run>`
 
-## Remaining work
+## Remaining work & recovery
 
-<Variable names to rebind, re-authentication, missing dependencies, unsupported
-semantics and user decisions. No values, tokens or raw session logs.>
-
-## Recovery
-
-<Exact private backup locations for changed files, or no replacements made.>
+- Pending actions: `<env rebinding, OAuth re-auth, parked hooks in .migration-review/, conflicts>`
+- Private `0700`/`0600` backups: `<exact backup directory for modified files, or none overwritten>`
