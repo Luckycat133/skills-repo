@@ -201,7 +201,8 @@ def atomic_write_bytes(dst: Path, data: bytes, *, mode: int = 0o644, private_par
         return
     ensure_dir(dst.parent, private=private_parent, dry_run=False)
     tmp = dst.parent / f".{dst.name}.tmp-{os.getpid()}-{os.urandom(4).hex()}"
-    fd = os.open(str(tmp), os.O_CREAT | os.O_EXCL | os.O_WRONLY, mode)
+    flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_BINARY", 0)
+    fd = os.open(str(tmp), flags, mode)
     try:
         os.write(fd, data)
         os.fsync(fd)

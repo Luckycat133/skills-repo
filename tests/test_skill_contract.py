@@ -332,10 +332,25 @@ class RepoConsistency(unittest.TestCase):
                     self.assertTrue(target.exists(), (path, lineno, link))
 
     def test_catalog_baseline_commit_resolves_and_cli_help_deduplicated(self) -> None:
+        helper_src = (SKILL / "scripts/migrate_context.py").read_text(encoding="utf-8")
+        self.assertIn('getattr(os, "O_BINARY", 0)', helper_src)
+
+        is_shallow = True
         if (ROOT / ".git").exists():
-            for ledger_file in sorted((ROOT / "docs/research").glob("catalog-*.json")):
-                ledger = json.loads(ledger_file.read_text(encoding="utf-8"))
-                sha = ledger["baseline_commit"]
+            sh_proc = subprocess.run(
+                ["git", "rev-parse", "--is-shallow-repository"],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            is_shallow = sh_proc.returncode != 0 or sh_proc.stdout.strip() != "false"
+
+        for ledger_file in sorted((ROOT / "docs/research").glob("catalog-*.json")):
+            ledger = json.loads(ledger_file.read_text(encoding="utf-8"))
+            sha = ledger["baseline_commit"]
+            self.assertRegex(sha, r"^[0-9a-f]{40}$")
+            if not is_shallow:
                 res = subprocess.run(
                     ["git", "cat-file", "-e", f"{sha}^{{commit}}"],
                     cwd=ROOT,
