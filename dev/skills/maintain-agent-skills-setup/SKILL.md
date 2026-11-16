@@ -1,79 +1,80 @@
 ---
 name: maintain-agent-skills-setup
 description: >-
-  Maintain Luckycat133/skills-repo as an agent-first context-migration Skill.
-  Use for checking product documentation, improving format conversions, running
-  the repository's real-agent/client acceptance queue, updating evidence, or
-  packaging the guidance. Not for migrating an end user's context directly.
+  Maintain Luckycat133/skills-repo as an agent-first context-migration Skill
+  with a zero-context-leak stdlib helper script. Use for checking vendor docs,
+  refining format conversions and scripts/migrate_context.py, running the
+  real-agent/client acceptance queue, updating evidence, or packaging the Skill.
+  Not for migrating an end user's context directly.
 license: MIT
 metadata:
-  version: "1.1"
+  version: "1.2"
 ---
 
-# Maintain guidance, not a migration platform
+# Maintain an Agent-First Skill + Safe Out-of-Band Script
 
-The owner's scope reset is binding. Use host-agent tools to research, edit and
-verify context migrations. Do not reintroduce an orchestration CLI, ACB engine,
-auto-installer, signing service, background sync, telemetry or commercial platform.
-The user package contains only Markdown guidance/templates and LICENSE.
+Keep the owner's architecture boundary intact. Do not reintroduce the retired `.acb`
+bundle format, Ed25519 signing/key service, SQLite state store, background sync,
+auto-installer, telemetry, or generated product-pair matrix.
+
+The distributable package (`skills/agent-skills-setup/`) ships only `SKILL.md`,
+`references/`, `assets/`, `LICENSE`, and `scripts/migrate_context.py` (a single
+self-contained Python 3.11+ stdlib helper with PEP 723 metadata).
 
 ## Read first
 
-Read root AGENTS.md, the canonical Skill and only the affected product/conversion
+Read root `AGENTS.md`, `skills/agent-skills-setup/SKILL.md`, and only the affected
 references. Read [acceptance](references/acceptance.md),
-[remaining work](references/remaining-work.md) and the
-[real-client test procedure](references/client-tests.md).
-For current research decisions read [research method](references/research-method.md).
-Check the branch/diff before changing it; do not assume a historical SHA is current.
+[remaining work](references/remaining-work.md),
+[real-client test procedure](references/client-tests.md), and
+[research method](references/research-method.md). Check the current branch and HEAD
+commit before editing; never hardcode stale commit SHAs.
 
-The 2026-11-07 catalog covers all 87 historical identifiers plus new clients and
-profiles. It is documentation evidence, **not runtime certification**. The
-maintainer-only `docs/research/catalog-2026-11-07.json` records coverage and sources;
-`evals/client-matrix.json` is the pending acceptance queue, not an executable registry.
-Historical notes under docs/history remain unverified clues, not active contracts.
+The 2026-11-07 catalog routes all 87 historical identifiers plus new clients and
+profiles across 90 records in 30 family references. It is documentation coverage,
+**not runtime certification**. `docs/research/catalog-2026-11-07.json` is maintainer
+bookkeeping; `evals/client-matrix.json` is the native-client acceptance queue.
+Historical notes under `docs/history/` are clues only, never active contracts.
+
+## Hard security invariants for `scripts/migrate_context.py`
+
+- **Zero LLM secret exposure**: Move sensitive config values (API keys, MCP
+  `env`/`headers`, `.env*` files) strictly out-of-band on disk by default (and honor
+  `--redact-secrets` when requested). Never print secret values to `stdout`, `stderr`,
+  or `MIGRATION.md`; emit only variable/key names, `has_secrets`, and 8-hex-char
+  SHA-256 prefixes (`sha256[:8]`).
+- **Strict permissions & private backups**: Enforce `0700` on secret/backup/transfer
+  directories and atomic `0600` writes on secret-bearing, backup, and transfer files.
+  Keep backups outside auto-loaded context trees and `/tmp` by default.
+- **Git-tracked protection**: Refuse silent writes of literal secrets into Git-tracked
+  workspace files (or route to untracked local config such as `~/.claude.json`
+  `projects[workspace].mcpServers` with explicit reporting).
+- **Non-portable exclusions**: Always exclude chat histories, transcripts, SQLite/LevelDB
+  databases, vector indexes, caches, session cookies, and approval/trust grants.
 
 ## When asked to run the tests
 
-1. Run `bash validate-all.sh` for structural/examples checks. Do not call this a
-   client migration test. Do not weaken a test just to obtain a green result.
-2. Read `evals/cases.json` and `evals/catalog-cases.json`. Use isolated fixture roots,
-   safe synthetic content and the actual host agent with the Skill loaded.
-3. Record actual installed clients/harnesses/versions. Do not install products or
-   touch the operator's real HOME without separate authorization.
-4. Execute available rows in `evals/client-matrix.json` using client-tests.md.
-   Every requested category must be present/absent/unknown/not-applicable with
-   evidence. Unavailable clients are `blocked-environment`, never `pass`.
-5. For each run save a redacted trace, before/after diff, native discovery evidence,
-   activation negative case, unchanged neighbors and repeat-run outcome. Use
-   [result template](references/result-template.md). Never publish private data.
-6. Fix the smallest guidance/fixture issue. Re-run the failed case and its nearby
-   negative case. Do not build a converter engine instead of explaining semantics.
-7. Summarize passed, failed, blocked and not-run separately. Update the queue and
-   remaining-work evidence only for checks actually performed.
+1. Run `bash validate-all.sh` (unit, contract, catalog, torture tests, and `skills-ref`
+   when installed). Do not call structural or script tests a real native-IDE pass.
+2. Read `evals/cases.json` and `evals/catalog-cases.json`. Use isolated fixture roots
+   and synthetic canary values only; never touch the operator's real `HOME` without
+   separate authorization.
+3. Execute available rows in `evals/client-matrix.json` per
+   [client-tests.md](references/client-tests.md). Unavailable clients stay
+   `blocked-environment`, never `pass`.
+4. Save redacted traces, before/after diffs, native discovery proof, negative scope
+   checks, unchanged neighbors, and repeat-run outcomes via
+   [result template](references/result-template.md).
+5. Fix the smallest script/guidance gap and re-run both positive and negative cases.
+   Summarize `pass`, `fail`, `blocked-*`, and `not-run` separately.
 
 ## Editing and review rules
 
-- Select product/profile/version/OS/harness before choosing a path. Use primary
-  vendor docs and installed schemas; a third-party installer is discovery only.
-- Preserve all context categories, not just those a previous script understood.
-  Unknown native formats get a precise evidence gap, not a guessed file or blanket
-  unsupported label. Cloud/UI objects need supported reconstruction instructions.
-- Preserve instruction scope/activation, invocation IDs, imports, environment-name
-  mapping, package identity and target neighbors. Never transfer credentials,
-  grants, raw history or generated state by default. Executable content stays parked.
-- Product references are progressively loaded. Keep the main Skill below 150 lines;
-  do not make agents read the entire catalog. New family docs require package
-  allowlist, routing, source/evidence and coverage tests in the same change.
-- Small deterministic helpers require a measured repeated need and owner agreement
-  before they become runtime dependencies. Maintainer checks are not user runtime.
-- Never count product Cartesian pairs as tested compatibility. No fake enabled flags,
-  fake native support, or simulated Linux roots described as native Windows proof.
-- Preserve established authorization; do not ask again for the same safe scoped edit.
-
-## Done / publication
-
-A real migration case improves, source/format evidence is explicit, intended diffs
-are small, structural checks pass and real-client results are reported honestly.
-Unverified rows stay pending. Publication, tags, marketplace uploads, account/payment
-changes and schedules require their own authorization; repository updates are not
-proof of a released or installed Skill.
+- Keep `skills/agent-skills-setup/SKILL.md` under 140 lines and total packaged size
+  under `MAX_PACKAGE_BYTES` (`260,000` bytes).
+- Preserve instruction scope/activation, manual invocation (`disable-model-invocation`),
+  env-name mapping, target neighbors, and per-object conflict isolation.
+- Park hooks and executable workflows outside live discovery paths unless explicitly
+  authorized (`--activate-hooks`).
+- Publication, tags, marketplace uploads, and account/payment changes require separate
+  owner authorization.

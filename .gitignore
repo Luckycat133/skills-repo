@@ -1,33 +1,10 @@
-# OS / editor
-.DS_Store
-*.swp
-*.swo
-
-# Local tooling / private state
-.workbuddy/
-.superpowers/
-.claude/
-.gemini/prompts.json
-.gemini/.prompts.json.lock
-.agent-context-migration/
-/datasets/
-
-# Secrets / environment (migration scripts write OpenClaw config/.env)
-.env
-.env.*
-!.env.example
-
-# Python
 __pycache__/
 *.py[cod]
+.pytest_cache/
 .venv/
-venv/
-
-# Node (safety net)
-node_modules/
-
-# Build output / logs
 dist/
 build/
-*.log
-clawhub-scan-*.zip
+*.zip
+.DS_Store
+.migration-review/
+.agent-skills-setup-backups/

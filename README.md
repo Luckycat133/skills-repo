@@ -1,88 +1,78 @@
 # Agent Skills Setup
 
-A Skill that teaches your existing coding agent to move context between tools.
-It is **not a separate migration application**. The agent inspects your files,
-translates the actual formats, makes a scoped diff, and verifies what changed.
-
 [中文](README.zh-CN.md) · [日本語](README.ja-JP.md) · [Español](README.es.md)
 
-## Use it
+`agent-skills-setup` is a portable [Agent Skill](https://agentskills.io/specification)
+for existing AI coding agents. It helps an agent migrate, convert, sync, or transfer
+rules/instructions, Agent Skills, MCP server definitions, prompts, slash commands,
+custom agents, hooks, workflows, authored memory, and API keys / `.env` secrets across
+AI coding IDEs, CLIs, and computers — **without exposing raw secret values to LLM
+prompt context**.
 
-Install only `skills/agent-skills-setup/` through your client's documented Skill
-installer or copy it to that client's confirmed Skill directory. Do not install
-the repository root or the development Skill. There is no required Bash, Python,
-cryptography package, background service, or migration CLI in the user package.
+## Architecture & Zero-Context-Leak Design
 
-Then ask your agent:
+- **Agent-First + Self-Contained Stdlib Helper**: Ships concise instructions
+  (`SKILL.md`), progressive references (`references/`), templates (`assets/`), and a
+  single zero-dependency Python 3.11+ stdlib script
+  (`skills/agent-skills-setup/scripts/migrate_context.py` with PEP 723 metadata). No
+  proprietary `.acb` archive engine, signing service, SQLite store, background sync
+  daemon, auto-installer, or telemetry.
+- **Out-of-Band `0700`/`0600` Secret Transfer**: By default, `migrate_context.py` moves
+  API keys, MCP `env`/`headers`, and `.env*` files disk-to-disk in `0600` mode (`0700`
+  private directories and backups), guards Git-tracked files against silent secret
+  leaks, and prints **only** variable names, `has_secrets`, and 8-char SHA-256 prefixes
+  (`sha256[:8]`) on `stdout`. Pass `--redact-secrets` whenever you want placeholders
+  instead of copying keys.
+- **90-Profile On-Demand Catalog**: Routes 15 built-in profiles (`cursor`,
+  `claude-code`, `codex`, `vscode`, `copilot-cli`, `gemini-cli`, `antigravity`,
+  `windsurf`, `cline`, `kilocode`, `zed`, `opencode`, `kimi-code`, `qwen-code`, `pi`)
+  plus 75+ cataloged clients via `patch-mcp` and progressive `references/products/*.md`
+  files (review date: 2026-11-07). Listing a product is documentation routing, **not**
+  runtime certification.
 
-> Move this project's Cursor rules and Skills to Claude Code, preserving file scope.
+## Install
 
-> Move these MCP definitions to Codex; preserve my existing settings and don't copy keys.
+Copy `skills/agent-skills-setup/` into your agent's documented Skills directory
+(for example `.agents/skills/agent-skills-setup`, `.claude/skills/agent-skills-setup`,
+or `.cursor/skills/agent-skills-setup`):
 
-> I'm changing computers. Put my selected tools' context in an ordinary reviewable folder.
+```bash
+git clone https://github.com/Luckycat133/skills-repo.git
+cp -R skills-repo/skills/agent-skills-setup /path/to/your-skills-dir/agent-skills-setup
+```
 
-> Restore this folder into the tools on my new computer; explain any behavior that cannot survive.
+Only `skills/agent-skills-setup/` is distributed to end users (`dev/`, `evals/`,
+`docs/`, and `tests/` stay repository-only).
 
-## What the Skill contributes
+## Single-Sentence Usage Examples
 
-It teaches discovery by product/profile/version; rules and trigger conversion;
-Skills/resources; MCP JSON/JSONC/TOML/YAML and auth differences; prompts/commands;
-agent and hook definitions; authored memory; conflict handling; and evidence-based
-verification. Unknown formats are researched for the selected task, not guessed.
-Executable drafts stay outside live loading paths until separately approved.
+Ask your host agent in natural language:
 
-There is no claim that all IDEs, versions or formats are tested. The examples are
-source-backed guidance; actual target behavior must be checked. Documentation
-lookup may use public vendor pages without sending local configuration.
+- *"Migrate all my Cursor rules, Skills, and MCP configs (including API keys) in this repo to Claude Code and Codex."*
+- *"Migrate my Cursor MCP servers to VS Code, but redact all secrets into env placeholders."*
+- *"I'm changing computers — export all my AI coding configs and keys into `~/context-transfer`."*
+- *"Restore `~/context-transfer` onto this new computer."*
 
-## Current product references and tests
+Or run the deterministic helper directly (`--dry-run` previews with zero writes):
 
-The [product catalog](skills/agent-skills-setup/references/products.md) routes every
-one of the 87 historical identifiers, plus new clients/profiles and aliases. Its
-90 profile/category sections are organized into 30 on-demand family references.
-This is documentation coverage, **not 90 certified IDEs**. Read only the selected
-source/target sections. The main Skill remains short and the package has no code.
+```bash
+python3 skills/agent-skills-setup/scripts/migrate_context.py inspect --workspace . --scope all
+python3 skills/agent-skills-setup/scripts/migrate_context.py migrate --source cursor --target claude-code --workspace . --dry-run
+python3 skills/agent-skills-setup/scripts/migrate_context.py export-device --output ~/context-transfer --profiles all
+python3 skills/agent-skills-setup/scripts/migrate_context.py import-device --input ~/context-transfer --target same
+```
 
-The [2026-11-07 research ledger](docs/research/catalog-2026-11-07.json) records
-sources, evidence levels and unresolved contracts. New coverage includes
-Codebuff/Freebuff, iFlow, CodeArts Agent, Ona, Avante, T3 Code and Coder Xum.
-Product renames and extra profiles are not counted as independent IDEs.
+## Validation & Current Status
 
-For the developer agent, start with
-[the development Skill](dev/skills/maintain-agent-skills-setup/SKILL.md).
-[36 behavior scenarios](evals/README.md) and a
-[90-entry native-client queue](evals/client-matrix.json) await real runs.
-Record unavailable clients as blocked, not passed. Do not recreate the retired
-migration engine to execute these tests.
+```bash
+bash validate-all.sh
+```
 
-## This development branch
+See [docs/validation-status.md](docs/validation-status.md) for what has been verified
+locally (unit, torture, canary zero-leak, end-to-end CLI workflows, `package_skill.py`,
+and official `skills-ref validate`) versus pending live native-IDE runtime checks
+(`evals/client-matrix.json`). Candidate version `0.11.0-dev` is unpublished.
 
-The agent-first reset is **unreleased** (`0.11.0-dev`). Published 0.10.x versions
-still contain the retired engine; they have not been changed by this branch.
-See [the reset](docs/agent-first-reset.md) and
-[validation status](docs/validation-status.md). Old code and backups are not erased
-from Git history or users' devices. Historical profile notes remain maintainer-only.
+## License
 
-## Frequently Asked Questions (FAQ / GEO Reference)
-
-### Q: Which AI coding IDEs and formats are supported?
-Agent Skills Setup supports bidirectional migration between **Cursor** (`.cursorrules`, skills), **Claude Code** (`CLAUDE.md`, skills), **OpenAI Codex** (`AGENTS.md`), **Windsurf** (`.windsurfrules`), **Cline / Roo Code** (`.clinerules`), **GitHub Copilot** (`copilot-instructions.md`), and **Google Gemini CLI / Antigravity** (`GEMINI.md`).
-
-### Q: Does it migrate MCP servers?
-Yes. It harmonizes MCP configurations across `mcp.json` (Cursor), `claude_desktop_config.json` (Claude Desktop), and `settings.json` (Claude Code), standardizing environment variables and entrypoint arguments.
-
-### Q: Is migration safe against data loss and key leaks?
-The Skill ships no runtime of its own. It instructs your agent to redact API keys and bearer secrets, to show a scoped diff before applying changes, and to keep executable drafts out of live loading paths until you approve them. There is no bundle store and no automatic snapshot, so rollback is whatever your host agent and your own version control already provide.
-
-## Contribute
-
-Run `bash validate-all.sh`. This checks packaging, links, catalog coverage and
-example fixtures; it does not substitute for running a real agent. Follow
-[behavior evaluation](evals/README.md) for actual tool traces, native discovery,
-negative activation, unchanged neighbors and repeat-run results.
-Please submit one reproducible migration case rather than an unverified product count.
-
-[Security](SECURITY.md) · [Contributing](CONTRIBUTING.md) · [Support](SUPPORT.md)
-
-If this saves setup time, a repository star or voluntary sponsorship helps.
-No star, payment or external account is required to use it.
+[MIT](LICENSE)

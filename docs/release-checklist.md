@@ -1,20 +1,20 @@
-# Maintainer release checklist
+# Release and publication gate
 
-Run `bash validate-all.sh`; review the canonical Skill and examples. Use
-`python scripts/package_skill.py --output <new-file.zip>` to create a local archive.
-The package is only `agent-skills-setup/SKILL.md`, references and templates; never
-include development Skills, evals, historical notes, repository tooling or old code.
+Target candidate: **`0.11.0-dev` (unpublished)**. Do not tag, create a GitHub release,
+upload a marketplace archive, or announce compatibility until the owner separately
+authorizes publication and the items below are reviewed.
 
-Structural checks and example parsing do not replace real-agent evaluation. Follow
-`dev/skills/maintain-agent-skills-setup/references/acceptance.md` before release.
-Record exact checks and outstanding limitations in `docs/validation-status.md`.
+## Gate
 
-Use one approved release version and update metadata/changelog together. Do not
-publish the `-dev` branch automatically. Recheck marketplace-specific licensing
-and metadata against official rules; do not silently relicense contributions.
-The canonical repository license remains MIT. Prior distribution records are in
-Git history; no claim that a new ClawHub package has been published is made here.
-
-After separately authorized publication, download the package and inspect its
-file list, version, frontmatter and resource links. Verify real installation in
-the selected host before describing the release as usable there.
+- [x] `bash validate-all.sh` passes locally, including unit, torture, canary zero-leak,
+  catalog routing, deterministic zip packaging, and official `skills-ref validate`.
+- [x] `scripts/package_skill.py --output <outside-repo>/agent-skills-setup.zip` builds
+  reproducibly from the 42-file allowlist (`SKILL.md`, `references/`, `assets/`,
+  `LICENSE`, and `0755` `scripts/migrate_context.py`) with zero `dev/`, `evals/`,
+  `docs/`, `tests/`, `__pycache__/`, or `.acb` content.
+- [ ] Real host-agent / native GUI IDE verification runs from `evals/client-matrix.json`
+  are executed on real machines and recorded honestly in [validation-status.md](validation-status.md).
+- [ ] `README.md`, `README.zh-CN.md`, `SKILL.md` metadata version, and changelog match
+  the verified boundary.
+- [ ] Explicit owner approval exists for the version number, Git tag, GitHub Release,
+  and any marketplace upload.
