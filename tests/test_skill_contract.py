@@ -4,9 +4,12 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import re
 import shutil
+import subprocess
+import sys
 import tempfile
 import tomllib
 import unittest
@@ -207,6 +210,135 @@ class Examples(unittest.TestCase):
         self.assertEqual(expected, {"mcpServers": source["mcpServers"]})
         self.assertNotIn("trust", expected)
         self.assertNotIn("theme", expected)
+
+
+class RepoConsistency(unittest.TestCase):
+    ALLOWED_FRONTMATTER_KEYS = {"name", "description", "license", "compatibility", "metadata", "allowed-tools"}
+    SKILL_NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+
+    @staticmethod
+    def _parse_simple_frontmatter(text: str) -> dict[str, str]:
+        assert text.startswith("---\n")
+        block = text.split("---", 2)[1]
+        data: dict[str, str] = {}
+        current_key: str | None = None
+        for raw_line in block.splitlines():
+            if not raw_line.strip():
+                continue
+            if not raw_line.startswith((" ", "\t")) and ":" in raw_line:
+                key, _, val = raw_line.partition(":")
+                current_key = key.strip()
+                data[current_key] = val.strip().strip('"').strip("'")
+            elif current_key is not None:
+                data[current_key] = (data[current_key] + " " + raw_line.strip()).strip()
+        return data
+
+    def test_offline_agentskills_frontmatter_and_non_utf8_locale_safety(self) -> None:
+        for directory in (SKILL, DEV):
+            text = (directory / "SKILL.md").read_text(encoding="utf-8")
+            fm = self._parse_simple_frontmatter(text)
+            self.assertTrue(set(fm).issubset(self.ALLOWED_FRONTMATTER_KEYS), fm.keys())
+            self.assertEqual(fm.get("name"), directory.name)
+            self.assertLessEqual(len(fm["name"]), 64)
+            self.assertRegex(fm["name"], self.SKILL_NAME_RE)
+            self.assertGreaterEqual(len(fm.get("description", "")), 1)
+            self.assertLessEqual(len(fm["description"]), 1024)
+
+        pub_desc = self._parse_simple_frontmatter((SKILL / "SKILL.md").read_text(encoding="utf-8"))["description"]
+        self.assertIn("迁移上下文", pub_desc)
+
+        # Simulate Windows / C-locale default read_text() without explicit encoding when PYTHONUTF8=1 is active.
+        env = {**os.environ, "LC_ALL": "C", "LANG": "C", "PYTHONUTF8": "1"}
+        proc = subprocess.run(
+            [sys.executable, "-c", "from pathlib import Path; t = Path('skills/agent-skills-setup/SKILL.md').read_text(); assert '迁移上下文' in t"],
+            cwd=ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
+    def test_ci_workflow_enforces_utf8_and_unmasked_single_command_steps(self) -> None:
+        wf = (ROOT / ".github/workflows/validate.yml").read_text(encoding="utf-8")
+        self.assertIn('PYTHONUTF8: "1"', wf)
+        self.assertNotIn("run: |", wf)
+        self.assertIn("run: skills-ref validate skills/agent-skills-setup", wf)
+        self.assertIn("run: skills-ref validate dev/skills/maintain-agent-skills-setup", wf)
+
+        val_sh = (ROOT / "validate-all.sh").read_text(encoding="utf-8")
+        self.assertIn("export PYTHONUTF8=1", val_sh)
+
+    def test_issue_templates_and_repo_docs_have_no_retired_ghosts_or_broken_links(self) -> None:
+        ghost_tokens = (
+            "scan-skill-secrets.py",
+            "bundle-verify",
+            "Registry v2",
+            "sync-root-mirror.sh",
+            "0.10.2",
+        )
+        checked_files = [
+            *sorted((ROOT / ".github/ISSUE_TEMPLATE").glob("*.yml")),
+            *sorted(ROOT.glob("README*.md")),
+            ROOT / "AGENTS.md",
+            ROOT / "CLAUDE.md",
+            ROOT / "SECURITY.md",
+            ROOT / "llms.txt",
+            ROOT / "llms-full.txt",
+            ROOT / ".gitattributes",
+        ]
+        for path in checked_files:
+            text = path.read_text(encoding="utf-8")
+            for ghost in ghost_tokens:
+                self.assertNotIn(ghost, text, f"stale reference {ghost!r} in {path.relative_to(ROOT)}")
+
+        doc_files = [
+            *sorted(ROOT.glob("README*.md")),
+            ROOT / "AGENTS.md",
+            ROOT / "CLAUDE.md",
+            ROOT / "SECURITY.md",
+            *sorted((ROOT / "docs").glob("*.md")),
+        ]
+        for path in doc_files:
+            in_fence = False
+            for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                if line.startswith("```"):
+                    in_fence = not in_fence
+                    continue
+                if in_fence:
+                    continue
+                for raw_link in LINK_RE.findall(line):
+                    link = raw_link.split()[0]
+                    if "://" in link or link.startswith(("mailto:", "#")):
+                        continue
+                    rel_part, _, _ = link.partition("#")
+                    target = (path.parent / unquote(rel_part)).resolve()
+                    self.assertTrue(target.is_relative_to(ROOT.resolve()), (path, lineno, link))
+                    self.assertTrue(target.exists(), (path, lineno, link))
+
+    def test_catalog_baseline_commit_resolves_and_cli_help_deduplicated(self) -> None:
+        if (ROOT / ".git").exists():
+            for ledger_file in sorted((ROOT / "docs/research").glob("catalog-*.json")):
+                ledger = json.loads(ledger_file.read_text(encoding="utf-8"))
+                sha = ledger["baseline_commit"]
+                res = subprocess.run(
+                    ["git", "cat-file", "-e", f"{sha}^{{commit}}"],
+                    cwd=ROOT,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(res.returncode, 0, f"unreachable baseline_commit {sha} in {ledger_file.name}")
+
+        help_proc = subprocess.run(
+            [sys.executable, "-B", str(SKILL / "scripts/migrate_context.py"), "--help"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(help_proc.returncode, 0, help_proc.stderr)
+        self.assertEqual(help_proc.stdout.count("Exit codes:"), 1)
 
 
 if __name__ == "__main__":

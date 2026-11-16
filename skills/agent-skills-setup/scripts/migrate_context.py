@@ -9,13 +9,6 @@ Moves rules/instructions, Agent Skills, MCP servers, commands, agents, parked ho
 authored memory, and .env secrets across AI coding tools or plain device-transfer
 folders without exposing raw secret values to stdout, stderr, LLM context, or
 MIGRATION.md.
-
-Exit codes:
-  0  Success (conflicts, if any, are isolated and listed in stdout JSON).
-  2  Invalid CLI usage or safety refusal (symlink escape, path traversal, existing
-     export directory, unsafe backup path, or Git-tracked secret target refusal).
-  3  Completed with unresolved conflicts or parked drafts when --strict-conflicts
-     is enabled.
 """
 from __future__ import annotations
 

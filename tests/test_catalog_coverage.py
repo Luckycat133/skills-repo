@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 import json
 from pathlib import Path
 import re
@@ -9,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SKILL = ROOT / "skills" / "agent-skills-setup"
 CATALOG_DOC = SKILL / "references" / "products.md"
 PRODUCTS_DIR = SKILL / "references" / "products"
-LEDGER_PATH = ROOT / "docs" / "research" / "catalog-2026-11-07.json"
+LEDGER_PATH = sorted((ROOT / "docs" / "research").glob("catalog-*.json"))[-1]
 CLIENT_MATRIX_PATH = ROOT / "evals" / "client-matrix.json"
 CATALOG_EVALS_PATH = ROOT / "evals" / "catalog-cases.json"
 
@@ -86,7 +87,7 @@ class CatalogCoverageTests(unittest.TestCase):
             rid = rec["id"]
             self.assertNotIn(rid, seen_ids)
             seen_ids.add(rid)
-            self.assertEqual(rec["reviewed_at"], "2026-11-07")
+            date.fromisoformat(rec["reviewed_at"])
             self.assertEqual(rec["runtime"], "not-run")
             self.assertIn(rec["evidence"], ALLOWED_EVIDENCE)
 

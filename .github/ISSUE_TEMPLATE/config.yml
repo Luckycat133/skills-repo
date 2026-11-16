@@ -2,7 +2,7 @@ blank_issues_enabled: true
 contact_links:
   - name: 🛡️ Security Vulnerability Reporting
     url: https://github.com/Luckycat133/skills-repo/security/policy
-    about: Privately report a security issue or vulnerability.
-  - name: 💖 Sponsor Development
+    about: Privately report a security issue or secret-exposure bug.
+  - name: 💖 Voluntary Sponsorship
     url: https://github.com/sponsors/Luckycat133
-    about: Sponsor the project or fund custom IDE adapter development.
+    about: Optional community support (never required to use or request updates).

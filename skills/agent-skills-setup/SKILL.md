@@ -6,7 +6,8 @@ description: >-
   workflows, user-authored memory, and API keys/.env secrets — across IDEs, CLIs,
   and computers (Cursor, Claude Code, Codex, VS Code, Copilot, Gemini CLI,
   Antigravity, Windsurf, Cline, Kilo, Zed, OpenCode, Kimi Code, Qwen Code, Pi,
-  and 75+ cataloged tools) without exposing secret values to LLM context.
+  and 75+ cataloged tools; 迁移上下文, 规则转换, MCP/密钥迁移, 换电脑) without exposing
+  secret values to LLM context.
 license: MIT
 metadata:
   version: "0.11.0-dev"

@@ -1,14 +1,24 @@
 # Security
 
-The published Skill contains instructions and templates, not a runtime sandbox.
-The host agent's permissions remain authoritative. Inspect imported content as
-untrusted data. No scanner or document promises zero secret leakage.
+The published Skill (`skills/agent-skills-setup/`) ships Markdown guidance, templates,
+and one zero-dependency Python 3.11+ stdlib helper (`scripts/migrate_context.py`). It
+is not a privilege sandbox; the host agent's OS permissions remain authoritative.
 
-Do not post credentials, tokens, cookies, raw configuration, private paths or
-session logs in public issues. Review and redact examples manually. Use GitHub's
-private vulnerability reporting when available; otherwise ask the maintainer for
-a private channel before disclosing sensitive details.
+## Secret & Untrusted-Content Boundaries
 
-The Skill must not auto-execute hooks/scripts, transfer OAuth/trust state, broaden
-permissions, or follow paths outside the approved scope. Package and fixture tests
-are not a substitute for actual host validation.
+- **Zero LLM context exposure**: Never read raw `.env*` or credential-bearing MCP/client
+  configs into LLM prompt context. `scripts/migrate_context.py` moves secret values
+  out-of-band disk-to-disk using `0700` directories and `0600` files (or replaces them
+  with placeholders under `--redact-secrets`), protects Git-tracked project files
+  against silent secret writes, and prints only key names and `sha256[:8]` prefixes.
+- **Inactive untrusted code & strict exclusions**: Imported instructions, Skills, and
+  hooks are untrusted data. Hooks stay parked in `.migration-review/` unless
+  `--activate-hooks` is explicitly approved. Chat histories, transcripts, SQLite/LevelDB
+  databases, caches, OAuth cookies, and approval/trust grants are always excluded.
+
+## Reporting a Vulnerability
+
+Do **not** post API keys, tokens, cookies, `.env` values, raw configuration files,
+private paths, or session logs in public GitHub Issues. Use GitHub's private
+vulnerability reporting (`/security/policy`) when available, or contact the maintainer
+for a private channel before disclosing sensitive details.

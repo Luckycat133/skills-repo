@@ -2,6 +2,7 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
+export PYTHONUTF8=1
 export PYTHONDONTWRITEBYTECODE=1
 python_bin="${PYTHON:-python3}"
 

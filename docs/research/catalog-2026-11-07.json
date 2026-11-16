@@ -3,7 +3,7 @@
   "reviewed_at": "2026-11-07",
   "kind": "documentation-coverage-not-runtime-registry",
   "runtime_status": "not-run",
-  "baseline_commit": "2a65abed5cd0e80aeca2413dd1d183c01deabf42",
+  "baseline_commit": "4f7b343ac0e909119ecc07efe1e98ec219136b11",
   "scope_note": "Every historical identifier is routed. This is not a claim of every product worldwide, every feature, or working client compatibility.",
   "source_method": "Selected current vendor docs, official indexes, release notes and repositories reviewed. Sources are links supporting the documented subset; a source list is not evidence that every linked page or every client was executed.",
   "required_surface_inventory": ["instructions", "skills", "prompts", "commands", "agents", "hooks", "workflows", "mcp", "authored-memory-knowledge", "plugins-extensions", "settings-policy-trust"],
