@@ -18,8 +18,14 @@ registries, engine-specific evals, and old publishing automation. The old test
 suite is retired with the removed engine; new tests cover the new artifact. They
 do not claim that the old engine's behavior is still supported or certified.
 
-Repository-only scripts now validate/stage the Skill; they cannot migrate a user's
-configuration and are not distributed. No new runtime dependency was introduced.
+At the initial 2026-11-07 reset, repository-only scripts only validated/staged the
+Skill. On 2026-11-16 (`0.11.0-dev`), the owner authorized adding a single
+zero-dependency Python 3.11+ stdlib helper
+([`skills/agent-skills-setup/scripts/migrate_context.py`](../skills/agent-skills-setup/scripts/migrate_context.py))
+so host agents can migrate context and `.env`/MCP credentials out-of-band on disk
+(`0700`/`0600`) without reading raw secret values into LLM prompt context. The
+retired `.acb` archive engine, signing/key service, SQLite store, background sync
+daemon, auto-installer, and generated compatibility matrix remain permanently excluded.
 
 ## Historical material is retained
 
@@ -32,6 +38,6 @@ The earlier changelog is retained there. No existing user backup is touched.
 ## Not claimed
 
 No marketplace release has been made. No real IDE/agent behavioral evaluation is
-inferred from structural CI. No claim of complete IDE coverage remains. The
+inferred from structural or script CI. No claim of complete IDE coverage remains. The
 remaining work and its acceptance evidence live in the repository's development
 Skill. Existing published releases remain unchanged until an approved replacement.

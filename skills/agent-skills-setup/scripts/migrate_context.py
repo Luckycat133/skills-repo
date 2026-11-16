@@ -217,7 +217,8 @@ def atomic_write_bytes(dst: Path, data: bytes, *, mode: int = 0o644, private_par
 
 
 def git_path_status(target: Path) -> str:
-    probe = target.parent
+    resolved_target = target.resolve(strict=False)
+    probe = resolved_target.parent
     while not probe.exists() and probe.parent != probe:
         probe = probe.parent
     try:
@@ -226,10 +227,11 @@ def git_path_status(target: Path) -> str:
         return "not-git"
     if res.returncode != 0 or res.stdout.strip() != "true":
         return "not-git"
-    tr = subprocess.run(["git", "-C", str(probe), "ls-files", "--error-unmatch", "--", str(target.absolute())], capture_output=True, text=True, check=False, timeout=5)
+    rel = resolved_target.relative_to(probe).as_posix()
+    tr = subprocess.run(["git", "-C", str(probe), "ls-files", "--error-unmatch", "--", rel], capture_output=True, text=True, check=False, timeout=5)
     if tr.returncode == 0:
         return "tracked"
-    ig = subprocess.run(["git", "-C", str(probe), "check-ignore", "-q", "--", str(target.absolute())], capture_output=True, text=True, check=False, timeout=5)
+    ig = subprocess.run(["git", "-C", str(probe), "check-ignore", "-q", "--", rel], capture_output=True, text=True, check=False, timeout=5)
     return "ignored" if ig.returncode == 0 else "untracked-unignored"
 
 

@@ -250,7 +250,11 @@ class RepoConsistency(unittest.TestCase):
         # Simulate Windows / C-locale default read_text() without explicit encoding when PYTHONUTF8=1 is active.
         env = {**os.environ, "LC_ALL": "C", "LANG": "C", "PYTHONUTF8": "1"}
         proc = subprocess.run(
-            [sys.executable, "-c", "from pathlib import Path; t = Path('skills/agent-skills-setup/SKILL.md').read_text(); assert '迁移上下文' in t"],
+            [
+                sys.executable,
+                "-c",
+                "from pathlib import Path; t = Path('skills/agent-skills-setup/SKILL.md').read_text(); assert '\\u8fc1\\u79fb\\u4e0a\\u4e0b\\u6587' in t",
+            ],
             cwd=ROOT,
             env=env,
             capture_output=True,
@@ -276,16 +280,21 @@ class RepoConsistency(unittest.TestCase):
             "Registry v2",
             "sync-root-mirror.sh",
             "0.10.2",
+            "220,000",
         )
         checked_files = [
             *sorted((ROOT / ".github/ISSUE_TEMPLATE").glob("*.yml")),
             *sorted(ROOT.glob("README*.md")),
             ROOT / "AGENTS.md",
             ROOT / "CLAUDE.md",
+            ROOT / "CONTRIBUTING.md",
+            ROOT / "SUPPORT.md",
             ROOT / "SECURITY.md",
+            ROOT / "SKILL.md",
             ROOT / "llms.txt",
             ROOT / "llms-full.txt",
             ROOT / ".gitattributes",
+            *sorted((DEV / "references").glob("*.md")),
         ]
         for path in checked_files:
             text = path.read_text(encoding="utf-8")
@@ -296,8 +305,14 @@ class RepoConsistency(unittest.TestCase):
             *sorted(ROOT.glob("README*.md")),
             ROOT / "AGENTS.md",
             ROOT / "CLAUDE.md",
+            ROOT / "CONTRIBUTING.md",
+            ROOT / "SUPPORT.md",
             ROOT / "SECURITY.md",
+            ROOT / "SKILL.md",
+            ROOT / "evals/README.md",
             *sorted((ROOT / "docs").glob("*.md")),
+            *sorted((ROOT / "docs/agent-skills-setup").glob("*.md")),
+            *sorted((ROOT / "docs/research").glob("*.md")),
         ]
         for path in doc_files:
             in_fence = False

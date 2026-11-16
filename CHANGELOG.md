@@ -13,9 +13,10 @@
 - **90-profile progressive catalog**: Route all 87 historical identifiers plus 25 new
   product/profile names across 30 on-demand `references/products/*.md` files with
   concrete paths, container keys, frontmatter fields, and env interpolation guidance.
-- **Repository & CI hardening**: Add 40+ contract, torture, canary secret zero-leak,
-  and E2E workflow checks; pin GitHub Actions by SHA; enforce `PYTHONUTF8=1` and
-  unmasked per-Skill official `skills-ref validate` steps across Linux, macOS, and Windows.
+- **Repository & CI hardening**: Add 44 contract, catalog, torture, canary secret
+  zero-leak, E2E workflow, and repo-consistency checks; pin GitHub Actions by SHA;
+  enforce `PYTHONUTF8=1` and unmasked single-command CI steps (including separate
+  official `skills-ref validate` steps) across Linux, macOS, and Windows.
 
 Earlier release history is preserved in
 [the historical changelog](docs/history/CHANGELOG-before-agent-first.md).

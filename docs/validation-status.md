@@ -2,8 +2,11 @@
 
 ## Verified locally (script, contract, security & official `skills-ref`)
 
-- **Official Agent Skills validator (`skills-ref`)**: `skills-ref validate` passes on
-  both `skills/agent-skills-setup` and `dev/skills/maintain-agent-skills-setup`.
+- **Official Agent Skills validator (`skills-ref`) & 44 automated checks**:
+  `REQUIRE_SKILLS_REF=1 bash validate-all.sh` passes all 44 contract, catalog, torture,
+  canary zero-leak, E2E workflow, and repo-consistency checks plus `skills-ref validate`
+  on both `skills/agent-skills-setup` and `dev/skills/maintain-agent-skills-setup`
+  (with `PYTHONUTF8=1` verified under non-UTF-8 locales).
 - **Canonical Skill & progressive references**: `SKILL.md` < 140 lines; all relative
   links and `#anchors` resolve; all 90 canonical IDs, 87 historical IDs, and 25 new
   product/profile names route in Column 1 of `references/products.md` across 30 family

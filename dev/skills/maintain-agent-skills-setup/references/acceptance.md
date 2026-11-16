@@ -22,6 +22,6 @@ Repository checks (`bash validate-all.sh`): entrypoints stay concise; links and 
 resolve; catalog Column 1 routes every canonical ID and alias; real-client status is
 never fabricated; the publishable archive contains only the explicit allowlist
 (`SKILL.md`, `references/`, `assets/`, `LICENSE`, and `scripts/migrate_context.py`),
-excludes `dev/`, `evals/`, `docs/`, and `tests/`, stays under `220,000` bytes, is
+excludes `dev/`, `evals/`, `docs/`, and `tests/`, stays under `260,000` bytes, is
 reproducible, and refuses clobbering. Structural/script checks do not replace
 [client-tests.md](client-tests.md).

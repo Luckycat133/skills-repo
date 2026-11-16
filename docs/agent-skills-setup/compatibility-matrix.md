@@ -8,7 +8,12 @@ See [discovery](../../skills/agent-skills-setup/references/discovery.md),
 [rules](../../skills/agent-skills-setup/references/instructions.md), and
 [MCP](../../skills/agent-skills-setup/references/mcp.md).
 
-Documentation-backed examples cover Cursor scoped rules to Claude, the VS Code
-scoped-instruction equivalent, and MCP stdio JSON to Codex TOML. These are not
-end-to-end host certifications. Other products require source verification for
-the requested surface. See [validation status](../validation-status.md).
+The Skill ships 15 built-in deterministic profiles in
+[`scripts/migrate_context.py`](../../skills/agent-skills-setup/scripts/migrate_context.py)
+(`cursor`, `claude-code`, `codex`, `vscode`, `copilot-cli`, `gemini-cli`, `antigravity`,
+`windsurf`, `cline`, `kilocode`, `zed`, `opencode`, `kimi-code`, `qwen-code`, `pi`) plus
+composable `patch-mcp` and 30 on-demand
+[`references/products/*.md`](../../skills/agent-skills-setup/references/products.md)
+family guides across 90 cataloged profiles. Offline parser and script tests do not
+certify live GUI/IDE loading; other surfaces require source verification and real
+client checks. See [validation status](../validation-status.md).
