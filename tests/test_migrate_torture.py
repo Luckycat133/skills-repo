@@ -1,6 +1,7 @@
 """Round 1 torture tests: parser edge cases, containment, conflict isolation, and TOML/JSONC safety."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -471,7 +472,7 @@ class MigrateTortureTests(unittest.TestCase):
                 "--scope", "project",
             )
             self.assertEqual(code, 2, out)
-            self.assertEqual(out["error"], "path_outside_root")
+            self.assertEqual(out["error"], "symlink_escape")
             self.assertTrue((ws / ".claude").is_symlink())
             self.assertFalse((outside / "rules").exists())
 
