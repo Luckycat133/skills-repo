@@ -161,8 +161,10 @@ def validate_contained(path: Path, root: Path, label: str = "path") -> None:
     try:
         rel = path.relative_to(root)
     except ValueError:
+        # 未解析路径可能只因中间环节有符号链接而前缀不同（如 macOS /var -> /private/var），
+        # 此时按解析后的真实路径再判包含关系。
         try:
-            rel = path.resolve().relative_to(root_res)
+            rel = path.resolve(strict=False).relative_to(root_res)
         except ValueError as exc:
             raise SafetyRefusalError("path_outside_root", f"{label} escapes authorized root: {path}") from exc
     if ".." in rel.parts:
@@ -172,7 +174,7 @@ def validate_contained(path: Path, root: Path, label: str = "path") -> None:
         cur = cur / part
         if cur.is_symlink() and not cur.resolve().is_relative_to(root_res):
             raise SafetyRefusalError("symlink_escape", f"Symlink escapes authorized root in {label}: {cur.name}", {"entry": str(rel)})
-    if (path.exists() or path.is_symlink()) and not path.resolve().is_relative_to(root_res):
+    if (path.exists() or path.is_symlink()) and not path.resolve(strict=False).is_relative_to(root_res):
         raise SafetyRefusalError("symlink_escape", f"Resolved {label} escapes authorized root: {rel}", {"entry": str(rel)})
 
 
@@ -590,7 +592,12 @@ def parse_dotenv_secrets(text: str, redact: bool = False) -> tuple[str, list[dic
             key = key[7:].strip()
         val = rhs.strip()
         unq = val[1:-1] if ((val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'"))) else re.split(r"\s+#", val, maxsplit=1)[0].strip()
-        if unq and not ENV_PLACEHOLDER_RE.match(unq):
+        is_dotenv_secret = (
+            SENSITIVE_KEY_RE.search(key)
+            or SECRET_VALUE_RE.search(unq)
+            or key.upper().endswith(("_KEY", "_SECRET", "_TOKEN", "_PASSWORD", "_PWD"))
+        )
+        if unq and not ENV_PLACEHOLDER_RE.match(unq) and is_dotenv_secret:
             secrets.append({"name": key, "sha256_prefix": sha256_prefix(unq)})
             if redact:
                 out_lines.append(f"{lhs.rstrip()}=" + ("\n" if raw.endswith("\n") else ""))
@@ -1683,7 +1690,7 @@ def apply_mcp_servers_to_file(
             routed = apply_mcp_servers_to_file(
                 sec_srvs, dst_path=claude_local_fallback_file, dst_key_path=ptr, dst_style="claude-code", dst_fmt="json",
                 redact_secrets=redact_secrets, allow_git_tracked_secrets=False, claude_local_fallback_file=None,
-                workspace=workspace, auth_root=home, backups=backups, warnings=warnings, dry_run=dry_run,
+                workspace=workspace, auth_root=claude_local_fallback_file.parent, backups=backups, warnings=warnings, dry_run=dry_run,
             )
             for r in routed:
                 r["routed_from_git_tracked"] = str(dst_path)
@@ -1826,9 +1833,9 @@ def apply_doc_item_to_target(
     dst_name = item.name
     if tp == "vscode":
         if item.category == "commands" and not dst_name.endswith(".prompt.md"):
-            dst_name = dst_name[:-4] + ".prompt.md" if dst_name.endswith(".md") else dst_name + ".prompt.md"
+            dst_name = dst_name[:-3] + ".prompt.md" if dst_name.endswith(".md") else dst_name + ".prompt.md"
         elif item.category == "agents" and not dst_name.endswith(".agent.md"):
-            dst_name = dst_name[:-4] + ".agent.md" if dst_name.endswith(".md") else dst_name + ".agent.md"
+            dst_name = dst_name[:-3] + ".agent.md" if dst_name.endswith(".md") else dst_name + ".agent.md"
     dst = dst_dir / dst_name
     if dst.resolve(strict=False) == item.path.resolve(strict=False):
         return act(item.category, item.name, "noop", dst)
@@ -1935,7 +1942,7 @@ def execute_inventories_to_targets(
             for r in apply_mcp_servers_to_file(
                 in_mcp, dst_path=dmp, dst_key_path=dmk, dst_style=dms, dst_fmt="auto", redact_secrets=redact_secrets,
                 allow_git_tracked_secrets=allow_git_tracked_secrets, claude_local_fallback_file=(tpp.user_mcp if (tprof == "claude-code" and msc == "project") else None),
-                workspace=workspace, auth_root=(workspace if msc == "project" else home), backups=backups, warnings=warnings, dry_run=dry_run,
+                workspace=workspace, auth_root=(workspace if msc == "project" and dmp == tpp.proj_mcp else home), backups=backups, warnings=warnings, dry_run=dry_run,
             ):
                 r["target_profile"] = tprof
                 actions.append(r)
