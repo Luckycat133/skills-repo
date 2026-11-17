@@ -84,6 +84,16 @@ EXCLUDED_FILE_NAMES = frozenset({
 })
 EXCLUDED_SUFFIXES = (".db", ".sqlite", ".sqlite3", ".sqlite-wal", ".sqlite-shm", ".ldb", ".jsonl", ".log")
 GRANT_KEYS = frozenset({"alwaysAllow", "autoApprove", "trust", "trusted", "approvedTools", "approval_policy"})
+
+
+def is_excluded_asset(p: Path, root: Path) -> bool:
+    try:
+        rel = p.relative_to(root)
+    except ValueError:
+        rel = p
+    if any(part in EXCLUDED_DIR_NAMES for part in rel.parts[:-1]):
+        return True
+    return p.name in EXCLUDED_FILE_NAMES or p.name.endswith(EXCLUDED_SUFFIXES)
 AUTOLOAD_PARTS = (
     (".cursor", "rules"), (".cursor", "skills"), (".claude", "rules"), (".claude", "skills"),
     (".claude", "commands"), (".agents", "skills"), (".agents", "rules"),
@@ -541,11 +551,14 @@ def inspect_args_secrets(args: list[str]) -> tuple[list[str], list[dict[str, str
             found.append({"name": f"arg:{fk}", "sha256_prefix": sha256_prefix(m.group(2))})
             redacted_args.append(f"{m.group(1)}${{{fk}}}")
             continue
-        if SECRET_VALUE_RE.search(arg) and not ENV_PLACEHOLDER_RE.match(arg):
+        is_url = re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", arg) is not None
+        if (SECRET_VALUE_RE.search(arg) or is_url) and not ENV_PLACEHOLDER_RE.match(arg):
             r_url, u_sec = inspect_url_secrets(arg)
             if u_sec:
                 found.extend(u_sec)
                 redacted_args.append(r_url)
+            elif is_url:
+                redacted_args.append(arg)
             else:
                 found.append({"name": f"arg[{idx}]", "sha256_prefix": sha256_prefix(arg)})
                 redacted_args.append(f"${{SECRET_ARG_{idx}}}")
@@ -557,8 +570,17 @@ def inspect_args_secrets(args: list[str]) -> tuple[list[str], list[dict[str, str
 def parse_dotenv_secrets(text: str, redact: bool = False) -> tuple[str, list[dict[str, str]]]:
     secrets: list[dict[str, str]] = []
     out_lines: list[str] = []
+    pending_quote: str | None = None
     for raw in text.splitlines(keepends=True):
         s = raw.strip()
+        if pending_quote is not None:
+            if redact:
+                out_lines.append("\n" if raw.endswith("\n") else "")
+            else:
+                out_lines.append(raw)
+            if pending_quote in raw:
+                pending_quote = None
+            continue
         if not s or s.startswith("#") or "=" not in s:
             out_lines.append(raw)
             continue
@@ -572,6 +594,8 @@ def parse_dotenv_secrets(text: str, redact: bool = False) -> tuple[str, list[dic
             secrets.append({"name": key, "sha256_prefix": sha256_prefix(unq)})
             if redact:
                 out_lines.append(f"{lhs.rstrip()}=" + ("\n" if raw.endswith("\n") else ""))
+                if (val.startswith('"') and not val.endswith('"')) or (val.startswith("'") and not val.endswith("'")):
+                    pending_quote = val[0]
                 continue
         out_lines.append(raw)
     return "".join(out_lines), secrets
@@ -631,6 +655,7 @@ class NormalizedMcp:
             "args": [f"sec:{sha256_prefix(a)}" if SECRET_VALUE_RE.search(a) else a for a in args_val],
             "url": (f"{inspect_url_secrets(url_val)[0]}#{sha256_prefix(url_val)}" if (url_val and inspect_url_secrets(url_val)[1]) else url_val),
             "env": norm_env, "headers": norm_hdr, "disabled": self.disabled, "knob_only": self.knob_only,
+            "tool_allow": sorted(self.tool_allow), "tool_deny": sorted(self.tool_deny),
         }
 
 
@@ -1211,13 +1236,16 @@ def parse_rule_files(path: Path, scope: str, profile: str) -> list[DiscoveredRul
     always = meta.get("alwaysApply") is True or str(meta.get("trigger", "")).lower() == "always_on"
     globs = split_globs(meta.get("globs") or meta.get("paths") or meta.get("applyTo"))
     desc = str(meta.get("description") or "").strip()
+    trigger = str(meta.get("trigger", "")).lower()
     if always:
         kind = "always_on"
     elif globs:
         kind = "glob_scoped"
-    elif desc or str(meta.get("trigger", "")).lower() == "model_decision":
+    elif trigger == "manual":
+        kind = "manual"
+    elif desc or trigger == "model_decision":
         kind = "model_selected"
-    elif path.suffix == ".mdc" or str(meta.get("trigger", "")).lower() == "manual":
+    elif path.suffix == ".mdc":
         kind = "manual"
     else:
         kind = "always_on"
@@ -1228,7 +1256,7 @@ def compute_skill_digest(skill_dir: Path, auth_root: Path) -> str:
     h = hashlib.sha256()
     for p in sorted(skill_dir.rglob("*")):
         validate_contained(p, auth_root, f"skill:{skill_dir.name}")
-        if p.is_file():
+        if p.is_file() and not is_excluded_asset(p, skill_dir):
             h.update(p.relative_to(skill_dir).as_posix().encode("utf-8") + b"\0" + p.read_bytes() + b"\0")
     return h.hexdigest()
 
@@ -1416,8 +1444,11 @@ def discover_profile(profile: str, workspace: Path, home: Path, scope: str, cate
 
 def write_managed_file(
     dst: Path, data: bytes, *, has_secrets: bool, executable: bool = False, private_parent: bool = False,
-    allow_git_tracked_secrets: bool = False, backups: BackupManager, warnings: list[dict[str, Any]], dry_run: bool,
+    allow_git_tracked_secrets: bool = False, auth_root: Path | None = None,
+    backups: BackupManager, warnings: list[dict[str, Any]], dry_run: bool,
 ) -> str | None:
+    if auth_root is not None:
+        validate_contained(dst, auth_root, f"write:{dst.name}")
     if has_secrets:
         gs = git_path_status(dst)
         if gs == "tracked" and not allow_git_tracked_secrets:
@@ -1442,10 +1473,11 @@ def write_managed_file(
 
 
 def apply_rule_to_target(
-    rule: DiscoveredRule, tpp: ProfilePaths, *, workspace: Path, allow_broaden_scope: bool,
-    backups: BackupManager, warnings: list[dict[str, Any]], dry_run: bool,
+    rule: DiscoveredRule, tpp: ProfilePaths, *, workspace: Path, home: Path | None = None,
+    allow_broaden_scope: bool, backups: BackupManager, warnings: list[dict[str, Any]], dry_run: bool,
 ) -> dict[str, Any]:
     tp, is_p = tpp.profile, rule.scope == "project"
+    root = workspace if is_p else (home or workspace)
     if tp == "zed" and is_p:
         sh = [c for c in (".rules", ".cursorrules", ".windsurfrules", ".clinerules", "CLAUDE.md", "GEMINI.md") if (workspace / c).exists() and (workspace / c) != rule.source_path]
         if sh:
@@ -1460,7 +1492,7 @@ def apply_rule_to_target(
             dst = rdir / f"{rule.slug}.md"
             if dst.exists():
                 return act("instructions", rule.slug, "noop" if dst.read_text(encoding="utf-8").strip() == rule.body.strip() else "conflict", dst)
-            write_managed_file(dst, (rule.body.strip() + "\n").encode("utf-8"), has_secrets=False, backups=backups, warnings=warnings, dry_run=dry_run)
+            write_managed_file(dst, (rule.body.strip() + "\n").encode("utf-8"), has_secrets=False, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
             return act("instructions", rule.slug, "migrated", dst)
         if dst.resolve(strict=False) == rule.source_path.resolve(strict=False):
             return act("instructions", rule.slug, "noop", dst)
@@ -1468,7 +1500,7 @@ def apply_rule_to_target(
         merged, st = merge_markdown_section(existing, rule.slug, rule.body)
         if st in ("noop", "conflict"):
             return act("instructions", rule.slug, st, dst, reason="divergent_section_with_same_id" if st == "conflict" else None)
-        write_managed_file(dst, merged.encode("utf-8"), has_secrets=False, backups=backups, warnings=warnings, dry_run=dry_run)
+        write_managed_file(dst, merged.encode("utf-8"), has_secrets=False, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
         return act("instructions", rule.slug, "migrated", dst)
 
     if rule.kind == "glob_scoped":
@@ -1492,16 +1524,16 @@ def apply_rule_to_target(
             if st == "conflict":
                 return act("instructions", rule.slug, "conflict", ddoc)
             if st == "added":
-                write_managed_file(ddoc, merged.encode("utf-8"), has_secrets=False, backups=backups, warnings=warnings, dry_run=dry_run)
+                write_managed_file(ddoc, merged.encode("utf-8"), has_secrets=False, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
             return act("instructions", rule.slug, "noop" if st == "noop" else "migrated", ddoc, note="Broadened glob rule (--allow-broaden-scope)")
         else:
             pdst = workspace / ".migration-review" / "rules" / tp / f"{rule.slug}.md"
-            write_managed_file(pdst, render_frontmatter({"source_globs": rule.globs, "target": tp}, rule.body).encode("utf-8"), has_secrets=False, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
+            write_managed_file(pdst, render_frontmatter({"source_globs": rule.globs, "target": tp}, rule.body).encode("utf-8"), has_secrets=False, auth_root=workspace, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
             return act("instructions", rule.slug, "parked_draft", pdst, reason=f"{tp} lacks file-glob rule frontmatter; parked instead of widening scope")
         assert dst is not None and rendered is not None
         if dst.exists():
             return act("instructions", rule.slug, "noop" if dst.read_text(encoding="utf-8").strip() == rendered.strip() else "conflict", dst)
-        write_managed_file(dst, rendered.encode("utf-8"), has_secrets=False, backups=backups, warnings=warnings, dry_run=dry_run)
+        write_managed_file(dst, rendered.encode("utf-8"), has_secrets=False, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
         return act("instructions", rule.slug, "migrated", dst, note="Converted glob-scoped rule; activation timing is host-specific")
 
     if rule.kind == "model_selected":
@@ -1517,7 +1549,7 @@ def apply_rule_to_target(
             dst, rendered = sdir / rule.slug / "SKILL.md", render_frontmatter({"name": rule.slug, "description": rule.description or f"Rule {rule.slug}"}, rule.body)
         if dst.exists():
             return act("instructions", rule.slug, "noop" if dst.read_text(encoding="utf-8").strip() == rendered.strip() else "conflict", dst)
-        write_managed_file(dst, rendered.encode("utf-8"), has_secrets=False, backups=backups, warnings=warnings, dry_run=dry_run)
+        write_managed_file(dst, rendered.encode("utf-8"), has_secrets=False, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
         return act("instructions", rule.slug, "migrated", dst, note="Converted model-selected rule to on-demand surface")
 
     # Manual rule -> manual-only Skill or explicit command (never always-on)
@@ -1528,7 +1560,7 @@ def apply_rule_to_target(
         rendered = render_frontmatter({"name": rule.slug, "description": f"Manual workflow /{rule.slug} (explicit invocation only).", "disable-model-invocation": True}, rule.body)
         if dst.exists():
             return act("instructions", rule.slug, "noop" if dst.read_text(encoding="utf-8").strip() == rendered.strip() else "conflict", dst)
-        write_managed_file(dst, rendered.encode("utf-8"), has_secrets=False, backups=backups, warnings=warnings, dry_run=dry_run)
+        write_managed_file(dst, rendered.encode("utf-8"), has_secrets=False, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
         return act("instructions", rule.slug, "migrated", dst, note="Converted manual rule to manual-only Skill (disable-model-invocation: true)")
 
     cdir = tpp.proj_cmds if is_p else tpp.user_cmds
@@ -1537,11 +1569,11 @@ def apply_rule_to_target(
         rendered = rule.body.strip() + "\n"
         if dst.exists():
             return act("instructions", rule.slug, "noop" if dst.read_text(encoding="utf-8").strip() == rendered.strip() else "conflict", dst)
-        write_managed_file(dst, rendered.encode("utf-8"), has_secrets=False, backups=backups, warnings=warnings, dry_run=dry_run)
+        write_managed_file(dst, rendered.encode("utf-8"), has_secrets=False, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
         return act("instructions", rule.slug, "migrated", dst, note="Converted manual rule to explicit command/prompt")
 
     pdst = workspace / ".migration-review" / "manual-rules" / tp / f"{rule.slug}.md"
-    write_managed_file(pdst, (rule.body.strip() + "\n").encode("utf-8"), has_secrets=False, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
+    write_managed_file(pdst, (rule.body.strip() + "\n").encode("utf-8"), has_secrets=False, auth_root=workspace, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
     return act("instructions", rule.slug, "parked_draft", pdst, reason=f"{tp} lacks verified manual-only flag; parked instead of making always-on")
 
 
@@ -1571,7 +1603,7 @@ def apply_skill_to_target(
     src_map: dict[Path, tuple[bytes, bool]] = {}
     for p in sorted(skill.directory.rglob("*")):
         validate_contained(p, auth_src, f"skill:{skill.name}")
-        if p.is_file():
+        if p.is_file() and not is_excluded_asset(p, skill.directory):
             rel = p.relative_to(skill.directory)
             content = alt_md if (rel.as_posix() == "SKILL.md" and alt_md is not None) else p.read_bytes()
             is_ex = bool(p.stat().st_mode & stat.S_IXUSR) or ("scripts" in rel.parts and p.suffix in (".py", ".sh"))
@@ -1583,15 +1615,44 @@ def apply_skill_to_target(
             return act("skills", skill.name, "noop", dst_dir)
         return act("skills", skill.name, "conflict", dst_dir, reason="existing_skill_has_different_content")
 
+    sroot = workspace if skill.scope == "project" else home
     for rel, (content, is_ex) in src_map.items():
-        write_managed_file(dst_dir / rel, content, has_secrets=False, executable=is_ex, allow_git_tracked_secrets=allow_git_tracked_secrets, backups=backups, warnings=warnings, dry_run=dry_run)
+        write_managed_file(dst_dir / rel, content, has_secrets=False, executable=is_ex, allow_git_tracked_secrets=allow_git_tracked_secrets, auth_root=sroot, backups=backups, warnings=warnings, dry_run=dry_run)
     return act("skills", skill.name, "migrated", dst_dir, note="; ".join(notes) if notes else None)
+
+
+def _document_has_secrets(doc: Any) -> bool:
+    if isinstance(doc, dict):
+        for k, v in doc.items():
+            if SENSITIVE_KEY_RE.search(str(k)) and not _looks_like_placeholder(v):
+                return True
+            if _document_has_secrets(v):
+                return True
+        return False
+    if isinstance(doc, list):
+        return any(_document_has_secrets(v) for v in doc)
+    if isinstance(doc, str) and doc.strip():
+        return bool(
+            SECRET_VALUE_RE.search(doc)
+            and not ENV_PLACEHOLDER_RE.match(doc)
+            and not INPUT_PLACEHOLDER_RE.match(doc)
+            and not BEARER_ENV_RE.match(doc),
+        )
+    return False
+
+
+def _looks_like_placeholder(v: Any) -> bool:
+    if not isinstance(v, str):
+        return False
+    return bool(
+        ENV_PLACEHOLDER_RE.match(v) or INPUT_PLACEHOLDER_RE.match(v) or BEARER_ENV_RE.match(v)
+    )
 
 
 def apply_mcp_servers_to_file(
     servers: list[NormalizedMcp], *, dst_path: Path, dst_key_path: str, dst_style: str, dst_fmt: str,
     redact_secrets: bool, allow_git_tracked_secrets: bool, claude_local_fallback_file: Path | None,
-    workspace: Path, backups: BackupManager, warnings: list[dict[str, Any]], dry_run: bool,
+    workspace: Path, auth_root: Path | None = None, backups: BackupManager, warnings: list[dict[str, Any]], dry_run: bool,
 ) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
     if not servers:
@@ -1622,7 +1683,7 @@ def apply_mcp_servers_to_file(
             routed = apply_mcp_servers_to_file(
                 sec_srvs, dst_path=claude_local_fallback_file, dst_key_path=ptr, dst_style="claude-code", dst_fmt="json",
                 redact_secrets=redact_secrets, allow_git_tracked_secrets=False, claude_local_fallback_file=None,
-                workspace=workspace, backups=backups, warnings=warnings, dry_run=dry_run,
+                workspace=workspace, auth_root=home, backups=backups, warnings=warnings, dry_run=dry_run,
             )
             for r in routed:
                 r["routed_from_git_tracked"] = str(dst_path)
@@ -1634,6 +1695,14 @@ def apply_mcp_servers_to_file(
     afmt = ("toml" if dst_path.suffix.lower() == ".toml" else "json") if dst_fmt == "auto" else dst_fmt
     existing_map = read_mcp_file(dst_path, dst_key_path, "codex_toml" if afmt == "toml" else dst_style, fmt=afmt)
     any_sec = any(es.secret_summary()[0] for es in existing_map.values())
+    if afmt == "toml" and dst_path.exists() and not any_sec:
+        ex_text_for_scan = dst_path.read_text(encoding="utf-8")
+        try:
+            if _document_has_secrets(tomllib.loads(ex_text_for_scan)):
+                any_sec = True
+        except tomllib.TOMLDecodeError:
+            if SECRET_VALUE_RE.search(ex_text_for_scan):
+                any_sec = True
 
     if afmt == "toml":
         ex_text = dst_path.read_text(encoding="utf-8") if dst_path.exists() else ""
@@ -1655,7 +1724,7 @@ def apply_mcp_servers_to_file(
             sep = "" if not ex_text else ("\n" if ex_text.endswith("\n\n") else ("\n" if ex_text.endswith("\n") else "\n\n"))
             final_toml = ex_text + sep + "\n".join(b.rstrip("\n") + "\n" for b in blocks)
             tomllib.loads(final_toml)
-            write_managed_file(dst_path, final_toml.encode("utf-8"), has_secrets=any_sec, allow_git_tracked_secrets=allow_git_tracked_secrets, backups=backups, warnings=warnings, dry_run=dry_run)
+            write_managed_file(dst_path, final_toml.encode("utf-8"), has_secrets=any_sec, allow_git_tracked_secrets=allow_git_tracked_secrets, auth_root=auth_root, backups=backups, warnings=warnings, dry_run=dry_run)
         return results
 
     doc: dict[str, Any] = {}
@@ -1677,21 +1746,22 @@ def apply_mcp_servers_to_file(
         container[srv.name] = ed
         changed = True
         wrote_s = hs and not redact_secrets
-        any_sec = any_sec or wrote_s
+        any_sec = any_sec or wrote_s or _document_has_secrets(doc)
         results.append(act("mcp", srv.name, "migrated", dst_path, has_secrets=wrote_s, secrets=sl, note="; ".join(notes) if notes else None))
     if changed:
         set_nested_dict(doc, parts, container)
         serialized = json.dumps(doc, indent=2, ensure_ascii=False) + "\n"
         json.loads(serialized)
-        write_managed_file(dst_path, serialized.encode("utf-8"), has_secrets=any_sec, allow_git_tracked_secrets=allow_git_tracked_secrets, backups=backups, warnings=warnings, dry_run=dry_run)
+        write_managed_file(dst_path, serialized.encode("utf-8"), has_secrets=any_sec, allow_git_tracked_secrets=allow_git_tracked_secrets, auth_root=auth_root, backups=backups, warnings=warnings, dry_run=dry_run)
     return results
 
 
 def apply_doc_item_to_target(
-    item: DiscoveredDocItem, tpp: ProfilePaths, *, workspace: Path, activate_hooks: bool,
-    backups: BackupManager, warnings: list[dict[str, Any]], dry_run: bool,
+    item: DiscoveredDocItem, tpp: ProfilePaths, *, workspace: Path, home: Path | None = None,
+    activate_hooks: bool, backups: BackupManager, warnings: list[dict[str, Any]], dry_run: bool,
 ) -> dict[str, Any]:
     is_p, tp = item.scope == "project", tpp.profile
+    root = workspace if is_p else (home or workspace)
     if item.category == "hooks":
         if activate_hooks:
             hd = tpp.proj_hooks if is_p else tpp.user_hooks
@@ -1699,10 +1769,10 @@ def apply_doc_item_to_target(
                 dst = (hd / item.name) if ((hd.exists() and hd.is_dir()) or not hd.suffix) else hd
                 if dst.exists():
                     return act("hooks", item.name, "noop" if dst.read_bytes() == item.content else "conflict", dst)
-                write_managed_file(dst, item.content, has_secrets=False, backups=backups, warnings=warnings, dry_run=dry_run)
+                write_managed_file(dst, item.content, has_secrets=False, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
                 return act("hooks", item.name, "migrated", dst, note="Activated hook via --activate-hooks")
         park = workspace / ".migration-review" / "hooks" / tp / item.scope / item.name
-        write_managed_file(park, item.content, has_secrets=False, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
+        write_managed_file(park, item.content, has_secrets=False, auth_root=workspace, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
         return act("hooks", item.name, "parked_draft", park, reason="Executable hooks stay parked in .migration-review/ until explicitly approved")
 
     dst_dir: Path | None = None
@@ -1717,10 +1787,10 @@ def apply_doc_item_to_target(
                 rnd = render_frontmatter({"name": cslug, "description": f"Command /{cslug}", "disable-model-invocation": True}, body).encode("utf-8")
                 if dst.exists():
                     return act("commands", item.name, "noop" if dst.read_bytes() == rnd else "conflict", dst)
-                write_managed_file(dst, rnd, has_secrets=False, backups=backups, warnings=warnings, dry_run=dry_run)
+                write_managed_file(dst, rnd, has_secrets=False, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
                 return act("commands", item.name, "migrated", dst, note="Mapped command to manual-only Skill")
             park = workspace / ".migration-review" / "commands" / tp / item.name
-            write_managed_file(park, item.content, has_secrets=False, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
+            write_managed_file(park, item.content, has_secrets=False, auth_root=workspace, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
             return act("commands", item.name, "parked_draft", park, reason="Command schema differs across source/target")
     elif item.category == "agents":
         dst_dir = tpp.proj_agents if is_p else tpp.user_agents
@@ -1735,7 +1805,7 @@ def apply_doc_item_to_target(
                 rnd = render_frontmatter({"name": wslug, "description": f"Workflow /{wslug}", "disable-model-invocation": True}, body).encode("utf-8")
                 if dst.exists():
                     return act("workflows", item.name, "noop" if dst.read_bytes() == rnd else "conflict", dst)
-                write_managed_file(dst, rnd, has_secrets=False, backups=backups, warnings=warnings, dry_run=dry_run)
+                write_managed_file(dst, rnd, has_secrets=False, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
                 return act("workflows", item.name, "migrated", dst, note="Mapped workflow to manual-only Skill")
     elif item.category == "memory":
         dst_dir = tpp.user_memory
@@ -1745,20 +1815,26 @@ def apply_doc_item_to_target(
             if st == "conflict":
                 return act("memory", item.name, "conflict", tpp.user_doc)
             if st == "added":
-                write_managed_file(tpp.user_doc, merged.encode("utf-8"), has_secrets=False, backups=backups, warnings=warnings, dry_run=dry_run)
+                write_managed_file(tpp.user_doc, merged.encode("utf-8"), has_secrets=False, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
             return act("memory", item.name, "noop" if st == "noop" else "migrated", tpp.user_doc)
 
     if dst_dir is None:
         park = workspace / ".migration-review" / item.category / tp / item.name
-        write_managed_file(park, item.content, has_secrets=False, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
+        write_managed_file(park, item.content, has_secrets=False, auth_root=workspace, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
         return act(item.category, item.name, "parked_draft", park, reason=f"No direct {item.category} directory on {tp}")
 
-    dst = dst_dir / item.name
+    dst_name = item.name
+    if tp == "vscode":
+        if item.category == "commands" and not dst_name.endswith(".prompt.md"):
+            dst_name = dst_name[:-4] + ".prompt.md" if dst_name.endswith(".md") else dst_name + ".prompt.md"
+        elif item.category == "agents" and not dst_name.endswith(".agent.md"):
+            dst_name = dst_name[:-4] + ".agent.md" if dst_name.endswith(".md") else dst_name + ".agent.md"
+    dst = dst_dir / dst_name
     if dst.resolve(strict=False) == item.path.resolve(strict=False):
         return act(item.category, item.name, "noop", dst)
     if dst.exists():
         return act(item.category, item.name, "noop" if dst.read_bytes() == item.content else "conflict", dst, reason=None if dst.read_bytes() == item.content else "existing_target_file_differs")
-    write_managed_file(dst, item.content, has_secrets=False, backups=backups, warnings=warnings, dry_run=dry_run)
+    write_managed_file(dst, item.content, has_secrets=False, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
     return act(item.category, item.name, "migrated", dst)
 
 
@@ -1822,7 +1898,7 @@ def execute_inventories_to_targets(
                         actions.append(act("instructions", r.slug, "conflict", target_profile=tprof, reason="conflicting_rules_across_sources"))
                     continue
                 seen_rules[rk] = r
-                res = apply_rule_to_target(r, tpp, workspace=workspace, allow_broaden_scope=allow_broaden_scope, backups=backups, warnings=warnings, dry_run=dry_run)
+                res = apply_rule_to_target(r, tpp, workspace=workspace, home=home, allow_broaden_scope=allow_broaden_scope, backups=backups, warnings=warnings, dry_run=dry_run)
                 res["target_profile"] = tprof
                 actions.append(res)
 
@@ -1859,7 +1935,7 @@ def execute_inventories_to_targets(
             for r in apply_mcp_servers_to_file(
                 in_mcp, dst_path=dmp, dst_key_path=dmk, dst_style=dms, dst_fmt="auto", redact_secrets=redact_secrets,
                 allow_git_tracked_secrets=allow_git_tracked_secrets, claude_local_fallback_file=(tpp.user_mcp if (tprof == "claude-code" and msc == "project") else None),
-                workspace=workspace, backups=backups, warnings=warnings, dry_run=dry_run,
+                workspace=workspace, auth_root=(workspace if msc == "project" else home), backups=backups, warnings=warnings, dry_run=dry_run,
             ):
                 r["target_profile"] = tprof
                 actions.append(r)
@@ -1870,7 +1946,7 @@ def execute_inventories_to_targets(
                 dk = (item.category, item.scope, item.name)
                 if dk not in seen_docs:
                     seen_docs.add(dk)
-                    res = apply_doc_item_to_target(item, tpp, workspace=workspace, activate_hooks=activate_hooks, backups=backups, warnings=warnings, dry_run=dry_run)
+                    res = apply_doc_item_to_target(item, tpp, workspace=workspace, home=home, activate_hooks=activate_hooks, backups=backups, warnings=warnings, dry_run=dry_run)
                     res["target_profile"] = tprof
                     actions.append(res)
 
@@ -1890,7 +1966,7 @@ def execute_inventories_to_targets(
             elif dst_env.exists() and dst_env.read_text(encoding="utf-8") != out_env:
                 actions.append(act("env_secrets", ef.name, "conflict", dst_env, has_secrets=bool(sec_list), secrets=sec_list))
             else:
-                write_managed_file(dst_env, out_env.encode("utf-8"), has_secrets=hs, allow_git_tracked_secrets=allow_git_tracked_secrets, backups=backups, warnings=warnings, dry_run=dry_run)
+                write_managed_file(dst_env, out_env.encode("utf-8"), has_secrets=hs, allow_git_tracked_secrets=allow_git_tracked_secrets, auth_root=workspace, backups=backups, warnings=warnings, dry_run=dry_run)
                 actions.append(act("env_secrets", ef.name, "migrated", dst_env, has_secrets=hs, secrets=sec_list))
 
     unresolved = [a for a in actions if a["outcome"] in ("conflict", "deferred", "parked_draft")]
@@ -1958,7 +2034,7 @@ def cmd_export_device(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
             auth_s = ws if sk.scope == "project" else home
             for p in sorted(sk.directory.rglob("*")):
                 validate_contained(p, auth_s, f"skill:{sk.name}")
-                if p.is_file():
+                if p.is_file() and not is_excluded_asset(p, sk.directory):
                     irel = p.relative_to(sk.directory).as_posix()
                     is_ex = bool(p.stat().st_mode & stat.S_IXUSR) or ("scripts" in p.relative_to(sk.directory).parts and p.suffix in (".py", ".sh"))
                     _stage(f"files/{prof}/{sk.scope}/skills/{sk.name}/{irel}", p.read_bytes(), {
@@ -2164,10 +2240,11 @@ def cmd_patch_mcp(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
         selected = [s for s in selected if s.name in wanted]
     backups = BackupManager(Path(args.backup_dir) if args.backup_dir else None, home=home, workspace=ws, dry_run=args.dry_run)
     warnings: list[dict[str, Any]] = []
+    patch_auth_root: Path | None = ws if dst_f.is_relative_to(ws) else (home if dst_f.is_relative_to(home) else None)
     res = apply_mcp_servers_to_file(
         selected, dst_path=dst_f, dst_key_path=args.dst_key_path, dst_style=d_style, dst_fmt=args.dst_format,
         redact_secrets=args.redact_secrets, allow_git_tracked_secrets=args.allow_git_tracked_secrets,
-        claude_local_fallback_file=None, workspace=ws, backups=backups, warnings=warnings, dry_run=args.dry_run,
+        claude_local_fallback_file=None, workspace=ws, auth_root=patch_auth_root, backups=backups, warnings=warnings, dry_run=args.dry_run,
     )
     bad = [r for r in res if r["outcome"] in ("conflict", "deferred")]
     return {
