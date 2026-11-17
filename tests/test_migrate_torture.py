@@ -891,6 +891,102 @@ class MigrateTortureTests(unittest.TestCase):
             self.assertFalse(any("private.md" == p.name for p in bundle.rglob("*")))
             self.assertFalse(any("cache" in p.parts for p in bundle.rglob("*")))
 
+    def test_rule_beneath_excluded_ancestor_not_migrated_nor_exported(self):
+        """Rule Markdown under an excluded ancestor dir (rules/cache/) must not surface as live instruction."""
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            ws, home = base / "ws", base / "home"
+            ws.mkdir()
+            home.mkdir()
+            rules = ws / ".cursor" / "rules" / "cache"
+            rules.mkdir(parents=True)
+            (rules / "private.md").write_text("# cached instruction\nCACHE_CANARY_998877\n", encoding="utf-8")
+            (ws / ".cursor" / "rules" / "active.md").write_text("# active rule\nACTIVE_CANARY_112233\n", encoding="utf-8")
+
+            code, out, _ = run_cli(
+                "migrate", "--source", "cursor", "--target", "claude-code",
+                "--workspace", str(ws), "--home", str(home),
+            )
+            self.assertEqual(code, 0, out)
+            self.assertFalse((ws / ".claude" / "rules" / "private.md").exists())
+            claude_md = (ws / "CLAUDE.md").read_text(encoding="utf-8") if (ws / "CLAUDE.md").exists() else ""
+            self.assertNotIn("CACHE_CANARY_998877", claude_md)
+            self.assertNotIn("# cached instruction", claude_md)
+            self.assertTrue(
+                any("cache/private.md" in e.get("path", "") for e in out.get("excluded", [])),
+                out.get("excluded"),
+            )
+            self.assertIn("ACTIVE_CANARY_112233", claude_md)
+
+            bundle = base / "transfer"
+            code_e, _, _ = run_cli("export-device", "--output", str(bundle), "--workspace", str(ws), "--home", str(home))
+            self.assertEqual(code_e, 0)
+            self.assertFalse(any("private.md" == p.name for p in bundle.rglob("*")))
+            self.assertFalse(any("cache" in p.parts for p in bundle.rglob("*")))
+
+    def test_export_device_redacts_skill_dotenv_and_fingerprints_secret(self):
+        """.env resource inside a Skill must be classified on export, redacted on request, and fingerprinted."""
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            ws, home = base / "ws", base / "home"
+            ws.mkdir()
+            home.mkdir()
+            sk = ws / ".cursor" / "skills" / "demo"
+            sk.mkdir(parents=True)
+            (sk / "SKILL.md").write_text("---\nname: demo\ndescription: a demo skill\n---\nBody\n", encoding="utf-8")
+            (sk / ".env").write_text("API_TOKEN=sk-live_abcdef0123456789deadbeef\n", encoding="utf-8")
+
+            redacted = base / "redacted-bundle"
+            code, out, _ = run_cli(
+                "export-device", "--output", str(redacted), "--workspace", str(ws), "--home", str(home),
+                "--profiles", "cursor", "--redact-secrets",
+            )
+            self.assertEqual(code, 0, out)
+            bundled = (redacted / "files" / "cursor" / "project" / "skills" / "demo" / ".env").read_text(encoding="utf-8")
+            self.assertNotIn("sk-live_abcdef0123456789deadbeef", bundled)
+            self.assertEqual(bundled, "API_TOKEN=\n")
+            entry = next(e for e in out["entries"] if e["bundle_path"].endswith("skills/demo/.env"))
+            self.assertFalse(entry["has_secrets"])
+            self.assertEqual(len(entry["secrets"]), 1)
+            self.assertEqual(entry["secrets"][0]["name"], "API_TOKEN")
+            if os.name != "nt":
+                self.assertEqual(os.stat(redacted / "files" / "cursor" / "project" / "skills" / "demo" / ".env").st_mode & 0o777, 0o600)
+
+            plain = base / "plain-bundle"
+            code2, out2, _ = run_cli(
+                "export-device", "--output", str(plain), "--workspace", str(ws), "--home", str(home),
+                "--profiles", "cursor",
+            )
+            self.assertEqual(code2, 0, out2)
+            plain_bundled = (plain / "files" / "cursor" / "project" / "skills" / "demo" / ".env").read_text(encoding="utf-8")
+            self.assertIn("sk-live_abcdef0123456789deadbeef", plain_bundled)
+            plain_entry = next(e for e in out2["entries"] if e["bundle_path"].endswith("skills/demo/.env"))
+            self.assertTrue(plain_entry["has_secrets"])
+            self.assertEqual(len(plain_entry["secrets"]), 1)
+
+    def test_export_and_backup_refuse_live_command_agent_dirs(self):
+        """Transfer/backup destinations inside live command or agent discovery roots are refused."""
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            ws, home = base / "ws", base / "home"
+            ws.mkdir()
+            home.mkdir()
+
+            code, out, _ = run_cli(
+                "export-device", "--output", str(ws / ".github" / "prompts" / "transfer"),
+                "--workspace", str(ws), "--home", str(home), "--profiles", "cursor",
+            )
+            self.assertEqual(code, 2, out)
+            self.assertEqual(out["error"], "unsafe_output_dir", out)
+
+            code2, out2, _ = run_cli(
+                "migrate", "--source", "cursor", "--target", "claude-code",
+                "--workspace", str(ws), "--home", str(home),
+                "--backup-dir", str(ws / ".github" / "agents" / "backup"),
+            )
+            self.assertEqual(code2, 2, out2)
+            self.assertEqual(out2["error"], "unsafe_backup_dir", out2)
+
 
 if __name__ == "__main__":
     unittest.main()

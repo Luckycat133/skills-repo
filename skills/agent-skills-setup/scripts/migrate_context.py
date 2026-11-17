@@ -99,10 +99,22 @@ def is_excluded_asset(p: Path, root: Path) -> bool:
         return True
     return p.name in EXCLUDED_FILE_NAMES or p.name.endswith(EXCLUDED_SUFFIXES)
 AUTOLOAD_PARTS = (
-    (".cursor", "rules"), (".cursor", "skills"), (".claude", "rules"), (".claude", "skills"),
-    (".claude", "commands"), (".agents", "skills"), (".agents", "rules"),
-    (".github", "instructions"), (".github", "skills"), (".windsurf", "rules"),
-    (".windsurf", "skills"), (".gemini", "skills"), (".qwen", "skills"), (".kilo", "skills"),
+    (".cursor", "rules"), (".cursor", "skills"),
+    (".cursor", "commands"), (".cursor", "agents"),
+    (".claude", "rules"), (".claude", "skills"),
+    (".claude", "commands"), (".claude", "agents"),
+    (".codex", "prompts"),
+    (".agents", "skills"), (".agents", "rules"), (".agents", "workflows"),
+    (".github", "instructions"), (".github", "skills"),
+    (".github", "prompts"), (".github", "agents"),
+    (".windsurf", "rules"), (".windsurf", "skills"), (".windsurf", "workflows"),
+    (".copilot", "agents"),
+    (".gemini", "skills"), (".gemini", "commands"), (".gemini", "agents"),
+    (".qwen", "skills"), (".qwen", "commands"), (".qwen", "agents"),
+    (".kilo", "skills"), (".kilo", "agents"), (".kilo", "workflows"),
+    (".opencode", "commands"), (".opencode", "agents"),
+    (".cline", "workflows"),
+    (".pi", "prompts"),
 )
 
 
@@ -1328,6 +1340,11 @@ def discover_profile(profile: str, workspace: Path, home: Path, scope: str, cate
                 for f in sorted(pth.rglob("*")):
                     validate_contained(f, root, f"rule:{f.name}")
                     if f.is_file() and f.suffix in (".mdc", ".md"):
+                        if is_excluded_asset(f, root):
+                            lp = logical_path_str(f, workspace, home)
+                            if not any(x.get("path") == lp for x in inv.excluded):
+                                inv.excluded.append({"path": lp, "reason": "excluded_history_or_db_file"})
+                            continue
                         cands.append((sc, f, root))
 
         if wp:
@@ -2085,9 +2102,16 @@ def cmd_export_device(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
                 if p.is_file() and not is_excluded_asset(p, sk.directory):
                     irel = p.relative_to(sk.directory).as_posix()
                     is_ex = bool(p.stat().st_mode & stat.S_IXUSR) or ("scripts" in p.relative_to(sk.directory).parts and p.suffix in (".py", ".sh"))
-                    _stage(f"files/{prof}/{sk.scope}/skills/{sk.name}/{irel}", p.read_bytes(), {
+                    content = p.read_bytes()
+                    has_sec = _resource_contains_secrets(content)
+                    _, dotenv_secrets = parse_dotenv_secrets(content.decode("utf-8", errors="replace"))
+                    data = content
+                    if args.redact_secrets and has_sec:
+                        data = _redact_resource(content)
+                    _stage(f"files/{prof}/{sk.scope}/skills/{sk.name}/{irel}", data, {
                         "profile": prof, "category": "skills", "scope": sk.scope, "id": sk.name,
-                        "skill_rel_path": irel, "logical_source": logical_path_str(p, ws, home), "has_secrets": False, "secrets": [],
+                        "skill_rel_path": irel, "logical_source": logical_path_str(p, ws, home),
+                        "has_secrets": has_sec and not args.redact_secrets, "secrets": dotenv_secrets,
                     }, exec_bit=is_ex)
         for msc in ("project", "user"):
             srvs = inv.mcp_servers[msc]
