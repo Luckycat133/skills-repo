@@ -535,8 +535,10 @@ class MigrateTortureTests(unittest.TestCase):
                 "--scope", "project",
             )
             self.assertEqual(code, 0, out)
-            mode = os.stat(settings).st_mode & 0o777
-            self.assertEqual(mode, 0o600, f"settings.json downgraded to {oct(mode)}, exposing the retained credential")
+            if os.name != "nt":
+                # Windows has no POSIX mode bits: chmod only toggles read-only there.
+                mode = os.stat(settings).st_mode & 0o777
+                self.assertEqual(mode, 0o600, f"settings.json downgraded to {oct(mode)}, exposing the retained credential")
             doc = json.loads(settings.read_text(encoding="utf-8"))
             self.assertEqual(doc["api_key"], "sk-live-GEMINI_OTHER_CANARY_9900")
             self.assertIn("weather", doc["mcpServers"])
