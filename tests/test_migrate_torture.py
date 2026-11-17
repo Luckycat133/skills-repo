@@ -779,6 +779,118 @@ class MigrateTortureTests(unittest.TestCase):
             self.assertFalse((ws / ".github" / "agents" / "reviewer.md").exists())
             self.assertEqual((ws / ".github" / "prompts" / "release.prompt.md").read_text(encoding="utf-8"), "# Release command\n")
 
+    def test_skill_env_resource_is_redacted_and_private_with_redact_secrets(self):
+        """.env resource inside a Skill must be redacted with --redact-secrets and written 0600."""
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            ws, home = base / "ws", base / "home"
+            ws.mkdir()
+            home.mkdir()
+            sk = ws / ".cursor" / "skills" / "demo"
+            sk.mkdir(parents=True)
+            (sk / "SKILL.md").write_text("---\nname: demo\ndescription: a demo skill\n---\nBody\n", encoding="utf-8")
+            (sk / ".env").write_text("API_TOKEN=sk-live_abcdef0123456789deadbeef\n", encoding="utf-8")
+
+            code, out, _ = run_cli(
+                "migrate", "--source", "cursor", "--target", "claude-code",
+                "--workspace", str(ws), "--home", str(home), "--redact-secrets",
+            )
+            self.assertEqual(code, 0, out)
+            dst_env = ws / ".claude" / "skills" / "demo" / ".env"
+            self.assertTrue(dst_env.is_file())
+            self.assertNotIn("sk-live_abcdef0123456789deadbeef", dst_env.read_text(encoding="utf-8"))
+            if os.name != "nt":
+                self.assertEqual(os.stat(dst_env).st_mode & 0o777, 0o600, oct(os.stat(dst_env).st_mode & 0o777))
+
+    def test_command_frontmatter_restrictions_preserved_or_parked(self):
+        """Enforceable command metadata carries into the Skill; unrepresentable restrictions park it."""
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            ws, home = base / "ws", base / "home"
+            ws.mkdir()
+            home.mkdir()
+            (ws / ".cursor" / "commands").mkdir(parents=True)
+            (ws / ".cursor" / "commands" / "deploy.md").write_text(
+                "---\nallowed-tools: Read\ndescription: Deploys stuff\n---\n# Deploy\nrun migrations.\n", encoding="utf-8")
+            (ws / ".cursor" / "commands" / "audit.md").write_text(
+                "---\nallowed-tools: Read\ncontext: fork\n---\n# Audit\ncheck prod.\n", encoding="utf-8")
+
+            code, out, _ = run_cli(
+                "migrate", "--source", "cursor", "--target", "codex",
+                "--workspace", str(ws), "--home", str(home),
+            )
+            self.assertEqual(code, 0, out)
+
+            # Enforceable metadata is preserved in the converted Skill.
+            deploy = ws / ".agents" / "skills" / "deploy" / "SKILL.md"
+            self.assertTrue(deploy.is_file())
+            deploy_text = deploy.read_text(encoding="utf-8")
+            self.assertIn("disable-model-invocation: true", deploy_text)
+            self.assertIn("allowed-tools: Read", deploy_text)
+
+            # Unrepresentable restrictions park the command instead of installing a weaker Skill.
+            self.assertFalse((ws / ".agents" / "skills" / "audit").exists())
+            park = ws / ".migration-review" / "commands" / "codex" / "audit.md"
+            self.assertTrue(park.is_file())
+            self.assertIn("context: fork", park.read_text(encoding="utf-8"))
+            audited = [a for a in out["actions"] if a.get("id") == "audit.md"]
+            self.assertTrue(audited)
+            self.assertEqual(audited[0]["outcome"], "parked_draft")
+            self.assertIn("context", audited[0].get("reason", ""))
+
+    def test_zed_mcp_serialization_keeps_disabled_state(self):
+        """Zed entries must carry disabled state for local and remote servers."""
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("migrate_context_zed_probe", SCRIPT)
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules["migrate_context_zed_probe"] = mod
+        spec.loader.exec_module(mod)
+
+        local = mod.NormalizedMcp(name="offline", transport="stdio", command="node", args=["srv.js"], disabled=True)
+        entry, _ = mod.serialize_mcp_for_json_style(local, "zed", redact_secrets=False)
+        self.assertEqual(entry, {"command": {"path": "node", "args": ["srv.js"]}, "disabled": True})
+
+        remote = mod.NormalizedMcp(name="docs", transport="http", url="https://example.com/sse", disabled=True)
+        entry, _ = mod.serialize_mcp_for_json_style(remote, "zed", redact_secrets=False)
+        self.assertEqual(entry, {"url": "https://example.com/sse", "disabled": True})
+
+        active, _ = mod.serialize_mcp_for_json_style(
+            mod.NormalizedMcp(name="web", transport="http", url="https://example.com/sse"), "zed", redact_secrets=False
+        )
+        self.assertNotIn("disabled", active)
+
+    def test_excluded_ancestor_dir_asset_not_migrated_or_exported(self):
+        """Files beneath excluded dirs (cache/, etc.) must not migrate or travel in device exports."""
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            ws, home = base / "ws", base / "home"
+            ws.mkdir()
+            home.mkdir()
+            cmds = ws / ".cursor" / "commands" / "cache"
+            cmds.mkdir(parents=True)
+            (cmds / "private.md").write_text("# cached instruction\n", encoding="utf-8")
+            (ws / ".cursor" / "commands" / "active.md").write_text("# active command\n", encoding="utf-8")
+
+            code, out, _ = run_cli(
+                "migrate", "--source", "cursor", "--target", "claude-code",
+                "--workspace", str(ws), "--home", str(home),
+            )
+            self.assertEqual(code, 0, out)
+            self.assertFalse((ws / ".claude" / "commands" / "cache").exists())
+            self.assertFalse((ws / ".claude" / "commands" / "cache" / "private.md").exists())
+            self.assertTrue((ws / ".claude" / "commands" / "active.md").is_file())
+            self.assertTrue(
+                any("cache/private.md" in e.get("path", "") for e in out.get("excluded", [])),
+                out.get("excluded"),
+            )
+
+            bundle = base / "transfer"
+            code_e, _, _ = run_cli("export-device", "--output", str(bundle), "--workspace", str(ws), "--home", str(home))
+            self.assertEqual(code_e, 0)
+            self.assertFalse(any("private.md" == p.name for p in bundle.rglob("*")))
+            self.assertFalse(any("cache" in p.parts for p in bundle.rglob("*")))
+
 
 if __name__ == "__main__":
     unittest.main()

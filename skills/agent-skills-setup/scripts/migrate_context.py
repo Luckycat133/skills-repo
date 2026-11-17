@@ -84,6 +84,10 @@ EXCLUDED_FILE_NAMES = frozenset({
 })
 EXCLUDED_SUFFIXES = (".db", ".sqlite", ".sqlite3", ".sqlite-wal", ".sqlite-shm", ".ldb", ".jsonl", ".log")
 GRANT_KEYS = frozenset({"alwaysAllow", "autoApprove", "trust", "trusted", "approvedTools", "approval_policy"})
+# Command frontmatter keys the destination Skill surface can enforce. Any other
+# source restriction (e.g. isolation/context) cannot be represented and must block
+# conversion instead of silently installing a less-restricted Skill.
+COMMAND_ENFORCEABLE_KEYS = frozenset({"allowed-tools"})
 
 
 def is_excluded_asset(p: Path, root: Path) -> bool:
@@ -775,11 +779,19 @@ def serialize_mcp_for_json_style(srv: NormalizedMcp, target_style: str, redact_s
 
     if target_style == "zed":
         if srv.url:
-            return ({"url": url, "headers": hdr_out} if hdr_out else {"url": url}), notes
+            entry: dict[str, Any] = {"url": url}
+            if hdr_out:
+                entry["headers"] = hdr_out
+            if srv.disabled:
+                entry["disabled"] = True
+            return entry, notes
         cobj: dict[str, Any] = {"path": srv.command or "", "args": args}
         if env_out:
             cobj["env"] = env_out
-        return {"command": cobj}, notes
+        entry = {"command": cobj}
+        if srv.disabled:
+            entry["disabled"] = True
+        return entry, notes
 
     if target_style == "opencode":
         if srv.url:
@@ -1413,7 +1425,7 @@ def discover_profile(profile: str, workspace: Path, home: Path, scope: str, cate
             validate_contained(f, aroot, f"{cat}:{f.name}")
             if not f.is_file():
                 continue
-            if f.name in EXCLUDED_FILE_NAMES or f.name.endswith(EXCLUDED_SUFFIXES):
+            if is_excluded_asset(f, dpth):
                 inv.excluded.append({"path": logical_path_str(f, workspace, home), "reason": "excluded_history_or_db_file"})
                 continue
             inv.doc_items.append(DiscoveredDocItem(cat, f.relative_to(dpth).as_posix(), dsc, f, f.read_bytes(), pp.profile))
@@ -1584,9 +1596,25 @@ def apply_rule_to_target(
     return act("instructions", rule.slug, "parked_draft", pdst, reason=f"{tp} lacks verified manual-only flag; parked instead of making always-on")
 
 
+def _resource_contains_secrets(content: bytes) -> bool:
+    """Classify a Skill resource as secret-bearing before it is copied."""
+    text = content.decode("utf-8", errors="replace")
+    if parse_dotenv_secrets(text)[1]:
+        return True
+    return bool(SECRET_VALUE_RE.search(text))
+
+
+def _redact_resource(content: bytes) -> bytes:
+    text = content.decode("utf-8", errors="replace")
+    redacted, _ = parse_dotenv_secrets(text, redact=True)
+    redacted = SECRET_VALUE_RE.sub("", redacted)
+    return redacted.encode("utf-8")
+
+
 def apply_skill_to_target(
     skill: DiscoveredSkill, tpp: ProfilePaths, *, workspace: Path, home: Path,
     allow_git_tracked_secrets: bool, backups: BackupManager, warnings: list[dict[str, Any]], dry_run: bool,
+    redact_secrets: bool = False,
 ) -> dict[str, Any]:
     sdir = tpp.proj_skills if skill.scope == "project" else tpp.user_skills
     if sdir is None:
@@ -1614,7 +1642,8 @@ def apply_skill_to_target(
             rel = p.relative_to(skill.directory)
             content = alt_md if (rel.as_posix() == "SKILL.md" and alt_md is not None) else p.read_bytes()
             is_ex = bool(p.stat().st_mode & stat.S_IXUSR) or ("scripts" in rel.parts and p.suffix in (".py", ".sh"))
-            src_map[rel] = (content, is_ex)
+            has_sec = _resource_contains_secrets(content)
+            src_map[rel] = (content, is_ex, has_sec)
 
     if dst_dir.exists():
         dst_map = {p.relative_to(dst_dir): p.read_bytes() for p in sorted(dst_dir.rglob("*")) if p.is_file()}
@@ -1623,8 +1652,13 @@ def apply_skill_to_target(
         return act("skills", skill.name, "conflict", dst_dir, reason="existing_skill_has_different_content")
 
     sroot = workspace if skill.scope == "project" else home
-    for rel, (content, is_ex) in src_map.items():
-        write_managed_file(dst_dir / rel, content, has_secrets=False, executable=is_ex, allow_git_tracked_secrets=allow_git_tracked_secrets, auth_root=sroot, backups=backups, warnings=warnings, dry_run=dry_run)
+    for rel, (content, is_ex, has_sec) in src_map.items():
+        data = content
+        mark_secrets = has_sec
+        if redact_secrets and has_sec:
+            data = _redact_resource(content)
+            mark_secrets = True
+        write_managed_file(dst_dir / rel, data, has_secrets=mark_secrets, executable=is_ex, allow_git_tracked_secrets=allow_git_tracked_secrets, auth_root=sroot, backups=backups, warnings=warnings, dry_run=dry_run)
     return act("skills", skill.name, "migrated", dst_dir, note="; ".join(notes) if notes else None)
 
 
@@ -1790,8 +1824,15 @@ def apply_doc_item_to_target(
             if sdir is not None and item.name.endswith(".md"):
                 cslug = slugify(Path(item.name).stem)
                 dst = sdir / cslug / "SKILL.md"
-                _, body = parse_frontmatter(item.content.decode("utf-8", errors="replace"))
-                rnd = render_frontmatter({"name": cslug, "description": f"Command /{cslug}", "disable-model-invocation": True}, body).encode("utf-8")
+                text = item.content.decode("utf-8", errors="replace")
+                src_meta, body = parse_frontmatter(text)
+                carry = {k: v for k, v in src_meta.items() if k in COMMAND_ENFORCEABLE_KEYS}
+                lost = [k for k in src_meta if k not in carry and k not in ("name", "description")]
+                rnd = render_frontmatter({"name": cslug, "description": f"Command /{cslug}", "disable-model-invocation": True, **carry}, body).encode("utf-8")
+                if lost:
+                    park = workspace / ".migration-review" / "commands" / tp / item.name
+                    write_managed_file(park, item.content, has_secrets=False, auth_root=workspace, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
+                    return act("commands", item.name, "parked_draft", park, reason=f"command restrictions not representable as Skill: {', '.join(sorted(lost))}")
                 if dst.exists():
                     return act("commands", item.name, "noop" if dst.read_bytes() == rnd else "conflict", dst)
                 write_managed_file(dst, rnd, has_secrets=False, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
@@ -1917,7 +1958,7 @@ def execute_inventories_to_targets(
             if any(c.digest != scands[0].digest for c in scands[1:]):
                 actions.append(act("skills", sname, "conflict", target_profile=tprof, reason="conflicting_skill_variants_across_sources"))
                 continue
-            res = apply_skill_to_target(scands[0], tpp, workspace=workspace, home=home, allow_git_tracked_secrets=allow_git_tracked_secrets, backups=backups, warnings=warnings, dry_run=dry_run)
+            res = apply_skill_to_target(scands[0], tpp, workspace=workspace, home=home, allow_git_tracked_secrets=allow_git_tracked_secrets, backups=backups, warnings=warnings, dry_run=dry_run, redact_secrets=redact_secrets)
             res["target_profile"] = tprof
             actions.append(res)
 
