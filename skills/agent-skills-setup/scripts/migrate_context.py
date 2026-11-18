@@ -26,6 +26,7 @@ import sys
 import tomllib
 from typing import Any
 
+D = chr(36)  # "$" 占位符前缀，避免在源码里写出会被外层模板吃掉的花括号
 SCHEMA_VERSION = "0.11.0-dev"
 
 PROFILE_ALIASES: dict[str, str] = {
@@ -67,6 +68,20 @@ URL_QUERY_SECRET_RE = re.compile(
 ARG_SECRET_RE = re.compile(
     r"^(--?(?:api[-_]?key|token|secret|password|auth[-_]?token)=)(.+)$", re.IGNORECASE
 )
+HEADER_LITERAL_RE = re.compile(
+    r"^([A-Za-z][A-Za-z0-9_-]*)[ \t]*:[ \t]*(\S.*)$"
+)
+HEADER_SECRET_KEYS = frozenset({
+    "authorization", "proxy-authorization", "x-api-key", "api-key", "api_key",
+    "access-token", "access_token", "auth-token", "auth_token", "token", "secret",
+    "password", "credential", "cookie",
+})
+INLINE_SECRET_RE = re.compile(
+    r"(?<![A-Za-z0-9_-])(?:sk-[A-Za-z0-9_-]{8,}|gh[pousr]_[A-Za-z0-9_]{8,}|"
+    r"github_pat_[A-Za-z0-9_]{10,}|xox[baprs]-[A-Za-z0-9-]{8,}|"
+    r"AIza[0-9A-Za-z_-]{16,}|AKIA[0-9A-Z]{12,})(?![A-Za-z0-9_-])"
+)
+BEARER_LITERAL_RE = re.compile(r"\bBearer\s+(?!" + re.escape(D + "{") + r")\S+")
 SECTION_RE = re.compile(
     r"<!-- agent-skills-setup:begin id=([A-Za-z0-9_.:-]+) sha256=([0-9a-f]+) -->\n"
     r"(.*?)"
@@ -559,10 +574,21 @@ def inspect_args_secrets(args: list[str]) -> tuple[list[str], list[dict[str, str
                 redacted_args.append(arg)
             pending_flag = None
             continue
-        if re.fullmatch(r"--?(?:api[-_]?key|token|secret|password|auth[-_]?token)", arg, re.IGNORECASE):
+        if re.fullmatch(
+            r"--?(?:api[-_]?key|token|secret|password|auth[-_]?token|authorization|auth|header|headers)",
+            arg, re.IGNORECASE,
+        ):
             pending_flag = arg.lstrip("-")
             redacted_args.append(arg)
             continue
+        header_like = HEADER_LITERAL_RE.match(arg)
+        if header_like and header_like.group(1).lower() in HEADER_SECRET_KEYS:
+            value = header_like.group(2)
+            if not ENV_PLACEHOLDER_RE.match(value):
+                fk = slugify(header_like.group(1)).upper().replace("-", "_")
+                found.append({"name": f"arg:{fk}", "sha256_prefix": sha256_prefix(value)})
+                redacted_args.append(f"{header_like.group(1)}:{D}{{{fk}}}")
+                continue
         m = ARG_SECRET_RE.match(arg)
         if m and not ENV_PLACEHOLDER_RE.match(m.group(2)):
             fk = slugify(m.group(1).rstrip("=").lstrip("-")).upper().replace("-", "_")
@@ -1462,7 +1488,7 @@ def discover_profile(profile: str, workspace: Path, home: Path, scope: str, cate
             elif hpth.is_dir():
                 for f in sorted(hpth.rglob("*")):
                     validate_contained(f, aroot, f"hook:{f.name}")
-                    if f.is_file():
+                    if f.is_file() and not is_excluded_asset(f, hpth):
                         inv.doc_items.append(DiscoveredDocItem("hooks", f.relative_to(hpth).as_posix(), hsc, f, f.read_bytes(), pp.profile))
 
     if "env_secrets" in categories and wp and workspace.is_dir():
@@ -1699,6 +1725,38 @@ def _document_has_secrets(doc: Any) -> bool:
     return False
 
 
+def _document_text_has_secrets(text: str) -> bool:
+    # 凭据是否仍然留在文本里：token / Bearer 字面量 / 认证头三种形态。
+    if INLINE_SECRET_RE.search(text):
+        return True
+    if BEARER_LITERAL_RE.search(text):
+        return True
+    for line in text.splitlines():
+        m = HEADER_LITERAL_RE.match(line)
+        if m is None:
+            continue
+        if m.group(1).lower() in HEADER_SECRET_KEYS and not ENV_PLACEHOLDER_RE.match(m.group(2)):
+            return True
+    return False
+
+
+def _redact_document_text(text: str) -> str:
+    # 把文本里的凭据换成占位符。
+    out = INLINE_SECRET_RE.sub(D + "{REDACTED_SECRET}", text)
+    out = BEARER_LITERAL_RE.sub("Bearer " + D + "{REDACTED_SECRET}", out)
+
+    def _header(m: re.Match[str]) -> str:
+        return m.group(1) + D + "{REDACTED_SECRET}"
+
+    out = re.sub(
+        r"(?im)^([ \t]*[\"\x27]?(?:authorization|proxy-authorization|x-api-key|api[-_]?key|"
+        r"access[-_]?token|auth[-_]?token|token|secret|password|credential|cookie)"
+        r"[\"\x27]?[ \t]*[:=][ \t]*[\"\x27]?)([^\"\x27\s,;]+)",
+        _header, out,
+    )
+    return out
+
+
 def _looks_like_placeholder(v: Any) -> bool:
     if not isinstance(v, str):
         return False
@@ -1816,9 +1874,15 @@ def apply_mcp_servers_to_file(
 
 def apply_doc_item_to_target(
     item: DiscoveredDocItem, tpp: ProfilePaths, *, workspace: Path, home: Path | None = None,
-    activate_hooks: bool, backups: BackupManager, warnings: list[dict[str, Any]], dry_run: bool,
+    activate_hooks: bool, redact_secrets: bool = False,
+    backups: BackupManager, warnings: list[dict[str, Any]], dry_run: bool,
 ) -> dict[str, Any]:
     is_p, tp = item.scope == "project", tpp.profile
+    doc_text = item.content.decode("utf-8", errors="replace")
+    if redact_secrets:
+        doc_text = _redact_document_text(doc_text)
+    doc_content = doc_text.encode("utf-8")
+    doc_has_secrets = _document_text_has_secrets(doc_text)
     root = workspace if is_p else (home or workspace)
     if item.category == "hooks":
         if activate_hooks:
@@ -1826,11 +1890,11 @@ def apply_doc_item_to_target(
             if hd is not None and tp != "claude-code":
                 dst = (hd / item.name) if ((hd.exists() and hd.is_dir()) or not hd.suffix) else hd
                 if dst.exists():
-                    return act("hooks", item.name, "noop" if dst.read_bytes() == item.content else "conflict", dst)
-                write_managed_file(dst, item.content, has_secrets=False, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
+                    return act("hooks", item.name, "noop" if dst.read_bytes() == doc_content else "conflict", dst)
+                write_managed_file(dst, doc_content, has_secrets=doc_has_secrets, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
                 return act("hooks", item.name, "migrated", dst, note="Activated hook via --activate-hooks")
         park = workspace / ".migration-review" / "hooks" / tp / item.scope / item.name
-        write_managed_file(park, item.content, has_secrets=False, auth_root=workspace, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
+        write_managed_file(park, doc_content, has_secrets=doc_has_secrets, auth_root=workspace, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
         return act("hooks", item.name, "parked_draft", park, reason="Executable hooks stay parked in .migration-review/ until explicitly approved")
 
     dst_dir: Path | None = None
@@ -1841,21 +1905,21 @@ def apply_doc_item_to_target(
             if sdir is not None and item.name.endswith(".md"):
                 cslug = slugify(Path(item.name).stem)
                 dst = sdir / cslug / "SKILL.md"
-                text = item.content.decode("utf-8", errors="replace")
+                text = doc_text
                 src_meta, body = parse_frontmatter(text)
                 carry = {k: v for k, v in src_meta.items() if k in COMMAND_ENFORCEABLE_KEYS}
                 lost = [k for k in src_meta if k not in carry and k not in ("name", "description")]
                 rnd = render_frontmatter({"name": cslug, "description": f"Command /{cslug}", "disable-model-invocation": True, **carry}, body).encode("utf-8")
                 if lost:
                     park = workspace / ".migration-review" / "commands" / tp / item.name
-                    write_managed_file(park, item.content, has_secrets=False, auth_root=workspace, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
+                    write_managed_file(park, doc_content, has_secrets=doc_has_secrets, auth_root=workspace, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
                     return act("commands", item.name, "parked_draft", park, reason=f"command restrictions not representable as Skill: {', '.join(sorted(lost))}")
                 if dst.exists():
                     return act("commands", item.name, "noop" if dst.read_bytes() == rnd else "conflict", dst)
-                write_managed_file(dst, rnd, has_secrets=False, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
+                write_managed_file(dst, rnd, has_secrets=doc_has_secrets, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
                 return act("commands", item.name, "migrated", dst, note="Mapped command to manual-only Skill")
             park = workspace / ".migration-review" / "commands" / tp / item.name
-            write_managed_file(park, item.content, has_secrets=False, auth_root=workspace, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
+            write_managed_file(park, doc_content, has_secrets=doc_has_secrets, auth_root=workspace, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
             return act("commands", item.name, "parked_draft", park, reason="Command schema differs across source/target")
     elif item.category == "agents":
         dst_dir = tpp.proj_agents if is_p else tpp.user_agents
@@ -1866,26 +1930,26 @@ def apply_doc_item_to_target(
             if sdir is not None and item.name.endswith(".md"):
                 wslug = slugify(Path(item.name).stem)
                 dst = sdir / wslug / "SKILL.md"
-                _, body = parse_frontmatter(item.content.decode("utf-8", errors="replace"))
+                _, body = parse_frontmatter(doc_text)
                 rnd = render_frontmatter({"name": wslug, "description": f"Workflow /{wslug}", "disable-model-invocation": True}, body).encode("utf-8")
                 if dst.exists():
                     return act("workflows", item.name, "noop" if dst.read_bytes() == rnd else "conflict", dst)
-                write_managed_file(dst, rnd, has_secrets=False, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
+                write_managed_file(dst, rnd, has_secrets=doc_has_secrets, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
                 return act("workflows", item.name, "migrated", dst, note="Mapped workflow to manual-only Skill")
     elif item.category == "memory":
         dst_dir = tpp.user_memory
         if dst_dir is None and tpp.user_doc is not None:
             ex = tpp.user_doc.read_text(encoding="utf-8") if tpp.user_doc.exists() else ""
-            merged, st = merge_markdown_section(ex, slugify(f"memory-{Path(item.name).stem}"), item.content.decode("utf-8", errors="replace"))
+            merged, st = merge_markdown_section(ex, slugify(f"memory-{Path(item.name).stem}"), doc_text)
             if st == "conflict":
                 return act("memory", item.name, "conflict", tpp.user_doc)
             if st == "added":
-                write_managed_file(tpp.user_doc, merged.encode("utf-8"), has_secrets=False, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
+                write_managed_file(tpp.user_doc, merged.encode("utf-8"), has_secrets=doc_has_secrets, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
             return act("memory", item.name, "noop" if st == "noop" else "migrated", tpp.user_doc)
 
     if dst_dir is None:
         park = workspace / ".migration-review" / item.category / tp / item.name
-        write_managed_file(park, item.content, has_secrets=False, auth_root=workspace, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
+        write_managed_file(park, doc_content, has_secrets=doc_has_secrets, auth_root=workspace, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
         return act(item.category, item.name, "parked_draft", park, reason=f"No direct {item.category} directory on {tp}")
 
     dst_name = item.name
@@ -1898,8 +1962,8 @@ def apply_doc_item_to_target(
     if dst.resolve(strict=False) == item.path.resolve(strict=False):
         return act(item.category, item.name, "noop", dst)
     if dst.exists():
-        return act(item.category, item.name, "noop" if dst.read_bytes() == item.content else "conflict", dst, reason=None if dst.read_bytes() == item.content else "existing_target_file_differs")
-    write_managed_file(dst, item.content, has_secrets=False, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
+        return act(item.category, item.name, "noop" if dst.read_bytes() == doc_content else "conflict", dst, reason=None if dst.read_bytes() == doc_content else "existing_target_file_differs")
+    write_managed_file(dst, doc_content, has_secrets=doc_has_secrets, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
     return act(item.category, item.name, "migrated", dst)
 
 
@@ -2011,7 +2075,7 @@ def execute_inventories_to_targets(
                 dk = (item.category, item.scope, item.name)
                 if dk not in seen_docs:
                     seen_docs.add(dk)
-                    res = apply_doc_item_to_target(item, tpp, workspace=workspace, home=home, activate_hooks=activate_hooks, backups=backups, warnings=warnings, dry_run=dry_run)
+                    res = apply_doc_item_to_target(item, tpp, workspace=workspace, home=home, activate_hooks=activate_hooks, redact_secrets=redact_secrets, backups=backups, warnings=warnings, dry_run=dry_run)
                     res["target_profile"] = tprof
                     actions.append(res)
 

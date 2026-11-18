@@ -988,5 +988,100 @@ class MigrateTortureTests(unittest.TestCase):
             self.assertEqual(out2["error"], "unsafe_backup_dir", out2)
 
 
+    def test_mcp_header_authorization_argument_is_treated_as_secret(self) -> None:
+        """--header "Authorization: Bearer ..." must be inspected even though it is outside the value whitelist."""
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            ws, home = base / "ws", base / "home"
+            ws.mkdir()
+            home.mkdir()
+            (ws / ".cursor").mkdir(parents=True)
+            (ws / ".cursor" / "mcp.json").write_text(
+                json.dumps({
+                    "mcpServers": {
+                        "canary-srv": {
+                            "command": "node",
+                            "args": ["srv.js", "--header", "Authorization: Bearer CANARY_HEADER_TOKEN"],
+                        }
+                    }
+                }),
+                encoding="utf-8",
+            )
+            code, out, _ = run_cli(
+                "migrate", "--source", "cursor", "--target", "claude-code",
+                "--workspace", str(ws), "--home", str(home), "--scope", "project",
+                "--redact-secrets",
+            )
+            self.assertEqual(code, 0, out)
+            doc = json.dumps(json.loads((ws / ".mcp.json").read_text(encoding="utf-8")))
+            self.assertNotIn("CANARY_HEADER_TOKEN", doc)
+
+    def test_direct_document_token_is_not_written_verbatim(self) -> None:
+        """A command document carrying a literal token must not land verbatim in the target file."""
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            ws, home = base / "ws", base / "home"
+            ws.mkdir()
+            home.mkdir()
+            cmd = ws / ".cursor" / "commands" / "deploy.md"
+            cmd.parent.mkdir(parents=True)
+            cmd.write_text(
+                "---\ndescription: deploy the app\n---\n\n"
+                "export DEPLOY_TOKEN=sk-CANARYDOCSECRET1234567890\n",
+                encoding="utf-8",
+            )
+            code, out, _ = run_cli(
+                "migrate", "--source", "cursor", "--target", "vscode",
+                "--workspace", str(ws), "--home", str(home), "--scope", "project",
+                "--redact-secrets",
+            )
+            self.assertEqual(code, 0, out)
+            target = ws / ".github" / "prompts" / "deploy.prompt.md"
+            self.assertTrue(target.is_file(), out)
+            self.assertNotIn("sk-CANARYDOCSECRET1234567890", target.read_text(encoding="utf-8"))
+
+    def test_parked_hook_credentials_are_redacted(self) -> None:
+        """Hook documents carrying credentials must be redacted before they are parked."""
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            ws, home = base / "ws", base / "home"
+            ws.mkdir()
+            home.mkdir()
+            hook = ws / ".cline" / "hooks" / "guard.sh"
+            hook.parent.mkdir(parents=True)
+            hook.write_text(
+                "#!/bin/sh\ncurl -H 'Authorization: Bearer CANARY_HOOK_TOKEN' https://api.test\n",
+                encoding="utf-8",
+            )
+            code, out, _ = run_cli(
+                "migrate", "--source", "cline", "--target", "cursor",
+                "--workspace", str(ws), "--home", str(home), "--scope", "project",
+                "--redact-secrets",
+            )
+            self.assertEqual(code, 0, out)
+            parked = list((ws / ".migration-review").rglob("guard.sh"))
+            self.assertTrue(parked, out)
+            self.assertNotIn("CANARY_HOOK_TOKEN", parked[0].read_text(encoding="utf-8"))
+
+    def test_hook_directory_skips_cache_and_history_assets(self) -> None:
+        """Hook directory traversal must not copy cache/history artifacts into the target."""
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            ws, home = base / "ws", base / "home"
+            ws.mkdir()
+            home.mkdir()
+            hooks = ws / ".cline" / "hooks"
+            (hooks / "cache").mkdir(parents=True)
+            (hooks / "guard.sh").write_text("#!/bin/sh\necho guard\n", encoding="utf-8")
+            (hooks / "cache" / "history.jsonl").write_text("{\"turn\": 1}\n", encoding="utf-8")
+            code, out, _ = run_cli(
+                "migrate", "--source", "cline", "--target", "cursor",
+                "--workspace", str(ws), "--home", str(home), "--scope", "project",
+            )
+            self.assertEqual(code, 0, out)
+            parked = {p.name for p in (ws / ".migration-review").rglob("*") if p.is_file()}
+            self.assertIn("guard.sh", parked, out)
+            self.assertNotIn("history.jsonl", parked, out)
+
 if __name__ == "__main__":
     unittest.main()
