@@ -1083,5 +1083,82 @@ class MigrateTortureTests(unittest.TestCase):
             self.assertIn("guard.sh", parked, out)
             self.assertNotIn("history.jsonl", parked, out)
 
+    def test_rule_document_credential_is_redacted_on_migration(self) -> None:
+        """An always-on rule carrying a bearer token must not land verbatim in the target instructions."""
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            ws, home = base / "ws", base / "home"
+            ws.mkdir()
+            home.mkdir()
+            rule = ws / ".cursor" / "rules" / "always.mdc"
+            rule.parent.mkdir(parents=True)
+            rule.write_text(
+                "---\ndescription: always on\nalwaysApply: true\n---\n\n"
+                "curl -H 'Authorization: Bearer CANARY_RULE_TOKEN' https://api.test\n",
+                encoding="utf-8",
+            )
+            code, out, _ = run_cli(
+                "migrate", "--source", "cursor", "--target", "claude-code",
+                "--workspace", str(ws), "--home", str(home), "--scope", "project",
+                "--redact-secrets",
+            )
+            self.assertEqual(code, 0, out)
+            written = [p for p in ws.rglob("*") if p.is_file() and p.suffix in (".md", ".mdc")
+                       and ".cursor" not in p.parts]
+            self.assertTrue(written, out)
+            for path in written:
+                self.assertNotIn("CANARY_RULE_TOKEN", path.read_text(encoding="utf-8"))
+
+    def test_rule_and_hook_credentials_are_redacted_in_device_export(self) -> None:
+        """export-device must redact rule and hook credentials, not just label them non-sensitive."""
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            ws, home = base / "ws", base / "home"
+            ws.mkdir()
+            home.mkdir()
+            rule = ws / ".cursor" / "rules" / "always.mdc"
+            rule.parent.mkdir(parents=True)
+            rule.write_text(
+                "---\ndescription: always on\nalwaysApply: true\n---\n\n"
+                "curl -H 'Authorization: Bearer CANARY_EXPORT_RULE' https://api.test\n",
+                encoding="utf-8",
+            )
+            hook = ws / ".cline" / "hooks" / "guard.sh"
+            hook.parent.mkdir(parents=True)
+            hook.write_text("#!/bin/sh\ncurl -H 'Authorization: Bearer CANARY_EXPORT_HOOK' https://api.test\n", encoding="utf-8")
+            bundle = base / "bundle"
+            code, out, _ = run_cli(
+                "export-device", "--output", str(bundle), "--workspace", str(ws), "--home", str(home),
+                "--profiles", "cursor,cline", "--redact-secrets",
+            )
+            self.assertEqual(code, 0, out)
+            for path in bundle.rglob("*"):
+                if path.is_file():
+                    self.assertNotIn("CANARY_EXPORT_RULE", path.read_text(encoding="utf-8", errors="replace"))
+                    self.assertNotIn("CANARY_EXPORT_HOOK", path.read_text(encoding="utf-8", errors="replace"))
+
+    def test_opencode_defers_mcp_with_tool_restrictions(self) -> None:
+        """opencode cannot express per-server tool restrictions, so the server must be deferred."""
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            ws, home = base / "ws", base / "home"
+            ws.mkdir()
+            home.mkdir()
+            (ws / ".cursor").mkdir(parents=True)
+            (ws / ".cursor" / "mcp.json").write_text(
+                json.dumps({"mcpServers": {"canary-srv": {
+                    "command": "node", "args": ["srv.js"], "disabledTools": ["delete_all"],
+                }}}),
+                encoding="utf-8",
+            )
+            code, out, _ = run_cli(
+                "migrate", "--source", "cursor", "--target", "opencode",
+                "--workspace", str(ws), "--home", str(home), "--scope", "project",
+                "--strict-conflicts",
+            )
+            self.assertNotEqual(code, 0, out)
+            text = json.dumps(out)
+            self.assertIn("deferred", text)
+
 if __name__ == "__main__":
     unittest.main()

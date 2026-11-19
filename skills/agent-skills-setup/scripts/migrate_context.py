@@ -81,7 +81,7 @@ INLINE_SECRET_RE = re.compile(
     r"github_pat_[A-Za-z0-9_]{10,}|xox[baprs]-[A-Za-z0-9-]{8,}|"
     r"AIza[0-9A-Za-z_-]{16,}|AKIA[0-9A-Z]{12,})(?![A-Za-z0-9_-])"
 )
-BEARER_LITERAL_RE = re.compile(r"\bBearer\s+(?!" + re.escape(D + "{") + r")\S+")
+BEARER_LITERAL_RE = re.compile(r"\bBearer\s+(?!" + re.escape(D + "{") + r")[^\s'\"\x60]+")
 SECTION_RE = re.compile(
     r"<!-- agent-skills-setup:begin id=([A-Za-z0-9_.:-]+) sha256=([0-9a-f]+) -->\n"
     r"(.*?)"
@@ -777,6 +777,13 @@ def normalize_mcp_entry(name: str, raw: dict[str, Any], source_style: str = "mcp
     )
 
 
+class UnrepresentableMcpServer(Exception):
+    """目标面无法表达这个 MCP 服务器（例如按服务器的工具允许/拒绝列表）。
+
+    延后而不是安装成更宽松的服务。
+    """
+
+
 def serialize_mcp_for_json_style(srv: NormalizedMcp, target_style: str, redact_secrets: bool) -> tuple[dict[str, Any], list[str]]:
     notes = [f"Excluded non-portable grants: {', '.join(sorted(srv.stripped_grants))}"] if srv.stripped_grants else []
     if srv.knob_only and target_style == "pi":
@@ -832,6 +839,10 @@ def serialize_mcp_for_json_style(srv: NormalizedMcp, target_style: str, redact_s
         return entry, notes
 
     if target_style == "opencode":
+        if srv.tool_allow or srv.tool_deny:
+            raise UnrepresentableMcpServer(
+                "opencode 的 MCP 条目没有工具允许/拒绝列表，装上去会变成更宽松的服务"
+            )
         if srv.url:
             e: dict[str, Any] = {"type": "remote", "url": url, "enabled": not srv.disabled}
             if hdr_out:
@@ -1536,10 +1547,12 @@ def write_managed_file(
 
 def apply_rule_to_target(
     rule: DiscoveredRule, tpp: ProfilePaths, *, workspace: Path, home: Path | None = None,
-    allow_broaden_scope: bool, backups: BackupManager, warnings: list[dict[str, Any]], dry_run: bool,
+    allow_broaden_scope: bool, redact_secrets: bool = False,
+    backups: BackupManager, warnings: list[dict[str, Any]], dry_run: bool,
 ) -> dict[str, Any]:
     tp, is_p = tpp.profile, rule.scope == "project"
     root = workspace if is_p else (home or workspace)
+    rule_body = _redact_document_text(rule.body) if redact_secrets else rule.body
     if tp == "zed" and is_p:
         sh = [c for c in (".rules", ".cursorrules", ".windsurfrules", ".clinerules", "CLAUDE.md", "GEMINI.md") if (workspace / c).exists() and (workspace / c) != rule.source_path]
         if sh:
@@ -1553,16 +1566,16 @@ def apply_rule_to_target(
                 return act("instructions", rule.slug, "deferred", reason="no_target_rule_surface")
             dst = rdir / f"{rule.slug}.md"
             if dst.exists():
-                return act("instructions", rule.slug, "noop" if dst.read_text(encoding="utf-8").strip() == rule.body.strip() else "conflict", dst)
-            write_managed_file(dst, (rule.body.strip() + "\n").encode("utf-8"), has_secrets=False, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
+                return act("instructions", rule.slug, "noop" if dst.read_text(encoding="utf-8").strip() == rule_body.strip() else "conflict", dst)
+            write_managed_file(dst, (rule_body.strip() + "\n").encode("utf-8"), has_secrets=_payload_has_secrets((rule_body.strip() + "\n").encode("utf-8")), auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
             return act("instructions", rule.slug, "migrated", dst)
         if dst.resolve(strict=False) == rule.source_path.resolve(strict=False):
             return act("instructions", rule.slug, "noop", dst)
         existing = dst.read_text(encoding="utf-8") if dst.exists() else ""
-        merged, st = merge_markdown_section(existing, rule.slug, rule.body)
+        merged, st = merge_markdown_section(existing, rule.slug, rule_body)
         if st in ("noop", "conflict"):
             return act("instructions", rule.slug, st, dst, reason="divergent_section_with_same_id" if st == "conflict" else None)
-        write_managed_file(dst, merged.encode("utf-8"), has_secrets=False, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
+        write_managed_file(dst, merged.encode("utf-8"), has_secrets=_payload_has_secrets(merged.encode("utf-8")), auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
         return act("instructions", rule.slug, "migrated", dst)
 
     if rule.kind == "glob_scoped":
@@ -1570,48 +1583,48 @@ def apply_rule_to_target(
         rendered: str | None = None
         dst = None
         if tp == "claude-code" and rdir:
-            dst, rendered = rdir / f"{rule.slug}.md", render_frontmatter({"paths": rule.globs}, rule.body)
+            dst, rendered = rdir / f"{rule.slug}.md", render_frontmatter({"paths": rule.globs}, rule_body)
         elif tp in ("vscode", "copilot-cli") and is_p and tpp.proj_rules:
-            dst, rendered = tpp.proj_rules / f"{rule.slug}.instructions.md", render_frontmatter({"applyTo": ", ".join(rule.globs)}, rule.body)
+            dst, rendered = tpp.proj_rules / f"{rule.slug}.instructions.md", render_frontmatter({"applyTo": ", ".join(rule.globs)}, rule_body)
         elif tp == "cursor" and rdir:
             gval: Any = rule.globs[0] if len(rule.globs) == 1 else ", ".join(rule.globs)
-            dst, rendered = rdir / f"{rule.slug}.mdc", render_frontmatter({"globs": gval, "alwaysApply": False}, rule.body)
+            dst, rendered = rdir / f"{rule.slug}.mdc", render_frontmatter({"globs": gval, "alwaysApply": False}, rule_body)
         elif tp == "windsurf" and is_p and tpp.proj_rules:
-            dst, rendered = tpp.proj_rules / f"{rule.slug}.md", render_frontmatter({"trigger": "glob", "globs": ", ".join(rule.globs)}, rule.body)
+            dst, rendered = tpp.proj_rules / f"{rule.slug}.md", render_frontmatter({"trigger": "glob", "globs": ", ".join(rule.globs)}, rule_body)
         elif allow_broaden_scope and (tpp.proj_doc if is_p else tpp.user_doc):
             ddoc = (tpp.proj_doc if is_p else tpp.user_doc)
             assert ddoc is not None
             ex = ddoc.read_text(encoding="utf-8") if ddoc.exists() else ""
-            merged, st = merge_markdown_section(ex, rule.slug, f"> Scoped guideline (`{', '.join(rule.globs)}`)\n\n{rule.body.strip()}\n")
+            merged, st = merge_markdown_section(ex, rule.slug, f"> Scoped guideline (`{', '.join(rule.globs)}`)\n\n{rule_body.strip()}\n")
             if st == "conflict":
                 return act("instructions", rule.slug, "conflict", ddoc)
             if st == "added":
-                write_managed_file(ddoc, merged.encode("utf-8"), has_secrets=False, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
+                write_managed_file(ddoc, merged.encode("utf-8"), has_secrets=_payload_has_secrets(merged.encode("utf-8")), auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
             return act("instructions", rule.slug, "noop" if st == "noop" else "migrated", ddoc, note="Broadened glob rule (--allow-broaden-scope)")
         else:
             pdst = workspace / ".migration-review" / "rules" / tp / f"{rule.slug}.md"
-            write_managed_file(pdst, render_frontmatter({"source_globs": rule.globs, "target": tp}, rule.body).encode("utf-8"), has_secrets=False, auth_root=workspace, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
+            write_managed_file(pdst, render_frontmatter({"source_globs": rule.globs, "target": tp}, rule_body).encode("utf-8"), has_secrets=_payload_has_secrets(render_frontmatter({"source_globs": rule.globs, "target": tp}, rule_body).encode("utf-8")), auth_root=workspace, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
             return act("instructions", rule.slug, "parked_draft", pdst, reason=f"{tp} lacks file-glob rule frontmatter; parked instead of widening scope")
         assert dst is not None and rendered is not None
         if dst.exists():
             return act("instructions", rule.slug, "noop" if dst.read_text(encoding="utf-8").strip() == rendered.strip() else "conflict", dst)
-        write_managed_file(dst, rendered.encode("utf-8"), has_secrets=False, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
+        write_managed_file(dst, rendered.encode("utf-8"), has_secrets=_payload_has_secrets(rendered.encode("utf-8")), auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
         return act("instructions", rule.slug, "migrated", dst, note="Converted glob-scoped rule; activation timing is host-specific")
 
     if rule.kind == "model_selected":
         rdir = tpp.proj_rules if is_p else tpp.user_rules
         if tp == "cursor" and rdir:
-            dst, rendered = rdir / f"{rule.slug}.mdc", render_frontmatter({"description": rule.description, "alwaysApply": False}, rule.body)
+            dst, rendered = rdir / f"{rule.slug}.mdc", render_frontmatter({"description": rule.description, "alwaysApply": False}, rule_body)
         elif tp == "windsurf" and is_p and tpp.proj_rules:
-            dst, rendered = tpp.proj_rules / f"{rule.slug}.md", render_frontmatter({"trigger": "model_decision", "description": rule.description}, rule.body)
+            dst, rendered = tpp.proj_rules / f"{rule.slug}.md", render_frontmatter({"trigger": "model_decision", "description": rule.description}, rule_body)
         else:
             sdir = tpp.proj_skills if is_p else tpp.user_skills
             if sdir is None:
                 return act("instructions", rule.slug, "deferred", reason="no_on_demand_surface")
-            dst, rendered = sdir / rule.slug / "SKILL.md", render_frontmatter({"name": rule.slug, "description": rule.description or f"Rule {rule.slug}"}, rule.body)
+            dst, rendered = sdir / rule.slug / "SKILL.md", render_frontmatter({"name": rule.slug, "description": rule.description or f"Rule {rule.slug}"}, rule_body)
         if dst.exists():
             return act("instructions", rule.slug, "noop" if dst.read_text(encoding="utf-8").strip() == rendered.strip() else "conflict", dst)
-        write_managed_file(dst, rendered.encode("utf-8"), has_secrets=False, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
+        write_managed_file(dst, rendered.encode("utf-8"), has_secrets=_payload_has_secrets(rendered.encode("utf-8")), auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
         return act("instructions", rule.slug, "migrated", dst, note="Converted model-selected rule to on-demand surface")
 
     # Manual rule -> manual-only Skill or explicit command (never always-on)
@@ -1619,39 +1632,43 @@ def apply_rule_to_target(
         sdir = tpp.proj_skills if is_p else tpp.user_skills
         assert sdir is not None
         dst = sdir / rule.slug / "SKILL.md"
-        rendered = render_frontmatter({"name": rule.slug, "description": f"Manual workflow /{rule.slug} (explicit invocation only).", "disable-model-invocation": True}, rule.body)
+        rendered = render_frontmatter({"name": rule.slug, "description": f"Manual workflow /{rule.slug} (explicit invocation only).", "disable-model-invocation": True}, rule_body)
         if dst.exists():
             return act("instructions", rule.slug, "noop" if dst.read_text(encoding="utf-8").strip() == rendered.strip() else "conflict", dst)
-        write_managed_file(dst, rendered.encode("utf-8"), has_secrets=False, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
+        write_managed_file(dst, rendered.encode("utf-8"), has_secrets=_payload_has_secrets(rendered.encode("utf-8")), auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
         return act("instructions", rule.slug, "migrated", dst, note="Converted manual rule to manual-only Skill (disable-model-invocation: true)")
 
     cdir = tpp.proj_cmds if is_p else tpp.user_cmds
     if cdir is not None and tp != "gemini-cli":
         dst = cdir / f"{rule.slug}{'.prompt.md' if tp == 'vscode' else '.md'}"
-        rendered = rule.body.strip() + "\n"
+        rendered = rule_body.strip() + "\n"
         if dst.exists():
             return act("instructions", rule.slug, "noop" if dst.read_text(encoding="utf-8").strip() == rendered.strip() else "conflict", dst)
-        write_managed_file(dst, rendered.encode("utf-8"), has_secrets=False, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
+        write_managed_file(dst, rendered.encode("utf-8"), has_secrets=_payload_has_secrets(rendered.encode("utf-8")), auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
         return act("instructions", rule.slug, "migrated", dst, note="Converted manual rule to explicit command/prompt")
 
     pdst = workspace / ".migration-review" / "manual-rules" / tp / f"{rule.slug}.md"
-    write_managed_file(pdst, (rule.body.strip() + "\n").encode("utf-8"), has_secrets=False, auth_root=workspace, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
+    write_managed_file(pdst, (rule_body.strip() + "\n").encode("utf-8"), has_secrets=_payload_has_secrets((rule_body.strip() + "\n").encode("utf-8")), auth_root=workspace, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
     return act("instructions", rule.slug, "parked_draft", pdst, reason=f"{tp} lacks verified manual-only flag; parked instead of making always-on")
 
 
+def _payload_has_secrets(data: bytes) -> bool:
+    """写入前判断这份内容里是否还留着凭据（token / Bearer / 认证头）。"""
+    return _document_text_has_secrets(data.decode("utf-8", errors="replace"))
+
+
 def _resource_contains_secrets(content: bytes) -> bool:
-    """Classify a Skill resource as secret-bearing before it is copied."""
+    """Classify a resource as secret-bearing before it is copied or written."""
     text = content.decode("utf-8", errors="replace")
     if parse_dotenv_secrets(text)[1]:
         return True
-    return bool(SECRET_VALUE_RE.search(text))
+    return _document_text_has_secrets(text)
 
 
 def _redact_resource(content: bytes) -> bytes:
     text = content.decode("utf-8", errors="replace")
     redacted, _ = parse_dotenv_secrets(text, redact=True)
-    redacted = SECRET_VALUE_RE.sub("", redacted)
-    return redacted.encode("utf-8")
+    return _redact_document_text(redacted).encode("utf-8")
 
 
 def apply_skill_to_target(
@@ -1858,7 +1875,11 @@ def apply_mcp_servers_to_file(
             same = existing_map[srv.name].comparison_signature(redact_secrets=redact_secrets) == srv.comparison_signature(redact_secrets=redact_secrets)
             results.append(act("mcp", srv.name, "noop" if same else "conflict", dst_path, reason=None if same else "existing_target_server_differs", has_secrets=hs and (not redact_secrets if same else True), secrets=sl))
             continue
-        ed, notes = serialize_mcp_for_json_style(srv, dst_style, redact_secrets=redact_secrets)
+        try:
+            ed, notes = serialize_mcp_for_json_style(srv, dst_style, redact_secrets=redact_secrets)
+        except UnrepresentableMcpServer as exc:
+            results.append(act("mcp", srv.name, "deferred", dst_path, reason=str(exc), has_secrets=hs, secrets=sl))
+            continue
         container[srv.name] = ed
         changed = True
         wrote_s = hs and not redact_secrets
@@ -2027,7 +2048,7 @@ def execute_inventories_to_targets(
                         actions.append(act("instructions", r.slug, "conflict", target_profile=tprof, reason="conflicting_rules_across_sources"))
                     continue
                 seen_rules[rk] = r
-                res = apply_rule_to_target(r, tpp, workspace=workspace, home=home, allow_broaden_scope=allow_broaden_scope, backups=backups, warnings=warnings, dry_run=dry_run)
+                res = apply_rule_to_target(r, tpp, workspace=workspace, home=home, allow_broaden_scope=allow_broaden_scope, redact_secrets=redact_secrets, backups=backups, warnings=warnings, dry_run=dry_run)
                 res["target_profile"] = tprof
                 actions.append(res)
 
@@ -2154,10 +2175,14 @@ def cmd_export_device(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
                 seen_ex.add(ex["path"])
                 excluded_all.append(ex)
         for idx, r in enumerate(inv.rules):
-            _stage(f"files/{prof}/{r.scope}/instructions/{idx:02d}-{r.slug}-{r.source_path.name}", r.source_path.read_bytes(), {
+            rule_bytes = r.source_path.read_bytes()
+            rule_has_secrets = _resource_contains_secrets(rule_bytes)
+            rule_data = _redact_resource(rule_bytes) if (args.redact_secrets and rule_has_secrets) else rule_bytes
+            _stage(f"files/{prof}/{r.scope}/instructions/{idx:02d}-{r.slug}-{r.source_path.name}", rule_data, {
                 "profile": prof, "category": "instructions", "scope": r.scope, "id": r.slug,
                 "rule_kind": r.kind, "globs": r.globs, "description": r.description,
-                "logical_source": logical_path_str(r.source_path, ws, home), "has_secrets": False, "secrets": [],
+                "logical_source": logical_path_str(r.source_path, ws, home),
+                "has_secrets": rule_has_secrets and not args.redact_secrets, "secrets": [],
             })
         for sk in inv.skills:
             auth_s = ws if sk.scope == "project" else home
@@ -2193,9 +2218,12 @@ def cmd_export_device(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
             })
         for d in inv.doc_items:
             rel = f"review/hooks/{prof}-{d.scope}-{d.name}" if d.category == "hooks" else f"files/{prof}/{d.scope}/{d.category}/{d.name}"
-            _stage(rel, d.content, {
+            doc_has_secrets = _resource_contains_secrets(d.content)
+            doc_data = _redact_resource(d.content) if (args.redact_secrets and doc_has_secrets) else d.content
+            _stage(rel, doc_data, {
                 "profile": prof, "category": d.category, "scope": d.scope, "id": d.name,
-                "logical_source": logical_path_str(d.path, ws, home), "has_secrets": False, "secrets": [],
+                "logical_source": logical_path_str(d.path, ws, home),
+                "has_secrets": doc_has_secrets and not args.redact_secrets, "secrets": [],
             })
         for ef in inv.env_files:
             if ef.name not in seen_env:
