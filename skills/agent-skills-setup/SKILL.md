@@ -22,6 +22,16 @@ Read only the references needed for the requested objects. Route selected tools
 through the [product catalog](references/products.md), then load only the relevant
 profile sections. Its documentation evidence is not a real-client test result.
 
+## Select the right workflow contract
+
+- For terminal/native commands or an old CLI transcript, read
+  [CLI workflow](references/cli-workflow.md); verify command side effects first.
+- For old Registry v2 selectors, policies or compatibility claims, read
+  [Registry v2 interpretation](references/registry-v2.md). Archived entries are
+  evidence to recheck, not instructions to run the retired engine.
+- For completion, use the checklist in [verification](references/verification.md).
+  Account for unchanged, conflicted, deferred and failed objects as well as writes.
+
 ## Start from the user's request
 
 Infer source product/profile, destination, workspace, scope, and preview versus
@@ -56,18 +66,20 @@ source files unless the user separately asks to delete them.
    Separate exact copies, semantic conversions, consent-dependent changes,
    parked drafts, and items needing evidence. Unsupported fields must remain in
    the report; never silently widen applicability, tools, or privileges.
-4. **Apply a small, reviewable diff.** Re-read the target before writing. Preserve
-   existing unrelated settings and comments. Back up only files actually being
-   replaced, outside auto-loaded context directories. Work per skill, instruction,
-   or MCP server: one conflict must not block unrelated objects. Same name and
-   same content is a no-op; differing content is a conflict, not first-source-wins.
-   Do not follow links outside the authorized roots or run imported code.
+4. **Apply a small, reviewable diff.** Re-read source and target before writing.
+   If either changed since review, recompute the diff and preserve concurrent edits.
+   Preserve existing unrelated settings and comments. Back up only replacements,
+   outside auto-loaded context directories. Work per skill, instruction or MCP
+   server: one conflict must not block unrelated objects. Same name and content
+   is a no-op; differing content is a conflict, not first-source-wins.
+   Do not follow links outside authorized roots or run imported code.
 5. **Verify and report.** Read [verification](references/verification.md).
    Check syntax, discovery path, scope, imports, content, and unchanged neighbors.
-   Loading and runtime behavior need separate evidence. Return changed paths,
-   preserved/deferred items, losses, secret names to rebind, and the checks actually
-   performed. Use the [report template](assets/migration-report.md) only when a
-   durable report helps; do not create a state database or mandatory JSON plan.
+   Loading, activation and runtime behavior need separate evidence. Return changed
+   paths, all object outcomes, losses, variable names to rebind, and exact checks
+   with pass/fail/not-run/blocked status. Use the
+   [report template](assets/migration-report.md) only when a durable report helps;
+   do not create a state database or mandatory JSON plan.
 
 ## Switching devices
 
