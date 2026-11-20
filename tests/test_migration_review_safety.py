@@ -236,3 +236,33 @@ class MigrationReviewSafety(unittest.TestCase):
         self.assertEqual(Path(output["backups"][0]).read_text(encoding="utf-8"), "# Original fixture\n")
         self.assertIn("# Cursor fixture", existing.read_text(encoding="utf-8"))
         self.assertIn("# Kilo fixture", existing.read_text(encoding="utf-8"))
+
+    def test_backup_destination_is_validated_before_any_write(self):
+        from unittest.mock import patch
+        target = self.write(self.work / "AGENTS.md", "# Existing\n")
+        manager = migrate.BackupManager(self.root / "backups", self.home, self.work, False)
+        with patch.object(migrate, "validate_contained", side_effect=migrate.SafetyRefusalError(
+                "test_refusal", "synthetic refusal")) as validate, patch.object(
+                migrate, "atomic_write_bytes") as write:
+            with self.assertRaises(migrate.SafetyRefusalError):
+                manager.backup_if_exists(target)
+            validate.assert_called_once_with(manager.root / "workspace/AGENTS.md", manager.root, "backup_file")
+            write.assert_not_called()
+        self.assertFalse(manager.root.exists())
+
+    def test_qwen_tool_restricted_skill_defers_on_unverified_destination(self):
+        self.write(self.work / ".qwen/skills/fixture/SKILL.md",
+                   '---\nname: fixture\ndescription: Fixture\nallowedTools: [Read]\n---\n# Notes\n')
+        report = self.run_cli("migrate", "--source", "qwen-code", "--target", "claude-code",
+                              "--scope", "project", "--categories", "skills")
+        self.assertEqual(report["summary"]["deferred"], 1)
+        self.assertFalse((self.work / ".claude/skills/fixture").exists())
+
+    def test_vscode_prompt_and_agent_suffixes_are_removed_on_other_clients(self):
+        self.write(self.work / ".github/prompts/team/review.prompt.md", "# Prompt fixture\n")
+        self.write(self.work / ".github/agents/check.agent.md", "# Agent fixture\n")
+        self.run_cli("migrate", "--source", "vscode", "--target", "claude-code",
+                     "--scope", "project", "--categories", "commands,agents", "--strict-conflicts")
+        self.assertTrue((self.work / ".claude/commands/team/review.md").is_file())
+        self.assertTrue((self.work / ".claude/agents/check.md").is_file())
+        self.assertFalse((self.work / ".claude/commands/team/review.prompt.md").exists())

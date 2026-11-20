@@ -307,6 +307,10 @@ class BackupManager:
         else:
             rel = Path("external") / f"{sha256_prefix(str(resolved))}-{resolved.name}"
         bpath = self.root / rel
+        validate_contained(bpath, self.root, "backup_file")
+        for part in (*bpath.parents, bpath):
+            if part.is_relative_to(self.root) and part.is_symlink():
+                raise SafetyRefusalError("unsafe_backup_path", "Backup paths cannot contain symlinks")
         if not self.dry_run:
             ensure_dir(self.root, private=True, dry_run=False)
             atomic_write_bytes(bpath, target.read_bytes(), mode=0o600, private_parent=True, dry_run=False)
@@ -1780,7 +1784,7 @@ def apply_skill_to_target(
         alt_md = render_frontmatter(nm, skill.body).encode("utf-8")
         notes.append("Translated allowed-tools -> Qwen allowedTools; verify tool names")
     elif skill.source_profile == "qwen-code" and tpp.profile != "qwen-code" and "allowedTools" in skill.meta:
-        notes.append("Source Skill uses Qwen allowedTools; verify destination tool enforcement")
+        return act("skills", skill.name, "deferred", dst_dir, reason="qwen_tool_restrictions_not_verified")
 
     raw_files = dict(skill.verified_files) if skill.verified_files is not None else {}
     if skill.verified_files is None:
@@ -2009,6 +2013,11 @@ def apply_doc_item_to_target(
         raise SafetyRefusalError("invalid_document_scope", "Invalid document scope")
     checked_doc_name(item.name)
     is_p, tp = item.scope == "project", tpp.profile
+    name = item.name
+    if item.source_profile == "vscode" and tp != "vscode":
+        suffix = {"commands": ".prompt.md", "agents": ".agent.md"}.get(item.category)
+        if suffix and name.endswith(suffix):
+            name = name[:-len(suffix)] + ".md"
     doc_text = item.content.decode("utf-8", errors="surrogateescape")
     if redact_secrets:
         doc_text = _redact_document_text(doc_text)
@@ -2055,7 +2064,7 @@ def apply_doc_item_to_target(
         if dst_dir is None or (tp == "gemini-cli" and not item.name.endswith(".toml")) or (item.source_profile == "gemini-cli" and tp != "gemini-cli"):
             sdir = tpp.proj_skills if is_p else tpp.user_skills
             if sdir is not None and item.name.endswith(".md"):
-                cslug = slugify(Path(item.name).stem)
+                cslug = slugify(Path(name).stem)
                 dst = sdir / cslug / "SKILL.md"
                 text = doc_text
                 src_meta, body = parse_frontmatter(text)
@@ -2107,7 +2116,7 @@ def apply_doc_item_to_target(
         write_managed_file(park, doc_content, has_secrets=doc_has_secrets, auth_root=workspace, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
         return act(item.category, item.name, "parked_draft", park, reason=f"No direct {item.category} directory on {tp}")
 
-    dst_name = item.name
+    dst_name = name
     if tp == "vscode":
         if item.category == "commands" and not dst_name.endswith(".prompt.md"):
             dst_name = dst_name[:-3] + ".prompt.md" if dst_name.endswith(".md") else dst_name + ".prompt.md"
