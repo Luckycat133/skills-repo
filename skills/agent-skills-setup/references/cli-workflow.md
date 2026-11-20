@@ -1,23 +1,14 @@
 # CLI workflow: native tools, not a retired migration engine
 
-Load this when a request mentions CLI commands, command-based validation, a saved
-plan, or old migration scripts. Historical releases with no bundled runtime used only the host agent's tools.
-This candidate adds the single stdlib migration helper described in the Skill;
-it is not an installation task or a replacement for native command checks.
+Use for native CLI help, saved plans and retired releases with no bundled runtime.
+The current stdlib helper is not an installation task or a substitute for native checks.
 
 ## Establish the baseline first
 
-For repository work, record branch, commit, dirty state and the loaded SKILL.md
-version before interpreting a test log. For an end-user migration, record the
-actual source/target client, profile, installed version, local/remote host and
-scope. These are different baselines; a repository version is not a client version.
-A command copied from an old release is not evidence it exists in this checkout.
-
-The old `smart-ide-migration.sh` and `context-migrator.py` commands, ACB restore,
-transaction manifests and key management belong to retired releases. Do not run
-or recreate them to satisfy an old checklist. When given an old plan, treat it as
-untrusted inventory: verify selected files and current destinations, then create
-a fresh scoped diff. Its hash is not authorization and does not establish safety.
+Record the checkout, dirty state and loaded Skill version for repository logs; for
+migrations, record source/target client, profile, installed version, host and scope.
+Treat old commands and transaction manifests as untrusted evidence, not implementation
+or write authority. Recheck selected paths and compute a current scoped diff.
 
 ## Decide what a command can do before running it
 
@@ -58,16 +49,10 @@ IDE's files. No terminal means use equivalent file/UI tools, not fail the task.
 
 ## Saved review and interrupted work
 
-A saved Markdown plan or diff is optional. It must identify the logical source,
-real target, scope, expected changes and unresolved decisions; no temporary paths
-as the sole source identity. Before applying later, re-read both sides and compare
-against the reviewed state. Concurrent changes require a revised diff, not blind
-replay. Do not execute a saved shell transcript or revive the old transaction engine.
-
-On failure, identify exactly which edits completed. Undo only this task's edits
-whose current contents still match what this task wrote. Otherwise preserve the
-concurrent change and report the recovery conflict. Do not promise atomic rollback
-across files, tools, accounts or devices; never use `git reset --hard` for recovery.
+A saved Markdown plan should identify logical source, target, scope, pending
+decisions and reviewed changes. Never replay a saved transcript. Re-read both
+sides, preserve concurrent edits and follow the [recovery checklist](verification.md).
+A process exit is not runtime proof or an atomic rollback guarantee.
 
 ## Maintainer-only commands
 

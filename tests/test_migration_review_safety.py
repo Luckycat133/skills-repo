@@ -116,3 +116,123 @@ class MigrationReviewSafety(unittest.TestCase):
         live = active / ".cline/hooks/TaskStart"
         self.assertEqual(live.read_bytes(), source.read_bytes())
         self.assertTrue(live.stat().st_mode & stat.S_IXUSR)
+
+    def test_inline_comments_preserve_activation_and_quoted_hashes(self):
+        path = self.write(self.work / ".cursor/rules/review.mdc",
+                          '---\nalwaysApply: true # note\ndescription: "Keep # here" # note\n---\nReview.\n')
+        meta, _ = migrate.parse_frontmatter(path.read_text(encoding="utf-8"))
+        self.assertEqual(meta["description"], "Keep # here")
+        self.assertEqual(migrate.parse_rule_files(path, "project", "cursor")[0].kind, "always_on")
+
+    def test_project_mcp_routing_uses_actual_user_destination(self):
+        self.write(self.work / ".cursor/mcp.json",
+                   '{"mcpServers":{"demo":{"command":"fixture-command"}}}')
+        output = self.run_cli("migrate", "--source", "cursor", "--target", "cline",
+                              "--scope", "all", "--categories", "mcp")
+        self.assertEqual(output["summary"]["migrated"], 1)
+        destination = self.home / ".cline/data/settings/cline_mcp_settings.json"
+        self.assertEqual(json.loads(destination.read_text(encoding="utf-8"))["mcpServers"]["demo"]["command"],
+                         "fixture-command")
+
+    def test_normalized_rule_export_and_restore_keep_each_body_once(self):
+        content = "# Root notes\nRoot fixture.\n"
+        source = self.work / "AGENTS.md"
+        for id_, body in (("one", "First fixture."), ("two", "Second fixture.")):
+            content, _ = migrate.merge_markdown_section(content, id_, body)
+        self.write(source, content)
+        transfer = self.root / "transfer"
+        self.run_cli("export-device", "--profiles", "cursor", "--scope", "project",
+                     "--categories", "instructions", "--output", str(transfer))
+        entries = json.loads((transfer / "manifest.json").read_text(encoding="utf-8"))["entries"]
+        bodies = {e["id"]: (transfer / e["bundle_path"]).read_text(encoding="utf-8") for e in entries}
+        self.assertEqual(bodies["one"].strip(), "First fixture.")
+        self.assertEqual(bodies["two"].strip(), "Second fixture.")
+        target = self.root / "target"
+        target.mkdir()
+        self.run_cli("import-device", "--input", str(transfer), "--scope", "project", workspace=target)
+        restored = (target / "AGENTS.md").read_text(encoding="utf-8")
+        for marker in ("Root fixture.", "First fixture.", "Second fixture."):
+            self.assertEqual(restored.count(marker), 1)
+
+    def test_restore_skill_uses_only_checked_manifest_files(self):
+        skill = self.work / ".cursor/skills/fixtures"
+        self.write(skill / "SKILL.md", "---\nname: fixtures\ndescription: Fixture\n---\n# Fixture\n")
+        self.write(skill / "included.txt", "included\n")
+        transfer = self.root / "transfer"
+        self.run_cli("export-device", "--profiles", "cursor", "--scope", "project",
+                     "--categories", "skills", "--output", str(transfer))
+        self.write(transfer / "files/cursor/project/skills/fixtures/unlisted.txt", "unlisted\n")
+        target = self.root / "target"
+        target.mkdir()
+        self.run_cli("import-device", "--input", str(transfer), "--scope", "project", workspace=target)
+        restored = target / ".cursor/skills/fixtures"
+        self.assertEqual({p.name for p in restored.iterdir()}, {"SKILL.md", "included.txt"})
+
+    def test_redacted_skill_repeat_compares_final_bytes(self):
+        skill = self.work / ".cursor/skills/fixtures"
+        self.write(skill / "SKILL.md", "---\nname: fixtures\ndescription: Fixture\n---\n# Fixture\n")
+        self.write(skill / ".env", "FIXTURE_TOKEN=fixture-value\n")
+        args = ("--source", "cursor", "--target", "claude-code", "--scope", "project",
+                "--categories", "skills", "--redact-secrets", "--strict-conflicts")
+        self.assertEqual(self.run_cli("migrate", *args)["summary"]["migrated"], 1)
+        self.assertEqual(self.run_cli("migrate", *args)["summary"]["noop"], 1)
+
+    def test_binary_document_bytes_survive_direct_migration(self):
+        path = self.work / ".cursor/commands/asset.bin"
+        path.parent.mkdir(parents=True)
+        data = bytes([0, 255, 254, 65, 0, 128])
+        path.write_bytes(data)
+        self.run_cli("migrate", "--source", "cursor", "--target", "claude-code", "--scope", "project",
+                     "--categories", "commands", "--redact-secrets", "--strict-conflicts")
+        self.assertEqual((self.work / ".claude/commands/asset.bin").read_bytes(), data)
+
+    def test_divergent_same_name_documents_report_conflict_without_winning_copy(self):
+        for profile, body in ((".cursor", "one"), (".claude", "two")):
+            self.write(self.work / profile / "commands/review.md", f"# Review\n{body}\n")
+        self.write(self.work / ".cursor/commands/other.md", "# Other\n")
+        output = self.run_cli("migrate", "--source", "cursor,claude-code", "--target", "vscode",
+                              "--scope", "project", "--categories", "commands")
+        self.assertEqual(output["summary"]["conflict"], 1)
+        self.assertFalse((self.work / ".github/prompts/review.prompt.md").exists())
+        self.assertTrue((self.work / ".github/prompts/other.prompt.md").is_file())
+
+    def test_cline_existing_single_file_merges_always_on_rule_and_preserves_neighbor(self):
+        self.write(self.work / "AGENTS.md", "# New rule\nUse review notes.\n")
+        existing = self.write(self.work / ".clinerules", "# Existing rule\nKeep this.\n")
+        args = ("--source", "cursor", "--target", "cline", "--scope", "project",
+                "--categories", "instructions", "--strict-conflicts")
+        self.assertEqual(self.run_cli("migrate", *args)["summary"]["migrated"], 1)
+        self.assertEqual(self.run_cli("migrate", *args)["summary"]["noop"], 1)
+        text = existing.read_text(encoding="utf-8")
+        self.assertIn("Keep this.", text)
+        self.assertEqual(text.count("Use review notes."), 1)
+
+    def test_same_profile_restore_preserves_original_shared_backup(self):
+        # Cursor and Kilocode both use AGENTS.md; hand-build two independent,
+        # checksummed profile entries using ordinary exports of different fixtures.
+        import shutil
+        transfer = self.root / "transfer"
+        source = self.write(self.work / "AGENTS.md", "# Cursor fixture\n")
+        self.run_cli("export-device", "--profiles", "cursor", "--scope", "project",
+                     "--categories", "instructions", "--output", str(transfer))
+        other = self.root / "other"
+        self.write(source, migrate.merge_markdown_section("", "kilo-notes", "# Kilo fixture\n")[0])
+        self.run_cli("export-device", "--profiles", "kilocode", "--scope", "project",
+                     "--categories", "instructions", "--output", str(other))
+        shutil.copytree(other / "files/kilocode", transfer / "files/kilocode")
+        manifest_path = transfer / "manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        second = json.loads((other / "manifest.json").read_text(encoding="utf-8"))
+        manifest["entries"].extend(second["entries"])
+        manifest["profiles"].extend(second["profiles"])
+        self.write(manifest_path, json.dumps(manifest))
+        target = self.root / "destination"
+        existing = self.write(target / "AGENTS.md", "# Original fixture\n")
+        backups = self.root / "backups"
+        output = self.run_cli("import-device", "--input", str(transfer), "--scope", "project",
+                              "--backup-dir", str(backups), workspace=target)
+        self.assertEqual(output["summary"]["migrated"], 2)
+        self.assertEqual(len(output["backups"]), 1)
+        self.assertEqual(Path(output["backups"][0]).read_text(encoding="utf-8"), "# Original fixture\n")
+        self.assertIn("# Cursor fixture", existing.read_text(encoding="utf-8"))
+        self.assertIn("# Kilo fixture", existing.read_text(encoding="utf-8"))

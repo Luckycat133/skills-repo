@@ -420,8 +420,27 @@ def split_globs(raw: Any) -> list[str]:
     return parts
 
 
+def strip_yaml_comment(value: str) -> str:
+    quote = None
+    escaped = False
+    for i, ch in enumerate(value):
+        prev = value[i - 1] if i else ""
+        if quote:
+            if escaped:
+                escaped = False
+            elif quote == '"' and ch == "\\":
+                escaped = True
+            elif ch == quote:
+                quote = None
+        elif ch == "#" and (not i or prev.isspace()):
+            return value[:i].rstrip()
+        elif ch in ("'", '"') and (not i or prev.isspace() or prev in "[,{:"):
+            quote = ch
+    return value.rstrip()
+
+
 def parse_scalar_yaml(val: str) -> Any:
-    v = val.strip()
+    v = strip_yaml_comment(val).strip()
     if not v:
         return ""
     if v in ("true", "True"):
@@ -470,7 +489,7 @@ def parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
         if ":" in raw_line and indent == 0:
             key, rest = raw_line.split(":", 1)
             cur_key, cur_list = key.strip(), None
-            rs = rest.strip()
+            rs = strip_yaml_comment(rest).strip()
             if rs in (">", ">-", "|", "|-"):
                 cur_folded, meta[cur_key] = [], ""
             elif rs == "":
@@ -1244,6 +1263,7 @@ class DiscoveredSkill:
     digest: str
     source_profile: str
     auth_root: Path | None = None
+    verified_files: dict[Path, tuple[bytes, bool]] | None = None
 
 
 @dataclass
@@ -1614,6 +1634,14 @@ def apply_rule_to_target(
             rdir = tpp.proj_rules if is_p else tpp.user_rules
             if rdir is None:
                 return act("instructions", rule.slug, "deferred", reason="no_target_rule_surface")
+            root = target_root(rdir)
+            if is_p and tp == "cline" and rdir.is_file():
+                existing = rdir.read_text(encoding="utf-8")
+                merged, outcome = merge_markdown_section(existing, rule.slug, rule_body)
+                if outcome == "added":
+                    data = merged.encode("utf-8")
+                    write_managed_file(rdir, data, has_secrets=_payload_has_secrets(data), auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
+                return act("instructions", rule.slug, "migrated" if outcome == "added" else outcome, rdir)
             dst = rdir / f"{rule.slug}.md"
             root = target_root(dst)
             if dst.exists():
@@ -1723,9 +1751,9 @@ def _resource_contains_secrets(content: bytes) -> bool:
 
 
 def _redact_resource(content: bytes) -> bytes:
-    text = content.decode("utf-8", errors="replace")
+    text = content.decode("utf-8", errors="surrogateescape")
     redacted, _ = parse_dotenv_secrets(text, redact=True)
-    return _redact_document_text(redacted).encode("utf-8")
+    return _redact_document_text(redacted).encode("utf-8", errors="surrogateescape")
 
 
 def apply_skill_to_target(
@@ -1754,15 +1782,24 @@ def apply_skill_to_target(
     elif skill.source_profile == "qwen-code" and tpp.profile != "qwen-code" and "allowedTools" in skill.meta:
         notes.append("Source Skill uses Qwen allowedTools; verify destination tool enforcement")
 
-    src_map: dict[Path, tuple[bytes, bool]] = {}
-    for p in sorted(skill.directory.rglob("*")):
-        validate_contained(p, auth_src, f"skill:{skill.name}")
-        if p.is_file() and not is_excluded_asset(p, skill.directory):
-            rel = p.relative_to(skill.directory)
-            content = alt_md if (rel.as_posix() == "SKILL.md" and alt_md is not None) else p.read_bytes()
-            is_ex = bool(p.stat().st_mode & stat.S_IXUSR) or ("scripts" in rel.parts and p.suffix in (".py", ".sh"))
-            has_sec = _resource_contains_secrets(content)
-            src_map[rel] = (content, is_ex, has_sec)
+    raw_files = dict(skill.verified_files) if skill.verified_files is not None else {}
+    if skill.verified_files is None:
+        for p in sorted(skill.directory.rglob("*")):
+            validate_contained(p, auth_src, f"skill:{skill.name}")
+            if p.is_file() and not is_excluded_asset(p, skill.directory):
+                rel = p.relative_to(skill.directory)
+                executable = bool(p.stat().st_mode & stat.S_IXUSR) or (
+                    "scripts" in rel.parts and p.suffix in (".py", ".sh"))
+                raw_files[rel] = (p.read_bytes(), executable)
+    if alt_md is not None:
+        path = Path("SKILL.md")
+        raw_files[path] = (alt_md, raw_files[path][1])
+
+    src_map: dict[Path, tuple[bytes, bool, bool]] = {}
+    for rel, (content, executable) in raw_files.items():
+        has_secrets = _resource_contains_secrets(content)
+        data = _redact_resource(content) if redact_secrets and has_secrets else content
+        src_map[rel] = (data, executable, has_secrets)
 
     if dst_dir.exists():
         dst_map: dict[Path, bytes] = {}
@@ -1774,13 +1811,8 @@ def apply_skill_to_target(
             return act("skills", skill.name, "noop", dst_dir)
         return act("skills", skill.name, "conflict", dst_dir, reason="existing_skill_has_different_content")
 
-    for rel, (content, is_ex, has_sec) in src_map.items():
-        data = content
-        mark_secrets = has_sec
-        if redact_secrets and has_sec:
-            data = _redact_resource(content)
-            mark_secrets = True
-        write_managed_file(dst_dir / rel, data, has_secrets=mark_secrets, executable=is_ex, allow_git_tracked_secrets=allow_git_tracked_secrets, auth_root=sroot, backups=backups, warnings=warnings, dry_run=dry_run)
+    for rel, (data, is_ex, has_sec) in src_map.items():
+        write_managed_file(dst_dir / rel, data, has_secrets=has_sec, executable=is_ex, allow_git_tracked_secrets=allow_git_tracked_secrets, auth_root=sroot, backups=backups, warnings=warnings, dry_run=dry_run)
     return act("skills", skill.name, "migrated", dst_dir, note="; ".join(notes) if notes else None)
 
 
@@ -1977,10 +2009,10 @@ def apply_doc_item_to_target(
         raise SafetyRefusalError("invalid_document_scope", "Invalid document scope")
     checked_doc_name(item.name)
     is_p, tp = item.scope == "project", tpp.profile
-    doc_text = item.content.decode("utf-8", errors="replace")
+    doc_text = item.content.decode("utf-8", errors="surrogateescape")
     if redact_secrets:
         doc_text = _redact_document_text(doc_text)
-    doc_content = doc_text.encode("utf-8")
+    doc_content = doc_text.encode("utf-8", errors="surrogateescape")
     doc_has_secrets = _document_text_has_secrets(doc_text)
 
     def target_root(dst: Path) -> Path:
@@ -2126,9 +2158,11 @@ def execute_inventories_to_targets(
     invs: list[ProfileInventory], target_profiles: list[str], *, workspace: Path, home: Path, scope: str,
     redact_secrets: bool, activate_hooks: bool, allow_broaden_scope: bool, allow_git_tracked_secrets: bool,
     strict_conflicts: bool, backup_dir: Path | None, dry_run: bool, is_bundle_import: bool = False,
+    backup_manager: BackupManager | None = None,
 ) -> tuple[dict[str, Any], int]:
     product_roots = configured_product_roots([*target_profiles, *(inv.profile for inv in invs)], workspace, home)
-    backups = BackupManager(backup_dir, home=home, workspace=workspace, dry_run=dry_run, product_roots=product_roots)
+    backups = backup_manager or BackupManager(
+        backup_dir, home=home, workspace=workspace, dry_run=dry_run, product_roots=product_roots)
     warnings: list[dict[str, Any]] = []
     actions: list[dict[str, Any]] = []
     excluded_all: list[dict[str, str]] = []
@@ -2194,15 +2228,18 @@ def execute_inventories_to_targets(
                 r["target_profile"] = tprof
                 actions.append(r)
 
-        seen_docs: set[tuple[str, str, str]] = set()
+        doc_groups: dict[tuple[str, str, str], list[DiscoveredDocItem]] = {}
         for inv in active:
             for item in inv.doc_items:
-                dk = (item.category, item.scope, item.name)
-                if dk not in seen_docs:
-                    seen_docs.add(dk)
-                    res = apply_doc_item_to_target(item, tpp, workspace=workspace, home=home, activate_hooks=activate_hooks, redact_secrets=redact_secrets, backups=backups, warnings=warnings, dry_run=dry_run)
-                    res["target_profile"] = tprof
-                    actions.append(res)
+                doc_groups.setdefault((item.category, item.scope, item.name), []).append(item)
+        for candidates in doc_groups.values():
+            item = candidates[0]
+            if any((c.content, c.executable) != (item.content, item.executable) for c in candidates[1:]):
+                res = act(item.category, item.name, "conflict", reason="conflicting_documents_across_sources")
+            else:
+                res = apply_doc_item_to_target(item, tpp, workspace=workspace, home=home, activate_hooks=activate_hooks, redact_secrets=redact_secrets, backups=backups, warnings=warnings, dry_run=dry_run)
+            res["target_profile"] = tprof
+            actions.append(res)
 
     seen_env: set[str] = set()
     for inv in invs:
@@ -2284,12 +2321,12 @@ def cmd_export_device(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
                 seen_ex.add(ex["path"])
                 excluded_all.append(ex)
         for idx, r in enumerate(inv.rules):
-            rule_bytes = r.source_path.read_bytes()
+            rule_bytes = r.body.encode("utf-8")
             rule_has_secrets = _resource_contains_secrets(rule_bytes)
             rule_data = _redact_resource(rule_bytes) if (args.redact_secrets and rule_has_secrets) else rule_bytes
             _stage(f"files/{prof}/{r.scope}/instructions/{idx:02d}-{r.slug}-{r.source_path.name}", rule_data, {
                 "profile": prof, "category": "instructions", "scope": r.scope, "id": r.slug,
-                "rule_kind": r.kind, "globs": r.globs, "description": r.description,
+                "rule_kind": r.kind, "normalized_body": True, "globs": r.globs, "description": r.description,
                 "logical_source": logical_path_str(r.source_path, ws, home),
                 "has_secrets": rule_has_secrets and not args.redact_secrets, "secrets": [],
             })
@@ -2402,21 +2439,25 @@ def cmd_import_device(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
     ws, home = Path(args.workspace).expanduser().resolve(), Path(args.home).expanduser().resolve()
     verified: dict[str, bytes] = {}
     for e in entries:
-        brel = str(e.get("bundle_path", ""))
+        brel = checked_doc_name(str(e.get("bundle_path", "")))
+        if brel in verified:
+            raise SafetyRefusalError("duplicate_bundle_path", "Duplicate path in transfer manifest")
         bp = in_dir / brel
         validate_contained(bp, in_dir, f"bundle:{brel}")
         if not bp.is_file():
             raise SafetyRefusalError("missing_bundle_file", f"Missing transfer file: {brel}")
         data = bp.read_bytes()
-        if e.get("sha256") and sha256_bytes(data) != e["sha256"]:
+        if sha256_bytes(data) != e.get("sha256"):
             raise SafetyRefusalError("checksum_mismatch", f"SHA-256 mismatch for transfer file '{brel}'", {"bundle_path": brel})
         verified[brel] = data
 
     inv_by_prof: dict[str, ProfileInventory] = {}
-    skill_groups: dict[tuple[str, str, str], Path] = {}
+    skill_groups: dict[tuple[str, str, str], dict[Path, tuple[bytes, bool]]] = {}
     default_prof = manifest["profiles"][0] if manifest.get("profiles") else "cursor"
     for e in entries:
         prof, cat, esc, brel = str(e["profile"]), str(e["category"]), str(e["scope"]), str(e["bundle_path"])
+        if esc not in ("project", "user"):
+            raise SafetyRefusalError("invalid_entry_scope", "Invalid manifest entry scope")
         if args.scope != "all" and esc != args.scope:
             continue
         bp, data = in_dir / brel, verified[brel]
@@ -2427,10 +2468,19 @@ def cmd_import_device(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
         pinv = inv_by_prof.setdefault(prof, ProfileInventory(prof))
         if cat == "instructions":
             txt = data.decode("utf-8")
-            _, bdy = parse_frontmatter(txt) if (e.get("rule_kind") != "always_on" or txt.startswith("---")) else ({}, txt)
+            _, bdy = parse_frontmatter(txt) if (e.get("normalized_body") is not True and (
+                e.get("rule_kind") != "always_on" or txt.startswith("---"))) else ({}, txt)
             pinv.rules.append(DiscoveredRule(str(e["id"]), esc, str(e.get("rule_kind", "always_on")), bdy if bdy.strip() else txt, list(e.get("globs") or []), str(e.get("description") or ""), bp, prof))
         elif cat == "skills":
-            skill_groups[(prof, esc, str(e["id"]))] = in_dir / f"files/{prof}/{esc}/skills/{e['id']}"
+            name = checked_doc_name(str(e["id"]))
+            rel = checked_doc_name(str(e.get("skill_rel_path", "")))
+            if "/" in name or resolve_profile(prof) != prof or brel != f"files/{prof}/{esc}/skills/{name}/{rel}":
+                raise SafetyRefusalError("invalid_skill_entry", "Skill manifest path does not match its declared file")
+            relative = Path(rel)
+            if is_excluded_asset(in_dir / brel, in_dir / f"files/{prof}/{esc}/skills/{name}"):
+                continue
+            executable = e.get("mode") == "0o700"
+            skill_groups.setdefault((prof, esc, name), {})[relative] = (data, executable)
         elif cat == "mcp":
             for srv in read_mcp_file(bp, "mcpServers", "mcpServers", fmt="json").values():
                 srv.source_profile = prof
@@ -2440,22 +2490,29 @@ def cmd_import_device(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
             pinv.doc_items.append(DiscoveredDocItem(cat, name, esc, bp, data, prof,
                 executable=(cat == "hooks" and e.get("executable") is True)))
 
-    for (prof, esc, sname), sk_dir in sorted(skill_groups.items()):
-        smd = sk_dir / "SKILL.md"
-        if smd.is_file():
-            meta, bdy = parse_frontmatter(smd.read_text(encoding="utf-8"))
-            inv_by_prof.setdefault(prof, ProfileInventory(prof)).skills.append(DiscoveredSkill(sname, esc, sk_dir, meta, bdy, compute_skill_digest(sk_dir, in_dir), prof, auth_root=in_dir))
+    for (prof, esc, sname), files in sorted(skill_groups.items()):
+        if Path("SKILL.md") not in files:
+            raise SafetyRefusalError("missing_skill_entry", "Listed Skill has no verified SKILL.md")
+        sk_dir = in_dir / f"files/{prof}/{esc}/skills/{sname}"
+        meta, bdy = parse_frontmatter(files[Path("SKILL.md")][0].decode("utf-8"))
+        digest = hashlib.sha256()
+        for rel, (data, _) in sorted(files.items()):
+            digest.update(rel.as_posix().encode("utf-8") + b"\0" + data + b"\0")
+        inv_by_prof[prof].skills.append(DiscoveredSkill(
+            sname, esc, sk_dir, meta, bdy, digest.hexdigest(), prof, auth_root=in_dir, verified_files=files))
 
     bdir = Path(args.backup_dir) if args.backup_dir else None
     raw_t = (args.target or "same").strip()
     if raw_t.lower() == "same":
+        roots = configured_product_roots(inv_by_prof, ws, home)
+        backups = BackupManager(bdir, home=home, workspace=ws, dry_run=args.dry_run, product_roots=roots)
         comb_act, comb_warn, comb_bak, fcode = [], [], [], 0
         for prof, pinv in inv_by_prof.items():
             sp, sc = execute_inventories_to_targets(
                 [pinv], [prof], workspace=ws, home=home, scope=args.scope, redact_secrets=args.redact_secrets,
                 activate_hooks=args.activate_hooks, allow_broaden_scope=args.allow_broaden_scope,
                 allow_git_tracked_secrets=args.allow_git_tracked_secrets, strict_conflicts=args.strict_conflicts,
-                backup_dir=bdir, dry_run=args.dry_run,
+                backup_dir=bdir, dry_run=args.dry_run, backup_manager=backups,
             )
             comb_act.extend(sp["actions"])
             comb_warn.extend(sp["warnings"])
