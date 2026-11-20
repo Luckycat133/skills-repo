@@ -250,6 +250,24 @@ class MigrationReviewSafety(unittest.TestCase):
             write.assert_not_called()
         self.assertFalse(manager.root.exists())
 
+    @unittest.skipIf(os.name == "nt", "POSIX permission bits")
+    def test_merged_memory_keeps_destination_and_backup_private(self):
+        target = self.write(self.home / ".codex/AGENTS.md",
+                            "# Existing fixture\nAuthorization: Bearer test-fixture-not-a-credential\n")
+        target.chmod(0o600)
+        original = target.read_bytes()
+        self.write(self.home / ".claude/memory/check.md", "# New fixture note\n")
+        result = self.run_cli("migrate", "--source", "claude-code", "--target", "codex",
+                              "--scope", "user", "--categories", "memory",
+                              "--backup-dir", str(self.root / "backups"))
+        self.assertEqual(result["summary"]["migrated"], 1)
+        self.assertTrue(target.read_bytes().startswith(original))
+        self.assertIn(b"New fixture note", target.read_bytes())
+        self.assertEqual(stat.S_IMODE(target.stat().st_mode), 0o600)
+        backup, = map(Path, result["backups"])
+        self.assertEqual(backup.read_bytes(), original)
+        self.assertEqual(stat.S_IMODE(backup.stat().st_mode), 0o600)
+
     def test_qwen_tool_restricted_skill_defers_on_unverified_destination(self):
         self.write(self.work / ".qwen/skills/fixture/SKILL.md",
                    '---\nname: fixture\ndescription: Fixture\nallowedTools: [Read]\n---\n# Notes\n')

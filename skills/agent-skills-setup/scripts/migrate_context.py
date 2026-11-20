@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import os
-from pathlib import Path, PurePosixPath, PureWindowsPath
+from pathlib import Path, PureWindowsPath
 import re
 import stat
 import subprocess
@@ -1995,9 +1995,7 @@ def apply_mcp_servers_to_file(
 
 def checked_doc_name(value: str) -> str:
     """Only portable, relative, normalized document paths may become targets."""
-    posix = PurePosixPath(value)
-    win = PureWindowsPath(value)
-    if (not value or posix.is_absolute() or win.anchor or not posix.parts
+    if (not isinstance(value, str) or not value or PureWindowsPath(value).anchor
             or any(part in {"", ".", ".."} for part in value.split("/"))
             or "\\" in value or ":" in value):
         raise SafetyRefusalError("invalid_document_path", "Expected a portable relative document path")
@@ -2108,7 +2106,7 @@ def apply_doc_item_to_target(
             if st == "conflict":
                 return act("memory", item.name, "conflict", tpp.user_doc)
             if st == "added":
-                write_managed_file(tpp.user_doc, merged.encode("utf-8"), has_secrets=doc_has_secrets, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
+                write_managed_file(tpp.user_doc, merged.encode("utf-8"), has_secrets=_document_text_has_secrets(merged), auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
             return act("memory", item.name, "noop" if st == "noop" else "migrated", tpp.user_doc)
 
     if dst_dir is None:
@@ -2465,6 +2463,7 @@ def cmd_import_device(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
     default_prof = manifest["profiles"][0] if manifest.get("profiles") else "cursor"
     for e in entries:
         prof, cat, esc, brel = str(e["profile"]), str(e["category"]), str(e["scope"]), str(e["bundle_path"])
+        name = checked_doc_name(e.get("id", ""))
         if esc not in ("project", "user"):
             raise SafetyRefusalError("invalid_entry_scope", "Invalid manifest entry scope")
         if args.scope != "all" and esc != args.scope:
@@ -2472,16 +2471,15 @@ def cmd_import_device(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
         bp, data = in_dir / brel, verified[brel]
         if cat == "env_secrets":
             rt = data.decode("utf-8")
-            inv_by_prof.setdefault(default_prof, ProfileInventory(default_prof)).env_files.append(DiscoveredEnvFile(e["id"], "project", bp, rt, parse_dotenv_secrets(rt)[1]))
+            inv_by_prof.setdefault(default_prof, ProfileInventory(default_prof)).env_files.append(DiscoveredEnvFile(name, "project", bp, rt, parse_dotenv_secrets(rt)[1]))
             continue
         pinv = inv_by_prof.setdefault(prof, ProfileInventory(prof))
         if cat == "instructions":
             txt = data.decode("utf-8")
             _, bdy = parse_frontmatter(txt) if (e.get("normalized_body") is not True and (
                 e.get("rule_kind") != "always_on" or txt.startswith("---"))) else ({}, txt)
-            pinv.rules.append(DiscoveredRule(str(e["id"]), esc, str(e.get("rule_kind", "always_on")), bdy if bdy.strip() else txt, list(e.get("globs") or []), str(e.get("description") or ""), bp, prof))
+            pinv.rules.append(DiscoveredRule(name, esc, str(e.get("rule_kind", "always_on")), bdy if bdy.strip() else txt, list(e.get("globs") or []), str(e.get("description") or ""), bp, prof))
         elif cat == "skills":
-            name = checked_doc_name(str(e["id"]))
             rel = checked_doc_name(str(e.get("skill_rel_path", "")))
             if "/" in name or resolve_profile(prof) != prof or brel != f"files/{prof}/{esc}/skills/{name}/{rel}":
                 raise SafetyRefusalError("invalid_skill_entry", "Skill manifest path does not match its declared file")
@@ -2495,7 +2493,6 @@ def cmd_import_device(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
                 srv.source_profile = prof
                 pinv.mcp_servers[esc].append(srv)
         else:
-            name = checked_doc_name(str(e["id"]))
             pinv.doc_items.append(DiscoveredDocItem(cat, name, esc, bp, data, prof,
                 executable=(cat == "hooks" and e.get("executable") is True)))
 
