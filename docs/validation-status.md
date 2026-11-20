@@ -1,41 +1,47 @@
-# Validation status (`0.11.0-dev`, unpublished)
+# Validation status — agent-first documentation update
 
-## Verified locally (script, contract, security & official `skills-ref`)
+Research date: 2026-11-07. Agent-first baseline:
+`2a65abed5cd0e80aeca2413dd1d183c01deabf42`.
+Candidate metadata remains `0.11.0-dev` (unreleased).
 
-- **Official Agent Skills validator (`skills-ref`) & 44 automated checks**:
-  `REQUIRE_SKILLS_REF=1 bash validate-all.sh` passes all 44 contract, catalog, torture,
-  canary zero-leak, E2E workflow, and repo-consistency checks plus `skills-ref validate`
-  on both `skills/agent-skills-setup` and `dev/skills/maintain-agent-skills-setup`
-  (with `PYTHONUTF8=1` verified under non-UTF-8 locales).
-- **Canonical Skill & progressive references**: `SKILL.md` < 140 lines; all relative
-  links and `#anchors` resolve; all 90 canonical IDs, 87 historical IDs, and 25 new
-  product/profile names route in Column 1 of `references/products.md` across 30 family
-  documents and 280 primary official URLs.
-- **Zero-context-leak out-of-band migration (`scripts/migrate_context.py`)**:
-  - Multi-round canary secret tests verify **zero** occurrences of synthetic API keys,
-    MCP `env` secrets, Bearer headers, URL userinfo passwords, secret CLI flags, and
-    `.env*` values in `stdout`, `stderr`, or `MIGRATION.md` across `inspect`, `migrate`,
-    `export-device`, `import-device`, and `patch-mcp` (including `--dry-run`, conflict,
-    and parse-error paths).
-  - Enforces `0700` directory and `0600` atomic file permissions on secret-bearing
-    targets, private backups (`~/.agent-skills-setup-backups/`), and device-transfer
-    folders; honors `--redact-secrets` when requested.
-  - Protects Git-tracked project files (routes secret-bearing Claude `.mcp.json`
-    entries to untracked `~/.claude.json` `projects[workspace].mcpServers`; refuses
-    other Git-tracked secret writes with exit code `2` unless authorized).
-  - Rejects `..` path traversal, symlinks escaping authorized roots, tampered transfer
-    manifests (SHA-256 mismatch), and existing export directories.
-  - Parses JSONC (`//`, `/* */`, trailing commas), unquoted/comma/brace Cursor `.mdc`
-    globs, surgical Codex TOML `[mcp_servers.<name>]` (`env_vars` vs `env` vs rename
-    detection), OpenCode V1/V2, Zed `context_servers`, VS Code `servers`, Gemini
-    `httpUrl`, Antigravity/Windsurf `serverUrl`, Pi knob-only MCP overrides, Qwen
-    `allowedTools`, manual-only `disable-model-invocation: true`, and idempotent
-    Markdown section merges.
-- **Packaging (`scripts/package_skill.py`)**: Reproducible `.zip` containing only the
-  42 allowlisted files (`0755` on `scripts/migrate_context.py`, `0644` on docs),
-  excluding `dev/`, `evals/`, `docs/`, `tests/`, `__pycache__/`, and `.pyc`.
+| Level | Status |
+| --- | --- |
+| Local package/link/contract/catalog checks | PASS in Linux sandbox; 22 unittest checks |
+| Example JSON/TOML and scope/content checks | PASS for recorded deterministic fixture expectations |
+| Documentation coverage | All 87 historical identifiers routed; 90 profile/category records, 30 family references, 25 additional names/profiles/aliases |
+| Primary-source references | 280 unique URLs attached to relevant sections; links are evidence for described subsets, not a complete schema/runtime certification |
+| Official Agent Skills validator | Required in CI; not installed in local sandbox |
+| Actual host agent runs | NOT RUN; 15 original + 21 additional cases await execution |
+| Native IDE discovery/activation | NOT RUN; 90-entry client queue prepared |
+| Native Windows, WSL and remote behavior | NOT RUN |
+| Marketplace publication/download verification | NOT RUN; not part of this edit |
 
-## Not verified here (requires live native IDE / GUI / account environments)
+The documentation snapshot and test scenarios remain historical inputs. Record new
+real runs in `evals/client-matrix.json` with installed version, harness, OS, category
+results and redacted evidence files. Do not relabel research as a native-client pass.
+The queue validation accepts recorded passes/failures only with that evidence;
+unavailable environments require a block reason rather than a fabricated success.
+
+See [evaluation](../evals/README.md),
+[catalog ledger](research/catalog-2026-11-07.json), and
+[developer procedure](../dev/skills/maintain-agent-skills-setup/references/client-tests.md).
+A green structural test proves internal consistency, not the behavior of all clients.
+
+## 2026-11-14 workflow-contract review (separate evidence)
+
+The table above records the earlier research snapshot; it is not a fresh local run.
+Reviewed main `4f7b343ac0e909119ecc07efe1e98ec219136b11` has no migration runtime.
+The user's local 52-check/IDE-mapping/transaction-suite statement is user-reported
+until its exact checkout and log are associated with it. No local edits were discarded.
+
+This update adds 10 structural/rubric checks (passed locally on the changed-file set)
+and 10 pending host-agent scenarios in `evals/workflow-cases.json`. Full-checkout
+validation belongs to the new PR's exact CI head or the user's recorded local run;
+no native-client queue entry was promoted. See
+[review scope and reproduction](reviews/2026-11-14-workflow-review.md).
+
+
+## 0.11.0-dev helper scope
 
 - **Native IDE / GUI runtime loading (`evals/client-matrix.json`)**: `not-run` in this
   headless Linux container. Structural/parser/script tests prove generated file syntax,

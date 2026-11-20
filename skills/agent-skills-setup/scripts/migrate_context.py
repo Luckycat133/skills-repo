@@ -18,13 +18,13 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 import re
 import stat
 import subprocess
 import sys
 import tomllib
-from typing import Any
+from typing import Any, Iterable
 
 D = chr(36)  # "$" 占位符前缀，避免在源码里写出会被外层模板吃掉的花括号
 SCHEMA_VERSION = "0.11.0-dev"
@@ -209,8 +209,10 @@ def validate_contained(path: Path, root: Path, label: str = "path") -> None:
         raise SafetyRefusalError("symlink_escape", f"Resolved {label} escapes authorized root: {rel}", {"entry": str(rel)})
 
 
-def is_inside_autoload_dir(candidate: Path, workspace: Path, home: Path) -> bool:
+def is_inside_autoload_dir(candidate: Path, workspace: Path, home: Path, product_roots: tuple[Path, ...] = ()) -> bool:
     cand = candidate.resolve(strict=False)
+    if any(cand.is_relative_to(root.resolve(strict=False)) for root in product_roots):
+        return True
     for base in (workspace.resolve(strict=False), home.resolve(strict=False)):
         for parts in AUTOLOAD_PARTS:
             auto_dir = base.joinpath(*parts)
@@ -280,10 +282,10 @@ def git_path_status(target: Path) -> str:
 
 
 class BackupManager:
-    def __init__(self, backup_dir: Path | None, home: Path, workspace: Path, dry_run: bool) -> None:
+    def __init__(self, backup_dir: Path | None, home: Path, workspace: Path, dry_run: bool, product_roots: tuple[Path, ...] = ()) -> None:
         ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         self.root = backup_dir.expanduser().resolve(strict=False) if backup_dir else (home / ".agent-skills-setup-backups" / f"{ts}-{os.getpid()}")
-        if is_inside_autoload_dir(self.root, workspace, home):
+        if is_inside_autoload_dir(self.root, workspace, home, product_roots):
             raise SafetyRefusalError("unsafe_backup_dir", f"Backup dir sits inside an auto-loaded context path: {self.root}")
         if git_path_status(self.root) == "tracked":
             raise SafetyRefusalError("unsafe_backup_dir", f"Backup dir must not be Git-tracked: {self.root}")
@@ -630,8 +632,12 @@ def parse_dotenv_secrets(text: str, redact: bool = False) -> tuple[str, list[dic
             continue
         lhs, rhs = raw.split("=", 1)
         key = lhs.strip()
-        if key.startswith("export "):
-            key = key[7:].strip()
+        key = re.sub(r"^export[ \t]+", "", key)
+        # Only dotenv identifiers can be exposed in secret metadata. Treat
+        # arbitrary resource text as text, not as a key to publish.
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key):
+            out_lines.append(raw)
+            continue
         val = rhs.strip()
         unq = val[1:-1] if ((val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'"))) else re.split(r"\s+#", val, maxsplit=1)[0].strip()
         is_dotenv_secret = (
@@ -1057,14 +1063,33 @@ class ProfilePaths:
     user_mcp_style: str = "mcpServers"
     user_memory: Path | None = None
     legacy: list[tuple[str, str, Path]] = field(default_factory=list)
+    user_product_root: Path | None = None
+
+    def contained_root(self, path: Path | None, scope: str, ws: Path, home: Path) -> Path:
+        if scope == "project":
+            return ws
+        if path is not None and self.user_product_root is not None and path.is_relative_to(self.user_product_root):
+            return self.user_product_root
+        return home
 
 
 def get_profile_paths(profile: str, ws: Path, home: Path) -> ProfilePaths:
     p = resolve_profile(profile)
-    use_env = home == Path.home()
-    chome = Path(os.environ["CODEX_HOME"]) if (use_env and "CODEX_HOME" in os.environ) else (home / ".codex")
-    khome = Path(os.environ["KIMI_CODE_HOME"]) if (use_env and "KIMI_CODE_HOME" in os.environ) else (home / ".kimi-code")
-    ag_sk = Path(os.environ["ANTIGRAVITY_SKILLS_DIR"]) if (use_env and "ANTIGRAVITY_SKILLS_DIR" in os.environ) else (home / ".gemini/antigravity/skills")
+    use_env = home == Path.home().resolve()
+    overrides = {"codex": "CODEX_HOME", "kimi-code": "KIMI_CODE_HOME", "antigravity": "ANTIGRAVITY_SKILLS_DIR"}
+    var = overrides.get(p)
+    configured = None
+    raw = os.environ.get(var) if (use_env and var) else None
+    if raw:
+        configured = Path(raw).expanduser()
+        if not configured.is_absolute() or ".." in configured.parts:
+            raise SafetyRefusalError("invalid_product_root", f"{var} must be an absolute product directory")
+        physical = configured.resolve(strict=False)
+        if physical == Path(physical.anchor) or (physical.exists() and not physical.is_dir()):
+            raise SafetyRefusalError("invalid_product_root", f"{var} must be an absolute product directory")
+    chome = (configured if p == "codex" else None) or (home / ".codex")
+    khome = (configured if p == "kimi-code" else None) or (home / ".kimi-code")
+    ag_sk = (configured if p == "antigravity" else None) or (home / ".gemini/antigravity/skills")
 
     table: dict[str, ProfilePaths] = {
         "cursor": ProfilePaths(
@@ -1187,7 +1212,14 @@ def get_profile_paths(profile: str, ws: Path, home: Path) -> ProfilePaths:
             user_mcp=home / ".pi/agent/mcp.json", user_mcp_style="pi",
         ),
     }
-    return table[p]
+    paths = table[p]
+    paths.user_product_root = configured
+    return paths
+
+
+def configured_product_roots(profiles: Iterable[str], ws: Path, home: Path) -> tuple[Path, ...]:
+    candidates = (get_profile_paths(profile, ws, home).user_product_root for profile in dict.fromkeys(profiles))
+    return tuple(root for root in candidates if root is not None)
 
 
 @dataclass
@@ -1222,6 +1254,7 @@ class DiscoveredDocItem:
     path: Path
     content: bytes
     source_profile: str
+    executable: bool = False
 
 
 @dataclass
@@ -1388,7 +1421,7 @@ def discover_profile(profile: str, workspace: Path, home: Path, scope: str, cate
             _collect_rule_path("project", pp.proj_doc, workspace)
             _collect_rule_path("project", pp.proj_rules, workspace)
         if wu:
-            _collect_rule_path("user", pp.user_doc, home)
+            _collect_rule_path("user", pp.user_doc, pp.contained_root(pp.user_doc, "user", workspace, home))
             _collect_rule_path("user", pp.user_rules, home)
         for lc, ls, lp in pp.legacy:
             if lc == "instructions" and ((ls == "project" and wp) or (ls == "user" and wu)):
@@ -1410,10 +1443,10 @@ def discover_profile(profile: str, workspace: Path, home: Path, scope: str, cate
         if wp and pp.proj_skills:
             sroots.append(("project", pp.proj_skills, workspace))
         if wu and pp.user_skills:
-            sroots.append(("user", pp.user_skills, home))
+            sroots.append(("user", pp.user_skills, pp.contained_root(pp.user_skills, "user", workspace, home)))
         for lc, ls, lp in pp.legacy:
             if lc == "skills" and ((ls == "project" and wp) or (ls == "user" and wu)):
-                sroots.append((ls, lp, workspace if ls == "project" else home))
+                sroots.append((ls, lp, pp.contained_root(lp, ls, workspace, home)))
         seen_sk: set[tuple[str, str]] = set()
         for ssc, sroot, aroot in sroots:
             if not (sroot.exists() or sroot.is_symlink()):
@@ -1448,7 +1481,7 @@ def discover_profile(profile: str, workspace: Path, home: Path, scope: str, cate
                     srv.source_profile = pp.profile
                     inv.mcp_servers["project"].append(srv)
         if wu and pp.user_mcp and (pp.user_mcp.exists() or pp.user_mcp.is_symlink()):
-            validate_contained(pp.user_mcp, home, "user_mcp")
+            validate_contained(pp.user_mcp, pp.contained_root(pp.user_mcp, "user", workspace, home), "user_mcp")
             for srv in read_mcp_file(pp.user_mcp, pp.user_mcp_key, pp.user_mcp_style).values():
                 srv.source_profile = pp.profile
                 inv.mcp_servers["user"].append(srv)
@@ -1482,6 +1515,7 @@ def discover_profile(profile: str, workspace: Path, home: Path, scope: str, cate
     for cat, dsc, dpth, aroot in document_roots:
         if cat not in categories or dpth is None or not (dpth.exists() or dpth.is_symlink()):
             continue
+        aroot = pp.contained_root(dpth, dsc, workspace, home)
         validate_contained(dpth, aroot, f"{cat}_dir")
         if not dpth.is_dir():
             continue
@@ -1510,7 +1544,8 @@ def discover_profile(profile: str, workspace: Path, home: Path, scope: str, cate
                 for f in sorted(hpth.rglob("*")):
                     validate_contained(f, aroot, f"hook:{f.name}")
                     if f.is_file() and not is_excluded_asset(f, hpth):
-                        inv.doc_items.append(DiscoveredDocItem("hooks", f.relative_to(hpth).as_posix(), hsc, f, f.read_bytes(), pp.profile))
+                        inv.doc_items.append(DiscoveredDocItem("hooks", f.relative_to(hpth).as_posix(), hsc, f, f.read_bytes(), pp.profile,
+                            executable=(os.name != "nt" and bool(f.stat().st_mode & stat.S_IXUSR))))
 
     if "env_secrets" in categories and wp and workspace.is_dir():
         for entry in sorted(workspace.iterdir()):
@@ -1561,7 +1596,12 @@ def apply_rule_to_target(
     backups: BackupManager, warnings: list[dict[str, Any]], dry_run: bool,
 ) -> dict[str, Any]:
     tp, is_p = tpp.profile, rule.scope == "project"
-    root = workspace if is_p else (home or workspace)
+
+    def target_root(dst: Path) -> Path:
+        root = tpp.contained_root(dst, rule.scope, workspace, home or workspace)
+        validate_contained(dst, root, f"rule:{dst.name}")
+        return root
+
     rule_body = _redact_document_text(rule.body) if redact_secrets else rule.body
     if tp == "zed" and is_p:
         sh = [c for c in (".rules", ".cursorrules", ".windsurfrules", ".clinerules", "CLAUDE.md", "GEMINI.md") if (workspace / c).exists() and (workspace / c) != rule.source_path]
@@ -1575,10 +1615,12 @@ def apply_rule_to_target(
             if rdir is None:
                 return act("instructions", rule.slug, "deferred", reason="no_target_rule_surface")
             dst = rdir / f"{rule.slug}.md"
+            root = target_root(dst)
             if dst.exists():
                 return act("instructions", rule.slug, "noop" if dst.read_text(encoding="utf-8").strip() == rule_body.strip() else "conflict", dst)
             write_managed_file(dst, (rule_body.strip() + "\n").encode("utf-8"), has_secrets=_payload_has_secrets((rule_body.strip() + "\n").encode("utf-8")), auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
             return act("instructions", rule.slug, "migrated", dst)
+        root = target_root(dst)
         if dst.resolve(strict=False) == rule.source_path.resolve(strict=False):
             return act("instructions", rule.slug, "noop", dst)
         existing = dst.read_text(encoding="utf-8") if dst.exists() else ""
@@ -1604,6 +1646,7 @@ def apply_rule_to_target(
         elif allow_broaden_scope and (tpp.proj_doc if is_p else tpp.user_doc):
             ddoc = (tpp.proj_doc if is_p else tpp.user_doc)
             assert ddoc is not None
+            root = target_root(ddoc)
             ex = ddoc.read_text(encoding="utf-8") if ddoc.exists() else ""
             merged, st = merge_markdown_section(ex, rule.slug, f"> Scoped guideline (`{', '.join(rule.globs)}`)\n\n{rule_body.strip()}\n")
             if st == "conflict":
@@ -1616,6 +1659,7 @@ def apply_rule_to_target(
             write_managed_file(pdst, render_frontmatter({"source_globs": rule.globs, "target": tp}, rule_body).encode("utf-8"), has_secrets=_payload_has_secrets(render_frontmatter({"source_globs": rule.globs, "target": tp}, rule_body).encode("utf-8")), auth_root=workspace, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
             return act("instructions", rule.slug, "parked_draft", pdst, reason=f"{tp} lacks file-glob rule frontmatter; parked instead of widening scope")
         assert dst is not None and rendered is not None
+        root = target_root(dst)
         if dst.exists():
             return act("instructions", rule.slug, "noop" if dst.read_text(encoding="utf-8").strip() == rendered.strip() else "conflict", dst)
         write_managed_file(dst, rendered.encode("utf-8"), has_secrets=_payload_has_secrets(rendered.encode("utf-8")), auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
@@ -1632,6 +1676,7 @@ def apply_rule_to_target(
             if sdir is None:
                 return act("instructions", rule.slug, "deferred", reason="no_on_demand_surface")
             dst, rendered = sdir / rule.slug / "SKILL.md", render_frontmatter({"name": rule.slug, "description": rule.description or f"Rule {rule.slug}"}, rule_body)
+        root = target_root(dst)
         if dst.exists():
             return act("instructions", rule.slug, "noop" if dst.read_text(encoding="utf-8").strip() == rendered.strip() else "conflict", dst)
         write_managed_file(dst, rendered.encode("utf-8"), has_secrets=_payload_has_secrets(rendered.encode("utf-8")), auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
@@ -1643,6 +1688,7 @@ def apply_rule_to_target(
         assert sdir is not None
         dst = sdir / rule.slug / "SKILL.md"
         rendered = render_frontmatter({"name": rule.slug, "description": f"Manual workflow /{rule.slug} (explicit invocation only).", "disable-model-invocation": True}, rule_body)
+        root = target_root(dst)
         if dst.exists():
             return act("instructions", rule.slug, "noop" if dst.read_text(encoding="utf-8").strip() == rendered.strip() else "conflict", dst)
         write_managed_file(dst, rendered.encode("utf-8"), has_secrets=_payload_has_secrets(rendered.encode("utf-8")), auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
@@ -1652,6 +1698,7 @@ def apply_rule_to_target(
     if cdir is not None and tp != "gemini-cli":
         dst = cdir / f"{rule.slug}{'.prompt.md' if tp == 'vscode' else '.md'}"
         rendered = rule_body.strip() + "\n"
+        root = target_root(dst)
         if dst.exists():
             return act("instructions", rule.slug, "noop" if dst.read_text(encoding="utf-8").strip() == rendered.strip() else "conflict", dst)
         write_managed_file(dst, rendered.encode("utf-8"), has_secrets=_payload_has_secrets(rendered.encode("utf-8")), auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
@@ -1690,6 +1737,8 @@ def apply_skill_to_target(
     if sdir is None:
         return act("skills", skill.name, "deferred", reason="no_target_skills_dir")
     dst_dir = sdir / skill.name
+    sroot = tpp.contained_root(sdir, skill.scope, workspace, home)
+    validate_contained(dst_dir, sroot, "target_skill")
     auth_src = skill.auth_root or (workspace if skill.scope == "project" else home)
     if dst_dir.resolve(strict=False) == skill.directory.resolve(strict=False):
         return act("skills", skill.name, "noop", dst_dir)
@@ -1716,12 +1765,15 @@ def apply_skill_to_target(
             src_map[rel] = (content, is_ex, has_sec)
 
     if dst_dir.exists():
-        dst_map = {p.relative_to(dst_dir): p.read_bytes() for p in sorted(dst_dir.rglob("*")) if p.is_file()}
+        dst_map: dict[Path, bytes] = {}
+        for p in sorted(dst_dir.rglob("*")):
+            validate_contained(p, sroot, "target_skill_resource")
+            if p.is_file():
+                dst_map[p.relative_to(dst_dir)] = p.read_bytes()
         if {k: v[0] for k, v in src_map.items()} == dst_map:
             return act("skills", skill.name, "noop", dst_dir)
         return act("skills", skill.name, "conflict", dst_dir, reason="existing_skill_has_different_content")
 
-    sroot = workspace if skill.scope == "project" else home
     for rel, (content, is_ex, has_sec) in src_map.items():
         data = content
         mark_secrets = has_sec
@@ -1800,6 +1852,8 @@ def apply_mcp_servers_to_file(
     results: list[dict[str, Any]] = []
     if not servers:
         return results
+    if auth_root is not None:
+        validate_contained(dst_path, auth_root, "target_mcp")
 
     by_name: dict[str, list[NormalizedMcp]] = {}
     for s in servers:
@@ -1903,29 +1957,64 @@ def apply_mcp_servers_to_file(
     return results
 
 
+def checked_doc_name(value: str) -> str:
+    """Only portable, relative, normalized document paths may become targets."""
+    posix = PurePosixPath(value)
+    win = PureWindowsPath(value)
+    if (not value or posix.is_absolute() or win.anchor or not posix.parts
+            or any(part in {"", ".", ".."} for part in value.split("/"))
+            or "\\" in value or ":" in value):
+        raise SafetyRefusalError("invalid_document_path", "Expected a portable relative document path")
+    return value
+
+
 def apply_doc_item_to_target(
     item: DiscoveredDocItem, tpp: ProfilePaths, *, workspace: Path, home: Path | None = None,
     activate_hooks: bool, redact_secrets: bool = False,
     backups: BackupManager, warnings: list[dict[str, Any]], dry_run: bool,
 ) -> dict[str, Any]:
+    if item.scope not in ("project", "user"):
+        raise SafetyRefusalError("invalid_document_scope", "Invalid document scope")
+    checked_doc_name(item.name)
     is_p, tp = item.scope == "project", tpp.profile
     doc_text = item.content.decode("utf-8", errors="replace")
     if redact_secrets:
         doc_text = _redact_document_text(doc_text)
     doc_content = doc_text.encode("utf-8")
     doc_has_secrets = _document_text_has_secrets(doc_text)
-    root = workspace if is_p else (home or workspace)
+
+    def target_root(dst: Path) -> Path:
+        root = tpp.contained_root(dst, item.scope, workspace, home or workspace)
+        validate_contained(dst, root, f"document:{dst.name}")
+        return root
+
     if item.category == "hooks":
         if activate_hooks:
             hd = tpp.proj_hooks if is_p else tpp.user_hooks
             if hd is not None and tp != "claude-code":
-                dst = (hd / item.name) if ((hd.exists() and hd.is_dir()) or not hd.suffix) else hd
+                root = target_root(hd)
+                directory_hook = (hd.exists() and hd.is_dir()) or not hd.suffix
+                dst = (hd / item.name) if directory_hook else hd
+                if directory_hook:
+                    validate_contained(dst, hd, "live_hook")
+                    root = hd
+                executable = item.executable and directory_hook and item.source_profile == tp
+                if item.executable and not executable:
+                    return act("hooks", item.name, "deferred", reason="executable_hook_requires_same_profile_directory")
+                if executable and doc_has_secrets:
+                    return act("hooks", item.name, "deferred", reason="secret_hook_requires_private_nonexecutable_file")
                 if dst.exists():
-                    return act("hooks", item.name, "noop" if dst.read_bytes() == doc_content else "conflict", dst)
-                write_managed_file(dst, doc_content, has_secrets=doc_has_secrets, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
+                    same = dst.is_file() and dst.read_bytes() == doc_content
+                    mode_matches = os.name == "nt" or (bool(dst.stat().st_mode & stat.S_IXUSR) == executable)
+                    return act("hooks", item.name, "noop" if same and mode_matches else "conflict", dst)
+                write_managed_file(dst, doc_content, has_secrets=doc_has_secrets, executable=executable, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
                 return act("hooks", item.name, "migrated", dst, note="Activated hook via --activate-hooks")
-        park = workspace / ".migration-review" / "hooks" / tp / item.scope / item.name
-        write_managed_file(park, doc_content, has_secrets=doc_has_secrets, auth_root=workspace, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
+        park_dir = workspace / ".migration-review" / "hooks" / tp / item.scope
+        park = park_dir / item.name
+        validate_contained(park_dir, workspace, "parked_hook_directory")
+        if is_inside_autoload_dir(park, workspace, home or workspace):
+            raise SafetyRefusalError("unsafe_hook_parking", "Parked hook must stay outside live discovery paths")
+        write_managed_file(park, doc_content, has_secrets=doc_has_secrets, auth_root=park_dir, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
         return act("hooks", item.name, "parked_draft", park, reason="Executable hooks stay parked in .migration-review/ until explicitly approved")
 
     dst_dir: Path | None = None
@@ -1945,6 +2034,7 @@ def apply_doc_item_to_target(
                     park = workspace / ".migration-review" / "commands" / tp / item.name
                     write_managed_file(park, doc_content, has_secrets=doc_has_secrets, auth_root=workspace, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
                     return act("commands", item.name, "parked_draft", park, reason=f"command restrictions not representable as Skill: {', '.join(sorted(lost))}")
+                root = target_root(dst)
                 if dst.exists():
                     return act("commands", item.name, "noop" if dst.read_bytes() == rnd else "conflict", dst)
                 write_managed_file(dst, rnd, has_secrets=doc_has_secrets, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
@@ -1963,6 +2053,7 @@ def apply_doc_item_to_target(
                 dst = sdir / wslug / "SKILL.md"
                 _, body = parse_frontmatter(doc_text)
                 rnd = render_frontmatter({"name": wslug, "description": f"Workflow /{wslug}", "disable-model-invocation": True}, body).encode("utf-8")
+                root = target_root(dst)
                 if dst.exists():
                     return act("workflows", item.name, "noop" if dst.read_bytes() == rnd else "conflict", dst)
                 write_managed_file(dst, rnd, has_secrets=doc_has_secrets, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
@@ -1970,6 +2061,7 @@ def apply_doc_item_to_target(
     elif item.category == "memory":
         dst_dir = tpp.user_memory
         if dst_dir is None and tpp.user_doc is not None:
+            root = target_root(tpp.user_doc)
             ex = tpp.user_doc.read_text(encoding="utf-8") if tpp.user_doc.exists() else ""
             merged, st = merge_markdown_section(ex, slugify(f"memory-{Path(item.name).stem}"), doc_text)
             if st == "conflict":
@@ -1990,6 +2082,7 @@ def apply_doc_item_to_target(
         elif item.category == "agents" and not dst_name.endswith(".agent.md"):
             dst_name = dst_name[:-3] + ".agent.md" if dst_name.endswith(".md") else dst_name + ".agent.md"
     dst = dst_dir / dst_name
+    root = target_root(dst)
     if dst.resolve(strict=False) == item.path.resolve(strict=False):
         return act(item.category, item.name, "noop", dst)
     if dst.exists():
@@ -2034,7 +2127,8 @@ def execute_inventories_to_targets(
     redact_secrets: bool, activate_hooks: bool, allow_broaden_scope: bool, allow_git_tracked_secrets: bool,
     strict_conflicts: bool, backup_dir: Path | None, dry_run: bool, is_bundle_import: bool = False,
 ) -> tuple[dict[str, Any], int]:
-    backups = BackupManager(backup_dir, home=home, workspace=workspace, dry_run=dry_run)
+    product_roots = configured_product_roots([*target_profiles, *(inv.profile for inv in invs)], workspace, home)
+    backups = BackupManager(backup_dir, home=home, workspace=workspace, dry_run=dry_run, product_roots=product_roots)
     warnings: list[dict[str, Any]] = []
     actions: list[dict[str, Any]] = []
     excluded_all: list[dict[str, str]] = []
@@ -2095,7 +2189,7 @@ def execute_inventories_to_targets(
             for r in apply_mcp_servers_to_file(
                 in_mcp, dst_path=dmp, dst_key_path=dmk, dst_style=dms, dst_fmt="auto", redact_secrets=redact_secrets,
                 allow_git_tracked_secrets=allow_git_tracked_secrets, claude_local_fallback_file=(tpp.user_mcp if (tprof == "claude-code" and msc == "project") else None),
-                workspace=workspace, auth_root=(workspace if msc == "project" and dmp == tpp.proj_mcp else home), backups=backups, warnings=warnings, dry_run=dry_run,
+                workspace=workspace, auth_root=tpp.contained_root(dmp, "project" if msc == "project" and dmp == tpp.proj_mcp else "user", workspace, home), backups=backups, warnings=warnings, dry_run=dry_run,
             ):
                 r["target_profile"] = tprof
                 actions.append(r)
@@ -2165,6 +2259,11 @@ def cmd_export_device(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
         raise SafetyRefusalError("unsafe_output_dir", f"Transfer folder sits inside an auto-loaded context path: {out_dir}")
 
     invs = select_profiles(args.profiles, ws, home, args.scope, parse_categories(args.categories))
+    selected_profiles = CANONICAL_PROFILES if args.profiles.strip().lower() in ("", "all") else [
+        p.strip() for p in args.profiles.split(",") if p.strip()]
+    product_roots = configured_product_roots(selected_profiles, ws, home)
+    if is_inside_autoload_dir(out_dir, ws, home, product_roots):
+        raise SafetyRefusalError("unsafe_output_dir", "Transfer folder sits inside an auto-loaded product path")
     entries: list[dict[str, Any]] = []
     excluded_all: list[dict[str, str]] = []
     seen_ex, seen_env = set(), set()
@@ -2195,7 +2294,7 @@ def cmd_export_device(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
                 "has_secrets": rule_has_secrets and not args.redact_secrets, "secrets": [],
             })
         for sk in inv.skills:
-            auth_s = ws if sk.scope == "project" else home
+            auth_s = sk.auth_root or (ws if sk.scope == "project" else home)
             for p in sorted(sk.directory.rglob("*")):
                 validate_contained(p, auth_s, f"skill:{sk.name}")
                 if p.is_file() and not is_excluded_asset(p, sk.directory):
@@ -2233,6 +2332,7 @@ def cmd_export_device(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
             _stage(rel, doc_data, {
                 "profile": prof, "category": d.category, "scope": d.scope, "id": d.name,
                 "logical_source": logical_path_str(d.path, ws, home),
+                "executable": d.executable if d.category == "hooks" else False,
                 "has_secrets": doc_has_secrets and not args.redact_secrets, "secrets": [],
             })
         for ef in inv.env_files:
@@ -2336,7 +2436,9 @@ def cmd_import_device(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
                 srv.source_profile = prof
                 pinv.mcp_servers[esc].append(srv)
         else:
-            pinv.doc_items.append(DiscoveredDocItem(cat, str(e["id"]), esc, bp, data, prof))
+            name = checked_doc_name(str(e["id"]))
+            pinv.doc_items.append(DiscoveredDocItem(cat, name, esc, bp, data, prof,
+                executable=(cat == "hooks" and e.get("executable") is True)))
 
     for (prof, esc, sname), sk_dir in sorted(skill_groups.items()):
         smd = sk_dir / "SKILL.md"

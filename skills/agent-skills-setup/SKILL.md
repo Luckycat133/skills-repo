@@ -20,6 +20,13 @@ workflows, user-authored memory, and (unless told otherwise) local `.env` / MCP
 credentials out-of-band on disk — between AI coding tools or across computers.
 Resolve paths relative to this `SKILL.md` directory (`<SKILL_DIR>`).
 
+## Select the right workflow contract
+
+- For native commands and historical CLI transcripts, read the
+  [CLI workflow](references/cli-workflow.md) and verify side effects.
+- For archived compatibility claims, use [Registry v2 interpretation](references/registry-v2.md);
+  verify against the current source and target rather than invoking a retired runtime.
+
 ## Zero-context-leak rule (mandatory)
 
 - **Never read raw secret files into LLM context**: Do **not** `cat`, view, or print
@@ -60,6 +67,10 @@ Resolve paths relative to this `SKILL.md` directory (`<SKILL_DIR>`).
    ```
 
 ## Semantic & safety invariants
+
+- Re-read authorized source and target before writing; preserve concurrent changes.
+  Keep one outcome per logical object and distinguish syntax, discovery, activation,
+  and runtime using [verification](references/verification.md).
 
 - **Preserve activation & scope**: Keep always-on rules, file-glob rules (`.mdc`
   `globs` -> Claude `paths` / VS Code `applyTo`), model-selected descriptions, and

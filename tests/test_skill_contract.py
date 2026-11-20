@@ -265,7 +265,7 @@ class RepoConsistency(unittest.TestCase):
 
     def test_ci_workflow_enforces_utf8_and_unmasked_single_command_steps(self) -> None:
         wf = (ROOT / ".github/workflows/validate.yml").read_text(encoding="utf-8")
-        self.assertIn('PYTHONUTF8: "1"', wf)
+        self.assertRegex(wf, r"""(?m)^      PYTHONUTF8: ['"]1['"]$""")
         self.assertNotIn("run: |", wf)
         self.assertIn("run: skills-ref validate skills/agent-skills-setup", wf)
         self.assertIn("run: skills-ref validate dev/skills/maintain-agent-skills-setup", wf)
@@ -277,7 +277,6 @@ class RepoConsistency(unittest.TestCase):
         ghost_tokens = (
             "scan-skill-secrets.py",
             "bundle-verify",
-            "Registry v2",
             "sync-root-mirror.sh",
             "0.10.2",
             "220,000",
