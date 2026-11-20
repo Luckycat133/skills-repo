@@ -1461,7 +1461,7 @@ def discover_profile(profile: str, workspace: Path, home: Path, scope: str, cate
                         srv.source_profile = pp.profile
                         inv.mcp_servers[ls].append(srv)
 
-    for cat, dsc, dpth, aroot in (
+    document_roots = [
         ("commands", "project", pp.proj_cmds if wp else None, workspace),
         ("commands", "user", pp.user_cmds if wu else None, home),
         ("agents", "project", pp.proj_agents if wp else None, workspace),
@@ -1469,7 +1469,17 @@ def discover_profile(profile: str, workspace: Path, home: Path, scope: str, cate
         ("workflows", "project", pp.proj_workflows if wp else None, workspace),
         ("workflows", "user", pp.user_workflows if wu else None, home),
         ("memory", "user", pp.user_memory if wu else None, home),
-    ):
+    ]
+    for legacy_category, legacy_scope, legacy_root in pp.legacy:
+        if legacy_category == "workflows" and (
+            (legacy_scope == "project" and wp) or (legacy_scope == "user" and wu)
+        ):
+            document_roots.append((
+                legacy_category, legacy_scope, legacy_root,
+                workspace if legacy_scope == "project" else home,
+            ))
+
+    for cat, dsc, dpth, aroot in document_roots:
         if cat not in categories or dpth is None or not (dpth.exists() or dpth.is_symlink()):
             continue
         validate_contained(dpth, aroot, f"{cat}_dir")
