@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased — workflow, evidence and delivery review (2026-11-14)
+
+- Clarify native CLI use and retired runtime commands without restoring an engine.
+- Add Registry v2 interpretation rules: archived policies are evidence to recheck,
+  not current write authority; compatibility remains per profile/surface/version.
+- Add per-object delivery outcomes and separate syntax/discovery/activation/runtime
+  results, preview zero-artifact rules, concurrent-edit checks and private recovery.
+- Require checkout/version provenance when reporting local validation; retain older
+  logs as user-reported until their source revision and evidence are available.
+- Add 10 pending workflow scenarios and 10 structural/rubric regression checks.
+  These are not new native-client passes; candidate remains `0.11.0-dev`.
+- Publish only two additional on-demand Markdown references; no runtime or dependency
+  is added and no historical product evidence date is refreshed by this review.
+
 ## Unreleased — agent-first scope reset
 
 - Replace the standalone migration engine with a guidance-first Skill using host
