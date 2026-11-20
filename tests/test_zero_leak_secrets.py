@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import runpy
 from pathlib import Path
 import subprocess
 import sys
@@ -50,6 +51,21 @@ def assert_zero_canary_leak(test: unittest.TestCase, text: str, context: str) ->
 
 
 class ZeroLeakSecretTests(unittest.TestCase):
+    def test_explicit_header_argument_forms_require_redaction(self) -> None:
+        inspect = runpy.run_path(str(SCRIPT))["inspect_args_secrets"]
+        marker = "SAFE_TEST_MARKER"
+        for args in [
+            ["--header", f"Authorization: {marker}"],
+            [f"--header=Authorization: {marker}"],
+            [f"--headers=X-API-Key: {marker}"],
+            [f"--authorization={marker}"],
+        ]:
+            with self.subTest(form=args[0].split("=")[0]):
+                result, found = inspect(args)
+                self.assertTrue(found)
+                self.assertFalse(any(marker in value for value in result))
+        self.assertEqual(inspect(["--port=8080"]), (["--port=8080"], []))
+
     def _populate_canary_source(self, ws: Path, home: Path) -> None:
         (ws / ".cursor").mkdir(parents=True, exist_ok=True)
         (home / ".cursor").mkdir(parents=True, exist_ok=True)

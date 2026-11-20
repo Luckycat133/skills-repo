@@ -66,7 +66,7 @@ URL_QUERY_SECRET_RE = re.compile(
     re.IGNORECASE,
 )
 ARG_SECRET_RE = re.compile(
-    r"^(--?(?:api[-_]?key|token|secret|password|auth[-_]?token)=)(.+)$", re.IGNORECASE
+    r"^(--?(?:api[-_]?key|token|secret|password|auth[-_]?token|authorization|auth|header|headers)=)(.+)$", re.IGNORECASE
 )
 HEADER_LITERAL_RE = re.compile(
     r"^([A-Za-z][A-Za-z0-9_-]*)[ \t]*:[ \t]*(\S.*)$"
