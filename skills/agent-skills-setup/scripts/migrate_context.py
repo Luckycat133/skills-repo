@@ -636,6 +636,10 @@ def inspect_args_secrets(args: list[str]) -> tuple[list[str], list[dict[str, str
     return redacted_args, found
 
 
+def is_project_dotenv(name: str) -> bool:
+    return "/" not in name and (name == ".env" or (name.startswith(".env.") and name != ".env.example"))
+
+
 def parse_dotenv_secrets(text: str, redact: bool = False) -> tuple[str, list[dict[str, str]]]:
     secrets: list[dict[str, str]] = []
     out_lines: list[str] = []
@@ -656,8 +660,7 @@ def parse_dotenv_secrets(text: str, redact: bool = False) -> tuple[str, list[dic
         lhs, rhs = raw.split("=", 1)
         key = lhs.strip()
         key = re.sub(r"^export[ \t]+", "", key)
-        # Only dotenv identifiers can be exposed in secret metadata. Treat
-        # arbitrary resource text as text, not as a key to publish.
+        # Publish dotenv identifiers, not arbitrary text.
         if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key):
             out_lines.append(raw)
             continue
@@ -807,10 +810,7 @@ def normalize_mcp_entry(name: str, raw: dict[str, Any], source_style: str = "mcp
 
 
 class UnrepresentableMcpServer(Exception):
-    """目标面无法表达这个 MCP 服务器（例如按服务器的工具允许/拒绝列表）。
-
-    延后而不是安装成更宽松的服务。
-    """
+    """Defer if the target cannot preserve source restrictions."""
 
 
 def serialize_mcp_for_json_style(srv: NormalizedMcp, target_style: str, redact_secrets: bool) -> tuple[dict[str, Any], list[str]]:
@@ -851,6 +851,9 @@ def serialize_mcp_for_json_style(srv: NormalizedMcp, target_style: str, redact_s
         else:
             hdr_out[k] = v
 
+    if target_style in {"zed", "opencode"} and (srv.tool_allow or srv.tool_deny):
+        raise UnrepresentableMcpServer(f"{target_style}: cannot preserve MCP tool allow/deny lists")
+
     if target_style == "zed":
         if srv.url:
             entry: dict[str, Any] = {"url": url}
@@ -868,10 +871,6 @@ def serialize_mcp_for_json_style(srv: NormalizedMcp, target_style: str, redact_s
         return entry, notes
 
     if target_style == "opencode":
-        if srv.tool_allow or srv.tool_deny:
-            raise UnrepresentableMcpServer(
-                "opencode 的 MCP 条目没有工具允许/拒绝列表，装上去会变成更宽松的服务"
-            )
         if srv.url:
             e: dict[str, Any] = {"type": "remote", "url": url, "enabled": not srv.disabled}
             if hdr_out:
@@ -1584,7 +1583,7 @@ def discover_profile(profile: str, workspace: Path, home: Path, scope: str, cate
 
     if "env_secrets" in categories and wp and workspace.is_dir():
         for entry in sorted(workspace.iterdir()):
-            if (entry.is_file() or entry.is_symlink()) and (entry.name == ".env" or (entry.name.startswith(".env.") and entry.name != ".env.example")):
+            if (entry.is_file() or entry.is_symlink()) and is_project_dotenv(entry.name):
                 validate_contained(entry, workspace, f"dotenv:{entry.name}")
                 raw_env = entry.read_text(encoding="utf-8")
                 inv.env_files.append(DiscoveredEnvFile(entry.name, "project", entry, raw_env, parse_dotenv_secrets(raw_env)[1]))
@@ -2006,7 +2005,7 @@ def apply_mcp_servers_to_file(
 
 
 def checked_doc_name(value: str) -> str:
-    """Only portable, relative, normalized document paths may become targets."""
+    """Validate a portable relative path."""
     if (not isinstance(value, str) or not value or PureWindowsPath(value).anchor
             or any(part in {"", ".", ".."} for part in value.split("/"))
             or "\\" in value or ":" in value):
@@ -2482,6 +2481,8 @@ def cmd_import_device(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
             continue
         bp, data = in_dir / brel, verified[brel]
         if cat == "env_secrets":
+            if esc != "project" or not is_project_dotenv(name):
+                raise SafetyRefusalError("invalid_env_entry", "Expected a project dotenv basename")
             rt = data.decode("utf-8")
             inv_by_prof.setdefault(default_prof, ProfileInventory(default_prof)).env_files.append(DiscoveredEnvFile(name, "project", bp, rt, parse_dotenv_secrets(rt)[1]))
             continue

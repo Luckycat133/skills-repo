@@ -78,6 +78,54 @@ class MigrationReviewSafety(unittest.TestCase):
                 self.assertIn("CLAUDE.md fixture.", (work / "AGENTS.md").read_text(encoding="utf-8"))
                 self.assertEqual({name: (work / name).read_bytes() for name in original}, original)
 
+    def test_zed_defers_restricted_mcp_and_preserves_existing_settings(self):
+        source = self.write(self.work / ".cursor/mcp.json", json.dumps({"mcpServers": {
+            "fixture-local": {"command": "fixture-only", "includeTools": ["read_fixture"]},
+            "fixture-remote": {"url": "https://example.invalid/mcp", "excludeTools": ["edit_fixture"]},
+        }}))
+        target = self.write(self.work / ".zed/settings.json", '// Existing setting\n{"vim_mode": true,}\n')
+        before = target.read_bytes()
+        args = ("--source", "cursor", "--target", "zed", "--scope", "project", "--categories", "mcp")
+        report = self.run_cli("migrate", *args, "--strict-conflicts", code=3)
+        self.assertEqual(report["summary"]["deferred"], 2)
+        self.assertEqual(target.read_bytes(), before)
+        self.assertEqual(report["backups"], [])
+        servers = json.loads(source.read_text(encoding="utf-8"))["mcpServers"]
+        servers["plain-fixture"] = {"command": "plain-fixture-only"}
+        source.write_text(json.dumps({"mcpServers": servers}), encoding="utf-8")
+        report = self.run_cli("migrate", *args)
+        self.assertEqual(report["summary"]["deferred"], 2)
+        settings = json.loads(target.read_text(encoding="utf-8"))
+        self.assertTrue(settings["vim_mode"])
+        self.assertEqual(list(settings["context_servers"]), ["plain-fixture"])
+
+    def test_project_dotenv_names_require_a_dotenv_basename(self):
+        for name in (".env", ".env.local", ".env.production.local"):
+            self.assertTrue(migrate.is_project_dotenv(name), name)
+        for name in (".env.example", "notes.txt", "nested/.env.local", ".env.local/notes.txt"):
+            self.assertFalse(migrate.is_project_dotenv(name), name)
+
+    def test_import_rejects_non_dotenv_entry_id_before_writing(self):
+        self.write(self.work / ".env.local", "FIXTURE_MODE=offline\n")
+        transfer = self.root / "dotenv-transfer"
+        self.run_cli("export-device", "--profiles", "cursor", "--scope", "project",
+                     "--categories", "env_secrets", "--output", str(transfer))
+        manifest = transfer / "manifest.json"
+        doc = json.loads(manifest.read_text(encoding="utf-8"))
+        self.assertEqual(len(doc["entries"]), 1)
+        self.assertEqual(doc["entries"][0]["id"], ".env.local")
+        doc["entries"][0]["id"] = "notes.txt"
+        manifest.write_text(json.dumps(doc), encoding="utf-8")
+        destination = self.root / "dotenv-target"
+        destination.mkdir()
+        existing = self.write(destination / "notes.txt", "Leave the fixture alone.\n")
+        before = existing.read_bytes()
+        report = self.run_cli("import-device", "--input", str(transfer), "--target", "cursor",
+                              workspace=destination, code=2)
+        self.assertEqual(report["error"], "invalid_env_entry")
+        self.assertEqual(existing.read_bytes(), before)
+        self.assertEqual(list(destination.iterdir()), [existing])
+
     def test_dotenv_metadata_only_contains_identifiers(self):
         benign = "not-an-assignment TOKEN=example-placeholder"
         sample = benign + "\nexport\tDEMO_TOKEN=fixture-value\n"
