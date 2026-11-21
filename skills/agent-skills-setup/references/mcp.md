@@ -5,26 +5,23 @@ timeout units, disabled state, tool filters, and credentials as distinct fields.
 Use `scripts/migrate_context.py` (`migrate` or `patch-mcp`) whenever MCP entries may
 contain API keys, tokens, or auth headers so raw secret values never enter LLM context.
 
-## Secret handling: out-of-band by default, `--redact-secrets` on request
+## Secrets: transfer out of band or explicitly redact
 
-1. **Zero LLM exposure**: Never `cat` raw `mcp.json`, `~/.claude.json`,
-   `.gemini/settings.json`, or `.codex/config.toml` into prompt context to copy keys.
-   `scripts/migrate_context.py` moves literal credentials disk-to-disk with `0600`
-   permissions and prints only key names, `has_secrets`, and `sha256[:8]` on `stdout`.
-2. **Default out-of-band transfer**: Preserves `${VAR}` / `${env:VAR}` placeholders as
-   variable references and copies literal API keys/headers to the destination in `0600`
-   mode (creating a `0600` backup of any existing target file in a `0700` backup dir).
-3. **Git-tracked target protection**: Never write literal secrets into a Git-tracked
-   project file silently. When `.mcp.json` is tracked in Git, `migrate_context.py`
-   automatically routes secret-bearing Claude Code MCP servers to untracked local
-   `~/.claude.json` (`projects[workspace].mcpServers`) and warns. For other tracked
-   targets, it refuses with exit code `2` unless `--redact-secrets`, `--scope user`,
-   or `--allow-git-tracked-secrets` is specified.
-4. **Explicit redaction (`--redact-secrets`)**: When the user says "don't copy keys" or
-   prepares a committed config, pass `--redact-secrets` to convert literal secrets into
-   target placeholders (`${VAR}`, VS Code `${env:VAR}`, or Codex `env_vars = ["VAR"]`
-   / `bearer_token_env_var`). Never transfer OAuth access/refresh tokens or `trust` /
-   `alwaysAllow` / `autoApprove` grants.
+- Never load raw MCP config into LLM context. The helper moves credentials
+  disk-to-disk with `0600` files and `0700` backup directories; stdout only reports
+  names, `has_secrets`, and `sha256[:8]`.
+- Preserve environment references. For tracked Claude `.mcp.json`, the helper routes
+  secret-bearing entries to untracked `~/.claude.json` under `projects[workspace].mcpServers`.
+  Other tracked targets refuse (exit 2) unless using `--redact-secrets`, `--scope user`,
+  or explicit `--allow-git-tracked-secrets`.
+- Use `--redact-secrets` when told not to copy keys or when preparing a commit.
+  It replaces literals with target bindings (`${VAR}`, VS Code `${env:VAR}`, or
+  Codex `env_vars = ["VAR"]` / `bearer_token_env_var`). Never copy OAuth access or
+  refresh tokens, trust, `alwaysAllow`, or `autoApprove` grants.
+
+For stdio `cwd`, OpenCode 1.17.4+ accepts literal absolute paths and native
+workspace-relative paths. Defer unverified relative bases or variable expansion.
+Zed has no per-server working-directory field; entries requiring one are deferred.
 
 ## Worked example: JSON stdio to Codex TOML
 

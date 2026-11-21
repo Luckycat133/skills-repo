@@ -86,6 +86,56 @@ class BatchMcpCompat(unittest.TestCase):
         self.assertEqual(report["summary"]["deferred"], 1)
         self.assertFalse((self.dest / ".cursor/mcp.json").exists())
 
+    def test_opencode_keeps_local_mcp_working_directories(self):
+        self.write(".cursor/mcp.json", {"mcpServers": {
+            "absolute": {"command": "fixture", "cwd": str(self.source / "backend")},
+            "relative": {"command": "fixture", "cwd": "backend/tools"},
+            "dynamic": {"command": "fixture", "cwd": "${workspaceFolder}/backend"},
+        }})
+        args = ("--source", "cursor", "--target", "opencode", "--scope", "project",
+                "--categories", "mcp", "--strict-conflicts")
+        for nested in (False, True):
+            with self.subTest(nested=nested):
+                config = self.write("opencode.json", {"mcp": {"servers": {}} if nested else {}})
+                self.assertEqual(self.cli("migrate", *args, code=3)["summary"]["migrated"], 1)
+                servers = json.loads(config.read_text())["mcp"]
+                if nested:
+                    servers = servers["servers"]
+                self.assertEqual(servers["absolute"]["cwd"], str(self.source / "backend"))
+                self.assertEqual(list(servers), ["absolute"])
+                self.assertEqual(self.cli("migrate", *args, code=3)["summary"]["noop"], 1)
+
+    def test_opencode_transfer_preserves_native_workspace_relative_cwd(self):
+        self.write("opencode.json", {"mcp": {"servers": {
+            "relative": {"type": "local", "command": ["fixture"], "cwd": "backend/tools"},
+        }}})
+        self.transfer("opencode")
+        server = json.loads((self.dest / "opencode.json").read_text())["mcp"]["relative"]
+        self.assertEqual(server["cwd"], "backend/tools")
+
+    def test_zed_defers_explicit_mcp_working_directory_without_writing(self):
+        source = self.write(".cursor/mcp.json", {"mcpServers": {
+            "dependent": {"command": "fixture", "cwd": "backend/tools"},
+        }})
+        target = self.write(".zed/settings.json", '// existing\n{"theme":"fixture"}\n')
+        before = target.read_bytes()
+        args = ("--source", "cursor", "--target", "zed", "--scope", "project",
+                "--categories", "mcp", "--strict-conflicts")
+        result = self.cli("migrate", *args, code=3)
+        self.assertEqual(result["summary"]["deferred"], 1)
+        self.assertIn("working directory", result["actions"][0]["reason"])
+        self.assertEqual(target.read_bytes(), before)
+        self.assertEqual(result["backups"], [])
+        doc = json.loads(source.read_text())
+        doc["mcpServers"]["ordinary"] = {"command": "fixture"}
+        source.write_text(json.dumps(doc))
+        result = self.cli("migrate", *args, code=3)
+        self.assertEqual(result["summary"]["migrated"], 1)
+        self.assertEqual(result["summary"]["deferred"], 1)
+        config = json.loads(target.read_text())
+        self.assertEqual(list(config["context_servers"]), ["ordinary"])
+        self.assertEqual(config["theme"], "fixture")
+
     def test_patch_mcp_uses_requested_nested_toml_table_and_is_idempotent(self):
         src = self.write("mcp.json", {"mcpServers": {"demo": {"command": "fixture", "env": {"MODE": "offline"}}}})
         dst = self.write("config.toml", "[settings]\nkeep = true\n")

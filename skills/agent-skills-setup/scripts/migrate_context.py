@@ -3,13 +3,7 @@
 # requires-python = ">=3.11"
 # dependencies = []
 # ///
-"""Safe, zero-context-leak AI coding context & secret migration helper.
-
-Moves rules/instructions, Agent Skills, MCP servers, commands, agents, parked hooks,
-authored memory, and .env secrets across AI coding tools or plain device-transfer
-folders without exposing raw secret values to stdout, stderr, LLM context, or
-MIGRATION.md.
-"""
+"""Migrate AI coding context and secrets without exposing values in reports or logs."""
 from __future__ import annotations
 
 import argparse
@@ -775,6 +769,7 @@ def normalize_mcp_entry(name: str, raw: dict[str, Any], source_style: str = "mcp
             env={str(k): str(v) for k, v in env_raw.items()},
             headers={str(k): str(v) for k, v in (raw.get("headers") or {}).items()},
             disabled=disabled, timeout=raw.get("timeout"), stripped_grants=grants, knob_only=not cmd and not url,
+            source_profile=source_style if source_style == "opencode" else "",
         )
 
     if isinstance(raw.get("command"), dict):
@@ -890,6 +885,8 @@ def serialize_mcp_for_json_style(srv: NormalizedMcp, target_style: str, redact_s
             if srv.disabled:
                 entry["disabled"] = True
             return entry, notes
+        if srv.cwd:
+            raise UnrepresentableMcpServer("Zed cannot preserve an explicit MCP working directory")
         cobj: dict[str, Any] = {"path": srv.command or "", "args": args}
         if env_out:
             cobj["env"] = env_out
@@ -907,6 +904,13 @@ def serialize_mcp_for_json_style(srv: NormalizedMcp, target_style: str, redact_s
         e = {"type": "local", "command": ([srv.command] if srv.command else []) + args, "enabled": not srv.disabled}
         if env_out:
             e["environment"] = env_out
+        if srv.cwd:
+            cwd = srv.cwd
+            if "${" in cwd or "{env:" in cwd or cwd.startswith("~") or (
+                srv.source_profile != "opencode" and not (Path(cwd).is_absolute() or PureWindowsPath(cwd).is_absolute())
+            ):
+                raise UnrepresentableMcpServer("OpenCode needs a verified MCP working-directory base")
+            e["cwd"] = cwd
         return e, notes
 
     entry: dict[str, Any] = {}
