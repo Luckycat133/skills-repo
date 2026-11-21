@@ -46,6 +46,38 @@ class MigrationReviewSafety(unittest.TestCase):
         path.write_text(text, encoding="utf-8")
         return path
 
+    def test_zed_discovers_only_the_first_native_project_instruction(self):
+        native = self.write(self.work / ".rules", "---\ndescription: Plain native instruction\n---\nUse the fixture.\n")
+        for supplied_fallbacks in (False, True):
+            with self.subTest(supplied_fallbacks=supplied_fallbacks):
+                if supplied_fallbacks:
+                    self.write(self.work / "AGENTS.md", "Later instruction.\n")
+                    self.write(self.work / ".github/copilot-instructions.md", "Another later instruction.\n")
+                rules = migrate.discover_profile("zed", self.work, self.home, "project", {"instructions"}).rules
+                self.assertEqual([(rule.source_path, rule.kind, rule.body) for rule in rules],
+                                 [(native, "always_on", native.read_text(encoding="utf-8"))])
+        native.unlink()
+        fallbacks = migrate.discover_profile("zed", self.work, self.home, "project", {"instructions"}).rules
+        self.assertEqual([rule.source_path for rule in fallbacks], [self.work / ".github/copilot-instructions.md"])
+
+    def test_zed_destination_warns_only_for_real_higher_priority_files(self):
+        for higher_priority in ((), ("AGENT.md",), (".github/copilot-instructions.md", "AGENT.md")):
+            with self.subTest(higher_priority=higher_priority):
+                work = self.root / f"zed-{len(higher_priority)}"
+                work.mkdir()
+                original = {
+                    name: self.write(work / name, f"{name} fixture.\n").read_bytes()
+                    for name in ("CLAUDE.md", "GEMINI.md", *higher_priority)
+                }
+                (work / ".rules").mkdir()  # A directory is not a native rule file.
+                report = self.run_cli("migrate", "--source", "claude-code", "--target", "zed",
+                                      "--scope", "project", "--categories", "instructions", workspace=work)
+                warnings = [w for w in report["warnings"] if w.get("code") == "zed_first_match_shadow_check"]
+                self.assertEqual([w["present_files"] for w in warnings],
+                                 [list(higher_priority)] if higher_priority else [])
+                self.assertIn("CLAUDE.md fixture.", (work / "AGENTS.md").read_text(encoding="utf-8"))
+                self.assertEqual({name: (work / name).read_bytes() for name in original}, original)
+
     def test_dotenv_metadata_only_contains_identifiers(self):
         benign = "not-an-assignment TOKEN=example-placeholder"
         sample = benign + "\nexport\tDEMO_TOKEN=fixture-value\n"

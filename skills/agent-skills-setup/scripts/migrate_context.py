@@ -1061,6 +1061,13 @@ def set_nested_dict(doc: dict[str, Any], parts: list[str], value: dict[str, Any]
 # --- Declarative Profile Layout & Bounded Discovery ---
 
 
+# https://zed.dev/docs/ai/instructions#project-instructions
+_ZED_PROJECT_INSTRUCTIONS = (
+    ".rules", ".cursorrules", ".windsurfrules", ".clinerules",
+    ".github/copilot-instructions.md", "AGENT.md", "AGENTS.md", "CLAUDE.md", "GEMINI.md",
+)
+
+
 @dataclass
 class ProfilePaths:
     profile: str
@@ -1342,7 +1349,8 @@ def parse_rule_files(path: Path, scope: str, profile: str) -> list[DiscoveredRul
             break
     slug = slugify(bname)
     root_names = {"AGENTS.md", "CLAUDE.md", "CLAUDE.local.md", "GEMINI.md", "QWEN.md", "copilot-instructions.md", ".cursorrules", ".windsurfrules", "global_rules.md"}
-    if path.name in root_names or (path.name == ".clinerules" and path.is_file()):
+    zed_native = profile == "zed" and path.name in {".rules", "AGENT.md"}
+    if path.name in root_names or zed_native or (path.name == ".clinerules" and path.is_file()):
         base_id = slugify(f"{scope}-{path.name}")
         found_sections = list(SECTION_RE.finditer(text))
         if found_sections:
@@ -1442,7 +1450,10 @@ def discover_profile(profile: str, workspace: Path, home: Path, scope: str, cate
                         cands.append((sc, f, root))
 
         if wp:
-            _collect_rule_path("project", pp.proj_doc, workspace)
+            project_doc = pp.proj_doc
+            if pp.profile == "zed":
+                project_doc = next((workspace / n for n in _ZED_PROJECT_INSTRUCTIONS if (workspace / n).is_file()), None)
+            _collect_rule_path("project", project_doc, workspace)
             _collect_rule_path("project", pp.proj_rules, workspace)
         if wu:
             _collect_rule_path("user", pp.user_doc, pp.contained_root(pp.user_doc, "user", workspace, home))
@@ -1627,10 +1638,11 @@ def apply_rule_to_target(
         return root
 
     rule_body = _redact_document_text(rule.body) if redact_secrets else rule.body
-    if tp == "zed" and is_p:
-        sh = [c for c in (".rules", ".cursorrules", ".windsurfrules", ".clinerules", "CLAUDE.md", "GEMINI.md") if (workspace / c).exists() and (workspace / c) != rule.source_path]
+    if tp == "zed" and is_p and (rule.kind == "always_on" or (rule.kind == "glob_scoped" and allow_broaden_scope)):
+        first = _ZED_PROJECT_INSTRUCTIONS.index("AGENTS.md")
+        sh = [n for n in _ZED_PROJECT_INSTRUCTIONS[:first] if (workspace / n).is_file()]
         if sh:
-            warnings.append({"code": "zed_first_match_shadow_check", "profile": "zed", "present_files": sh, "message": f"Zed uses first-match rule loading; check competing files: {', '.join(sh)}"})
+            warnings.append({"code": "zed_first_match_shadow_check", "profile": "zed", "present_files": sh, "message": f"Native Zed selects {sh[0]} before AGENTS.md; shadowing files are unchanged."})
 
     if rule.kind == "always_on":
         dst = tpp.proj_doc if is_p else tpp.user_doc
