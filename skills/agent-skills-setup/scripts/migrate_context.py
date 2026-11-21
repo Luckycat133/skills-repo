@@ -769,6 +769,7 @@ def normalize_mcp_entry(name: str, raw: dict[str, Any], source_style: str = "mcp
             env={str(k): str(v) for k, v in env_raw.items()},
             headers={str(k): str(v) for k, v in (raw.get("headers") or {}).items()},
             disabled=disabled, timeout=raw.get("timeout"), stripped_grants=grants, knob_only=not cmd and not url,
+            source_profile=source_style if source_style == "opencode" else "",
         )
 
     if isinstance(raw.get("command"), dict):
@@ -904,7 +905,12 @@ def serialize_mcp_for_json_style(srv: NormalizedMcp, target_style: str, redact_s
         if env_out:
             e["environment"] = env_out
         if srv.cwd:
-            e["cwd"] = srv.cwd
+            cwd = srv.cwd
+            if "${" in cwd or "{env:" in cwd or cwd.startswith("~") or (
+                srv.source_profile != "opencode" and not (Path(cwd).is_absolute() or PureWindowsPath(cwd).is_absolute())
+            ):
+                raise UnrepresentableMcpServer("OpenCode needs a verified MCP working-directory base")
+            e["cwd"] = cwd
         return e, notes
 
     entry: dict[str, Any] = {}

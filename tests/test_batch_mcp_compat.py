@@ -90,19 +90,28 @@ class BatchMcpCompat(unittest.TestCase):
         self.write(".cursor/mcp.json", {"mcpServers": {
             "absolute": {"command": "fixture", "cwd": str(self.source / "backend")},
             "relative": {"command": "fixture", "cwd": "backend/tools"},
+            "dynamic": {"command": "fixture", "cwd": "${workspaceFolder}/backend"},
         }})
         args = ("--source", "cursor", "--target", "opencode", "--scope", "project",
                 "--categories", "mcp", "--strict-conflicts")
         for nested in (False, True):
             with self.subTest(nested=nested):
                 config = self.write("opencode.json", {"mcp": {"servers": {}} if nested else {}})
-                self.assertEqual(self.cli("migrate", *args)["summary"]["migrated"], 2)
+                self.assertEqual(self.cli("migrate", *args, code=3)["summary"]["migrated"], 1)
                 servers = json.loads(config.read_text())["mcp"]
                 if nested:
                     servers = servers["servers"]
                 self.assertEqual(servers["absolute"]["cwd"], str(self.source / "backend"))
-                self.assertEqual(servers["relative"]["cwd"], "backend/tools")
-                self.assertEqual(self.cli("migrate", *args)["summary"]["noop"], 2)
+                self.assertEqual(list(servers), ["absolute"])
+                self.assertEqual(self.cli("migrate", *args, code=3)["summary"]["noop"], 1)
+
+    def test_opencode_transfer_preserves_native_workspace_relative_cwd(self):
+        self.write("opencode.json", {"mcp": {"servers": {
+            "relative": {"type": "local", "command": ["fixture"], "cwd": "backend/tools"},
+        }}})
+        self.transfer("opencode")
+        server = json.loads((self.dest / "opencode.json").read_text())["mcp"]["relative"]
+        self.assertEqual(server["cwd"], "backend/tools")
 
     def test_zed_defers_explicit_mcp_working_directory_without_writing(self):
         source = self.write(".cursor/mcp.json", {"mcpServers": {
