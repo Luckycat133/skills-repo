@@ -21,16 +21,18 @@ class WorkflowContract(unittest.TestCase):
             self.assertTrue((SKILL / "references" / name).is_file())
         self.assertLess(len(entry.splitlines()), 150)
 
-    def test_package_explicitly_admits_only_guidance(self):
+    def test_package_admits_guidance_and_the_explicit_helper_only(self):
         module = ast.parse(text(ROOT / "scripts/package_skill.py"))
         assignment = next(n for n in module.body if isinstance(n, ast.Assign)
                           and any(isinstance(t, ast.Name) and t.id == "ALLOWED" for t in n.targets))
         allowed = ast.literal_eval(assignment.value.args[0])
-        self.assertEqual(len(allowed), 43)
+        self.assertIn("scripts/migrate_context.py", allowed)
+        guidance = allowed - {"scripts/migrate_context.py"}
+        self.assertEqual(len(guidance), 43)
         for name in ("references/cli-workflow.md", "references/registry-v2.md"):
             self.assertIn(name, allowed)
-        self.assertTrue(all(p.endswith(".md") or p == "LICENSE" for p in allowed))
-        self.assertFalse(any(p.startswith(("dev/", "evals/", "scripts/", "docs/history/")) for p in allowed))
+        self.assertTrue(all(p.endswith(".md") or p == "LICENSE" for p in guidance))
+        self.assertFalse(any(p.startswith(("dev/", "evals/", "scripts/", "docs/history/")) for p in guidance))
 
     def test_cli_distinguishes_native_commands_from_retired_engine(self):
         guide = text(SKILL / "references/cli-workflow.md")

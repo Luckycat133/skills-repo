@@ -1,19 +1,12 @@
 # Factory Droid and Augment
 
-Documentation review: 2026-11-07. **Client/runtime checks: not run.**
-Read only the relevant profile below. Paths are discovery candidates, not permission
-to scan or overwrite them. Apply the [catalog contract](../products.md) and record
-the installed version, OS, active harness and path overrides before changing files.
+Review: 2026-11-07 · Client checks: not run · Contract: [products.md](../products.md).
 
 ## factory-droid
 
 **Factory Droid CLI, desktop and cloud** · Evidence: `documented-subset` · Runtime: `not-run`.
 
-The executable is `droid`, not `factory`. Current documentation is organized around the Factory harness. Inventory `.factory/skills` and user Skills, AGENTS, custom droids, commands, hooks, MCP, output styles and plugins.
-
-Factory plugins use `.factory-plugin/plugin.json` plus component directories/files. Preserve the manifest namespace and droid/Skill references; do not reduce a plugin to the manifest alone. Project versus user droids have separate discovery and tool constraints. CLI, desktop and cloud jobs may run under different homes/workspaces.
-
-Copy selected inert Skills with resources; translate agent/model/tool fields deliberately. MCP config and hooks inside plugins remain executable/auth-bearing components. Check target package import, `/` invocation and droid visibility in the intended harness; never migrate allowlists or auto-run hook installation.
+Binary is `droid` (not `factory`). Inventory `AGENTS.md`, `.factory/skills/<name>/SKILL.md`, `~/.factory/skills`, custom droids (`.factory/droids/*.md`, `~/.factory/droids/*.md`), commands (`.factory/commands/`), hooks, `~/.factory/mcp.json` / `.factory/mcp.json` (`mcpServers` via `patch-mcp`), and `.factory-plugin/plugin.json` bundles. When a user requests only a Skill from a plugin bundle, copy only that Skill + inert resources and leave bundled hooks/MCP inactive.
 
 Official sources: [1](https://docs.factory.com/harness/skills) · [2](https://docs.factory.com/harness/plugins) · [3](https://docs.factory.com/harness/subagents) · [4](https://docs.factory.com/droid-cli/overview)
 
@@ -21,10 +14,7 @@ Official sources: [1](https://docs.factory.com/harness/skills) · [2](https://do
 
 **Auggie CLI, Augment IDE and Cosmos** · Evidence: `documented-subset` · Runtime: `not-run`.
 
-Inventory Skills, rules/guidelines, commands, agents, hooks, MCP, plugins and settings. CLI Skill precedence is not the common project-wins assumption: official docs prioritize user `~/.augment/skills` before workspace/compatibility roots; explicit Skill paths also matter.
-
-Rules include `.augment/rules`, user rules, AGENTS/CLAUDE discovery, legacy `.augment-guidelines` and system-prompt add/replace mechanisms. User rules are documented as always-apply; copying file-scoped frontmatter there does not preserve scope. At a directory where both AGENTS and CLAUDE exist, follow the documented fallback, not additive concatenation.
-
-CLI, IDE and Cosmos cloud context must be checked separately. Do not copy enterprise context indexes or permission state. Check selected rule activation, winning Skill definition, command references and actual MCP subobject while preserving the rest of settings.
+- **Candidate paths & precedence traps**: Skills `~/.augment/skills/<name>/SKILL.md` and `.augment/skills/<name>/SKILL.md` (**user `~/.augment/skills` wins over workspace/compatibility roots** in Auggie CLI — opposite of most tools!); Rules `.augment/rules/*.md`, user rules, `AGENTS.md` / `CLAUDE.md` fallback (not concatenated), legacy `.augment-guidelines`; Commands `.augment/commands/`, Agents `.augment/agents/`, and `mcpServers` in `~/.augment/settings.json` (patch subobject via `patch-mcp`).
+- **Scope trap**: Augment **user rules always apply** — never move a file-scoped glob rule into user rules without explicit user consent to broaden scope. Exclude enterprise context indexes and Cosmos cloud state.
 
 Official sources: [1](https://docs.augmentcode.com/cli/skills) · [2](https://docs.augmentcode.com/cli/rules) · [3](https://docs.augmentcode.com/)

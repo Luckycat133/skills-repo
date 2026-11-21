@@ -13,12 +13,13 @@ jobs:
     env:
       # skills-ref uses locale-default read_text(); Skill sources are UTF-8.
       PYTHONUTF8: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up validation Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
@@ -27,8 +28,31 @@ jobs:
         run: python -m pip install 'git+https://github.com/agentskills/agentskills.git@69ef37e9424c0a7ea9dd2293b559e43ec8176379#subdirectory=skills-ref'
       - name: Structural and example checks, not IDE certification
         run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Migration CLI help smoke check
+        run: python -B skills/agent-skills-setup/scripts/migrate_context.py --help
       # One native command per step: PowerShell must not mask an earlier failure.
       - name: Official published Skill validation
         run: skills-ref validate skills/agent-skills-setup
       - name: Official maintainer Skill validation
         run: skills-ref validate dev/skills/maintain-agent-skills-setup
+
+  validate-python-matrix:
+    name: Validate python matrix (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    env:
+      PYTHONUTF8: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.13']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up validation Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Structural and script checks
+        run: python -B -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Migration CLI help smoke check
+        run: python -B skills/agent-skills-setup/scripts/migrate_context.py --help

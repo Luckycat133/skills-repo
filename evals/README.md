@@ -28,5 +28,6 @@ scenarios and the dated documentation snapshot unchanged as historical inputs;
 write actual run evidence separately. Pass/fail needs evidence; blocked or N/A needs
 a reason. Preserve prior failures when adding a successful rerun.
 
-Do not build a CLI, protocol, database, signing service or test orchestration engine
-to run this queue. Use the existing agent and its native file/documentation tools.
+Do not build a separate test daemon, `.acb` protocol, database, or signing service
+to run this queue. Use the existing host agent, its native tools, and the canonical
+Skill's bundled `scripts/migrate_context.py`.

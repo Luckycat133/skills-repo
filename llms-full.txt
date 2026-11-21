@@ -1,50 +1,52 @@
 # Agent Skills Setup (skills-repo) Full Documentation
 
-> Offline, previewed, and rollback-safe migration of AI coding context (Skills, Rules, Instructions, and MCP) across Cursor, Claude Code, Codex, Cline, Windsurf, Copilot, and Gemini CLI.
+> Agent-first AI coding context & zero-LLM-exposure secret migration Skill across IDEs, CLIs, and computers.
 
 - **Repository**: https://github.com/Luckycat133/skills-repo
 - **Author**: Luckycat133
-- **Version**: 0.10.2
+- **Candidate Version**: 0.11.0-dev (unpublished; native client runtime matrix `not-run`)
 - **License**: MIT
-- **Registry**: ClawHub (`@luckycat133/agent-skills-setup`)
 
 ---
 
-## 1. Overview & Supported IDE Matrix
+## 1. Architecture & Built-In Profiles
 
-Agent Skills Setup harmonizes AI coding context across disparate IDE configurations:
+`skills/agent-skills-setup/` ships concise instructions (`SKILL.md`), progressive references (`references/`), templates (`assets/`), and a zero-dependency Python 3.11+ stdlib script (`scripts/migrate_context.py`). It does **not** use proprietary `.acb` bundles, signing keys, SQLite stores, or background daemons, and never claims blanket `100%` runtime certification across IDEs.
 
-| IDE / Agent | Skills | Rules / Instructions | MCP Server Config | Support Level |
-| :--- | :--- | :--- | :--- | :--- |
-| **Cursor** | `.cursor/skills` | `.cursorrules` / `.cursor/rules` | `~/.cursor/mcp.json` | Full |
-| **Claude Code** | `.claude/skills` | `CLAUDE.md` | `~/.claude/settings.json` | Full |
-| **Codex** | `.codex/skills` | `AGENTS.md` | `~/.codex/config.toml` | Full |
-| **Windsurf** | Native skills | `.windsurfrules` | Native MCP | Full |
-| **Cline / Roo Code** | Native skills | `.clinerules` | `cline_mcp_settings.json` | Full |
-| **GitHub Copilot** | Copilot instructions | `.github/copilot-instructions.md` | VS Code settings | Full |
-| **Gemini CLI / Antigravity** | `.gemini/skills` | `GEMINI.md` | `mcp_config.json` | Full |
+| Profile | Skills | Rules / Instructions | MCP Config & Container Key |
+| :--- | :--- | :--- | :--- |
+| **Cursor** | `.cursor/skills` | `.cursor/rules/*.mdc`, `AGENTS.md` | `.cursor/mcp.json` (`mcpServers`) |
+| **Claude Code** | `.claude/skills` | `CLAUDE.md`, `.claude/rules/*.md` | `.mcp.json`, `~/.claude.json` (`mcpServers`) |
+| **Codex** | `.agents/skills` | `AGENTS.md` (`AGENTS.override.md`) | `.codex/config.toml` (`[mcp_servers.<name>]`) |
+| **VS Code** | `.github/skills` | `.github/copilot-instructions.md`, `.github/instructions/*.instructions.md` | `.vscode/mcp.json` (`servers`) |
+| **Copilot CLI** | `.github/skills`, `~/.copilot/skills` | `~/.copilot/copilot-instructions.md` | `~/.copilot/mcp-config.json` (`mcpServers`) |
+| **Gemini CLI** | `.gemini/skills` | `GEMINI.md` | `.gemini/settings.json` (`mcpServers`, `httpUrl`) |
+| **Antigravity / Windsurf** | `.agents/skills`, `.windsurf/skills` | `GEMINI.md`, `.windsurf/rules/*.md` | `mcp_config.json` (`mcpServers`, `serverUrl`) |
+| **Cline / Kilo** | `.cline/skills`, `.kilo/skills` | `.clinerules`, `.kilo/rules` | `cline_mcp_settings.json`, `.kilo/mcp.json` |
+| **Zed / OpenCode / Pi** | `.agents/skills`, `.opencode/skills`, `.pi/skills` | `AGENTS.md` | `.zed/settings.json` (`context_servers`), `opencode.json` (`mcp`/`mcp.servers`), `.pi/mcp.json` |
+| **Kimi / Qwen** | `.kimi-code/skills`, `.qwen/skills` | `AGENTS.md`, `QWEN.md` | `.kimi-code/mcp.json`, `.qwen/settings.json` |
+
+75+ additional clients are routed on demand via `references/products.md` and `migrate_context.py patch-mcp`.
 
 ---
 
-## 2. Quick Installation & Invocation
+## 2. Installation & Usage
 
 ```bash
-# Via ClawHub / OpenClaw
-openclaw skills install @luckycat133/agent-skills-setup
-
-# Or via GitHub direct clone
 git clone --depth 1 https://github.com/Luckycat133/skills-repo.git
+cp -R skills-repo/skills/agent-skills-setup /path/to/your-skills-dir/agent-skills-setup
 ```
 
-### Natural Language Prompts (Say this to your AI Agent)
-- *"Migrate Skills, rules, and MCP from Cursor in this project to Claude Code."*
-- *"Back up all portable AI coding setup from my installed IDEs to an ACB bundle."*
-- *"Restore this ACB bundle to the installed IDEs on my new computer."*
+### Natural Language Prompts
+- *"Migrate Skills, rules, and MCP configs (including API keys) from Cursor in this project to Claude Code and Codex."*
+- *"Migrate my Cursor MCP servers to VS Code, redacting secrets into env placeholders."*
+- *"I'm changing computers — export my AI coding configs and keys into `~/context-transfer`."*
+- *"Restore `~/context-transfer` onto the tools on my new computer."*
 
 ---
 
-## 3. Core Safety & Rollback Architecture
+## 3. Core Safety Invariants
 
-1. **Secret Redaction**: High-entropy tokens, API keys (`*_KEY`, `*_SECRET`), and bearer tokens are automatically sanitized into placeholder tokens inside portable ACB bundles.
-2. **Interactive Preview**: Migration operations generate a unified preview diff (`migration-plan.md`) requiring explicit user approval before modifying files.
-3. **Automated Rollback**: Snapshots are persisted prior to writing changes, enabling instant 1-click rollback.
+1. **Zero-Context-Leak Out-of-Band Secret Transfer**: `migrate_context.py` moves credentials disk-to-disk in `0600` mode (`0700` dirs/backups), guards Git-tracked files against silent secret writes, and emits only variable names and `sha256[:8]` prefixes on `stdout` / `MIGRATION.md`. `--redact-secrets` converts secrets to placeholders on request.
+2. **Preview & Private Rollback Backups**: `--dry-run` makes zero target writes; real runs back up modified files to `~/.agent-skills-setup-backups/` (`0700`/`0600`).
+3. **Exclusions & Inactive Untrusted Code**: Chat histories, transcripts, SQLite/LevelDB databases, caches, OAuth cookies, and trust grants are always excluded; hooks remain parked in `.migration-review/` unless `--activate-hooks` is explicitly approved.

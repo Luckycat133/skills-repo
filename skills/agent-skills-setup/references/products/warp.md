@@ -1,19 +1,12 @@
 # Warp Desktop and Oz
 
-Documentation review: 2026-11-07. **Client/runtime checks: not run.**
-Read only the relevant profile below. Paths are discovery candidates, not permission
-to scan or overwrite them. Apply the [catalog contract](../products.md) and record
-the installed version, OS, active harness and path overrides before changing files.
+Review: 2026-11-07 · Client checks: not run · Contract: [products.md](../products.md).
 
 ## warp
 
 **Warp Desktop and Warp Drive** · Evidence: `documented-subset` · Runtime: `not-run`.
 
-Inventory Skills and compatibility roots, AGENTS and legacy WARP guidance, global Rules, MCP, Agent Profiles, Warp Drive prompts/workflows/notebooks/environment variables and cloud/team state. These are distinct context types, not one config file.
-
-Use actual Desktop settings to distinguish local files from account/team objects. Rule hierarchy and Skill precedence need confirmation before merging aliases. Environment-variable values, team permissions and provider auth are not portable context; retain names/rebinding steps only.
-
-Rebuild selected Warp Drive objects via supported export/UI where needed. Do not claim a file copy recreated account-side state. Check a new Desktop session sees the intended rules/Skill/profile, and review whether a workflow contains executable commands before enabling it.
+Inventory `AGENTS.md` (and legacy `WARP.md`), `.agents/skills/<name>/SKILL.md` and user Skills, global Rules, Agent Profiles, MCP server definitions, and Warp Drive prompts/workflows/notebooks/env-var names. Separate local repository files from account-backed Warp Drive objects (rebuilt via Warp Drive UI/export); never copy team permissions, provider auth, or executable workflows without explicit review.
 
 Official sources: [1](https://docs.warp.dev/agents/capabilities/skills) · [2](https://docs.warp.dev/agents/capabilities/agent-profiles-permissions/) · [3](https://docs.warp.dev/agents/capabilities)
 
@@ -21,10 +14,6 @@ Official sources: [1](https://docs.warp.dev/agents/capabilities/skills) · [2](h
 
 **Oz CLI, cloud runtime and SDK/API** · Evidence: `documented-subset` · Runtime: `not-run`.
 
-Oz is not a substitute name for every Warp Desktop setting. Inventory project instructions/Skills, run environment, MCP, agent profiles and supported task/workflow inputs using current Oz docs.
-
-A cloud job's working directory, dependency environment and secret bindings differ from Desktop. Move selected authored context, then map it to the destination runner; do not transfer cloud sessions or credentials. A schedule/job definition requires its own authorization before registration.
-
-Check which files the selected Oz run actually mounts and loads. File parsing alone does not prove an SDK/API/cloud job consumed them.
+Oz is Warp's CLI/cloud/SDK agent runner, not an alias for Warp Desktop UI state. Inventory repository `AGENTS.md`, Skills, Oz run environment/MCP definitions, and agent profiles; rebind working directories and secret names for the cloud runner, keep scheduled jobs unregistered until approved, and exclude cloud session logs/tokens.
 
 Official sources: [1](https://docs.warp.dev/) · [2](https://docs.warp.dev/agents/capabilities)

@@ -1,21 +1,14 @@
 # OpenAI: Codex harness and ChatGPT surfaces
 
-Documentation review: 2026-11-07. **Client/runtime checks: not run.**
-Read only the relevant profile below. Paths are discovery candidates, not permission
-to scan or overwrite them. Apply the [catalog contract](../products.md) and record
-the installed version, OS, active harness and path overrides before changing files.
+Review: 2026-11-07 · Client checks: not run · Contract: [products.md](../products.md).
 
 ## codex
 
 **Codex CLI, local IDE integration and app** · Evidence: `documented-subset` · Runtime: `not-run`.
 
-Instructions are hierarchical `AGENTS.md` with `AGENTS.override.md` precedence at the same level; do not flatten different scopes into one file. Check `CODEX_HOME` and custom fallback names. Skills use the documented Agent Skills discovery roots, including project/user `.agents/skills`; UI/dependency metadata in `agents/openai.yaml` is a separate extension, not portable permission policy.
-
-Local MCP belongs in `[mcp_servers.<name>]` tables in `~/.codex/config.toml` or the trusted project's `.codex/config.toml`, not `~/.agents/mcp.json`. Preserve other TOML tables. `env_vars` forwards identically named variables; it does not rename `HOST_TOKEN` to `SERVER_TOKEN`. HTTP auth must be rebound, not copied.
-
-Also inventory command-policy `.rules`, agent definitions, hooks, plugins, scheduled tasks and authored instructions separately from generated memories and app state. Their availability and paths require the installed surface/version; they are not interchangeable with Markdown rules. Cloud tasks have a different filesystem and environment setup.
-
-Check: actual Codex loader recognizes the Skill and AGENTS hierarchy; native configuration parses; MCP is listed without starting/connecting it unless authorized. Current legacy developer-doc links redirect to ChatGPT Learn: follow the Codex/CLI surface selector, not a generic ChatGPT page.
+- **Candidate paths & schemas**: Hierarchical `AGENTS.md` (`AGENTS.override.md` takes precedence at the same directory level; user `$CODEX_HOME/AGENTS.md`, default `~/.codex/AGENTS.md`); Skills `.agents/skills/<name>/SKILL.md` and `~/.agents/skills/<name>/SKILL.md` (legacy `.codex/skills`, optional `agents/openai.yaml` UI metadata); Prompts `~/.codex/prompts/*.md`; Local MCP `[mcp_servers.<name>]` in `.codex/config.toml` or `$CODEX_HOME/config.toml` (never `~/.agents/mcp.json`). Built-in profile: `codex`.
+- **TOML MCP & secret rules**: Preserve `approval_policy` and unrelated TOML tables/comments. `env_vars = ["VAR"]` forwards **identically named** host variables only (`SERVER_TOKEN = "${HOST_TOKEN}"` cannot use `env_vars` and `[mcp_servers.<name>.env]` does not expand `${...}`). Literal secrets transferred out-of-band use `[mcp_servers.<name>.env]` (`0600` file mode) or `--redact-secrets` -> `env_vars` / `bearer_token_env_var` / `env_http_headers`.
+- **Other surfaces & check**: Inventory `.rules` command policies, hooks, plugins, and cloud-task environments separately from Markdown instructions and session logs. Verify `tomllib` parse, `AGENTS.md` hierarchy, and Skill listing without starting MCP servers unless authorized.
 
 Official sources: [1](https://learn.chatgpt.com/docs/agent-configuration/agents-md) · [2](https://learn.chatgpt.com/docs/build-skills) · [3](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)
 
@@ -23,10 +16,6 @@ Official sources: [1](https://learn.chatgpt.com/docs/agent-configuration/agents-
 
 **OpenAI/ChatGPT plugin packages and cloud workspace context** · Evidence: `documented-subset` · Runtime: `not-run`.
 
-New plugin documentation describes a root `plugin.json`, optional MCP configuration and namespaced OpenAI extensions. Do not conflate this with an older `.codex-plugin/` layout or another vendor's manifest solely because the bundle contains Skills.
-
-Inventory Skills, app/tool bindings, MCP, UI metadata and other package components. Preserve package identity when the target understands the same manifest; otherwise unpack only the user-selected portable components into reviewed drafts. Do not reconstruct account connections, managed workspace policy or a cloud task's session state from local files.
-
-Check the target's current plugin validator/import UI and namespace requirements. A local Codex migration test does not certify ChatGPT workspace import.
+Current plugin packages use a root `plugin.json`, optional MCP configuration, Skills, and namespaced OpenAI extensions; do not conflate with older `.codex-plugin/` layouts or third-party plugin manifests. Preserve package identity when the target supports `plugin.json`; otherwise extract only user-selected portable Skills/instructions into reviewed drafts without copying cloud workspace connections, policies, or session state. Validate with the target's current plugin validator/import UI.
 
 Official sources: [1](https://developers.openai.com/plugins/build/plugins) · [2](https://learn.chatgpt.com/docs/build-skills)

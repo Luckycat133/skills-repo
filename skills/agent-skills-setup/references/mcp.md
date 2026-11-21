@@ -1,35 +1,34 @@
-# MCP migration: translate a server definition, not an entire settings file
+# MCP migration: translate server definitions without leaking secrets
 
-Treat name, transport, command/arguments, working directory, environment references,
-URL/headers, timeout units, enablement, tool restrictions, and authentication as
-separate fields. Consult the target's installed schema/current vendor docs.
-JSON, JSONC, TOML, YAML and UI configuration are not unsupported merely because
-there is no bundled converter: use the host agent's existing parser/edit tools.
+Treat server name, transport, command/args, `cwd`, environment bindings, URL/headers,
+timeout units, disabled state, tool filters, and credentials as distinct fields.
+Use `scripts/migrate_context.py` (`migrate` or `patch-mcp`) whenever MCP entries may
+contain API keys, tokens, or auth headers so raw secret values never enter LLM context.
 
-## Field-by-field procedure
+## Secret handling: out-of-band by default, `--redact-secrets` on request
 
-1. Read only the selected server definitions into the proposed output. Do not
-   export sibling settings, account data, approvals, trust, provider keys, caches,
-   or machine state. Preserve unrelated destination values and comments.
-2. Retain literal non-secret values only. Replace credential values with the
-   target's supported variable/input mechanism; record variable names, never
-   values. Search args and URL userinfo/query strings as well as env/headers.
-3. Map the transport explicitly. A URL does not prove SSE versus Streamable HTTP.
-   Retain a supported remote transport rather than pretending all remote MCP is
-   impossible. OAuth must be authorized again; do not move access/refresh tokens.
-4. Rebase local command/args/cwd paths for the destination. Keep arguments as an
-   array, not a shell-joined command. Missing binaries and packages become named
-   prerequisites, not automatic downloads or installations.
-5. Preserve disabled state and restrictive tool filters. Do not import trust or
-   auto-approval. Unrepresentable restrictions require a parked draft or explicit
-   resolution, not silently broader permissions. Convert timeout units explicitly.
-6. Merge by server name: identical normalized definitions deduplicate; different
-   definitions conflict. Keep other servers. Resolve all source contributions
-   before writing a destination file once.
+1. **Zero LLM exposure**: Never `cat` raw `mcp.json`, `~/.claude.json`,
+   `.gemini/settings.json`, or `.codex/config.toml` into prompt context to copy keys.
+   `scripts/migrate_context.py` moves literal credentials disk-to-disk with `0600`
+   permissions and prints only key names, `has_secrets`, and `sha256[:8]` on `stdout`.
+2. **Default out-of-band transfer**: Preserves `${VAR}` / `${env:VAR}` placeholders as
+   variable references and copies literal API keys/headers to the destination in `0600`
+   mode (creating a `0600` backup of any existing target file in a `0700` backup dir).
+3. **Git-tracked target protection**: Never write literal secrets into a Git-tracked
+   project file silently. When `.mcp.json` is tracked in Git, `migrate_context.py`
+   automatically routes secret-bearing Claude Code MCP servers to untracked local
+   `~/.claude.json` (`projects[workspace].mcpServers`) and warns. For other tracked
+   targets, it refuses with exit code `2` unless `--redact-secrets`, `--scope user`,
+   or `--allow-git-tracked-secrets` is specified.
+4. **Explicit redaction (`--redact-secrets`)**: When the user says "don't copy keys" or
+   prepares a committed config, pass `--redact-secrets` to convert literal secrets into
+   target placeholders (`${VAR}`, VS Code `${env:VAR}`, or Codex `env_vars = ["VAR"]`
+   / `bearer_token_env_var`). Never transfer OAuth access/refresh tokens or `trust` /
+   `alwaysAllow` / `autoApprove` grants.
 
 ## Worked example: JSON stdio to Codex TOML
 
-A reviewed definition from a `mcpServers` map:
+Source `mcpServers` definition:
 
 ```json
 {
@@ -43,8 +42,8 @@ A reviewed definition from a `mcpServers` map:
 }
 ```
 
-For a verified Codex config, merge this table into `.codex/config.toml` (project)
-or `~/.codex/config.toml` (user), never replace the entire file:
+Surgically merge into `.codex/config.toml` (project) or `~/.codex/config.toml` (user),
+preserving existing keys such as `approval_policy`:
 
 ```toml
 [mcp_servers.project-tools]
@@ -53,59 +52,44 @@ args = ["tools/project-server.mjs"]
 env_vars = ["PROJECT_TOKEN"]
 ```
 
-This example assumes the command runs from the same intended project root;
-otherwise resolve `cwd` or a new approved path first. `env_vars` forwards the
-**same-named** environment variable. It is not an arbitrary mapping: converting
-`SERVER_TOKEN = ${DIFFERENT_HOST_TOKEN}` to `env_vars = ["DIFFERENT_HOST_TOKEN"]`
-changes the server-visible name and is wrong. Leave a precise rebinding step or
-use a documented target mapping mechanism. Do not put a literal `${...}` string
-into TOML and assume interpolation.
+- **Env-name rename trap**: `env_vars` forwards only **identically named** host
+  variables. Converting `"SERVER_TOKEN": "${HOST_TOKEN}"` into `env_vars = ["HOST_TOKEN"]`
+  fails to deliver `SERVER_TOKEN` to the server, and `[mcp_servers.x.env]` in TOML does
+  not expand `${...}` strings. Defer and record a rebinding step when names differ.
+- **Literal secrets in Codex TOML**: When migrating literal secrets out-of-band (not
+  `--redact-secrets`), `migrate_context.py` writes `[mcp_servers.<name>.env]` on disk
+  (`0600`) while emitting only `sha256[:8]` on `stdout`.
 
-For a verified VS Code workspace target, use `.vscode/mcp.json`, a `servers` map,
-and the target's documented `type`/input/environment syntax. Renaming the root
-key alone does not convert auth, inputs, transport, or lifecycle fields.
-Gemini CLI stores a `mcpServers` subobject inside `.gemini/settings.json` and
-`~/.gemini/settings.json`; do not invent a separate `mcp.json` there.
+## Container keys and schema differences across clients
+
+Consult [products.md](products.md) before selecting `--src-key-path` / `--dst-key-path`
+for `patch-mcp`:
+
+| Client / Profile | File path (project / user) | Container key & shape |
+| --- | --- | --- |
+| Cursor | `.cursor/mcp.json`, `~/.cursor/mcp.json` | `mcpServers` (`url`, `env`, `headers`) |
+| Claude Code | `.mcp.json`, `~/.claude.json` (`mcpServers` & `projects[ws].mcpServers`) | `mcpServers` (`type: "http"\|"sse"`, `url`) |
+| Codex | `.codex/config.toml`, `~/.codex/config.toml` | TOML `[mcp_servers.<name>]` (`env_vars`, `env`, `bearer_token_env_var`) |
+| VS Code (Local) | `.vscode/mcp.json`, profile `mcp.json` | `servers` (`type: "stdio"\|"http"`, `${env:VAR}`, `${input:ID}`) |
+| Copilot CLI | `~/.copilot/mcp-config.json` | `mcpServers` |
+| Gemini CLI | `.gemini/settings.json`, `~/.gemini/settings.json` | `mcpServers` (`httpUrl` for Streamable HTTP, preserve sibling keys) |
+| Antigravity / Windsurf | `.agents/mcp_config.json`, `~/.gemini/antigravity/mcp_config.json`, `~/.codeium/windsurf/mcp_config.json` | `mcpServers` (`serverUrl` for remote HTTP) |
+| Cline | `~/.cline/data/settings/cline_mcp_settings.json` | `mcpServers` (never copy `~/.cline/data/tasks` or DBs) |
+| Zed | `.zed/settings.json`, `~/.config/zed/settings.json` | `context_servers` (`command: {"path", "args", "env"}`) |
+| OpenCode | `opencode.json`, `~/.config/opencode/opencode.json` | V1 `mcp` / V2 `mcp.servers` (`command: [...]`, `environment: {...}`) |
+| Pi | `.pi/mcp.json`, `~/.pi/agent/mcp.json` | `mcpServers` (preserve sparse knob-only `{"enabled": false}` overrides) |
+| Kimi Code / Qwen / Kilo | `.kimi-code/mcp.json`, `.qwen/settings.json`, `.kilo/mcp.json` | `mcpServers` |
 
 ## Review and validation
 
-Parse the final JSON/JSONC/TOML/YAML with a suitable parser. Show only a redacted
-semantic diff: added/changed server names, transport, referenced variable names,
-and losses. Check unrelated settings before/after. A valid file is not proof the
-host loads it, and a listed config is not proof a server connects. Some status/list
-commands start servers or contact endpoints: inspect their documented behavior
-and obtain separate authorization before any execution or connection test.
+Validate generated JSON/JSONC/TOML with a real parser (`migrate_context.py` validates
+with `json.loads` / `tomllib.loads` before atomic replacement). Show only a redacted
+semantic summary: server names, transports, secret variable names (`sha256[:8]`),
+preserved sibling settings, and conflicts. Never run `npx`/`uvx` installers or start
+untrusted servers merely to validate syntax.
 
-Do not run npx/uvx/installers, authenticate, or start a copied command merely to
-validate migration. Native UI-only imports should be explained as UI steps;
-never edit an application's internal database.
-
-## Evidence
-
-Consulted 2026-11-07:
+Evidence consulted 2026-11-07:
 [Codex MCP](https://developers.openai.com/codex/mcp),
 [VS Code MCP](https://code.visualstudio.com/docs/agent-customization/mcp-servers),
 [Gemini CLI MCP](https://geminicli.com/docs/tools/mcp-server/),
 [Claude Code MCP](https://code.claude.com/docs/en/mcp).
-
-## Configuration is per client and harness
-
-Read the [catalog](products.md) before choosing a root key. Examples: Codex uses
-TOML `mcp_servers`; Local VS Code uses JSON `servers`; Zed uses `context_servers`;
-Continue uses YAML blocks/arrays; OpenCode has major-version-specific layouts.
-Gateway, node-host, CLI, IDE and cloud MCP belong to different scopes. A shared
-protocol does not make their configuration interchangeable.
-
-Normalize all selected servers before writing one destination file. Same name and
-same effective definition is a no-op; same name with different transport, command,
-arguments, working directory, environment, auth or exposure is a conflict. Preserve
-all independent servers and target neighbors. Do not silently drop timeout, disabled,
-tool allow/deny or trust-related fields: distinguish content losses from grants
-that must be reacquired. References to a secret must preserve both the host variable
-name and the server-visible name; record rebinding when that mapping cannot be kept.
-
-Current Pi scope overrides and ZCode native-versus-shared precedence are not generic
-merge semantics. Inspect effective configuration rather than concatenate files.
-For a remote Skill extension, keep server identity and do not assume filesystem
-Skill discovery implements the extension. Config validation is separate from any
-server connection, OAuth flow, tool call or dependency installation.

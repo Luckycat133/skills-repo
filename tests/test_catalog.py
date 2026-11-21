@@ -1,5 +1,6 @@
 """Offline catalog consistency, never an assertion of native IDE compatibility."""
 from __future__ import annotations
+from datetime import date
 import json
 from pathlib import Path
 import re
@@ -9,12 +10,21 @@ from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILL = ROOT / "skills/agent-skills-setup"
-DATE = "2026-11-07"
+ISO_DATE_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
+
+
+def latest_catalog_path() -> Path:
+    candidates = sorted((ROOT / "docs/research").glob("catalog-*.json"))
+    if not candidates:
+        raise AssertionError("no docs/research/catalog-*.json found")
+    return candidates[-1]
+
 
 class CatalogContract(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.ledger = json.loads((ROOT / f"docs/research/catalog-{DATE}.json").read_text(encoding="utf-8"))
+        cls.ledger_path = latest_catalog_path()
+        cls.ledger = json.loads(cls.ledger_path.read_text(encoding="utf-8"))
         cls.records = cls.ledger["records"]
         cls.queue = json.loads((ROOT / "evals/client-matrix.json").read_text(encoding="utf-8"))
         cls.scenarios = json.loads((ROOT / "evals/catalog-cases.json").read_text(encoding="utf-8"))
@@ -30,12 +40,17 @@ class CatalogContract(unittest.TestCase):
         self.assertFalse(set(self.ledger["new_identifiers"]) - seen.keys())
 
     def test_documentation_evidence_is_not_runtime_evidence(self):
-        self.assertEqual(self.ledger["runtime_status"], "not-run")
+        self.assertIn(self.ledger["runtime_status"], {"not-run", "in-progress", "complete"})
         self.assertEqual(len({r["id"] for r in self.records}), len(self.records))
         self.assertEqual(len(self.records), 90)
+        queue_by_id = {row["id"]: row for row in self.queue["rows"]}
         for r in self.records:
-            self.assertEqual(r["reviewed_at"], DATE)
-            self.assertEqual(r["runtime"], "not-run")
+            date.fromisoformat(r["reviewed_at"])
+            self.assertEqual(r["runtime"], queue_by_id[r["id"]]["status"])
+            if r["runtime"] == "not-run":
+                self.assertEqual(queue_by_id[r["id"]].get("evidence_paths", []), [])
+            else:
+                self.assertTrue(queue_by_id[r["id"]].get("evidence_paths") or queue_by_id[r["id"]].get("block_reason"))
             self.assertTrue(r["evidence"])
             path, anchor = r["reference"].split("#", 1)
             text = (SKILL / path).read_text(encoding="utf-8")
@@ -58,8 +73,11 @@ class CatalogContract(unittest.TestCase):
             self.assertIn(r["id"], index)
             for label in r["aliases"]:
                 self.assertIn(label, index)
-            self.assertIn(DATE, text)
-            self.assertIn("not run", text)
+            m = ISO_DATE_RE.search(text)
+            self.assertIsNotNone(m, f"{name} lacks an ISO review date")
+            date.fromisoformat(m.group(0))
+            if r["runtime"] == "not-run":
+                self.assertIn("not run", text)
 
     def test_only_selected_family_documents_need_loading(self):
         entry = (SKILL / "SKILL.md").read_text(encoding="utf-8")
@@ -93,13 +111,19 @@ class CatalogContract(unittest.TestCase):
                 self.assertNotIn("..", evidence.parts)
                 self.assertTrue((ROOT / evidence).is_file(), evidence_path)
 
-    def test_scenarios_are_unrun_and_parseable(self):
-        self.assertEqual(self.scenarios["status"], "behavior-not-run")
+    def test_scenarios_are_parseable_and_reference_canonical_profiles(self):
+        self.assertIn(self.scenarios["status"], {"behavior-not-run", "in-progress", "complete"})
+        canonical_ids = {r["id"] for r in self.records}
         ids = set()
         for c in self.scenarios["cases"]:
             self.assertNotIn(c["id"], ids)
             ids.add(c["id"])
-            self.assertEqual(c["status"], "not-run")
+            self.assertIn(c["status"], {"not-run", "pass", "fail"})
+            if self.scenarios["status"] == "behavior-not-run":
+                self.assertEqual(c["status"], "not-run")
+            self.assertTrue(c["profiles"], c["id"])
+            for prof in c["profiles"]:
+                self.assertIn(prof, canonical_ids, f"non-canonical profile {prof!r} in case {c['id']!r}")
             self.assertTrue(c["must"])
             self.assertTrue(c["must_not"])
             for group in ("input_files", "expected_files"):
@@ -117,6 +141,7 @@ class CatalogContract(unittest.TestCase):
         self.assertIn("not-run", index)
         self.assertIn("discovery-required", index)
         self.assertNotIn("fully supported", index.lower())
+
 
 if __name__ == "__main__":
     unittest.main()

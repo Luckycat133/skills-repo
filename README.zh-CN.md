@@ -1,41 +1,47 @@
 # Agent Skills Setup
 
-**帮助现有 Agent 迁移上下文的 Skill，不是另一个迁移软件。**
+[English](README.md) · [日本語](README.ja-JP.md) · [Español](README.es.md)
 
-Agent 使用自己已有的读写、编辑、diff 和查资料能力，识别源与目标的真实格式，
-保留作用域、触发条件、权限边界，完成迁移并报告验证结果。用户不需要学习另一套 CLI。
+`agent-skills-setup` 是一个面向现有 AI 编程代理的可移植
+[Agent Skill](https://agentskills.io/specification)。它帮助宿主代理在不同 AI 编程 IDE、CLI
+或新旧电脑之间迁移、转换或同步规则/指令、Agent Skills、MCP 服务配置、提示词、斜杠命令、
+自定义子代理、Hooks、工作流、用户手写记忆以及 API Key / `.env` 密钥——**且全程不将任何明文密钥暴露给大模型上下文**。
 
-## 使用
+## 架构与零上下文泄密设计
 
-只把 `skills/agent-skills-setup/` 安装到客户端官方支持的 Skill 目录；不要安装仓库根目录，
-也不要把开发 Skill 一起安装。用户包不要求 Bash、Python、签名依赖或后台服务。
+- **Agent-First + 零依赖标准库脚本**：仅分发精炼指令（`SKILL.md`）、按需加载参考文档
+  （`references/`）、报告模板（`assets/`）以及单个 Python 3.11+ 标准库辅助脚本
+  （`skills/agent-skills-setup/scripts/migrate_context.py`，含 PEP 723 元数据）。不包含已退役的
+  `.acb` 私有包引擎、签名服务、SQLite 事务库、后台同步守护进程、自动安装器或遥测。
+- **`0700`/`0600` 带外（Out-of-Band）安全密钥迁移**：默认通过磁盘到磁盘原子写入（目录 `0700`、
+  文件与私有备份 `0600`）迁移 MCP `env`/`headers` 与 `.env*` 密钥，拦截向 Git 已追踪文件静默写入明文密钥，
+  并在 `stdout` / `MIGRATION.md` 中**仅输出变量名、`has_secrets` 与 8 位 SHA-256 指纹前缀（`sha256[:8]`）**。
+  若用户要求不复制密钥，传入 `--redact-secrets` 即可自动转为环境变量占位符。
+- **90 个产品档案按需路由目录**：内置 15 个常用档案（`cursor`、`claude-code`、`codex`、
+  `vscode`、`copilot-cli`、`gemini-cli`、`antigravity`、`windsurf`、`cline`、`kilocode`、
+  `zed`、`opencode`、`kimi-code`、`qwen-code`、`pi`），并通过 `patch-mcp` 与 30 份产品族参考文档覆盖
+  75+ 其他客户端（文档核查日期：2026-11-07；目录收录仅代表文档路由，**不等同于真机运行时认证**）。
 
-直接对 Agent 说：
+## 安装方式
 
-> 把当前项目 Cursor 的规则和 Skills 迁到 Claude Code，保留原来的文件作用域。
+只将 `skills/agent-skills-setup/` 复制到目标客户端官方支持的 Skills 目录（不要安装仓库根目录或 `dev/`）：
 
-> 把这些 MCP 配置迁到 Codex，保留目标已有设置，不复制密钥。
+```bash
+git clone https://github.com/Luckycat133/skills-repo.git
+cp -R skills-repo/skills/agent-skills-setup /path/to/your-skills-dir/agent-skills-setup
+```
 
-> 我要换电脑，把我选定工具的上下文整理成普通文件夹和迁移说明。
+## 一句话自然语言用法示例
 
-> 在新电脑恢复这个文件夹，按实际工具配置，告诉我哪些语义不能保留。
+- *“把我当前项目里的 Cursor 规则、Skills 和所有 MCP 配置（含 API Key）迁移到 Claude Code 和 Codex。”*
+- *“把我的 Cursor MCP 配置迁移到 VS Code，但不要复制明文密钥，改成环境变量引用。”*
+- *“我要换新电脑了，把我所有 AI 编程工具的配置和密钥导出到 `~/context-transfer`。”*
+- *“在这台新电脑上从 `~/context-transfer` 恢复我的全部配置。”*
 
-覆盖指导包括 Skills、Rules/Instructions、MCP、Prompts、Commands、Agents、Hooks、
-Workflows、Plugins 和用户手写 Memory。不是将脚本不认识的类型一律丢弃。
-可执行内容先作为非加载目录里的草稿；凭据、授权状态、原始聊天和数据库不整库复制。
+## 验证与当前状态
 
-## 当前状态
+运行 `bash validate-all.sh` 执行本地契约、极端边界、金丝雀密钥零泄漏、端到端工作流、打包边界及官方
+`skills-ref validate` 校验。候选版本 `0.11.0-dev` 尚未发布；原生 GUI/IDE 真机验收队列见
+[docs/validation-status.md](docs/validation-status.md)。
 
-这是未发布的 `0.11.0-dev` 收缩版本。旧 CLI、ACB、签名和自动执行引擎已退出工作树和
-用户发布目录，完整旧实现仍在 Git 历史中；用户已有文件与旧备份不会被自动删除。
-旧版市场安装没有被此次修改自动更新，也没有承诺全部 IDE 实机验证。
-
-## 开发
-
-`bash validate-all.sh` 检查包边界、引用和示例；不冒充真实 Agent/IDE 行为测试。
-后续开发必须先读 [开发 Skill](dev/skills/maintain-agent-skills-setup/SKILL.md)。
-未完成任务有具体证据和验收标准，不再通过继续造平台来填补迁移质量问题。
-
-[English](README.md) · [贡献](CONTRIBUTING.md) · [安全](SECURITY.md)
-
-觉得有用可以 Star 或自愿支持；使用不要求收藏、支付或注册外部服务。
+[贡献](CONTRIBUTING.md) · [安全](SECURITY.md) · [许可证 (MIT)](LICENSE)

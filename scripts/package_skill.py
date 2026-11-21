@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Maintainer-only packaging; never reads or modifies user IDE configuration."""
 from __future__ import annotations
+
 import argparse
 import hashlib
 from pathlib import Path
@@ -9,53 +10,58 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 SKILL = ROOT / "skills" / "agent-skills-setup"
 # Explicit reviewable allowlist; no filesystem-glob admission into the package.
-# 220 KB permits the requested on-demand vendor catalog, not a runtime platform.
-MAX_PACKAGE_BYTES = 220_000
-ALLOWED = frozenset({
-    'LICENSE',
-    'SKILL.md',
-    'references/cli-workflow.md',
-    'references/registry-v2.md',
-    'references/device-transfer.md',
-    'references/discovery.md',
-    'references/instructions.md',
-    'references/mcp.md',
-    'references/other-context.md',
-    'references/products/alibaba.md',
-    'references/products/amp-openhands.md',
-    'references/products/anthropic.md',
-    'references/products/aws.md',
-    'references/products/blackbox-pieces.md',
-    'references/products/china-coding.md',
-    'references/products/china-discovery.md',
-    'references/products/cline-kilo-roo.md',
-    'references/products/cloud-builders.md',
-    'references/products/continue-zed.md',
-    'references/products/copilot.md',
-    'references/products/cursor.md',
-    'references/products/devin-windsurf.md',
-    'references/products/editor-plugins.md',
-    'references/products/enterprise.md',
-    'references/products/factory-augment.md',
-    'references/products/google-cli-assist.md',
-    'references/products/google-ide-cloud.md',
-    'references/products/jetbrains-xcode.md',
-    'references/products/legacy.md',
-    'references/products/letta.md',
-    'references/products/new-clients.md',
-    'references/products/openai.md',
-    'references/products/openclaw-hermes.md',
-    'references/products/opencode.md',
-    'references/products/tencent.md',
-    'references/products/terminal-agents.md',
-    'references/products/trae.md',
-    'references/products/warp.md',
-    'references/products/zencoder.md',
-    'references/products.md',
-    'references/verification.md',
-    'assets/device-readme.md',
-    'assets/migration-report.md',
+# 280 KB accommodates the existing helper/catalog plus the two reviewed #35 references.
+MAX_PACKAGE_BYTES = 280_000
+EXECUTABLE_REL_PATHS = frozenset({
+    "scripts/migrate_context.py",
 })
+ALLOWED = frozenset({
+    "LICENSE",
+    "SKILL.md",
+    "scripts/migrate_context.py",
+    "references/cli-workflow.md",
+    "references/registry-v2.md",
+    "references/device-transfer.md",
+    "references/discovery.md",
+    "references/instructions.md",
+    "references/mcp.md",
+    "references/other-context.md",
+    "references/products/alibaba.md",
+    "references/products/amp-openhands.md",
+    "references/products/anthropic.md",
+    "references/products/aws.md",
+    "references/products/blackbox-pieces.md",
+    "references/products/china-coding.md",
+    "references/products/china-discovery.md",
+    "references/products/cline-kilo-roo.md",
+    "references/products/cloud-builders.md",
+    "references/products/continue-zed.md",
+    "references/products/copilot.md",
+    "references/products/cursor.md",
+    "references/products/devin-windsurf.md",
+    "references/products/editor-plugins.md",
+    "references/products/enterprise.md",
+    "references/products/factory-augment.md",
+    "references/products/google-cli-assist.md",
+    "references/products/google-ide-cloud.md",
+    "references/products/jetbrains-xcode.md",
+    "references/products/legacy.md",
+    "references/products/letta.md",
+    "references/products/new-clients.md",
+    "references/products/openai.md",
+    "references/products/openclaw-hermes.md",
+    "references/products/opencode.md",
+    "references/products/tencent.md",
+    "references/products/terminal-agents.md",
+    "references/products/trae.md",
+    "references/products/warp.md",
+    "references/products/zencoder.md",
+    "references/products.md",
+    "references/verification.md",
+    "assets/device-readme.md",
+    "assets/migration-report.md",
+})
+
 
 def package_files(skill: Path = SKILL) -> list[Path]:
     if skill.is_symlink() or not skill.is_dir():
@@ -64,6 +70,8 @@ def package_files(skill: Path = SKILL) -> list[Path]:
     for path in sorted(skill.rglob("*")):
         if path.is_symlink():
             raise ValueError(f"symlink is not allowed: {path}")
+        if "__pycache__" in path.parts or path.suffix == ".pyc":
+            raise ValueError(f"bytecode cache is not allowed in Skill package: {path}")
         if path.is_dir():
             continue
         if not path.is_file():
@@ -76,8 +84,9 @@ def package_files(skill: Path = SKILL) -> list[Path]:
     if actual != ALLOWED:
         raise ValueError(f"missing package files: {sorted(ALLOWED - actual)}")
     if sum(p.stat().st_size for p in files) > MAX_PACKAGE_BYTES:
-        raise ValueError("Package exceeds documentation budget; review scope before raising it")
+        raise ValueError("Package exceeds reviewed budget; review scope before raising it")
     return files
+
 
 def build(output: Path, skill: Path = SKILL) -> str:
     files = package_files(skill)
@@ -94,16 +103,19 @@ def build(output: Path, skill: Path = SKILL) -> str:
         created = True
         with stream, zipfile.ZipFile(stream, "w", compression=zipfile.ZIP_DEFLATED) as archive:
             for path in files:
-                info = zipfile.ZipInfo("agent-skills-setup/" + path.relative_to(skill).as_posix())
+                rel = path.relative_to(skill).as_posix()
+                info = zipfile.ZipInfo("agent-skills-setup/" + rel)
                 info.date_time = (2026, 11, 7, 0, 0, 0)
                 info.compress_type = zipfile.ZIP_DEFLATED
-                info.external_attr = 0o100644 << 16
+                mode = 0o100755 if rel in EXECUTABLE_REL_PATHS else 0o100644
+                info.external_attr = mode << 16
                 archive.writestr(info, path.read_bytes())
     except Exception:
         if created and output.is_file():
             output.unlink()
         raise
     return hashlib.sha256(output.read_bytes()).hexdigest()
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -115,6 +127,7 @@ def main() -> int:
         parser.exit(1, f"ERROR: {exc}\n")
     print(f"{digest}  {args.output}")
     return 0
+
 
 if __name__ == "__main__":
     raise SystemExit(main())

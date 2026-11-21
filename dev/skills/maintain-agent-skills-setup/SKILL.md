@@ -35,6 +35,22 @@ maintainer-only `docs/research/catalog-2026-11-07.json` records coverage and sou
 `evals/client-matrix.json` is the pending acceptance queue, not an executable registry.
 Historical notes under docs/history remain unverified clues, not active contracts.
 
+## Hard security invariants for `scripts/migrate_context.py`
+
+- **Zero LLM secret exposure**: Move sensitive config values (API keys, MCP
+  `env`/`headers`, `.env*` files) strictly out-of-band on disk by default (and honor
+  `--redact-secrets` when requested). Never print secret values to `stdout`, `stderr`,
+  or `MIGRATION.md`; emit only variable/key names, `has_secrets`, and 8-hex-char
+  SHA-256 prefixes (`sha256[:8]`).
+- **Strict permissions & private backups**: Enforce `0700` on secret/backup/transfer
+  directories and atomic `0600` writes on secret-bearing, backup, and transfer files.
+  Keep backups outside auto-loaded context trees and `/tmp` by default.
+- **Git-tracked protection**: Refuse silent writes of literal secrets into Git-tracked
+  workspace files (or route to untracked local config such as `~/.claude.json`
+  `projects[workspace].mcpServers` with explicit reporting).
+- **Non-portable exclusions**: Always exclude chat histories, transcripts, SQLite/LevelDB
+  databases, vector indexes, caches, session cookies, and approval/trust grants.
+
 ## When asked to run the tests
 
 1. Run `bash validate-all.sh` for structural/examples checks. Record command, exit
@@ -52,7 +68,7 @@ Historical notes under docs/history remain unverified clues, not active contract
    activation negative case, unchanged neighbors and repeat-run outcome. Use
    [result template](references/result-template.md). Never publish private data.
 6. Fix the smallest guidance/fixture issue. Re-run the failed case and its nearby
-   negative case. Do not build a converter engine instead of explaining semantics.
+   negative case. Do not reintroduce the retired converter engine.
 7. Summarize passed, failed, blocked and not-run separately. Update the queue and
    remaining-work evidence only for checks actually performed.
 
@@ -64,12 +80,14 @@ Historical notes under docs/history remain unverified clues, not active contract
   Unknown native formats get a precise evidence gap, not a guessed file or blanket
   unsupported label. Cloud/UI objects need supported reconstruction instructions.
 - Preserve instruction scope/activation, invocation IDs, imports, environment-name
-  mapping, package identity and target neighbors. Never transfer credentials,
-  grants, raw history or generated state by default. Executable content stays parked.
-- Product references are progressively loaded. Keep the main Skill below 150 lines;
+  mapping, package identity and target neighbors. Keep explicitly in-scope credentials out-of-band only; never transfer trust
+  grants, raw history or generated state. Executable content stays parked unless
+  explicitly authorized. Do not run imported content.
+- Product references are progressively loaded. Keep the main Skill under 140 lines and the package within 280,000 bytes;
   do not make agents read the entire catalog. New family docs require package
   allowlist, routing, source/evidence and coverage tests in the same change.
-- Small deterministic helpers require a measured repeated need and owner agreement
+- The sole runtime helper is the reviewed stdlib script; additional helpers require
+  a measured repeated need and owner agreement
   before they become runtime dependencies. Maintainer checks are not user runtime.
 - Never count product Cartesian pairs as tested compatibility. No fake enabled flags,
   fake native support, or simulated Linux roots described as native Windows proof.

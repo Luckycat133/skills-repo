@@ -1,5 +1,5 @@
 name: 🐛 Bug Report
-description: Report an issue with migration, backup, restore, or verification
+description: Report an issue with context migration, conversion, device transfer, or verification
 title: "[Bug]: "
 labels: ["bug", "triage"]
 body:
@@ -8,42 +8,38 @@ body:
       value: |
         Thanks for reporting an issue! Please check if your problem is already reported in open issues.
 
-        > ⚠️ **Do NOT paste API keys, tokens, cookies, Authorization headers, environment
-        > values, private repository URLs, full configuration files, or any other
-        > credentials into this issue.** GitHub Issues are **public** and are **not**
-        > automatically redacted. The repository has no server-side secret scan at
-        > issue creation time.
-        >
-        > If you need to share logs, run a local secret scan first:
-        >
-        > ```bash
-        > python3 skills/agent-skills-setup/scripts/scan-skill-secrets.py path/to/your.log
-        > ```
-        >
-        > Remove or mask any remaining secret-looking values manually before pasting.
+        > ⚠️ **Do NOT paste API keys, tokens, cookies, Authorization headers, `.env` values,
+        > private repository URLs, full configuration files, or session logs into this issue.**
+        > GitHub Issues are **public** and are **not** automatically redacted. Manually replace
+        > any sensitive value with a placeholder such as `<REDACTED>` before submitting.
+  - type: input
+    id: host_agent
+    attributes:
+      label: Host Agent & Version
+      description: Which coding agent loaded `skills/agent-skills-setup/` (or ran `migrate_context.py`)?
+      placeholder: "e.g. Claude Code 1.x, Codex CLI, Cursor Agent, Antigravity"
+    validations:
+      required: true
   - type: input
     id: source_target
     attributes:
-      label: Source and Target IDEs / Products
-      description: Which tools are you migrating between? (e.g. Cursor -> Claude Code, Cline -> Windsurf, all-installed)
-      placeholder: "e.g. Cursor (ide) -> Claude Code (cli)"
+      label: Source and Target Profiles
+      description: Which profiles and scopes were involved? (See `skills/agent-skills-setup/references/products.md`)
+      placeholder: "e.g. cursor -> claude-code (project scope)"
     validations:
       required: true
   - type: dropdown
-    id: command
+    id: workflow
     attributes:
-      label: Command Executed
-      description: Which CLI command produced the issue?
+      label: Workflow / Subcommand
+      description: Which workflow or `scripts/migrate_context.py` subcommand produced the issue?
       options:
-        - "migrate"
-        - "snapshot"
-        - "restore"
-        - "plan"
-        - "apply"
-        - "verify"
-        - "rollback"
-        - "bundle-verify"
-        - "doctor"
+        - "migrate (cross-tool migration)"
+        - "inspect (discovery / inventory)"
+        - "export-device (device transfer export)"
+        - "import-device (device transfer restore)"
+        - "patch-mcp (custom/long-tail MCP patch)"
+        - "guided agent edit (Skill reference guidance)"
         - "other"
     validations:
       required: true
@@ -51,13 +47,14 @@ body:
     id: os
     attributes:
       label: Operating System
-      description: Which platform are you running on?
+      description: Which platform and execution host are you running on?
       options:
         - "macOS (Apple Silicon)"
         - "macOS (Intel)"
-        - "Linux (Ubuntu / Debian / Arch / Fedora)"
-        - "Windows (Native MSYS/Git Bash)"
+        - "Linux"
+        - "Windows (Native)"
         - "Windows (WSL2)"
+        - "Remote SSH / Devcontainer / Cloud"
         - "Other"
     validations:
       required: true
@@ -65,13 +62,13 @@ body:
     id: what_happened
     attributes:
       label: What happened?
-      description: Describe what went wrong. If you paste log output, first run the local secret scanner shown above and confirm no credentials remain.
+      description: Minimal redacted reproduction steps and observed output (confirm no credentials or private paths remain).
     validations:
       required: true
   - type: textarea
     id: expected
     attributes:
       label: Expected Behavior
-      description: What should have happened instead?
+      description: What semantic mapping, file output, or safety refusal should have occurred instead?
     validations:
       required: false

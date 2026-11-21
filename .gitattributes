@@ -1,8 +1,5 @@
-# Normalize all text files to LF on every platform.
-#
-# Windows runners use core.autocrlf=true by default; CRLF working-tree
-# copies break byte-level comparisons such as scripts/sync-root-mirror.sh
-# --check and are fragile under Git Bash. Binary artifacts are exempt.
+# Normalize all text files to LF on every platform so Windows, macOS, and Linux
+# checkouts produce identical hashes and reproducible Skill archives.
 
 * text=auto eol=lf
 

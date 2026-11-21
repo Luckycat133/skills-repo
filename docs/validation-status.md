@@ -39,3 +39,19 @@ and 10 pending host-agent scenarios in `evals/workflow-cases.json`. Full-checkou
 validation belongs to the new PR's exact CI head or the user's recorded local run;
 no native-client queue entry was promoted. See
 [review scope and reproduction](reviews/2026-11-14-workflow-review.md).
+
+
+## 0.11.0-dev helper scope
+
+- **Native IDE / GUI runtime loading (`evals/client-matrix.json`)**: `not-run` in this
+  headless Linux container. Structural/parser/script tests prove generated file syntax,
+  permissions, and zero secret leakage, **not** that a closed-source desktop GUI IDE
+  (Cursor GUI, Windsurf Desktop, Xcode 27, Android Studio, JetBrains IDE, Claude
+  Desktop, Warp Desktop, TRAE, Qoder, etc.) loaded and activated the object in a live
+  UI session.
+- **Unverified vendor schemas (`discovery-required`)**: `iflycode`, `raccoon-ai`,
+  `vecli`/`ark-cli`, International `trae`, `pearai`, `coder-xum`, and `claude-desktop`
+  remain explicitly marked `discovery-required` / `not-run` until inspected on real
+  installed builds.
+- **Live MCP network handshakes & OAuth re-binding**: Intentionally not executed during
+  migration or automated tests.

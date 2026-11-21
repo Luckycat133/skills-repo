@@ -5,6 +5,7 @@ Overall result: <complete within scope / partial / preview / no-op>
 Source / destination: <product, profile/harness, installed versions or unknown, OS/host>
 Loaded Skill: <version; source commit/digest when known>
 Evidence dates: <documentation checks and actual client runs, separately>
+Secret handling: <redacted or approved disk-to-disk; names/fingerprints only in report>
 Report audience: <private local / portable or public; use logical roots for portable>
 
 ## Inventory and outcomes
@@ -38,6 +39,8 @@ Count logical objects once; do not count files or duplicate aliases as additiona
 semantics and concrete decisions. No values, tokens, raw history or private logs.>
 
 ## Recovery
+
+<Private backups: 0700 directory and 0600 files; never include secret values.>
 
 <Edits completed; exact private backup paths for local use, or logical references
 for portable reports; conditional restore steps; concurrent-change conflicts.

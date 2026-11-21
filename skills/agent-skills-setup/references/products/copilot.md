@@ -1,21 +1,14 @@
 # GitHub Copilot and VS Code harnesses
 
-Documentation review: 2026-11-07. **Client/runtime checks: not run.**
-Read only the relevant profile below. Paths are discovery candidates, not permission
-to scan or overwrite them. Apply the [catalog contract](../products.md) and record
-the installed version, OS, active harness and path overrides before changing files.
+Review: 2026-11-07 · Client checks: not run · Contract: [products.md](../products.md).
 
 ## vscode
 
 **VS Code: Copilot, Local, Claude and Codex harnesses** · Evidence: `documented-subset` · Runtime: `not-run`.
 
-First identify the selected **harness**, not only the model. Current VS Code documentation separates Copilot, Local, Claude and Codex customization. Native harnesses load their own files; selecting a Claude model inside another harness does not automatically select Claude Code conventions.
-
-Copilot repository instructions include `.github/copilot-instructions.md`, scoped `.github/instructions/*.instructions.md` and documented AGENTS discovery. Claude uses CLAUDE/rules; Codex uses AGENTS discovery. Local/Profile prompt files and user storage are not universal native-harness locations. Skills, agents, hooks, plugins and MCP availability vary by harness.
-
-For Local VS Code MCP, `.vscode/mcp.json` uses `servers`; active user MCP is profile-managed. Never guess Stable/Insiders/VSCodium or remote profile locations. `${input:...}`, input definitions and env-file features may not work in portable/native MCP config. Preserve selected input references only if the destination resolves them.
-
-Check: active harness recognizes instructions and Skills; scoped `applyTo` matches the same path set; active user profile and remote extension host are correct. Do not transfer Settings Sync state or managed plugin caches. Current plugins can contain more than Skills: hooks, MCP, LSP and other UI/automation components need individual review.
+- **Harness-first routing**: Identify the active **harness** (Copilot/Local vs Claude vs Codex), not just the selected model. Copilot/Local loads `.github/copilot-instructions.md`, scoped `.github/instructions/*.instructions.md` (`applyTo: "glob"`), `AGENTS.md`, `.github/prompts/*.prompt.md`, `.github/agents/*.agent.md`, and `.github/skills/<name>/SKILL.md` (plus `.agents/skills`). Claude and Codex harnesses use their own native files. Built-in profile: `vscode`.
+- **MCP schema**: Workspace `.vscode/mcp.json` uses root key **`servers`** (not `mcpServers`), `type: "stdio" | "http" | "sse"`, `${env:VAR}`, and optional `inputs` (`${input:id}`). User MCP lives in the active VS Code profile (`Code` / `Code - Insiders` / remote server) — inspect rather than guessing profile folders.
+- **Check**: Active harness loads instructions/Skills, `applyTo` globs match expected paths, and Settings Sync / plugin caches / `state.vscdb` stay excluded.
 
 Official sources: [1](https://code.visualstudio.com/docs/agents/reference/custom-instructions-reference) · [2](https://code.visualstudio.com/docs/agents/concepts/customization) · [3](https://code.visualstudio.com/docs/agent-customization/mcp-servers) · [4](https://code.visualstudio.com/docs/agent-customization/agent-plugins)
 
@@ -23,11 +16,8 @@ Official sources: [1](https://code.visualstudio.com/docs/agents/reference/custom
 
 **GitHub Copilot CLI and Copilot app** · Evidence: `documented-subset` · Runtime: `not-run`.
 
-CLI Skills may be project `.github/skills`, `.claude/skills`, `.agents/skills` and documented personal roots such as `~/.copilot/skills` and `~/.agents/skills`. Resolve duplicate names before writing. CLI user MCP is `~/.copilot/mcp-config.json`, using `mcpServers`; it is not VS Code's `servers` schema.
-
-Inventory custom instructions, agents, skills, hooks, plugins, slash commands, MCP and custom settings separately. The Copilot app adds its own UI features and reuses some CLI/repository customizations; do not invent an app-local storage tree from that fact. Import approved definitions, never CLI credentials, sessions, remembered trust or allowlists.
-
-Check CLI/app discovery using its actual customization view. Command-line flags and native configuration determine scope. Do not copy VS Code prompt-file/hook layouts into CLI merely because both products are called Copilot.
+- **Candidate paths & schemas**: Skills `.github/skills`, `.claude/skills`, `.agents/skills`, `~/.copilot/skills`, `~/.agents/skills`; Instructions `.github/copilot-instructions.md`, `.github/instructions/*.instructions.md`, `~/.copilot/copilot-instructions.md`, `AGENTS.md`; Agents `.github/agents/*.agent.md`, `~/.copilot/agents/*.agent.md`; User MCP `~/.copilot/mcp-config.json` using **`mcpServers`** (distinct from VS Code `.vscode/mcp.json` `servers`). Built-in profile: `copilot-cli` (`copilot`, `copilot-app`).
+- **Cautions & check**: Resolve duplicate Skill names across shared roots; do not copy CLI auth tokens, session state, or allowlists, and do not invent an app-private folder for Copilot app UI state. Verify discovery in the CLI/app customization view.
 
 Official sources: [1](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-skills) · [2](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-config-dir-reference) · [3](https://docs.github.com/en/copilot/how-tos/github-copilot-app/customize-github-copilot-app)
 
@@ -35,10 +25,6 @@ Official sources: [1](https://docs.github.com/en/copilot/how-tos/copilot-cli/cus
 
 **Visual Studio, JetBrains, Eclipse, Xcode and GitHub cloud coding agent** · Evidence: `documented-subset` · Runtime: `not-run`.
 
-Use GitHub's client support table for each category, not a single green tick for the brand. At review time the table distinguishes stable, preview and unavailable support for instructions, prompt files, custom agents, subagents, Skills, MCP and hooks. Visual Studio and Copilot-in-Xcode are not VS Code; cloud coding agents do not inherit desktop user-profile state.
-
-Record IDE version, Copilot extension version, feature flags and supported object types. Translate selected project instructions first. For a type absent from that client, preserve a reviewed portable file or UI rebuild instruction rather than dropping it or claiming automatic loading. Organization policy and environment secrets are administrative state, not portable instructions.
-
-Check discovery in the exact IDE/cloud job. Preview support is not a tested guarantee. GitHub cloud setup steps and hooks are executable and require approval; do not run them during migration.
+Check GitHub's per-host support matrix per category (stable vs preview vs unavailable across instructions, prompt files, custom agents, subagents, Skills, MCP, and hooks). Visual Studio and Copilot-in-Xcode are not VS Code; cloud coding agents do not read local desktop user profiles. Migrate supported repository instructions (`.github/copilot-instructions.md` / `AGENTS.md`) first, park unsupported categories as reviewed drafts, keep cloud setup steps/hooks unexecuted without approval, and exclude org secrets/policies.
 
 Official sources: [1](https://docs.github.com/en/copilot/reference/customization-cheat-sheet)

@@ -26,8 +26,8 @@ old evidence dates or importing old policies as permission to write.
 ## Review code and checks at the right level
 
 - Inspect the package allowlist and its budget; add selected Markdown references
-  explicitly. No dev/eval/history material or runtime code enters the user package.
-- Confirm all live references resolve, SKILL.md stays under 150 lines, and commands
+  explicitly. Package only the approved helper and guidance; no dev/eval/history material.
+- Confirm all live references resolve, SKILL.md stays under 140 lines, and commands
   in prose exist in the selected checkout/client. Generic terminal syntax is not
   evidence of a vendor command contract.
 - Check structural tests and fixtures for false certainty: string presence and
@@ -44,8 +44,8 @@ old evidence dates or importing old policies as permission to write.
    Python version and exact command in a private or redacted run report.
 2. Run `bash validate-all.sh` in the actual checkout. Capture exit code and counts;
    if skills-ref is absent, report its NOT RUN separately. CI requires it.
-3. Verify that packaging includes only allowlisted guidance, and that no executable
-   migrator or historic Registry is introduced by this change.
+3. Verify packaging admits only allowlisted guidance and the single approved helper,
+   not the retired migrator or historical Registry.
 4. Execute `evals/workflow-cases.json` with a real host agent in isolated fixtures,
    alongside affected cases in the existing eval files. Do not give the agent the
    expected rubric. Review its file edits and tool trace, not only its final claim.

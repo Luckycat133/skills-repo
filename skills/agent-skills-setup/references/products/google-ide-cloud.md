@@ -1,19 +1,12 @@
 # Google IDEs and cloud development
 
-Documentation review: 2026-11-07. **Client/runtime checks: not run.**
-Read only the relevant profile below. Paths are discovery candidates, not permission
-to scan or overwrite them. Apply the [catalog contract](../products.md) and record
-the installed version, OS, active harness and path overrides before changing files.
+Review: 2026-11-07 · Client checks: not run · Contract: [products.md](../products.md).
 
 ## android-studio
 
 **Gemini in Android Studio** · Evidence: `documented-subset` · Runtime: `not-run`.
 
-Separate Android Studio's bundled Gemini from generic Code Assist and Gemini CLI. Current documentation covers AGENTS files, Agent Skills, prompt/rule UI and MCP/device capabilities. Older Studio releases used experimental Skill formats; identify the installed release before using a current `SKILL.md` example.
-
-Inventory project instructions, Skills, saved prompts, UI rules, agent settings and MCP, plus required Android tool dependencies. AGENTS instructions and IDE-managed prompt libraries are different objects. Do not transfer device permissions, credentials, emulator state or indexes.
-
-Check a new session sees the migrated Skill/instructions and the intended project. Validate API/tool bindings without running builds, app installation or device control unless authorized.
+Separate bundled Gemini in Android Studio from Gemini CLI and generic Code Assist. Inventory `AGENTS.md` files, Agent Skills (`SKILL.md` on current releases; verify Studio build before assuming legacy experimental Skill schemas), saved UI prompts/rules, and MCP/device bindings. Keep emulator/device permissions, signing keys, and IDE indexes out of transfers; verify discovery in a fresh session without running builds or device actions unapproved.
 
 Official sources: [1](https://developer.android.com/studio/gemini/skills) · [2](https://developer.android.com/studio/gemini/agent-files) · [3](https://developer.android.com/studio/gemini/features)
 
@@ -21,11 +14,8 @@ Official sources: [1](https://developer.android.com/studio/gemini/skills) · [2]
 
 **Antigravity IDE, App and CLI** · Evidence: `documented-subset` · Runtime: `not-run`.
 
-Do not merge the three surfaces. Current Skill discovery includes `.agents/skills`; older `.agent/skills` compatibility and explicit includes need precedence checks. Inventory rules, Skills, workflows, agents, hooks, plugins, MCP, project/user settings and review artifacts separately.
-
-The current workflow-to-Skill migration is documented for Antigravity App 2.12+, not automatically for IDE or CLI. A workflow can become an on-demand Skill, but preserve manual invocation and arguments; never convert a persistent rule this way. Where workflow and Skill share a name, inspect the documented precedence before deleting either.
-
-Check the current customization-discovery page against local settings. Different old `.gemini`/`.agent` paths in archived notes are not sufficient evidence for new targets. Imported scripts/hooks remain parked until separately approved.
+- **Candidate paths & schemas**: Keep IDE, App, and CLI distinct. Project Skills `.agents/skills/<name>/SKILL.md` (legacy `.agent/skills`); User Skills `$ANTIGRAVITY_SKILLS_DIR` or `~/.gemini/antigravity/skills` (legacy `~/.gemini/config/skills`); Rules `.agents/rules/*.md`, `GEMINI.md` / `~/.gemini/GEMINI.md`; Workflows `.agents/workflows/*.md` (legacy `.agent/workflows`); Hooks `.agents/hooks.json`, `~/.gemini/config/hooks.json`; MCP `~/.gemini/antigravity/mcp_config.json` (legacy `~/.gemini/config/mcp_config.json`) and `.agents/mcp_config.json` (`mcpServers` root key; remote HTTP uses `serverUrl`). Built-in profile: `antigravity`.
+- **Cautions & check**: Workflow-to-Skill migration applies to Antigravity App 2.12+ on-demand workflows (`disable-model-invocation` / slash arguments preserved), never persistent rules. Keep imported hooks/scripts parked until approved.
 
 Official sources: [1](https://antigravity.google/docs/skills) · [2](https://antigravity.google/docs/customization-discovery) · [3](https://antigravity.google/docs/migration/workflows-to-skills) · [4](https://antigravity.google/changelog)
 
@@ -33,11 +23,7 @@ Official sources: [1](https://antigravity.google/docs/skills) · [2](https://ant
 
 **Firebase Studio / former IDX** · Evidence: `documented-subset` · Runtime: `not-run`.
 
-Official migration guidance schedules shutdown for **2027-03-22**; that is still in the future as of this review. Prefer a reviewed export from an existing workspace, not the claim that it is already closed.
-
-Inventory authored rules/AI instructions, workspace configuration and `.idx/mcp.json`. Its MCP map is not absent merely because the workspace is cloud-hosted. Preserve the server definitions and declared transport, but rebind local commands to the new execution environment. Nix/devcontainer/setup files are environment configuration, not AI rules.
-
-Export project files and selected instructions through supported mechanisms, not cloud tokens, sessions or generated indexes. Migration to Antigravity or AI Studio requires inspecting that destination's current context surfaces independently.
+Shutdown is scheduled for **2027-03-22** (future as of review); treat existing workspaces as active exportable sources. Inventory authored AI rules/instructions and `.idx/mcp.json` (`mcpServers`; patch out-of-band with `patch-mcp`), rebinding local stdio paths for the new host while keeping `.idx/dev.nix` environment setup, cloud tokens, and indexes separate.
 
 Official sources: [1](https://firebase.google.com/docs/studio/mcp-servers) · [2](https://firebase.google.com/docs/studio/migrating-project)
 
@@ -45,10 +31,6 @@ Official sources: [1](https://firebase.google.com/docs/studio/mcp-servers) · [2
 
 **Google Jules cloud, Tools CLI and API** · Evidence: `documented-subset` · Runtime: `not-run`.
 
-Jules uses repository instructions and a cloud task environment. Inventory AGENTS/README guidance, selected repository/branch, explicit setup script, environment snapshot metadata, schedules and integrations. Tools CLI/API control a cloud service; they do not establish a local Skill or MCP discovery directory.
-
-Copy selected authored guidance as project instructions. Recreate environment setup only after reviewing executable commands and secrets requirements. Do not copy a VM image, session transcript or cloud credential as context. Keep scheduled tasks disabled/unregistered until authorized.
-
-Check the target job reads the expected repository instructions and can prepare its environment in an explicitly approved test. Merely parsing a setup script does not verify the environment.
+Jules consumes repository instructions (`AGENTS.md` / `README.md`) and cloud environment setup scripts; Tools CLI/API orchestrate cloud jobs rather than local Skill/MCP folders. Migrate authored repo instructions, review setup scripts and required secret names without executing commands or copying VM snapshots/transcripts, and keep scheduled tasks unregistered until approved.
 
 Official sources: [1](https://jules.google/docs/environment/) · [2](https://jules.google/docs/cli/) · [3](https://jules.google/docs/scheduled-tasks/)

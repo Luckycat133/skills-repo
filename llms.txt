@@ -1,13 +1,14 @@
 # Agent Skills Setup (skills-repo)
-> Offline, previewed, and rollback-safe migration of AI coding context (Skills, Rules, Instructions, and MCP) across Cursor, Claude Code, Codex, Cline, Windsurf, Copilot, and Gemini CLI.
+> Agent-first AI coding context & zero-LLM-exposure secret migration Skill across Cursor, Claude Code, Codex, VS Code, Copilot, Gemini CLI, Antigravity, Windsurf, Cline, Kilo, Zed, OpenCode, Kimi Code, Qwen Code, Pi, and 75+ cataloged tools.
 
-Agent Skills Setup provides cross-IDE context translation, secret-redacting backup bundles (ACB), and deterministic migration between AI developer environments.
+`agent-skills-setup` helps an existing coding agent migrate rules/instructions, Agent Skills, MCP server definitions, commands, agents, parked hooks, authored memory, and out-of-band `0600` `.env`/MCP secrets across tools or plain device-transfer folders without exposing raw secret values to LLM context (`--redact-secrets` available on request). No proprietary `.acb` archive engine, signing service, or background daemon is used.
 
 ## Documentation
-- [README](https://raw.githubusercontent.com/Luckycat133/skills-repo/main/README.md): High-level overview, quick installation, supported IDE matrix, and FAQ.
-- [Canonical Skill Descriptor](https://raw.githubusercontent.com/Luckycat133/skills-repo/main/skills/agent-skills-setup/SKILL.md): Agent-native skill specification, CLI synopsis, and prompt triggers.
-- [Full Documentation](https://raw.githubusercontent.com/Luckycat133/skills-repo/main/llms-full.txt): Complete concatenated reference documentation including migration boundaries and command recipes.
+- [README](https://raw.githubusercontent.com/Luckycat133/skills-repo/main/README.md): Overview, installation, single-sentence workflows, and validation status.
+- [Canonical Skill Descriptor](https://raw.githubusercontent.com/Luckycat133/skills-repo/main/skills/agent-skills-setup/SKILL.md): Agent Skills entry point, zero-context-leak rules, and `migrate_context.py` CLI recipes.
+- [Product Catalog Index](https://raw.githubusercontent.com/Luckycat133/skills-repo/main/skills/agent-skills-setup/references/products.md): Progressive routing index for 90 profiles across 30 family references.
+- [Full Documentation](https://raw.githubusercontent.com/Luckycat133/skills-repo/main/llms-full.txt): Extended architectural summary and safety invariants.
 
 ## Optional
-- [OpenClaw / ClawHub Listing](https://clawhub.ai/Luckycat133/agent-skills-setup): Published registry listing on ClawHub.
-- [Release Changelog](https://raw.githubusercontent.com/Luckycat133/skills-repo/main/CHANGELOG.md): Historical versions and format adapter updates.
+- [Validation Status](https://raw.githubusercontent.com/Luckycat133/skills-repo/main/docs/validation-status.md): Honest record of local checks vs pending native IDE acceptance runs.
+- [Release Changelog](https://raw.githubusercontent.com/Luckycat133/skills-repo/main/CHANGELOG.md): Version history.

@@ -1,21 +1,14 @@
 # Anthropic: Code is not Desktop Chat
 
-Documentation review: 2026-11-07. **Client/runtime checks: not run.**
-Read only the relevant profile below. Paths are discovery candidates, not permission
-to scan or overwrite them. Apply the [catalog contract](../products.md) and record
-the installed version, OS, active harness and path overrides before changing files.
+Review: 2026-11-07 · Client checks: not run · Contract: [products.md](../products.md).
 
 ## claude-code
 
 **Claude Code CLI, IDE integration, Desktop Code** · Evidence: `documented-subset` · Runtime: `not-run`.
 
-Inventory instructions (`CLAUDE.md`, `.claude/CLAUDE.md`, local overrides and imported files), scoped `.claude/rules/*.md`, Skills (`.claude/skills/`, `~/.claude/skills/`), legacy slash commands, `.claude/agents/`, hooks, plugins, MCP and reviewed authored memory. Keep managed settings, auto-memory, credentials and session databases separate.
-
-`paths` frontmatter narrows a rule; an unscoped rule is not equivalent to a model-selected Skill. Commands and Skills have converged in current Code, but legacy `.claude/commands/` remains a versioned input. Preserve arguments, invocation controls, tool/model choices, `context: fork` and any shell interpolation rather than copying only Markdown body. Skill hooks and dynamic shell content are executable.
-
-Project MCP uses `.mcp.json`; user/local settings may share `.claude.json`. Resolve actual scope and extract only selected server definitions. Never transfer approvals. Desktop's **Code** surface may use this harness, but its filesystem and sandbox must be checked independently.
-
-Check: target discovers the Skill by name; a scoped rule loads on a matching path and not an unrelated one; imported files resolve; all unrelated settings and authored memory remain unchanged.
+- **Candidate paths & schemas**: Instructions `CLAUDE.md`, `.claude/CLAUDE.md`, local `CLAUDE.local.md`, user `~/.claude/CLAUDE.md`, `@path` imports, and scoped `.claude/rules/*.md` / `~/.claude/rules/*.md` (`paths: ["glob", ...]`); Skills `.claude/skills/<name>/SKILL.md`, `~/.claude/skills/<name>/SKILL.md` (`disable-model-invocation`, `allowed-tools`, `context: fork`); Legacy commands `.claude/commands/*.md`, `~/.claude/commands/*.md`; Agents `.claude/agents/*.md`, `~/.claude/agents/*.md`; Hooks `hooks` subobject in `.claude/settings.json` / `.claude/settings.local.json` / `~/.claude/settings.json`; Authored memory `~/.claude/memory/*.md` (exclude `projects/*/sessions/*.jsonl`); MCP project `.mcp.json` (`mcpServers`), local project override `~/.claude.json` -> `projects[<workspace>].mcpServers`, user `~/.claude.json` -> `mcpServers` (`${VAR}` interpolation, `type: "http"|"sse"` + `url`). Built-in profile: `claude-code` (`claude`).
+- **Migration cautions**: Never write literal secrets into a Git-tracked `.mcp.json` (`migrate_context.py` routes secret-bearing project MCP to untracked `~/.claude.json` `projects[ws].mcpServers` in `0600` mode). Preserve arguments, invocation controls, and `context: fork`; never copy `permissions.allow` or session transcripts. Desktop's **Code** tab must still have its sandbox/filesystem checked independently.
+- **Check**: Skill discovery by name, matching vs non-matching path loading for `.claude/rules/*.md`, resolved `@` imports, and intact sibling keys in `~/.claude.json` / `settings.json`.
 
 Official sources: [1](https://code.claude.com/docs/en/features-overview) · [2](https://code.claude.com/docs/en/memory) · [3](https://code.claude.com/docs/en/skills) · [4](https://code.claude.com/docs/en/mcp)
 
@@ -23,10 +16,8 @@ Official sources: [1](https://code.claude.com/docs/en/features-overview) · [2](
 
 **Claude Desktop Chat, web Projects and Cowork** · Evidence: `discovery-required` · Runtime: `not-run`.
 
-Do not treat Chat, Projects, Cowork and the Code tab as one profile. Inventory uploaded Skills, project instructions/knowledge, connectors, desktop extensions and any selected local MCP definitions through the actual product UI. A valid Skill directory does not prove a particular account supports file installation.
+Do not merge Chat, Projects, Cowork, and the Code tab into one profile. Inventory uploaded Skills, Project instructions/knowledge, connectors, desktop extensions (`.mcpb`), and any exposed `claude_desktop_config.json` (`mcpServers`) through the actual build's UI. A valid Skill directory does not prove file-based installation on every account.
 
-Import reviewed instruction text and Skill packages through the documented UI when available. MCPB/desktop extensions are executable packages, not JSON server records. Reauthorize connectors on the new device. Do not copy a Desktop application-data tree or use Claude Code's `.claude/` as a presumed Chat installation directory. Legacy `claude_desktop_config.json` only applies when that installed build actually exposes it.
-
-Check: the intended Chat/Project/Code surface, not a neighboring surface, can see the transferred object. This review does not establish a universal Desktop filesystem contract; use the vendor help center and the selected client's current settings before writing.
+Import reviewed instructions and Skill archives via documented UI controls. Desktop extensions (`.mcpb`) are executable bundles, not plain JSON server entries; reauthorize connectors on the new device and never copy Desktop app-data folders or assume `.claude/` feeds Chat. Confirm visibility in the exact Chat/Project/Code surface.
 
 Official sources: [1](https://support.claude.com/) · [2](https://code.claude.com/docs/en/desktop)

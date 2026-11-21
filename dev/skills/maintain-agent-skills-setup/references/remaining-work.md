@@ -1,39 +1,29 @@
-# Remaining work after the 2026-11-07 documentation update
+# Remaining work after the 2026-11-16 script & reference upgrade
 
 ## Completed in this branch
 
-Agent-first scope reset remains intact. Product references route all 87 historical
-identifiers, add missing clients/profiles, record primary sources and version traps,
-and stay documentation-only. Main Skill remains short and loads selected profiles.
-Historical reference material is not reactivated as an automatic compatibility map.
+- Agent-first scope reset preserved: no `.acb` engine, signing service, SQLite store,
+  background daemon, auto-installer, telemetry, or fake Cartesian matrix.
+- Added `skills/agent-skills-setup/scripts/migrate_context.py` (Python 3.11+ stdlib,
+  PEP 723 metadata) supporting `inspect`, `migrate`, `export-device`, `import-device`,
+  and `patch-mcp` with zero-context-leak `0700`/`0600` out-of-band secret handling,
+  `--redact-secrets`, Git-tracked secret protection, JSONC/TOML/MDC parsers, idempotent
+  Markdown section markers, and private `0600` backups.
+- Enriched `references/` and all 30 `references/products/*.md` family docs with concrete
+  candidate paths, root keys, frontmatter fields, and env interpolation rules while
+  keeping the packaged Skill comfortably under `260,000` bytes.
 
-## Pending: real behavior, not more architecture
+## Pending: real native-client runs
 
-1. Run client-tests.md with the Skill actually loaded. Execute available rows from
-   evals/client-matrix.json and all applicable fixture cases. Record unavailable
-   native clients as blocked; never claim their tests passed.
-2. Resolve discovery-required identities/contracts: iFlyCode, SenseTime Raccoon,
-   veCLI/Ark CLI distinction, exact International TRAE build, PearAI submodule and
-   Coder Xum version paths. Keep reviewed source content without guessed installs.
-3. Confirm document disagreements locally: Amazon Q global MCP, Forge home config,
-   Windsurf/Devin transition, Kiro major version, OpenCode major version, active
-   VS Code harness, Kimi root overrides, Bob IDE versus Shell MCP.
-4. Run Windows/WSL/remote-home and cloud/UI cases with actual supported clients.
-5. Add only the native examples a failed case demonstrates are missing. Commands,
-   agents, hooks, specs, workflows and authored memory remain in inventory; no
-   generic converter/runtime is required to prepare reviewed target definitions.
-6. Before publication, recheck changed vendor pages, run official Skill validation,
-   package only the allowlist, inspect archive, and separately authorize release /
-   license / marketplace operations and download-back verification.
-
-## Important evidence limits
-
-`documented-subset` means the cited primary material supports the described
-subset. It does not mean all listed URLs were fetched successfully, every feature
-has a file path, all possible IDEs are covered, or a client was exercised. Unknown
-fields/types and page-access conflicts stay explicit. The test queue is not a test
-result. Structural CI only certifies repository/package/example consistency.
-
-Do not restore ACB, signing, bulk detection, plugin installation, background sync
-or a migration CLI to make these rows pass. Improve what the host agent reads,
-checks and edits for the real migration request.
+1. Run [client-tests.md](client-tests.md) with `skills/agent-skills-setup/` loaded in
+   available native clients from `evals/client-matrix.json`. Keep unavailable GUI/IDE
+   clients marked `blocked-environment` or `not-run` — never `pass`.
+2. Resolve `discovery-required` contracts (`iflycode`, `raccoon-ai`, `vecli`/`ark-cli`,
+   International `trae`, `pearai`, `coder-xum`, `claude-desktop`) on actual installed builds.
+3. Confirm version-sensitive local surfaces (`amazon-q` global MCP path, `forge` home
+   root, `windsurf`/Devin Local harness, `kiro` CLI v2 vs v3, `opencode` v1 vs v2,
+   active VS Code harness, `kimi-code` `KIMI_CODE_HOME`, `ibm-bob` IDE vs Shell).
+4. Run native Windows/WSL/SSH-remote home and cloud/UI cases on real machines.
+5. Before any separately authorized release, recheck vendor URLs, run `validate-all.sh`
+   including `skills-ref`, build and inspect the zip archive, and obtain explicit owner
+   approval for tagging or marketplace upload.

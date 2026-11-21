@@ -1,44 +1,34 @@
-name: 🚀 Request New IDE / Profile
-description: Request support for a new AI coding agent, IDE, or tool profile
-title: "[IDE Request]: "
+name: 🚀 Request New Client / Profile Reference
+description: Propose vendor documentation coverage for a new AI coding agent, IDE, or harness profile
+title: "[Profile Request]: "
 labels: ["enhancement", "ide-profile"]
 body:
   - type: markdown
     attributes:
       value: |
-        We welcome requests for new AI coding tools and IDE profiles! Providing official documentation links and default configuration paths accelerates implementation.
+        Share primary vendor documentation and versioned context contracts to add or refine a profile in `skills/agent-skills-setup/references/products/`. Third-party installer lists alone are not sufficient evidence of native support.
   - type: input
     id: tool_name
     attributes:
-      label: Tool / IDE Name
-      description: Name of the AI coding tool or IDE.
-      placeholder: "e.g. Continue.dev, Void, Superwhisper, Trae, Roo Code"
+      label: Product / Harness Name & Version
+      description: Exact vendor, product name, and CLI/IDE/cloud surface.
+      placeholder: "e.g. ExampleCode CLI 1.2"
     validations:
       required: true
   - type: input
     id: official_docs
     attributes:
       label: Official Documentation URL
-      description: Official website or documentation link.
+      description: Primary vendor customization documentation or official repository schema URL.
       placeholder: "https://..."
     validations:
       required: true
   - type: textarea
     id: surfaces
     attributes:
-      label: Known Surfaces & File Paths
+      label: Documented Context Surfaces
       description: |
-        Where does this tool store its skills, instructions, or MCP configurations?
-        Examples:
-        - Skills: `~/.config/tool/skills`
-        - Rules: `.toolrules` or `~/.tool/instructions.md`
-        - MCP: `~/.tool/mcp.json`
+        Where does this client load instructions, Skills, MCP, commands, agents, hooks, or authored memory?
+        Include scope (user vs project), precedence, and any activation/security caveats.
     validations:
       required: false
-  - type: checkboxes
-    id: sponsorship
-    attributes:
-      label: Sponsorship / Priority
-      description: Are you or your organization interested in sponsoring this adapter for priority implementation?
-      options:
-        - label: "Yes, I would like to sponsor this profile's adapter and test fixtures."
