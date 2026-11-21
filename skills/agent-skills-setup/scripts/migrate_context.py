@@ -3,13 +3,7 @@
 # requires-python = ">=3.11"
 # dependencies = []
 # ///
-"""Safe, zero-context-leak AI coding context & secret migration helper.
-
-Moves rules/instructions, Agent Skills, MCP servers, commands, agents, parked hooks,
-authored memory, and .env secrets across AI coding tools or plain device-transfer
-folders without exposing raw secret values to stdout, stderr, LLM context, or
-MIGRATION.md.
-"""
+"""Migrate AI coding context and secrets without exposing values in reports or logs."""
 from __future__ import annotations
 
 import argparse
@@ -890,6 +884,8 @@ def serialize_mcp_for_json_style(srv: NormalizedMcp, target_style: str, redact_s
             if srv.disabled:
                 entry["disabled"] = True
             return entry, notes
+        if srv.cwd:
+            raise UnrepresentableMcpServer("Zed cannot preserve an explicit MCP working directory")
         cobj: dict[str, Any] = {"path": srv.command or "", "args": args}
         if env_out:
             cobj["env"] = env_out
@@ -907,6 +903,8 @@ def serialize_mcp_for_json_style(srv: NormalizedMcp, target_style: str, redact_s
         e = {"type": "local", "command": ([srv.command] if srv.command else []) + args, "enabled": not srv.disabled}
         if env_out:
             e["environment"] = env_out
+        if srv.cwd:
+            e["cwd"] = srv.cwd
         return e, notes
 
     entry: dict[str, Any] = {}
