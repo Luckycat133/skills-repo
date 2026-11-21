@@ -57,6 +57,9 @@ SECRET_VALUE_RE = re.compile(
     r"^xox[baprs]-[A-Za-z0-9-]{8,}|^AIza[0-9A-Za-z_-]{16,}|^AKIA[0-9A-Z]{12,}|"
     r"^Bearer\s+(?!\$\{)\S+|[a-zA-Z][a-zA-Z0-9+.-]*://[^/\s:@]+:[^/\s@]+@)"
 )
+PY_ENV_LOOKUP_RE = re.compile(
+    r"""os\.(?:environ\[(['"])[A-Za-z_][A-Za-z0-9_]*\1\]|(?:getenv|environ\.get)\((['"])[A-Za-z_][A-Za-z0-9_]*\2\))"""
+)
 ENV_PLACEHOLDER_RE = re.compile(r"^\$\{(?:env:)?([A-Za-z_][A-Za-z0-9_]*)\}$")
 INPUT_PLACEHOLDER_RE = re.compile(r"^\$\{input:([A-Za-z0-9_.-]+)\}$")
 BEARER_ENV_RE = re.compile(r"^Bearer\s+\$\{(?:env:)?([A-Za-z_][A-Za-z0-9_]*)\}$", re.IGNORECASE)
@@ -576,7 +579,7 @@ def inspect_url_secrets(url: str) -> tuple[str, list[dict[str, str]]]:
 
     def _q_repl(match: re.Match[str]) -> str:
         prefix, val = match.group(1), match.group(2)
-        if ENV_PLACEHOLDER_RE.match(val):
+        if ENV_PLACEHOLDER_RE.match(val) or INPUT_PLACEHOLDER_RE.match(val):
             return match.group(0)
         pname = prefix[1:-1]
         found.append({"name": f"url_query:{pname}", "sha256_prefix": sha256_prefix(val)})
@@ -592,7 +595,7 @@ def inspect_args_secrets(args: list[str]) -> tuple[list[str], list[dict[str, str
     for idx, arg in enumerate(args):
         if pending_flag is not None:
             fk = slugify(pending_flag).upper().replace("-", "_")
-            if not ENV_PLACEHOLDER_RE.match(arg):
+            if not (ENV_PLACEHOLDER_RE.match(arg) or INPUT_PLACEHOLDER_RE.match(arg)):
                 found.append({"name": f"arg:{fk}", "sha256_prefix": sha256_prefix(arg)})
                 redacted_args.append(f"${{{fk}}}")
             else:
@@ -609,13 +612,13 @@ def inspect_args_secrets(args: list[str]) -> tuple[list[str], list[dict[str, str
         header_like = HEADER_LITERAL_RE.match(arg)
         if header_like and header_like.group(1).lower() in HEADER_SECRET_KEYS:
             value = header_like.group(2)
-            if not ENV_PLACEHOLDER_RE.match(value):
+            if not (ENV_PLACEHOLDER_RE.match(value) or INPUT_PLACEHOLDER_RE.match(value)):
                 fk = slugify(header_like.group(1)).upper().replace("-", "_")
                 found.append({"name": f"arg:{fk}", "sha256_prefix": sha256_prefix(value)})
                 redacted_args.append(f"{header_like.group(1)}:{D}{{{fk}}}")
                 continue
         m = ARG_SECRET_RE.match(arg)
-        if m and not ENV_PLACEHOLDER_RE.match(m.group(2)):
+        if m and not (ENV_PLACEHOLDER_RE.match(m.group(2)) or INPUT_PLACEHOLDER_RE.match(m.group(2))):
             fk = slugify(m.group(1).rstrip("=").lstrip("-")).upper().replace("-", "_")
             found.append({"name": f"arg:{fk}", "sha256_prefix": sha256_prefix(m.group(2))})
             redacted_args.append(f"{m.group(1)}${{{fk}}}")
@@ -671,7 +674,7 @@ def parse_dotenv_secrets(text: str, redact: bool = False) -> tuple[str, list[dic
             or SECRET_VALUE_RE.search(unq)
             or key.upper().endswith(("_KEY", "_SECRET", "_TOKEN", "_PASSWORD", "_PWD"))
         )
-        if unq and not ENV_PLACEHOLDER_RE.match(unq) and is_dotenv_secret:
+        if unq and not (ENV_PLACEHOLDER_RE.match(unq) or PY_ENV_LOOKUP_RE.fullmatch(unq)) and is_dotenv_secret:
             secrets.append({"name": key, "sha256_prefix": sha256_prefix(unq)})
             if redact:
                 out_lines.append(f"{lhs.rstrip()}=" + ("\n" if raw.endswith("\n") else ""))
@@ -697,11 +700,27 @@ class NormalizedMcp:
     headers: dict[str, str] = field(default_factory=dict)
     disabled: bool = False
     timeout: int | float | None = None
+    startup_timeout_sec: int | float | None = None
+    tool_timeout_sec: int | float | None = None
+    bundle_import: bool = False
     tool_allow: list[str] = field(default_factory=list)
     tool_deny: list[str] = field(default_factory=list)
     knob_only: bool = False
     stripped_grants: list[str] = field(default_factory=list)
     source_profile: str = ""
+
+    def header_binding(self, key: str, value: str) -> str:
+        name = self.name + "-" + key
+        token = slugify(name).upper().replace("-", "_")
+        return ("Bearer " if value.lower().startswith("bearer ") else "") + f"${{{token}}}"
+
+    def deferred_reason(self) -> str | None:
+        fields = [self.command or "", self.url or "", self.cwd or "", *self.args, *self.env.values(), *self.headers.values()]
+        if any("${input:" in value for value in fields):
+            return "VS Code input declarations need manual rebinding"
+        if self.bundle_import and self.cwd and (Path(self.cwd).is_absolute() or PureWindowsPath(self.cwd).anchor):
+            return "Absolute workspace path needs destination rebinding"
+        return None
 
     def secret_summary(self) -> tuple[bool, list[dict[str, str]]]:
         items: list[dict[str, str]] = []
@@ -727,16 +746,17 @@ class NormalizedMcp:
         norm_hdr = {
             k: (
                 f"Bearer ${{{BEARER_ENV_RE.match(v).group(1)}}}" if BEARER_ENV_RE.match(v)  # type: ignore[union-attr]
-                else (f"${{{ENV_PLACEHOLDER_RE.match(v).group(1)}}}" if ENV_PLACEHOLDER_RE.match(v) else (f"redacted:{k}" if redact_secrets else f"val:{sha256_prefix(v)}"))  # type: ignore[union-attr]
+                else (f"${{{ENV_PLACEHOLDER_RE.match(v).group(1)}}}" if ENV_PLACEHOLDER_RE.match(v) else (self.header_binding(k, v) if redact_secrets else f"val:{sha256_prefix(v)}"))  # type: ignore[union-attr]
             )
             for k, v in sorted(self.headers.items())
         }
         return {
             "transport": self.transport, "command": self.command, "cwd": self.cwd,
-            "args": [f"sec:{sha256_prefix(a)}" if SECRET_VALUE_RE.search(a) else a for a in args_val],
-            "url": (f"{inspect_url_secrets(url_val)[0]}#{sha256_prefix(url_val)}" if (url_val and inspect_url_secrets(url_val)[1]) else url_val),
+            "args": [vscode_env(f"sec:{sha256_prefix(a)}" if SECRET_VALUE_RE.search(a) else a) for a in args_val],
+            "url": (f"{inspect_url_secrets(url_val)[0]}#{sha256_prefix(url_val)}" if (url_val and inspect_url_secrets(url_val)[1]) else vscode_env(url_val) if url_val else None),
             "env": norm_env, "headers": norm_hdr, "disabled": self.disabled, "knob_only": self.knob_only,
             "tool_allow": sorted(self.tool_allow), "tool_deny": sorted(self.tool_deny),
+            "startup_timeout_sec": self.startup_timeout_sec, "tool_timeout_sec": self.tool_timeout_sec,
         }
 
 
@@ -782,7 +802,7 @@ def normalize_mcp_entry(name: str, raw: dict[str, Any], source_style: str = "mcp
             name=name, transport="http" if url else "stdio", command=str(cmd) if cmd else None,
             args=[str(x) for x in (raw.get("args") or [])], url=str(url) if url else None, cwd=raw.get("cwd"),
             env=env_d, headers=hdrs, disabled=disabled,
-            timeout=raw.get("startup_timeout_sec") or raw.get("tool_timeout_sec"),
+            startup_timeout_sec=raw.get("startup_timeout_sec"), tool_timeout_sec=raw.get("tool_timeout_sec"),
             tool_allow=[str(x) for x in (raw.get("enabled_tools") or [])],
             tool_deny=[str(x) for x in (raw.get("disabled_tools") or [])],
             stripped_grants=grants, knob_only=not cmd and not url,
@@ -803,6 +823,7 @@ def normalize_mcp_entry(name: str, raw: dict[str, Any], source_style: str = "mcp
         name=name, transport=transport, command=str(cmd) if cmd else None,
         args=[str(x) for x in (raw.get("args") or [])], url=str(url) if url else None, cwd=raw.get("cwd"),
         env=env_map, headers=hdr_map, disabled=disabled, timeout=raw.get("timeout"),
+        startup_timeout_sec=raw.get("startup_timeout_sec"), tool_timeout_sec=raw.get("tool_timeout_sec"),
         tool_allow=[str(x) for x in (raw.get("includeTools") or raw.get("allowedTools") or [])],
         tool_deny=[str(x) for x in (raw.get("excludeTools") or raw.get("disabledTools") or [])],
         stripped_grants=grants, knob_only=knob_only,
@@ -811,6 +832,10 @@ def normalize_mcp_entry(name: str, raw: dict[str, Any], source_style: str = "mcp
 
 class UnrepresentableMcpServer(Exception):
     """Defer if the target cannot preserve source restrictions."""
+
+
+def vscode_env(value: str) -> str:
+    return re.sub(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}", r"${env:\1}", value)
 
 
 def serialize_mcp_for_json_style(srv: NormalizedMcp, target_style: str, redact_secrets: bool) -> tuple[dict[str, Any], list[str]]:
@@ -823,6 +848,9 @@ def serialize_mcp_for_json_style(srv: NormalizedMcp, target_style: str, redact_s
     url = inspect_url_secrets(srv.url)[0] if (redact_secrets and srv.url) else srv.url
     args = inspect_args_secrets(srv.args)[0] if redact_secrets else list(srv.args)
     vs = target_style == "vscode"
+    if vs:
+        args = [vscode_env(arg) for arg in args]
+        url = vscode_env(url) if url else url
 
     env_out: dict[str, str] = {}
     for k, v in srv.env.items():
@@ -845,9 +873,9 @@ def serialize_mcp_for_json_style(srv: NormalizedMcp, target_style: str, redact_s
             hdr_out[k] = f"Bearer ${{env:{bm.group(1)}}}" if vs else f"Bearer ${{{bm.group(1)}}}"
         elif em:
             hdr_out[k] = f"${{env:{em.group(1)}}}" if vs else f"${{{em.group(1)}}}"
-        elif redact_secrets:
-            ek = f"{slugify(srv.name).upper().replace('-', '_')}_{slugify(k).upper().replace('-', '_')}"
-            hdr_out[k] = (f"Bearer ${{env:{ek}}}" if vs else f"Bearer ${{{ek}}}") if v.lower().startswith("bearer ") else (f"${{env:{ek}}}" if vs else f"${{{ek}}}")
+        elif redact_secrets and "${input:" not in v:
+            binding = srv.header_binding(k, v)
+            hdr_out[k] = vscode_env(binding) if vs else binding
         else:
             hdr_out[k] = v
 
@@ -910,6 +938,10 @@ def serialize_mcp_for_json_style(srv: NormalizedMcp, target_style: str, redact_s
         entry["enabled" if target_style == "pi" else "disabled"] = False if target_style == "pi" else True
     if srv.timeout is not None:
         entry["timeout"] = srv.timeout
+    if target_style == "mcpServers":
+        for key in ("startup_timeout_sec", "tool_timeout_sec"):
+            if (value := getattr(srv, key)) is not None:
+                entry[key] = value
     if srv.tool_allow:
         entry["includeTools" if target_style == "gemini-cli" else "allowedTools"] = list(srv.tool_allow)
     if srv.tool_deny:
@@ -926,15 +958,15 @@ def toml_key(key: str) -> str:
     return key if re.fullmatch(r"[A-Za-z0-9_-]+", key) else toml_str(key)
 
 
-def render_codex_toml_server_block(srv: NormalizedMcp, redact_secrets: bool) -> tuple[str | None, list[str], bool]:
+def render_codex_toml_server_block(srv: NormalizedMcp, redact_secrets: bool, key_path: str = "mcp_servers") -> tuple[str | None, list[str], bool]:
     notes = [f"Excluded non-portable grants: {', '.join(sorted(srv.stripped_grants))}"] if srv.stripped_grants else []
     if srv.knob_only:
         notes.append(f"Deferred knob-only MCP entry '{srv.name}': Codex requires command or url")
         return None, notes, False
 
     has_lit = False
-    tname = toml_key(srv.name)
-    lines = [f"[mcp_servers.{tname}]"]
+    tname = ".".join(toml_key(k) for k in [*split_key_path(key_path), srv.name])
+    lines = [f"[{tname}]"]
     url = inspect_url_secrets(srv.url)[0] if (redact_secrets and srv.url) else srv.url
     args = inspect_args_secrets(srv.args)[0] if redact_secrets else list(srv.args)
     if not redact_secrets:
@@ -951,6 +983,12 @@ def render_codex_toml_server_block(srv: NormalizedMcp, redact_secrets: bool) -> 
             lines.append(f"cwd = {toml_str(srv.cwd)}")
     if srv.disabled:
         lines.append("enabled = false")
+    for key in ("startup_timeout_sec", "tool_timeout_sec"):
+        value = getattr(srv, key)
+        if value is not None:
+            if type(value) not in (int, float) or not 0 <= value < float("inf"):
+                return None, [f"Invalid {key}"], False
+            lines.append(f"{key} = {value}")
     if srv.tool_allow:
         lines.append(f"enabled_tools = [{', '.join(toml_str(x) for x in srv.tool_allow)}]")
     if srv.tool_deny:
@@ -991,9 +1029,9 @@ def render_codex_toml_server_block(srv: NormalizedMcp, redact_secrets: bool) -> 
         elif em:
             env_hdrs[hk] = em.group(1)
         elif redact_secrets:
-            ek = f"{slugify(srv.name).upper().replace('-', '_')}_{slugify(hk).upper().replace('-', '_')}"
+            ek = srv.header_binding(hk, hv).split("${", 1)[1][:-1]
             if hk.lower() == "authorization" and hv.lower().startswith("bearer "):
-                bearer_env = f"{slugify(srv.name).upper().replace('-', '_')}_BEARER_TOKEN"
+                bearer_env = ek
                 notes.append(f"Redacted Bearer header -> bearer_token_env_var = {bearer_env}")
             else:
                 env_hdrs[hk] = ek
@@ -1009,7 +1047,7 @@ def render_codex_toml_server_block(srv: NormalizedMcp, redact_secrets: bool) -> 
     if lit_hdrs:
         lines.append("http_headers = { " + ", ".join(f"{toml_key(k)} = {toml_str(v)}" for k, v in lit_hdrs.items()) + " }")
     if lit_env:
-        lines.extend(["", f"[mcp_servers.{tname}.env]"] + [f"{toml_key(k)} = {toml_str(v)}" for k, v in lit_env.items()])
+        lines.extend(["", f"[{tname}.env]"] + [f"{toml_key(k)} = {toml_str(v)}" for k, v in lit_env.items()])
     return "\n".join(lines) + "\n", notes, has_lit
 
 
@@ -1261,6 +1299,15 @@ class DiscoveredRule:
     description: str = ""
     source_path: Path = field(default_factory=Path)
     source_profile: str = ""
+    directory_scoped: bool = False
+
+
+def rule_deferral(rule: DiscoveredRule) -> str | None:
+    if rule.directory_scoped:
+        return "directory_scope_requires_manual_mapping"
+    if rule.source_profile == "claude-code" and re.search(r"(?<![\w\\])@\S", rule.body):
+        return "claude_import_dependencies_require_manual_mapping"
+    return None
 
 
 @dataclass
@@ -1337,7 +1384,7 @@ def scan_excluded_nearby(base: Path, workspace: Path, home: Path, out: list[dict
             seen.add(lp)
 
 
-def parse_rule_files(path: Path, scope: str, profile: str) -> list[DiscoveredRule]:
+def parse_rule_files(path: Path, scope: str, profile: str, *, native_rule: bool = False) -> list[DiscoveredRule]:
     text = path.read_text(encoding="utf-8")
     if not text.strip():
         return []
@@ -1349,7 +1396,8 @@ def parse_rule_files(path: Path, scope: str, profile: str) -> list[DiscoveredRul
     slug = slugify(bname)
     root_names = {"AGENTS.md", "CLAUDE.md", "CLAUDE.local.md", "GEMINI.md", "QWEN.md", "copilot-instructions.md", ".cursorrules", ".windsurfrules", "global_rules.md"}
     zed_native = profile == "zed" and path.name in {".rules", "AGENT.md"}
-    if path.name in root_names or zed_native or (path.name == ".clinerules" and path.is_file()):
+    claude_rule = profile == "claude-code" and native_rule
+    if not claude_rule and (path.name in root_names or zed_native or (path.name == ".clinerules" and path.is_file())):
         base_id = slugify(f"{scope}-{path.name}")
         found_sections = list(SECTION_RE.finditer(text))
         if found_sections:
@@ -1365,6 +1413,11 @@ def parse_rule_files(path: Path, scope: str, profile: str) -> list[DiscoveredRul
     meta, body = parse_frontmatter(text)
     if not meta and not text.startswith("---"):
         return [DiscoveredRule(slug, scope, "always_on", text, source_path=path, source_profile=profile)]
+    if claude_rule:
+        globs = split_globs(meta.get("paths"))
+        kind = "glob_scoped" if globs else "always_on"
+        return [DiscoveredRule(slug, scope, kind, body if body.strip() else text, globs=globs,
+                               source_path=path, source_profile=profile)]
     always = meta.get("alwaysApply") is True or str(meta.get("trigger", "")).lower() == "always_on"
     globs = split_globs(meta.get("globs") or meta.get("paths") or meta.get("applyTo"))
     desc = str(meta.get("description") or "").strip()
@@ -1454,6 +1507,15 @@ def discover_profile(profile: str, workspace: Path, home: Path, scope: str, cate
                 project_doc = next((workspace / n for n in _ZED_PROJECT_INSTRUCTIONS if (workspace / n).is_file()), None)
             _collect_rule_path("project", project_doc, workspace)
             _collect_rule_path("project", pp.proj_rules, workspace)
+            if pp.profile == "codex":
+                for root, dirs, files in os.walk(workspace):
+                    dirs[:] = sorted(d for d in dirs if not d.startswith(".") and d not in EXCLUDED_DIR_NAMES)
+                    folder = Path(root)
+                    if folder == workspace:
+                        continue
+                    for name in ("AGENTS.override.md", "AGENTS.md"):
+                        if name in files:
+                            _collect_rule_path("project", folder / name, workspace)
         if wu:
             _collect_rule_path("user", pp.user_doc, pp.contained_root(pp.user_doc, "user", workspace, home))
             _collect_rule_path("user", pp.user_rules, home)
@@ -1467,7 +1529,15 @@ def discover_profile(profile: str, workspace: Path, home: Path, scope: str, cate
             if rp not in seen_rp:
                 seen_rp.add(rp)
                 ex_slugs = {(x.scope, x.kind, x.slug) for x in inv.rules}
-                for pr in parse_rule_files(rpath, rsc, pp.profile):
+                rel = rpath.relative_to(aroot)
+                rules_root = pp.proj_rules if rsc == "project" else pp.user_rules
+                scoped = pp.profile == "codex" and rsc == "project" and len(rel.parts) > 1
+                native_rule = rules_root is not None and rpath.is_relative_to(rules_root)
+                nested = native_rule and rules_root is not None and rpath.parent != rules_root
+                for pr in parse_rule_files(rpath, rsc, pp.profile, native_rule=native_rule):
+                    pr.directory_scoped = scoped
+                    if scoped or nested:
+                        pr.slug = f"{pr.slug}-{sha256_bytes(rel.as_posix().encode())[:12]}"
                     if (pr.scope, pr.kind, pr.slug) not in ex_slugs:
                         inv.rules.append(pr)
                         ex_slugs.add((pr.scope, pr.kind, pr.slug))
@@ -1630,6 +1700,8 @@ def apply_rule_to_target(
     backups: BackupManager, warnings: list[dict[str, Any]], dry_run: bool,
 ) -> dict[str, Any]:
     tp, is_p = tpp.profile, rule.scope == "project"
+    if reason := rule_deferral(rule):
+        return act("instructions", rule.slug, "deferred", reason=reason)
 
     def target_root(dst: Path) -> Path:
         root = tpp.contained_root(dst, rule.scope, workspace, home or workspace)
@@ -1872,7 +1944,10 @@ def _redact_document_text(text: str) -> str:
     out = BEARER_LITERAL_RE.sub("Bearer " + D + "{REDACTED_SECRET}", out)
 
     def _header(m: re.Match[str]) -> str:
-        return m.group(1) + D + "{REDACTED_SECRET}"
+        start = m.end(1)
+        end = m.string.find("\n", start)
+        rest = m.string[start:(None if end < 0 else end)].rstrip()
+        return m.group(0) if PY_ENV_LOOKUP_RE.fullmatch(rest) else m.group(1) + D + "{REDACTED_SECRET}"
 
     out = re.sub(
         r"(?im)^([ \t]*[\"\x27]?(?:authorization|proxy-authorization|x-api-key|api[-_]?key|"
@@ -1913,6 +1988,13 @@ def apply_mcp_servers_to_file(
         else:
             hs, sl = cands[0].secret_summary()
             results.append(act("mcp", name, "conflict", dst_path, reason="conflicting_definitions_across_sources", has_secrets=hs, secrets=sl))
+    eligible = []
+    for srv in incoming:
+        if reason := srv.deferred_reason():
+            results.append(act("mcp", srv.name, "deferred", dst_path, reason=reason))
+        else:
+            eligible.append(srv)
+    incoming = eligible
     if not incoming:
         return results
 
@@ -1949,15 +2031,17 @@ def apply_mcp_servers_to_file(
                 any_sec = True
 
     if afmt == "toml":
+        if not split_key_path(dst_key_path):
+            raise SafetyRefusalError("invalid_mcp_key_path", "TOML MCP destination must name a table")
         ex_text = dst_path.read_text(encoding="utf-8") if dst_path.exists() else ""
         blocks: list[str] = []
         for srv in incoming:
             hs, sl = srv.secret_summary()
             if srv.name in existing_map:
-                same = existing_map[srv.name].comparison_signature(redact_secrets=redact_secrets) == srv.comparison_signature(redact_secrets=redact_secrets)
+                same = existing_map[srv.name].comparison_signature() == srv.comparison_signature(redact_secrets=redact_secrets)
                 results.append(act("mcp", srv.name, "noop" if same else "conflict", dst_path, reason=None if same else "existing_target_server_differs", has_secrets=hs and (not redact_secrets if same else True), secrets=sl))
                 continue
-            blk, notes, lit_out = render_codex_toml_server_block(srv, redact_secrets=redact_secrets)
+            blk, notes, lit_out = render_codex_toml_server_block(srv, redact_secrets=redact_secrets, key_path=dst_key_path)
             if blk is None:
                 results.append(act("mcp", srv.name, "deferred", dst_path, reason="; ".join(notes) or "unrepresentable_in_codex_toml", has_secrets=hs, secrets=sl))
                 continue
@@ -1983,7 +2067,7 @@ def apply_mcp_servers_to_file(
     for srv in incoming:
         hs, sl = srv.secret_summary()
         if srv.name in existing_map:
-            same = existing_map[srv.name].comparison_signature(redact_secrets=redact_secrets) == srv.comparison_signature(redact_secrets=redact_secrets)
+            same = existing_map[srv.name].comparison_signature() == srv.comparison_signature(redact_secrets=redact_secrets)
             results.append(act("mcp", srv.name, "noop" if same else "conflict", dst_path, reason=None if same else "existing_target_server_differs", has_secrets=hs and (not redact_secrets if same else True), secrets=sl))
             continue
         try:
@@ -2126,11 +2210,10 @@ def apply_doc_item_to_target(
         return act(item.category, item.name, "parked_draft", park, reason=f"No direct {item.category} directory on {tp}")
 
     dst_name = name
-    if tp == "vscode":
-        if item.category == "commands" and not dst_name.endswith(".prompt.md"):
-            dst_name = dst_name[:-3] + ".prompt.md" if dst_name.endswith(".md") else dst_name + ".prompt.md"
-        elif item.category == "agents" and not dst_name.endswith(".agent.md"):
-            dst_name = dst_name[:-3] + ".agent.md" if dst_name.endswith(".md") else dst_name + ".agent.md"
+    if tp == "vscode" and dst_name.endswith(".md"):
+        suffix = {"commands": ".prompt.md", "agents": ".agent.md"}.get(item.category)
+        if suffix and not dst_name.endswith(suffix):
+            dst_name = dst_name[:-3] + suffix
     dst = dst_dir / dst_name
     root = target_root(dst)
     if dst.resolve(strict=False) == item.path.resolve(strict=False):
@@ -2339,6 +2422,9 @@ def cmd_export_device(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
                 seen_ex.add(ex["path"])
                 excluded_all.append(ex)
         for idx, r in enumerate(inv.rules):
+            if reason := rule_deferral(r):
+                excluded_all.append({"path": logical_path_str(r.source_path, ws, home), "reason": reason})
+                continue
             rule_bytes = r.body.encode("utf-8")
             rule_has_secrets = _resource_contains_secrets(rule_bytes)
             rule_data = _redact_resource(rule_bytes) if (args.redact_secrets and rule_has_secrets) else rule_bytes
@@ -2375,7 +2461,10 @@ def cmd_export_device(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
                 hs, sl = srv.secret_summary()
                 any_s = any_s or (hs and not args.redact_secrets)
                 asec.extend(sl)
-                emap[srv.name] = serialize_mcp_for_json_style(srv, "mcpServers", redact_secrets=args.redact_secrets)[0]
+                entry, _ = serialize_mcp_for_json_style(srv, "mcpServers", redact_secrets=args.redact_secrets)
+                if srv.url:
+                    entry["type"] = srv.transport
+                emap[srv.name] = entry
             _stage(f"files/{prof}/{msc}/mcp/selected-mcp.json", (json.dumps({"mcpServers": emap}, indent=2, ensure_ascii=False) + "\n").encode("utf-8"), {
                 "profile": prof, "category": "mcp", "scope": msc, "id": f"{prof}-{msc}-mcp",
                 "server_names": [s.name for s in srvs], "has_secrets": any_s, "secrets": asec,
@@ -2502,8 +2591,12 @@ def cmd_import_device(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
             executable = e.get("mode") == "0o700"
             skill_groups.setdefault((prof, esc, name), {})[relative] = (data, executable)
         elif cat == "mcp":
-            for srv in read_mcp_file(bp, "mcpServers", "mcpServers", fmt="json").values():
+            for mcp_name, raw in get_nested_dict(json.loads(data), ["mcpServers"]).items():
+                if not isinstance(raw, dict):
+                    continue
+                srv = normalize_mcp_entry(mcp_name, raw)
                 srv.source_profile = prof
+                srv.bundle_import = True
                 pinv.mcp_servers[esc].append(srv)
         else:
             pinv.doc_items.append(DiscoveredDocItem(cat, name, esc, bp, data, prof,
@@ -2585,7 +2678,8 @@ def cmd_patch_mcp(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
     if not src_f.is_file():
         raise SafetyRefusalError("missing_src_file", f"Source MCP file does not exist: {src_f}")
     s_style = infer_mcp_style_from_key(args.src_key_path, args.src_format, src_f)
-    d_style = infer_mcp_style_from_key(args.dst_key_path, args.dst_format, dst_f)
+    dst_key = args.dst_key_path or ("mcp_servers" if args.dst_format == "toml" or dst_f.suffix.lower() == ".toml" else "mcpServers")
+    d_style = infer_mcp_style_from_key(dst_key, args.dst_format, dst_f)
     selected = list(read_mcp_file(src_f, args.src_key_path, s_style, fmt=args.src_format).values())
     if args.servers:
         wanted = {x.strip() for x in args.servers.split(",") if x.strip()}
@@ -2594,7 +2688,7 @@ def cmd_patch_mcp(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
     warnings: list[dict[str, Any]] = []
     patch_auth_root: Path | None = ws if dst_f.is_relative_to(ws) else (home if dst_f.is_relative_to(home) else None)
     res = apply_mcp_servers_to_file(
-        selected, dst_path=dst_f, dst_key_path=args.dst_key_path, dst_style=d_style, dst_fmt=args.dst_format,
+        selected, dst_path=dst_f, dst_key_path=dst_key, dst_style=d_style, dst_fmt=args.dst_format,
         redact_secrets=args.redact_secrets, allow_git_tracked_secrets=args.allow_git_tracked_secrets,
         claude_local_fallback_file=None, workspace=ws, auth_root=patch_auth_root, backups=backups, warnings=warnings, dry_run=args.dry_run,
     )
@@ -2686,7 +2780,7 @@ def build_parser() -> argparse.ArgumentParser:
     pp.add_argument("--src-file", required=True, help="Source MCP config file.")
     pp.add_argument("--src-key-path", default="mcpServers", help="Dotpath or '/json/pointer' to source MCP map.")
     pp.add_argument("--dst-file", required=True, help="Destination MCP config file.")
-    pp.add_argument("--dst-key-path", default="mcpServers", help="Dotpath or '/json/pointer' to destination MCP map.")
+    pp.add_argument("--dst-key-path", help="Dotpath or '/json/pointer' to destination MCP map.")
     pp.add_argument("--src-format", choices=("auto", "json", "jsonc", "toml"), default="auto", help="Source format.")
     pp.add_argument("--dst-format", choices=("auto", "json", "toml"), default="auto", help="Destination format.")
     pp.add_argument("--servers", default=None, help="Optional comma-separated server names.")
