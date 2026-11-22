@@ -102,6 +102,14 @@ class SkillContract(unittest.TestCase):
         self.assertIn("user-authored memory", entry)
         self.assertIn("preview requests make no target changes", entry)
 
+    def test_agent_usage_contract_stays_documented(self) -> None:
+        entry = (SKILL / "SKILL.md").read_text(encoding="utf-8").lower()
+        self.assertIn("pull the latest", entry)
+        self.assertIn("never open the secret", entry)
+        agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8").lower()
+        self.assertIn("keep the migration script current", agents)
+        self.assertIn("must not read `.env` files", agents)
+
     def test_publication_excludes_development_and_preserves_script_exec_bit(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "skill.zip"

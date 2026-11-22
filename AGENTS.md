@@ -20,6 +20,18 @@ private backups, and transfer folders must use `0700` directories and `0600` fil
 protect Git-tracked project files against silent secret writes, and always exclude
 chat histories, transcripts, databases, caches, indexes, and approval/trust grants.
 
+Keep the migration script current. When a client adds a new profile, a path, or a
+conversion, fix `scripts/migrate_context.py` in the same change instead of
+describing the workaround in prose, and bump `metadata.version` in the published
+Skill when published behavior changes. Users are told to pull the latest version
+before use, so a stale published Skill is a support burden.
+
+Agents must not read `.env` files or other secret-bearing sources themselves. To
+pack a device archive or migrate context on this machine, run
+`scripts/migrate_context.py`; it moves credentials disk-to-disk without exposing
+values to the prompt. Reading a secret file to move it by hand defeats the point of
+the script.
+
 Keep every requested context type in the inventory. Unknown formats require source
 verification, not fabricated paths or a blanket unsupported label. Preserve scope,
 activation, restrictions, user-authored memory, and unrelated target files. Never
