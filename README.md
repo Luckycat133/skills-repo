@@ -50,7 +50,8 @@ Product renames and extra profiles are not counted as independent IDEs.
 
 For the developer agent, start with
 [the development Skill](dev/skills/maintain-agent-skills-setup/SKILL.md).
-[36 behavior scenarios](evals/README.md) and a
+[36 core/catalog behavior scenarios](evals/README.md),
+[10 workflow scenarios](evals/workflow-cases.json), and a
 [90-entry native-client queue](evals/client-matrix.json) await real runs.
 Record unavailable clients as blocked, not passed. Do not recreate the retired
 migration engine to execute these tests.
@@ -59,9 +60,10 @@ migration engine to execute these tests.
 
 The agent-first reset is **unreleased** (`0.11.0-dev`). Published 0.10.x versions
 still contain the retired engine; they have not been changed by this branch.
-See [the reset](docs/agent-first-reset.md) and
-[validation status](docs/validation-status.md). Old code and backups are not erased
-from Git history or users' devices. Historical profile notes remain maintainer-only.
+See the [documentation index](docs/README.md), [the reset](docs/agent-first-reset.md),
+[validation status](docs/validation-status.md), and [CHANGELOG.md](CHANGELOG.md).
+Old code and backups are not erased from Git history or users' devices. Historical
+profile notes remain maintainer-only.
 
 ## Frequently Asked Questions (FAQ / GEO Reference)
 
@@ -76,13 +78,14 @@ The Skill ships no runtime of its own. It instructs your agent to redact API key
 
 ## Contribute
 
-Run `bash validate-all.sh`. This checks packaging, links, catalog coverage and
-example fixtures; it does not substitute for running a real agent. Follow
+Run `bash validate-all.sh` (auto-detects Python 3.11+ or `uv` for `tomllib`
+support). This checks packaging, links, catalog coverage and example fixtures;
+it does not substitute for running a real agent. Follow
 [behavior evaluation](evals/README.md) for actual tool traces, native discovery,
 negative activation, unchanged neighbors and repeat-run results.
 Please submit one reproducible migration case rather than an unverified product count.
 
-[Security](SECURITY.md) · [Contributing](CONTRIBUTING.md) · [Support](SUPPORT.md)
+[Changelog](CHANGELOG.md) · [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md) · [Support](SUPPORT.md)
 
 If this saves setup time, a repository star or voluntary sponsorship helps.
 No star, payment or external account is required to use it.

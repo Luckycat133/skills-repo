@@ -1,29 +1,69 @@
 # Changelog
 
-## Unreleased — workflow, evidence and delivery review (2026-11-14)
+All notable changes to this repository are documented in this file.
+This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-- Clarify native CLI use and retired runtime commands without restoring an engine.
-- Add Registry v2 interpretation rules: archived policies are evidence to recheck,
-  not current write authority; compatibility remains per profile/surface/version.
-- Add per-object delivery outcomes and separate syntax/discovery/activation/runtime
-  results, preview zero-artifact rules, concurrent-edit checks and private recovery.
-- Require checkout/version provenance when reporting local validation; retain older
-  logs as user-reported until their source revision and evidence are available.
-- Add 10 pending workflow scenarios and 10 structural/rubric regression checks.
-  These are not new native-client passes; candidate remains `0.11.0-dev`.
-- Publish only two additional on-demand Markdown references; no runtime or dependency
-  is added and no historical product evidence date is refreshed by this review.
+## [Unreleased] (0.11.0-dev)
 
-## Unreleased — agent-first scope reset
+Metadata remains `0.11.0-dev` (unreleased candidate; not a published `0.11.0` release).
 
-- Replace the standalone migration engine with a guidance-first Skill using host
-  agent tools; metadata is `0.11.0-dev`, not a published release.
-- Remove runtime CLI, ACB/signing orchestration and generated compatibility claims
-  from the active package; retain the full former implementation in Git history.
+### Added
+
 - Add rule/MCP worked conversions, all-context inventory, conflict/scope guidance,
-  authored-memory distinctions and plain-folder device transfer.
-- Add a repository-only development Skill with access-dependent acceptance work.
-- Separate structural/package checks from real agent and real IDE evaluation.
+  authored-memory distinctions, and plain-folder device transfer to the guidance-only Skill.
+- Add 30 on-demand family references routing all 87 historical product identifiers
+  (90 profile/category sections) alongside the 2026-11-07 research ledger and a
+  repository-only development Skill (`dev/skills/maintain-agent-skills-setup/`).
+- Add two on-demand Markdown references to the user package without adding any runtime or
+  dependency: native CLI guidance (`references/cli-workflow.md`) and historical Registry v2
+  interpretation rules (`references/registry-v2.md`).
+- Add per-object delivery outcomes, explicit separation of syntax/discovery/activation/runtime
+  verification levels, preview zero-artifact rules, concurrent-edit checks, private recovery
+  handling, and checkout/version provenance requirements for local validation reports.
+- Add 10 pending host-agent workflow scenarios (`evals/workflow-cases.json`) and 10
+  structural/rubric contract checks (`tests/test_workflow_contract.py`); these remain
+  unrun behavior scenarios rather than native-client passes.
 
-Earlier release history is preserved in
+### Changed
+
+- Replace the standalone migration engine with an agent-first, guidance-only Skill
+  (`skills/agent-skills-setup/`) executed through host-agent tools.
+- Separate structural/package checks (`validate-all.sh`) from real host-agent and
+  native-IDE behavior evaluation; retain older unverified validation logs as user-reported
+  until checkout revision and evidence are attached.
+
+### Fixed
+
+- Detect an available Python 3.11+ interpreter or `uv` automatically in `validate-all.sh`
+  so `tomllib`-dependent structural tests run cleanly when the default `python3` is older.
+
+### Removed
+
+- Remove runtime CLI, ACB/signing orchestration, and generated compatibility claims from the
+  active user package; the full former implementation remains preserved in Git history.
+
+## [0.10.3] - 2026-11-11
+
+Pre-reset maintenance on the `0.10.x` line prior to the `0.11.0-dev` agent-first scope reset.
+
+### Fixed
+
+- Persist recovery journals before migration or Skill installation replaces directories,
+  retaining complete old trees across the rename gap and enforcing conservative recovery
+  for interrupted installs (`#28`).
+- Bind migration plans, verification, and rollback guards to file/directory modes
+  separately from unchanged content hashes so mode-only target or backup drift is detected (`#28`).
+- Refresh 16 stale/broken vendor documentation URLs (19 failing source links) in the
+  product catalog freshness checks.
+
+### Docs
+
+- Add `llms.txt` and `llms-full.txt` aligned with the `llmstxt.org` specification, plus a
+  generative-engine FAQ section in `README.md` (`#32`, `#33`).
+
+### Changed
+
+- Bump GitHub Actions workflow dependencies and `actions/setup-python` (`#21`, `#30`).
+
+Earlier release history (`<= 0.10.2`) is preserved untouched in
 [the historical changelog](docs/history/CHANGELOG-before-agent-first.md).
