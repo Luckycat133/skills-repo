@@ -17,7 +17,9 @@ local overrides. Keep technical requirements and human language intact.
 Cursor `.mdc` uses `alwaysApply`, `globs` (often unquoted such as `globs: *.py` or
 comma-separated `src/**/*.ts, tests/**/*.ts`, or brace-expanded `src/**/*.{ts,tsx}`),
 and `description`. **`alwaysApply: true` overrides `globs`**. Claude Code uses YAML
-`paths: [...]`; VS Code uses `applyTo: "..."`; Windsurf uses `trigger: always_on | glob | model_decision | manual`.
+`paths: [...]`; VS Code uses `applyTo: "..."`; Antigravity and Windsurf use
+`trigger: always_on | glob | model_decision | manual` (Antigravity `rules/*.md`
+must declare `trigger`, and `AGENTS.md` / `GEMINI.md` hold unconditional rules).
 
 ## Worked example: Cursor scoped rule to Claude Code
 

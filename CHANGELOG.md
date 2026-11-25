@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased — Antigravity / Claude Code / Codex completeness & 3-way equivalence (2026-11-25)
+
+- **macOS & CLI ergonomics**: Auto-detect Python 3.11+ or `uv` in `validate-all.sh` and
+  add a Python 3.11+ self-bootstrap in `migrate_context.py`; add `anti`/`agy`/`cc`/`cx`
+  profile shortcuts, `inspect --summary`, top-level `totals`, optional `--output` on
+  `export-device`, and graceful broken-symlink exclusion.
+- **Complete Antigravity, Claude Code & Codex coverage**:
+  - **Antigravity**: Align primary user paths to `~/.gemini/config/` (`AGENTS.md`,
+    `rules/*.md`, `skills/`, `agents/`, `workflows/`, `hooks.json`, `mcp_config.json`),
+    preserve legacy paths, add plugins + `config.json` registry, discovery manifests,
+    scripts, parked sidecars, portable `userSettings`, CLI settings/keybindings,
+    `timeoutSeconds`, `enabledTools`, and legacy SSE deferral.
+  - **Claude Code**: Add `.claude/settings.local.json` hooks, same-profile `--activate-hooks`
+    surgical merge into `settings.json`, portable `settings.json` + `env` out-of-band
+    secrets, plugin registries, and workspace-encoded project memory remapping.
+  - **Codex**: Add `AGENTS.override.md`, `.codex/agents/` & `$CODEX_HOME/agents/`,
+    `hooks.json`, `$CODEX_HOME/scripts/`, parked `.rules` policies, portable `config.toml`
+    surgical merge (preserving `approval_policy` & `[mcp_servers]`), and `.system` skip.
+- **3-way equivalent migration (`Antigravity <-> Claude Code <-> Codex`)**: Add native
+  Antigravity rule `trigger` conversion (`glob`/`model_decision`/`manual`), Antigravity
+  `SKILL.md` frontmatter synthesis, workflow <-> command <-> manual Skill mapping, and
+  custom agent frontmatter/tool translation across all three IDEs.
+
 ## Unreleased — workflow, evidence and delivery review (2026-11-14)
 
 - Clarify native CLI use and retired runtime commands without restoring an engine.

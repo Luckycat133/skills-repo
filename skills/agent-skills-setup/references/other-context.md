@@ -24,17 +24,21 @@ when schemas differ, park a draft in `.migration-review/commands/` and report lo
 ## Agents, modes, personas, and subagents
 
 Preserve role prompt, tool allow/deny lists, model hints, and isolation (`context: fork`)
-only against verified target schemas (`.claude/agents/*.md`, `.cursor/agents/*.md`,
-`.github/agents/*.agent.md`, `.kilo/agents/*.md`, `.junie/agents/*.md`). Never drop a
-source restriction to grant broader tool access silently, and never import approval grants.
+only against verified target schemas (`.agents/agents/*.md` & `~/.gemini/config/agents/`,
+`.claude/agents/*.md`, `.codex/agents/`, `.cursor/agents/*.md`, `.github/agents/*.agent.md`,
+`.kilo/agents/*.md`, `.junie/agents/*.md`). `migrate_context.py` translates tool names
+and frontmatter across Antigravity (`subagent: true`, `mainAgent: false`, `read_file`/
+`edit_file`/`write_file`/`run_command`/`search_web`), Claude Code (`Read`/`Edit`/`Write`/
+`Bash`/`WebSearch`), and Codex without silently dropping restrictions.
 
-## Hooks and executable automations
+## Hooks, sidecars, and executable automations
 
-Hooks, cron jobs, setup scripts, and workflow verifiers execute arbitrary commands.
-Keep migrated hooks parked in `.migration-review/hooks/<target>/` (`0700`/`0600`) by
-default; write to live hook paths only when the user explicitly approves
-`--activate-hooks` after confirming event and I/O semantics. Never invent a fake
-`enabled: false` key in a live hook file or execute hook commands during migration.
+Hooks, sidecars, Codex `.rules` command policies, cron jobs, and setup scripts execute
+arbitrary commands. Keep migrated hooks/sidecars/policies parked in `.migration-review/`
+(`0700`/`0600`) by default; write to live paths only when `--activate-hooks` is
+approved (and on same-profile restore for sidecars, Codex `.rules`, and Claude
+`settings.json` `hooks`). Never invent a fake `enabled: false` key or execute scripts
+during migration.
 
 ## Plugins, extensions, and authored memory
 

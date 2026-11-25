@@ -56,9 +56,9 @@ Ask your host agent in natural language:
 Or run the deterministic helper directly (`--dry-run` previews with zero writes):
 
 ```bash
-python3 skills/agent-skills-setup/scripts/migrate_context.py inspect --workspace . --scope all
-python3 skills/agent-skills-setup/scripts/migrate_context.py migrate --source cursor --target claude-code --workspace . --dry-run
-python3 skills/agent-skills-setup/scripts/migrate_context.py export-device --output ~/context-transfer --profiles all
+python3 skills/agent-skills-setup/scripts/migrate_context.py inspect --workspace . --profiles anti,claude,codex --summary
+python3 skills/agent-skills-setup/scripts/migrate_context.py migrate --source anti --target claude,codex --workspace . --dry-run
+python3 skills/agent-skills-setup/scripts/migrate_context.py export-device --profiles anti,claude,codex --output ~/context-transfer
 python3 skills/agent-skills-setup/scripts/migrate_context.py import-device --input ~/context-transfer --target same
 ```
 

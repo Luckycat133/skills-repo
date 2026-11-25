@@ -34,9 +34,9 @@ cp -R skills-repo/skills/agent-skills-setup /path/to/your-skills-dir/agent-skill
 ## 一句话自然语言用法示例
 
 - *“把我当前项目里的 Cursor 规则、Skills 和所有 MCP 配置（含 API Key）迁移到 Claude Code 和 Codex。”*
-- *“把我的 Cursor MCP 配置迁移到 VS Code，但不要复制明文密钥，改成环境变量引用。”*
-- *“我要换新电脑了，把我所有 AI 编程工具的配置和密钥导出到 `~/context-transfer`。”*
+- *“导出我在 Antigravity、Claude Code 和 Codex 里的全部配置到 `~/context-transfer`，方便换电脑直接导入。”*
 - *“在这台新电脑上从 `~/context-transfer` 恢复我的全部配置。”*
+- *“把我在 Antigravity 的规则、Skills、Subagents、Workflows 和 MCP 等价迁移到 Claude Code 和 Codex。”*
 
 ## 验证与当前状态
 

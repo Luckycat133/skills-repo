@@ -70,7 +70,8 @@ for `patch-mcp`:
 | VS Code (Local) | `.vscode/mcp.json`, profile `mcp.json` | `servers` (`type: "stdio"\|"http"`, `${env:VAR}`, `${input:ID}`) |
 | Copilot CLI | `~/.copilot/mcp-config.json` | `mcpServers` |
 | Gemini CLI | `.gemini/settings.json`, `~/.gemini/settings.json` | `mcpServers` (`httpUrl` for Streamable HTTP, preserve sibling keys) |
-| Antigravity / Windsurf | `.agents/mcp_config.json`, `~/.gemini/antigravity/mcp_config.json`, `~/.codeium/windsurf/mcp_config.json` | `mcpServers` (`serverUrl` for remote HTTP) |
+| Antigravity | `.agents/mcp_config.json`, `~/.gemini/config/mcp_config.json` (legacy `~/.gemini/antigravity/mcp_config.json`) | `mcpServers` (`serverUrl`, `timeoutSeconds`, `enabledTools`/`disabledTools`; legacy SSE deferred) |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` | `mcpServers` (`serverUrl` for remote HTTP) |
 | Cline | `~/.cline/data/settings/cline_mcp_settings.json` | `mcpServers` (never copy `~/.cline/data/tasks` or DBs) |
 | Zed | `.zed/settings.json`, `~/.config/zed/settings.json` | `context_servers` (`command: {"path", "args", "env"}`) |
 | OpenCode | `opencode.json`, `~/.config/opencode/opencode.json` | V1 `mcp` / V2 `mcp.servers` (`command: [...]`, `environment: {...}`) |

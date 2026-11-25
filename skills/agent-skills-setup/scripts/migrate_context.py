@@ -17,17 +17,66 @@ import re
 import stat
 import subprocess
 import sys
-import tomllib
 from typing import Any, Iterable
+
+
+def _ensure_python_311() -> None:
+    if sys.version_info >= (3, 11) or os.environ.get("_MIGRATE_CONTEXT_REEXEC") == "1":
+        return
+    import shutil as _shutil
+    candidates: list[str] = []
+    for name in ("python3.13", "python3.12", "python3.11", "python3"):
+        found = _shutil.which(name)
+        if found:
+            candidates.append(found)
+    for prefix in ("/opt/homebrew/bin", "/usr/local/bin", os.path.expanduser("~/.local/bin")):
+        for name in ("python3.13", "python3.12", "python3.11"):
+            cand_path = os.path.join(prefix, name)
+            if os.path.isfile(cand_path) and os.access(cand_path, os.X_OK):
+                candidates.append(cand_path)
+    seen: set[str] = set()
+    for cand in candidates:
+        real = os.path.realpath(cand)
+        if real in seen or real == os.path.realpath(sys.executable):
+            continue
+        seen.add(real)
+        try:
+            chk = subprocess.run(
+                [cand, "-c", "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)"],
+                capture_output=True, check=False, timeout=5,
+            )
+            if chk.returncode == 0:
+                env = dict(os.environ)
+                env["_MIGRATE_CONTEXT_REEXEC"] = "1"
+                os.execve(cand, [cand, *sys.argv], env)
+        except OSError:
+            continue
+    uv_bin = _shutil.which("uv") or os.path.expanduser("~/.local/bin/uv")
+    if uv_bin and os.path.isfile(uv_bin) and os.access(uv_bin, os.X_OK):
+        env = dict(os.environ)
+        env["_MIGRATE_CONTEXT_REEXEC"] = "1"
+        os.execve(uv_bin, [uv_bin, "run", "--no-project", "--python", ">=3.11", "python", *sys.argv], env)
+    sys.stderr.write("[migrate_context] ERROR [python_version_too_old]: Python 3.11+ or uv is required (tomllib).\n")
+    sys.stdout.write(json.dumps({
+        "ok": False,
+        "error": "python_version_too_old",
+        "message": "Python 3.11+ or uv is required to run migrate_context.py.",
+    }, indent=2) + "\n")
+    raise SystemExit(2)
+
+
+_ensure_python_311()
+import tomllib
 
 D = chr(36)  # "$" 占位符前缀，避免在源码里写出会被外层模板吃掉的花括号
 SCHEMA_VERSION = "0.11.0-dev"
 
 PROFILE_ALIASES: dict[str, str] = {
-    "claude": "claude-code", "claude-code": "claude-code", "cursor": "cursor",
-    "codex": "codex", "vscode": "vscode", "copilot": "copilot-cli",
+    "claude": "claude-code", "claude-code": "claude-code", "cc": "claude-code", "cursor": "cursor",
+    "codex": "codex", "cx": "codex", "vscode": "vscode", "copilot": "copilot-cli",
     "copilot-app": "copilot-cli", "copilot-cli": "copilot-cli",
-    "gemini": "gemini-cli", "gemini-cli": "gemini-cli", "antigravity": "antigravity",
+    "gemini": "gemini-cli", "gemini-cli": "gemini-cli",
+    "antigravity": "antigravity", "anti": "antigravity", "agy": "antigravity",
     "windsurf": "windsurf", "codeium": "windsurf", "cline": "cline",
     "kilocode": "kilocode", "kilo": "kilocode", "zed": "zed", "opencode": "opencode",
     "kimi-code": "kimi-code", "kimiai": "kimi-code", "qwen-code": "qwen-code",
@@ -36,7 +85,8 @@ PROFILE_ALIASES: dict[str, str] = {
 CANONICAL_PROFILES = tuple(dict.fromkeys(PROFILE_ALIASES.values()))
 ALL_CATEGORIES = (
     "instructions", "skills", "mcp", "commands", "agents",
-    "hooks", "workflows", "env_secrets", "memory",
+    "hooks", "workflows", "plugins", "settings", "scripts",
+    "manifests", "sidecars", "env_secrets", "memory",
 )
 
 SENSITIVE_KEY_RE = re.compile(
@@ -115,13 +165,18 @@ AUTOLOAD_PARTS = (
     (".cursor", "commands"), (".cursor", "agents"),
     (".claude", "rules"), (".claude", "skills"),
     (".claude", "commands"), (".claude", "agents"),
-    (".codex", "prompts"),
+    (".codex", "prompts"), (".codex", "agents"), (".codex", "rules"), (".codex", "skills"),
     (".agents", "skills"), (".agents", "rules"), (".agents", "workflows"),
+    (".agents", "agents"), (".agents", "plugins"),
     (".github", "instructions"), (".github", "skills"),
     (".github", "prompts"), (".github", "agents"),
     (".windsurf", "rules"), (".windsurf", "skills"), (".windsurf", "workflows"),
     (".copilot", "agents"),
     (".gemini", "skills"), (".gemini", "commands"), (".gemini", "agents"),
+    (".gemini", "config", "rules"), (".gemini", "config", "skills"),
+    (".gemini", "config", "agents"), (".gemini", "config", "workflows"),
+    (".gemini", "config", "plugins"), (".gemini", "config", "sidecars"),
+    (".gemini", "antigravity", "skills"),
     (".qwen", "skills"), (".qwen", "commands"), (".qwen", "agents"),
     (".kilo", "skills"), (".kilo", "agents"), (".kilo", "workflows"),
     (".opencode", "commands"), (".opencode", "agents"),
@@ -171,7 +226,12 @@ def resolve_profile(name: str) -> str:
 def parse_categories(raw: str) -> set[str]:
     if not raw or raw.strip().lower() == "all":
         return set(ALL_CATEGORIES)
-    alias_map = {"rules": "instructions", "env": "env_secrets", "secrets": "env_secrets"}
+    alias_map = {
+        "rules": "instructions",
+        "env": "env_secrets",
+        "secrets": "env_secrets",
+        "config": "settings",
+    }
     out: set[str] = set()
     for part in raw.split(","):
         p = alias_map.get(part.strip().lower(), part.strip().lower())
@@ -750,7 +810,8 @@ class NormalizedMcp:
             "url": (f"{inspect_url_secrets(url_val)[0]}#{sha256_prefix(url_val)}" if (url_val and inspect_url_secrets(url_val)[1]) else vscode_env(url_val) if url_val else None),
             "env": norm_env, "headers": norm_hdr, "disabled": self.disabled, "knob_only": self.knob_only,
             "tool_allow": sorted(self.tool_allow), "tool_deny": sorted(self.tool_deny),
-            "startup_timeout_sec": self.startup_timeout_sec, "tool_timeout_sec": self.tool_timeout_sec,
+            "startup_timeout_sec": self.startup_timeout_sec,
+            "tool_timeout_sec": self.tool_timeout_sec if self.tool_timeout_sec is not None else self.timeout,
         }
 
 
@@ -814,12 +875,13 @@ def normalize_mcp_entry(name: str, raw: dict[str, Any], source_style: str = "mcp
         bm, em = BEARER_ENV_RE.match(sv), ENV_PLACEHOLDER_RE.match(sv)
         hdr_map[str(k)] = f"Bearer ${{{bm.group(1)}}}" if bm else (f"${{{em.group(1)}}}" if em else sv)
     knob_only = not cmd and not url and any(k in raw for k in ("enabled", "disabled", "exposeTools"))
+    timeout_val = raw.get("timeout") if raw.get("timeout") is not None else raw.get("timeoutSeconds")
     return NormalizedMcp(
         name=name, transport=transport, command=str(cmd) if cmd else None,
         args=[str(x) for x in (raw.get("args") or [])], url=str(url) if url else None, cwd=raw.get("cwd"),
-        env=env_map, headers=hdr_map, disabled=disabled, timeout=raw.get("timeout"),
+        env=env_map, headers=hdr_map, disabled=disabled, timeout=timeout_val,
         startup_timeout_sec=raw.get("startup_timeout_sec"), tool_timeout_sec=raw.get("tool_timeout_sec"),
-        tool_allow=[str(x) for x in (raw.get("includeTools") or raw.get("allowedTools") or [])],
+        tool_allow=[str(x) for x in (raw.get("includeTools") or raw.get("enabledTools") or raw.get("allowedTools") or [])],
         tool_deny=[str(x) for x in (raw.get("excludeTools") or raw.get("disabledTools") or [])],
         stripped_grants=grants, knob_only=knob_only,
     )
@@ -876,6 +938,8 @@ def serialize_mcp_for_json_style(srv: NormalizedMcp, target_style: str, redact_s
 
     if target_style in {"zed", "opencode"} and (srv.tool_allow or srv.tool_deny):
         raise UnrepresentableMcpServer(f"{target_style}: cannot preserve MCP tool allow/deny lists")
+    if target_style == "antigravity" and srv.url and srv.transport == "sse":
+        raise UnrepresentableMcpServer("antigravity does not support legacy HTTP+SSE transport; use Streamable HTTP or bridge via 'npx -y mcp-remote <url>'")
 
     if target_style == "zed":
         if srv.url:
@@ -940,14 +1004,19 @@ def serialize_mcp_for_json_style(srv: NormalizedMcp, target_style: str, redact_s
 
     if srv.disabled:
         entry["enabled" if target_style == "pi" else "disabled"] = False if target_style == "pi" else True
-    if srv.timeout is not None:
+    if target_style == "antigravity":
+        t_sec = srv.timeout if srv.timeout is not None else (srv.tool_timeout_sec if srv.tool_timeout_sec is not None else srv.startup_timeout_sec)
+        if t_sec is not None:
+            entry["timeoutSeconds"] = int(t_sec) if isinstance(t_sec, (int, float)) else t_sec
+    elif srv.timeout is not None:
         entry["timeout"] = srv.timeout
     if target_style == "mcpServers":
         for key in ("startup_timeout_sec", "tool_timeout_sec"):
             if (value := getattr(srv, key)) is not None:
                 entry[key] = value
     if srv.tool_allow:
-        entry["includeTools" if target_style == "gemini-cli" else "allowedTools"] = list(srv.tool_allow)
+        allow_key = "includeTools" if target_style == "gemini-cli" else ("enabledTools" if target_style == "antigravity" else "allowedTools")
+        entry[allow_key] = list(srv.tool_allow)
     if srv.tool_deny:
         entry["excludeTools" if target_style == "gemini-cli" else "disabledTools"] = list(srv.tool_deny)
     return entry, notes
@@ -989,6 +1058,8 @@ def render_codex_toml_server_block(srv: NormalizedMcp, redact_secrets: bool, key
         lines.append("enabled = false")
     for key in ("startup_timeout_sec", "tool_timeout_sec"):
         value = getattr(srv, key)
+        if key == "tool_timeout_sec" and value is None:
+            value = srv.timeout
         if value is not None:
             if type(value) not in (int, float) or not 0 <= value < float("inf"):
                 return None, [f"Invalid {key}"], False
@@ -1160,7 +1231,7 @@ def get_profile_paths(profile: str, ws: Path, home: Path) -> ProfilePaths:
             raise SafetyRefusalError("invalid_product_root", f"{var} must be an absolute product directory")
     chome = (configured if p == "codex" else None) or (home / ".codex")
     khome = (configured if p == "kimi-code" else None) or (home / ".kimi-code")
-    ag_sk = (configured if p == "antigravity" else None) or (home / ".gemini/antigravity/skills")
+    ag_sk = (configured if p == "antigravity" else None) or (home / ".gemini/config/skills")
 
     table: dict[str, ProfilePaths] = {
         "cursor": ProfilePaths(
@@ -1186,7 +1257,10 @@ def get_profile_paths(profile: str, ws: Path, home: Path) -> ProfilePaths:
         ),
         "codex": ProfilePaths(
             p, proj_doc=ws / "AGENTS.md", user_doc=chome / "AGENTS.md",
-            proj_skills=ws / ".agents/skills", user_skills=home / ".agents/skills", user_cmds=chome / "prompts",
+            proj_skills=ws / ".agents/skills", user_skills=home / ".agents/skills",
+            user_cmds=chome / "prompts",
+            proj_agents=ws / ".codex/agents", user_agents=chome / "agents",
+            proj_hooks=ws / ".codex/hooks.json", user_hooks=chome / "hooks.json",
             proj_mcp=ws / ".codex/config.toml", proj_mcp_key="mcp_servers", proj_mcp_style="codex_toml",
             user_mcp=chome / "config.toml", user_mcp_key="mcp_servers", user_mcp_style="codex_toml",
             legacy=[("skills", "project", ws / ".codex/skills"), ("skills", "user", chome / "skills")],
@@ -1213,14 +1287,30 @@ def get_profile_paths(profile: str, ws: Path, home: Path) -> ProfilePaths:
             user_mcp=home / ".gemini/settings.json", user_mcp_style="gemini-cli",
         ),
         "antigravity": ProfilePaths(
-            p, proj_doc=ws / "GEMINI.md", proj_rules=ws / ".agents/rules", user_doc=home / ".gemini/GEMINI.md",
-            proj_skills=ws / ".agents/skills", user_skills=ag_sk, proj_workflows=ws / ".agents/workflows",
+            p, proj_doc=ws / "AGENTS.md", proj_rules=ws / ".agents/rules",
+            user_doc=home / ".gemini/config/AGENTS.md", user_rules=home / ".gemini/config/rules",
+            proj_skills=ws / ".agents/skills", user_skills=ag_sk,
+            proj_agents=ws / ".agents/agents", user_agents=home / ".gemini/config/agents",
+            proj_workflows=ws / ".agents/workflows", user_workflows=home / ".gemini/config/workflows",
             proj_hooks=ws / ".agents/hooks.json", user_hooks=home / ".gemini/config/hooks.json",
             proj_mcp=ws / ".agents/mcp_config.json", proj_mcp_style="antigravity",
-            user_mcp=home / ".gemini/antigravity/mcp_config.json", user_mcp_style="antigravity",
+            user_mcp=home / ".gemini/config/mcp_config.json", user_mcp_style="antigravity",
             legacy=[
-                ("skills", "project", ws / ".agent/skills"), ("skills", "user", home / ".gemini/config/skills"),
-                ("workflows", "project", ws / ".agent/workflows"), ("mcp", "user", home / ".gemini/config/mcp_config.json"),
+                ("instructions", "project", ws / "GEMINI.md"),
+                ("instructions", "project", ws / ".agents/AGENTS.md"),
+                ("instructions", "project", ws / ".agents/GEMINI.md"),
+                ("instructions", "project", ws / ".agent/rules"),
+                ("instructions", "user", home / ".gemini/config/GEMINI.md"),
+                ("instructions", "user", home / ".gemini/AGENTS.md"),
+                ("instructions", "user", home / ".gemini/GEMINI.md"),
+                ("skills", "project", ws / ".agent/skills"),
+                ("skills", "project", ws / "_agents/skills"),
+                ("skills", "project", ws / "_agent/skills"),
+                ("skills", "user", home / ".gemini/antigravity/skills"),
+                ("skills", "user", home / ".gemini/antigravity-cli/skills"),
+                ("skills", "user", home / ".gemini/skills"),
+                ("workflows", "project", ws / ".agent/workflows"),
+                ("mcp", "user", home / ".gemini/antigravity/mcp_config.json"),
             ],
         ),
         "windsurf": ProfilePaths(
@@ -1304,6 +1394,7 @@ class DiscoveredRule:
     source_path: Path = field(default_factory=Path)
     source_profile: str = ""
     directory_scoped: bool = False
+    is_override: bool = False
 
 
 def rule_deferral(rule: DiscoveredRule) -> str | None:
@@ -1336,6 +1427,8 @@ class DiscoveredDocItem:
     content: bytes
     source_profile: str
     executable: bool = False
+    subkind: str = ""
+    secrets: list[dict[str, str]] = field(default_factory=list)
 
 
 @dataclass
@@ -1398,7 +1491,8 @@ def parse_rule_files(path: Path, scope: str, profile: str, *, native_rule: bool 
             bname = bname[: -len(suf)]
             break
     slug = slugify(bname)
-    root_names = {"AGENTS.md", "CLAUDE.md", "CLAUDE.local.md", "GEMINI.md", "QWEN.md", "copilot-instructions.md", ".cursorrules", ".windsurfrules", "global_rules.md"}
+    is_override = (path.name == "AGENTS.override.md")
+    root_names = {"AGENTS.md", "AGENTS.override.md", "CLAUDE.md", "CLAUDE.local.md", "GEMINI.md", "QWEN.md", "copilot-instructions.md", ".cursorrules", ".windsurfrules", "global_rules.md"}
     zed_native = profile == "zed" and path.name in {".rules", "AGENT.md"}
     claude_rule = profile == "claude-code" and native_rule
     if not claude_rule and (path.name in root_names or zed_native or (path.name == ".clinerules" and path.is_file())):
@@ -1408,11 +1502,11 @@ def parse_rule_files(path: Path, scope: str, profile: str, *, native_rule: bool 
             out_rules: list[DiscoveredRule] = []
             outside = SECTION_RE.sub("", text).strip()
             if outside:
-                out_rules.append(DiscoveredRule(base_id, scope, "always_on", outside + "\n", source_path=path, source_profile=profile))
+                out_rules.append(DiscoveredRule(base_id, scope, "always_on", outside + "\n", source_path=path, source_profile=profile, is_override=is_override))
             for m in found_sections:
-                out_rules.append(DiscoveredRule(m.group(1), scope, "always_on", m.group(3).strip() + "\n", source_path=path, source_profile=profile))
+                out_rules.append(DiscoveredRule(m.group(1), scope, "always_on", m.group(3).strip() + "\n", source_path=path, source_profile=profile, is_override=is_override))
             return out_rules
-        return [DiscoveredRule(base_id, scope, "always_on", text, source_path=path, source_profile=profile)]
+        return [DiscoveredRule(base_id, scope, "always_on", text, source_path=path, source_profile=profile, is_override=is_override)]
 
     meta, body = parse_frontmatter(text)
     if not meta and not text.startswith("---"):
@@ -1423,9 +1517,19 @@ def parse_rule_files(path: Path, scope: str, profile: str, *, native_rule: bool 
         return [DiscoveredRule(slug, scope, kind, body if body.strip() else text, globs=globs,
                                source_path=path, source_profile=profile)]
     always = meta.get("alwaysApply") is True or str(meta.get("trigger", "")).lower() == "always_on"
-    globs = split_globs(meta.get("globs") or meta.get("paths") or meta.get("applyTo"))
+    globs = split_globs(meta.get("globs") or meta.get("glob") or meta.get("paths") or meta.get("applyTo"))
     desc = str(meta.get("description") or "").strip()
     trigger = str(meta.get("trigger", "")).lower()
+    if profile == "antigravity" and native_rule and trigger in ("always_on", "glob", "model_decision", "manual"):
+        if trigger == "always_on":
+            kind = "always_on"
+        elif trigger == "glob":
+            kind = "glob_scoped" if globs else "manual"
+        elif trigger == "model_decision":
+            kind = "model_selected"
+        else:
+            kind = "manual"
+        return [DiscoveredRule(slug, scope, kind, body if body.strip() else text, globs=globs, description=desc, source_path=path, source_profile=profile)]
     if always:
         kind = "always_on"
     elif globs:
@@ -1441,9 +1545,20 @@ def parse_rule_files(path: Path, scope: str, profile: str, *, native_rule: bool 
     return [DiscoveredRule(slug, scope, kind, body if body.strip() else text, globs=globs, description=desc, source_path=path, source_profile=profile)]
 
 
+def _record_broken_symlink(p: Path, workspace: Path, home: Path, excluded: list[dict[str, str]]) -> bool:
+    if p.is_symlink() and not p.exists():
+        lp = logical_path_str(p, workspace, home)
+        if not any(x.get("path") == lp for x in excluded):
+            excluded.append({"path": lp, "reason": "broken_symlink"})
+        return True
+    return False
+
+
 def compute_skill_digest(skill_dir: Path, auth_root: Path) -> str:
     h = hashlib.sha256()
     for p in sorted(skill_dir.rglob("*")):
+        if p.is_symlink() and not p.exists():
+            continue
         validate_contained(p, auth_root, f"skill:{skill_dir.name}")
         if p.is_file() and not is_excluded_asset(p, skill_dir):
             h.update(p.relative_to(skill_dir).as_posix().encode("utf-8") + b"\0" + p.read_bytes() + b"\0")
@@ -1472,12 +1587,466 @@ def read_mcp_file(path: Path, key_path: str, style: str, fmt: str = "auto") -> d
     return {str(k): normalize_mcp_entry(str(k), v, style) for k, v in raw_s.items() if isinstance(v, dict)}
 
 
+CLAUDE_STRIP_SETTINGS_KEYS = frozenset({
+    "permissions", "skipDangerousModePermissionPrompt", "bypassPermissions",
+    "hooks", "apiKeyHelper", "awsAuthRefresh", "awsCredentialExport", "otelHeadersHelper",
+})
+ANTIGRAVITY_STRIP_USER_SETTINGS = frozenset({
+    "permissionPreset", "autoExecutionPolicy", "browserJsExecutionPolicy",
+    "nonWorkspaceFileAccessPolicy", "enableTerminalSandbox",
+    "permissionGrantsV2Migrated", "sandboxEnabledAtV2Migration",
+    "remoteControlEnabled", "remoteControlHostname", "resolvedPermissions",
+})
+ANTIGRAVITY_STRIP_CLI_SETTINGS = frozenset({
+    "toolPermission", "agentMode", "enableTerminalSandbox", "allowNonWorkspaceAccess",
+})
+CODEX_STRIP_SETTINGS_KEYS = frozenset({
+    "approval_policy", "approvals_reviewer", "sandbox_mode",
+    "projects", "notify", "mcp_servers",
+})
+
+
+def claude_project_slug(path: Path) -> str:
+    return re.sub(r"[^A-Za-z0-9]", "-", str(path.resolve()))
+
+
+def _append_excluded(out: list[dict[str, str]], path: Path, workspace: Path, home: Path, reason: str) -> None:
+    lp = logical_path_str(path, workspace, home)
+    if not any(x.get("path") == lp and x.get("reason") == reason for x in out):
+        out.append({"path": lp, "reason": reason})
+
+
+def _strip_secret_keys_from_dict(obj: Any) -> Any:
+    if isinstance(obj, dict):
+        return {
+            k: _strip_secret_keys_from_dict(v)
+            for k, v in obj.items()
+            if not SENSITIVE_KEY_RE.search(str(k))
+        }
+    if isinstance(obj, list):
+        return [_strip_secret_keys_from_dict(v) for v in obj]
+    return obj
+
+
+def _toml_inline_value(val: Any) -> str:
+    if isinstance(val, bool):
+        return "true" if val else "false"
+    if isinstance(val, int):
+        return str(val)
+    if isinstance(val, float):
+        return repr(val)
+    if isinstance(val, str):
+        return toml_str(val)
+    if isinstance(val, list):
+        return "[" + ", ".join(_toml_inline_value(x) for x in val if x is not None) + "]"
+    if isinstance(val, dict):
+        items = ", ".join(f"{toml_key(str(k))} = {_toml_inline_value(v)}" for k, v in val.items() if v is not None)
+        return "{ " + items + " }"
+    return toml_str(str(val))
+
+
+def render_toml_document(doc: dict[str, Any]) -> str:
+    lines: list[str] = []
+
+    def _emit_table(tbl: dict[str, Any], prefix: list[str]) -> None:
+        scalars: list[tuple[str, Any]] = []
+        subtables: list[tuple[str, dict[str, Any]]] = []
+        arrays_of_tables: list[tuple[str, list[dict[str, Any]]]] = []
+        for k, v in tbl.items():
+            if v is None:
+                continue
+            if isinstance(v, dict):
+                subtables.append((str(k), v))
+            elif isinstance(v, list) and v and all(isinstance(x, dict) for x in v):
+                arrays_of_tables.append((str(k), v))
+            else:
+                scalars.append((str(k), v))
+        if prefix and (scalars or not subtables and not arrays_of_tables):
+            lines.append("[" + ".".join(toml_key(p) for p in prefix) + "]")
+        for k, v in scalars:
+            lines.append(f"{toml_key(k)} = {_toml_inline_value(v)}")
+        if prefix and scalars:
+            lines.append("")
+        elif not prefix and scalars and (subtables or arrays_of_tables):
+            lines.append("")
+        for k, aot in arrays_of_tables:
+            for item in aot:
+                lines.append("[[" + ".".join(toml_key(p) for p in [*prefix, k]) + "]]")
+                for ik, iv in item.items():
+                    if iv is not None and not isinstance(iv, dict):
+                        lines.append(f"{toml_key(str(ik))} = {_toml_inline_value(iv)}")
+                lines.append("")
+                for ik, iv in item.items():
+                    if isinstance(iv, dict):
+                        _emit_table(iv, [*prefix, k, str(ik)])
+        for k, sub in subtables:
+            _emit_table(sub, [*prefix, k])
+
+    _emit_table(doc, [])
+    text = "\n".join(lines).rstrip()
+    return (text + "\n") if text else ""
+
+
+def _scan_and_redact_dict_secrets(obj: Any, *, prefix: str = "", redact: bool = False) -> tuple[Any, list[dict[str, str]]]:
+    secrets: list[dict[str, str]] = []
+    if isinstance(obj, dict):
+        out: dict[str, Any] = {}
+        for k, v in obj.items():
+            sk = f"{prefix}.{k}" if prefix else str(k)
+            if isinstance(v, str) and is_secret_kv(str(k), v) and (SENSITIVE_KEY_RE.search(str(k)) or SECRET_VALUE_RE.search(v)):
+                secrets.append({"name": sk, "sha256_prefix": sha256_prefix(v)})
+                out[k] = f"${{{slugify(str(k)).upper().replace('-', '_')}}}" if redact else v
+            elif isinstance(v, (dict, list)):
+                nv, ns = _scan_and_redact_dict_secrets(v, prefix=sk, redact=redact)
+                secrets.extend(ns)
+                out[k] = nv
+            else:
+                out[k] = v
+        return out, secrets
+    if isinstance(obj, list):
+        out_l: list[Any] = []
+        for idx, item in enumerate(obj):
+            ni, ns = _scan_and_redact_dict_secrets(item, prefix=f"{prefix}[{idx}]", redact=redact)
+            secrets.extend(ns)
+            out_l.append(ni)
+        return out_l, secrets
+    return obj, secrets
+
+
+def _collect_dir_doc_items(
+    base_dir: Path, *, category: str, scope: str, profile: str, auth_root: Path,
+    workspace: Path, home: Path, inv: ProfileInventory, prefix: str = "", subkind: str = "",
+) -> None:
+    if not (base_dir.exists() or base_dir.is_symlink()):
+        return
+    if _record_broken_symlink(base_dir, workspace, home, inv.excluded):
+        return
+    validate_contained(base_dir, auth_root, f"{category}_dir")
+    if not base_dir.is_dir():
+        return
+    for root, dirs, files in os.walk(base_dir, followlinks=False):
+        rpath = Path(root)
+        kept_dirs: list[str] = []
+        for d in sorted(dirs):
+            dp = rpath / d
+            if d in EXCLUDED_DIR_NAMES:
+                _append_excluded(inv.excluded, dp, workspace, home, "excluded_state_or_history_dir")
+                continue
+            if _record_broken_symlink(dp, workspace, home, inv.excluded):
+                continue
+            validate_contained(dp, auth_root, f"{category}:{d}")
+            kept_dirs.append(d)
+        dirs[:] = kept_dirs
+        for fname in sorted(files):
+            fp = rpath / fname
+            if _record_broken_symlink(fp, workspace, home, inv.excluded):
+                continue
+            validate_contained(fp, auth_root, f"{category}:{fname}")
+            if is_excluded_asset(fp, base_dir):
+                _append_excluded(inv.excluded, fp, workspace, home, "excluded_history_or_db_file")
+                continue
+            rel = fp.relative_to(base_dir).as_posix()
+            item_name = f"{prefix}/{rel}" if prefix else rel
+            is_exec = os.name != "nt" and bool(fp.stat().st_mode & stat.S_IXUSR)
+            inv.doc_items.append(DiscoveredDocItem(
+                category, item_name, scope, fp, fp.read_bytes(), profile,
+                executable=is_exec, subkind=subkind,
+            ))
+
+
+def _discover_antigravity_extras(
+    workspace: Path, home: Path, wp: bool, wu: bool, categories: set[str], inv: ProfileInventory,
+) -> None:
+    if wu:
+        for ex_p, ex_r in (
+            (home / ".gemini/antigravity/conversations", "excluded_state_or_history_dir"),
+            (home / ".gemini/antigravity/brain", "excluded_state_or_history_dir"),
+            (home / ".gemini/config/.subagent_sessions", "excluded_state_or_history_dir"),
+            (home / ".gemini/config/projects", "excluded_state_or_history_dir"),
+            (home / ".gemini/jetski-standalone-oauth-token", "excluded_oauth_or_session_state"),
+        ):
+            if ex_p.exists():
+                _append_excluded(inv.excluded, ex_p, workspace, home, ex_r)
+        scan_excluded_nearby(home / ".gemini/antigravity", workspace, home, inv.excluded)
+
+    if "plugins" in categories:
+        for psc, pdir, proot in (
+            ("project", workspace / ".agents/plugins" if wp else None, workspace),
+            ("user", home / ".gemini/config/plugins" if wu else None, home),
+        ):
+            if pdir is None or not (pdir.exists() or pdir.is_symlink()):
+                continue
+            if _record_broken_symlink(pdir, workspace, home, inv.excluded):
+                continue
+            validate_contained(pdir, proot, "plugins_dir")
+            if pdir.is_dir():
+                for entry in sorted(pdir.iterdir()):
+                    if _record_broken_symlink(entry, workspace, home, inv.excluded):
+                        continue
+                    validate_contained(entry, proot, f"plugin:{entry.name}")
+                    if entry.is_dir():
+                        _collect_dir_doc_items(
+                            entry, category="plugins", scope=psc, profile="antigravity",
+                            auth_root=proot, workspace=workspace, home=home, inv=inv,
+                            prefix=entry.name, subkind="plugin_file",
+                        )
+        if wu:
+            cfg = home / ".gemini/config/config.json"
+            if cfg.exists() or cfg.is_symlink():
+                if not _record_broken_symlink(cfg, workspace, home, inv.excluded):
+                    validate_contained(cfg, home, "antigravity_config_json")
+                    if cfg.is_file():
+                        cdoc = load_jsonc(cfg.read_text(encoding="utf-8"))
+                        if isinstance(cdoc, dict) and isinstance(cdoc.get("plugins"), dict) and cdoc["plugins"]:
+                            san = _strip_secret_keys_from_dict(cdoc["plugins"])
+                            inv.doc_items.append(DiscoveredDocItem(
+                                "plugins", "antigravity-plugins-registry.json", "user", cfg,
+                                (json.dumps({"plugins": san}, indent=2, ensure_ascii=False) + "\n").encode("utf-8"),
+                                "antigravity", subkind="antigravity_plugins_registry",
+                            ))
+
+    if "manifests" in categories:
+        for msc, mdir, mroot in (
+            ("project", workspace / ".agents" if wp else None, workspace),
+            ("user", home / ".gemini/config" if wu else None, home),
+        ):
+            if mdir is None or not mdir.is_dir():
+                continue
+            for mname in ("skills.json", "rules.json", "agents.json", "plugins.json"):
+                mp = mdir / mname
+                if mp.exists() or mp.is_symlink():
+                    if _record_broken_symlink(mp, workspace, home, inv.excluded):
+                        continue
+                    validate_contained(mp, mroot, f"manifest:{mname}")
+                    if mp.is_file():
+                        inv.doc_items.append(DiscoveredDocItem("manifests", mname, msc, mp, mp.read_bytes(), "antigravity"))
+
+    if "scripts" in categories and wu:
+        _collect_dir_doc_items(
+            home / ".gemini/config/scripts", category="scripts", scope="user",
+            profile="antigravity", auth_root=home, workspace=workspace, home=home, inv=inv,
+        )
+
+    if "sidecars" in categories and wu:
+        _collect_dir_doc_items(
+            home / ".gemini/config/sidecars", category="sidecars", scope="user",
+            profile="antigravity", auth_root=home, workspace=workspace, home=home, inv=inv,
+        )
+
+    if "settings" in categories and wu:
+        cfg = home / ".gemini/config/config.json"
+        if cfg.exists() or cfg.is_symlink():
+            if not _record_broken_symlink(cfg, workspace, home, inv.excluded):
+                validate_contained(cfg, home, "antigravity_config_json")
+                if cfg.is_file():
+                    cdoc = load_jsonc(cfg.read_text(encoding="utf-8"))
+                    us = cdoc.get("userSettings") if isinstance(cdoc, dict) else None
+                    if isinstance(us, dict) and us:
+                        stripped = [k for k in us if k in ANTIGRAVITY_STRIP_USER_SETTINGS]
+                        if stripped:
+                            _append_excluded(inv.excluded, cfg, workspace, home, f"stripped_non_portable_settings:{','.join(sorted(stripped))}")
+                        kept = {k: v for k, v in us.items() if k not in ANTIGRAVITY_STRIP_USER_SETTINGS}
+                        if kept:
+                            inv.doc_items.append(DiscoveredDocItem(
+                                "settings", "config-user-settings.json", "user", cfg,
+                                (json.dumps({"userSettings": kept}, indent=2, ensure_ascii=False) + "\n").encode("utf-8"),
+                                "antigravity", subkind="antigravity_config_settings",
+                            ))
+        cli_st = home / ".gemini/antigravity-cli/settings.json"
+        if (cli_st.exists() or cli_st.is_symlink()) and not _record_broken_symlink(cli_st, workspace, home, inv.excluded):
+            validate_contained(cli_st, home, "antigravity_cli_settings")
+            if cli_st.is_file():
+                sdoc = load_jsonc(cli_st.read_text(encoding="utf-8"))
+                if isinstance(sdoc, dict) and sdoc:
+                    kept = {k: v for k, v in sdoc.items() if k not in ANTIGRAVITY_STRIP_CLI_SETTINGS}
+                    if kept:
+                        inv.doc_items.append(DiscoveredDocItem(
+                            "settings", "cli-settings.json", "user", cli_st,
+                            (json.dumps(kept, indent=2, ensure_ascii=False) + "\n").encode("utf-8"),
+                            "antigravity", subkind="antigravity_cli_settings",
+                        ))
+        cli_kb = home / ".gemini/antigravity-cli/keybindings.json"
+        if (cli_kb.exists() or cli_kb.is_symlink()) and not _record_broken_symlink(cli_kb, workspace, home, inv.excluded):
+            validate_contained(cli_kb, home, "antigravity_cli_keybindings")
+            if cli_kb.is_file() and cli_kb.read_text(encoding="utf-8").strip():
+                inv.doc_items.append(DiscoveredDocItem(
+                    "settings", "cli-keybindings.json", "user", cli_kb, cli_kb.read_bytes(),
+                    "antigravity", subkind="antigravity_cli_keybindings",
+                ))
+
+
+def _discover_claude_extras(
+    workspace: Path, home: Path, wp: bool, wu: bool, categories: set[str], inv: ProfileInventory,
+) -> None:
+    if wu:
+        for ex_p, ex_r in (
+            (home / ".claude/plugins/cache", "excluded_state_or_history_dir"),
+            (home / ".claude/plugins/store", "excluded_state_or_history_dir"),
+            (home / ".claude/plugins/plugin-directory-cache-v2.json", "excluded_cache_file"),
+        ):
+            if ex_p.exists():
+                _append_excluded(inv.excluded, ex_p, workspace, home, ex_r)
+
+    if "hooks" in categories and wp:
+        local_st = workspace / ".claude/settings.local.json"
+        if (local_st.exists() or local_st.is_symlink()) and not _record_broken_symlink(local_st, workspace, home, inv.excluded):
+            validate_contained(local_st, workspace, "claude_local_hooks")
+            if local_st.is_file():
+                doc = load_jsonc(local_st.read_text(encoding="utf-8"))
+                if isinstance(doc, dict) and doc.get("hooks"):
+                    inv.doc_items.append(DiscoveredDocItem(
+                        "hooks", "claude-hooks.local.json", "project", local_st,
+                        (json.dumps({"hooks": doc["hooks"]}, indent=2, ensure_ascii=False) + "\n").encode("utf-8"),
+                        "claude-code", subkind="claude_local_hooks_json",
+                    ))
+
+    if "settings" in categories:
+        st_cands = [
+            ("project", workspace / ".claude/settings.json" if wp else None, workspace),
+            ("project", workspace / ".claude/settings.local.json" if wp else None, workspace),
+            ("user", home / ".claude/settings.json" if wu else None, home),
+        ]
+        for ssc, spth, sroot in st_cands:
+            if spth is None or not (spth.exists() or spth.is_symlink()):
+                continue
+            if _record_broken_symlink(spth, workspace, home, inv.excluded):
+                continue
+            validate_contained(spth, sroot, f"claude_settings:{spth.name}")
+            if not spth.is_file():
+                continue
+            sdoc = load_jsonc(spth.read_text(encoding="utf-8"))
+            if not isinstance(sdoc, dict):
+                continue
+            stripped = [k for k in sdoc if k in CLAUDE_STRIP_SETTINGS_KEYS]
+            if stripped:
+                _append_excluded(inv.excluded, spth, workspace, home, f"stripped_non_portable_settings:{','.join(sorted(stripped))}")
+            kept = {k: v for k, v in sdoc.items() if k not in CLAUDE_STRIP_SETTINGS_KEYS}
+            if not kept:
+                continue
+            _, sec_list = _scan_and_redact_dict_secrets(kept.get("env", {}), prefix="env", redact=False)
+            inv.doc_items.append(DiscoveredDocItem(
+                "settings", spth.name, ssc, spth,
+                (json.dumps(kept, indent=2, ensure_ascii=False) + "\n").encode("utf-8"),
+                "claude-code", subkind="claude_settings", secrets=sec_list,
+            ))
+
+    if "plugins" in categories and wu:
+        for fname in ("installed_plugins.json", "known_marketplaces.json"):
+            pp = home / ".claude/plugins" / fname
+            if (pp.exists() or pp.is_symlink()) and not _record_broken_symlink(pp, workspace, home, inv.excluded):
+                validate_contained(pp, home, f"claude_plugin:{fname}")
+                if pp.is_file():
+                    inv.doc_items.append(DiscoveredDocItem(
+                        "plugins", fname, "user", pp, pp.read_bytes(),
+                        "claude-code", subkind="claude_plugin_registry",
+                    ))
+
+    if "memory" in categories and wp:
+        mem_dir = home / ".claude/projects" / claude_project_slug(workspace) / "memory"
+        if (mem_dir.exists() or mem_dir.is_symlink()) and not _record_broken_symlink(mem_dir, workspace, home, inv.excluded):
+            validate_contained(mem_dir, home, "claude_project_memory")
+            if mem_dir.is_dir():
+                for f in sorted(mem_dir.rglob("*")):
+                    if _record_broken_symlink(f, workspace, home, inv.excluded):
+                        continue
+                    validate_contained(f, home, f"claude_memory:{f.name}")
+                    if f.is_file() and f.suffix == ".md" and not is_excluded_asset(f, mem_dir):
+                        inv.doc_items.append(DiscoveredDocItem(
+                            "memory", f.relative_to(mem_dir).as_posix(), "project", f,
+                            f.read_bytes(), "claude-code", subkind="claude_project_memory",
+                        ))
+
+
+def _discover_codex_extras(
+    pp: ProfilePaths, workspace: Path, home: Path, wp: bool, wu: bool, categories: set[str], inv: ProfileInventory,
+) -> None:
+    chome = pp.user_mcp.parent if pp.user_mcp else (home / ".codex")
+    croot = pp.contained_root(chome, "user", workspace, home)
+    if wu:
+        for ex_p, ex_r in (
+            (chome / "memories", "excluded_generated_memory"),
+            (chome / "memories_v2", "excluded_generated_memory"),
+            (chome / "auth.json", "excluded_oauth_or_session_state"),
+            (chome / "archived_sessions", "excluded_state_or_history_dir"),
+        ):
+            if ex_p.exists():
+                _append_excluded(inv.excluded, ex_p, workspace, home, ex_r)
+
+    if "scripts" in categories and wu:
+        _collect_dir_doc_items(
+            chome / "scripts", category="scripts", scope="user",
+            profile="codex", auth_root=croot, workspace=workspace, home=home, inv=inv,
+        )
+
+    if "hooks" in categories:
+        for rsc, rdir, rroot in (
+            ("project", workspace / ".codex/rules" if wp else None, workspace),
+            ("user", chome / "rules" if wu else None, croot),
+        ):
+            if rdir is None or not (rdir.exists() or rdir.is_symlink()):
+                continue
+            if _record_broken_symlink(rdir, workspace, home, inv.excluded):
+                continue
+            validate_contained(rdir, rroot, "codex_rules_dir")
+            if rdir.is_dir():
+                for f in sorted(rdir.rglob("*")):
+                    if _record_broken_symlink(f, workspace, home, inv.excluded):
+                        continue
+                    validate_contained(f, rroot, f"codex_rule:{f.name}")
+                    if f.is_file() and f.suffix == ".rules" and not is_excluded_asset(f, rdir):
+                        inv.doc_items.append(DiscoveredDocItem(
+                            "hooks", f.relative_to(rdir).as_posix(), rsc, f, f.read_bytes(),
+                            "codex", subkind="codex_policy_rule",
+                        ))
+
+    if "settings" in categories:
+        for ssc, cpth, sroot in (
+            ("project", pp.proj_mcp if wp else None, workspace),
+            ("user", pp.user_mcp if wu else None, croot),
+        ):
+            if cpth is None or not (cpth.exists() or cpth.is_symlink()):
+                continue
+            if _record_broken_symlink(cpth, workspace, home, inv.excluded):
+                continue
+            validate_contained(cpth, sroot, f"codex_settings:{cpth.name}")
+            if not cpth.is_file():
+                continue
+            text = cpth.read_text(encoding="utf-8")
+            if not text.strip():
+                continue
+            tdoc = tomllib.loads(text)
+            stripped = [k for k in tdoc if k in CODEX_STRIP_SETTINGS_KEYS]
+            if stripped:
+                _append_excluded(inv.excluded, cpth, workspace, home, f"stripped_non_portable_settings:{','.join(sorted(stripped))}")
+            kept = {k: v for k, v in tdoc.items() if k not in CODEX_STRIP_SETTINGS_KEYS}
+            if not kept:
+                continue
+            _, sec_list = _scan_and_redact_dict_secrets(kept, redact=False)
+            rendered = render_toml_document(kept)
+            if rendered:
+                inv.doc_items.append(DiscoveredDocItem(
+                    "settings", "config.toml", ssc, cpth, rendered.encode("utf-8"),
+                    "codex", subkind="codex_toml_settings", secrets=sec_list,
+                ))
+
+
 def discover_profile(profile: str, workspace: Path, home: Path, scope: str, categories: set[str]) -> ProfileInventory:
     pp = get_profile_paths(profile, workspace, home)
     inv = ProfileInventory(profile=pp.profile)
     wp, wu = scope in ("project", "all"), scope in ("user", "all")
 
-    for sdir in (workspace / f".{pp.profile.split('-')[0]}", home / f".{pp.profile.split('-')[0]}", home / ".cline/data", home / ".kimi-code", home / ".codeium/windsurf"):
+    scan_dirs = [
+        workspace / f".{pp.profile.split('-')[0]}",
+        home / f".{pp.profile.split('-')[0]}",
+        home / ".cline/data",
+        home / ".kimi-code",
+        home / ".codeium/windsurf",
+    ]
+    if pp.profile == "codex" and pp.user_mcp is not None:
+        scan_dirs.append(pp.user_mcp.parent)
+    if pp.profile == "antigravity":
+        scan_dirs.extend([home / ".gemini/antigravity", home / ".gemini/config"])
+    for sdir in scan_dirs:
         is_w = sdir.is_relative_to(workspace)
         if (wp and is_w) or (wu and not is_w):
             scan_excluded_nearby(sdir, workspace, home, inv.excluded)
@@ -1491,11 +2060,15 @@ def discover_profile(profile: str, workspace: Path, home: Path, scope: str, cate
         def _collect_rule_path(sc: str, pth: Path | None, root: Path) -> None:
             if pth is None or not (pth.exists() or pth.is_symlink()):
                 return
+            if _record_broken_symlink(pth, workspace, home, inv.excluded):
+                return
             validate_contained(pth, root, f"rule:{pth.name}")
             if pth.is_file():
                 cands.append((sc, pth, root))
             elif pth.is_dir():
                 for f in sorted(pth.rglob("*")):
+                    if _record_broken_symlink(f, workspace, home, inv.excluded):
+                        continue
                     validate_contained(f, root, f"rule:{f.name}")
                     if f.is_file() and f.suffix in (".mdc", ".md"):
                         if is_excluded_asset(f, root):
@@ -1512,6 +2085,7 @@ def discover_profile(profile: str, workspace: Path, home: Path, scope: str, cate
             _collect_rule_path("project", project_doc, workspace)
             _collect_rule_path("project", pp.proj_rules, workspace)
             if pp.profile == "codex":
+                _collect_rule_path("project", workspace / "AGENTS.override.md", workspace)
                 for root, dirs, files in os.walk(workspace):
                     dirs[:] = sorted(d for d in dirs if not d.startswith(".") and d not in EXCLUDED_DIR_NAMES)
                     folder = Path(root)
@@ -1521,7 +2095,10 @@ def discover_profile(profile: str, workspace: Path, home: Path, scope: str, cate
                         if name in files:
                             _collect_rule_path("project", folder / name, workspace)
         if wu:
-            _collect_rule_path("user", pp.user_doc, pp.contained_root(pp.user_doc, "user", workspace, home))
+            user_doc_root = pp.contained_root(pp.user_doc, "user", workspace, home)
+            _collect_rule_path("user", pp.user_doc, user_doc_root)
+            if pp.profile == "codex" and pp.user_doc is not None:
+                _collect_rule_path("user", pp.user_doc.parent / "AGENTS.override.md", user_doc_root)
             _collect_rule_path("user", pp.user_rules, home)
         for lc, ls, lp in pp.legacy:
             if lc == "instructions" and ((ls == "project" and wp) or (ls == "user" and wu)):
@@ -1559,12 +2136,20 @@ def discover_profile(profile: str, workspace: Path, home: Path, scope: str, cate
         for ssc, sroot, aroot in sroots:
             if not (sroot.exists() or sroot.is_symlink()):
                 continue
+            if _record_broken_symlink(sroot, workspace, home, inv.excluded):
+                continue
             validate_contained(sroot, aroot, "skills_dir")
             if not sroot.is_dir():
                 continue
             for entry in sorted(sroot.iterdir()):
+                if _record_broken_symlink(entry, workspace, home, inv.excluded):
+                    continue
                 validate_contained(entry, aroot, f"skill:{entry.name}")
+                if pp.profile == "codex" and entry.name.startswith("."):
+                    continue
                 smd = entry / "SKILL.md"
+                if _record_broken_symlink(smd, workspace, home, inv.excluded):
+                    continue
                 if not entry.is_dir() or entry.name == "agent-skills-setup" or not (smd.exists() or smd.is_symlink()):
                     continue
                 validate_contained(smd, aroot, f"skill_md:{entry.name}")
@@ -1576,25 +2161,31 @@ def discover_profile(profile: str, workspace: Path, home: Path, scope: str, cate
 
     if "mcp" in categories:
         if wp and pp.proj_mcp and (pp.proj_mcp.exists() or pp.proj_mcp.is_symlink()):
-            validate_contained(pp.proj_mcp, workspace, "project_mcp")
-            for srv in read_mcp_file(pp.proj_mcp, pp.proj_mcp_key, pp.proj_mcp_style).values():
-                srv.source_profile = pp.profile
-                inv.mcp_servers["project"].append(srv)
-        if wp and pp.profile == "claude-code" and pp.user_mcp and pp.user_mcp.is_file():
-            validate_contained(pp.user_mcp, home, "claude_local_mcp")
-            ptr = f"/projects/{str(workspace.resolve()).replace('~', '~0').replace('/', '~1')}/mcpServers"
-            ex_n = {s.name for s in inv.mcp_servers["project"]}
-            for srv in read_mcp_file(pp.user_mcp, ptr, "claude-code").values():
-                if srv.name not in ex_n:
+            if not _record_broken_symlink(pp.proj_mcp, workspace, home, inv.excluded):
+                validate_contained(pp.proj_mcp, workspace, "project_mcp")
+                for srv in read_mcp_file(pp.proj_mcp, pp.proj_mcp_key, pp.proj_mcp_style).values():
                     srv.source_profile = pp.profile
                     inv.mcp_servers["project"].append(srv)
+        if wp and pp.profile == "claude-code" and pp.user_mcp and pp.user_mcp.is_file():
+            validate_contained(pp.user_mcp, home, "claude_local_mcp")
+            ex_n = {s.name for s in inv.mcp_servers["project"]}
+            for ws_cand in dict.fromkeys((str(workspace.resolve()), str(workspace))):
+                ptr = f"/projects/{ws_cand.replace('~', '~0').replace('/', '~1')}/mcpServers"
+                for srv in read_mcp_file(pp.user_mcp, ptr, "claude-code").values():
+                    if srv.name not in ex_n:
+                        srv.source_profile = pp.profile
+                        inv.mcp_servers["project"].append(srv)
+                        ex_n.add(srv.name)
         if wu and pp.user_mcp and (pp.user_mcp.exists() or pp.user_mcp.is_symlink()):
-            validate_contained(pp.user_mcp, pp.contained_root(pp.user_mcp, "user", workspace, home), "user_mcp")
-            for srv in read_mcp_file(pp.user_mcp, pp.user_mcp_key, pp.user_mcp_style).values():
-                srv.source_profile = pp.profile
-                inv.mcp_servers["user"].append(srv)
+            if not _record_broken_symlink(pp.user_mcp, workspace, home, inv.excluded):
+                validate_contained(pp.user_mcp, pp.contained_root(pp.user_mcp, "user", workspace, home), "user_mcp")
+                for srv in read_mcp_file(pp.user_mcp, pp.user_mcp_key, pp.user_mcp_style).values():
+                    srv.source_profile = pp.profile
+                    inv.mcp_servers["user"].append(srv)
         for lc, ls, lp in pp.legacy:
             if lc == "mcp" and ((ls == "project" and wp) or (ls == "user" and wu)) and (lp.exists() or lp.is_symlink()):
+                if _record_broken_symlink(lp, workspace, home, inv.excluded):
+                    continue
                 validate_contained(lp, workspace if ls == "project" else home, "legacy_mcp")
                 ex_n = {s.name for s in inv.mcp_servers[ls]}
                 for srv in read_mcp_file(lp, "mcpServers", pp.profile).values():
@@ -1624,40 +2215,62 @@ def discover_profile(profile: str, workspace: Path, home: Path, scope: str, cate
         if cat not in categories or dpth is None or not (dpth.exists() or dpth.is_symlink()):
             continue
         aroot = pp.contained_root(dpth, dsc, workspace, home)
+        if _record_broken_symlink(dpth, workspace, home, inv.excluded):
+            continue
         validate_contained(dpth, aroot, f"{cat}_dir")
         if not dpth.is_dir():
             continue
         for f in sorted(dpth.rglob("*")):
+            if _record_broken_symlink(f, workspace, home, inv.excluded):
+                continue
             validate_contained(f, aroot, f"{cat}:{f.name}")
             if not f.is_file():
                 continue
             if is_excluded_asset(f, dpth):
                 inv.excluded.append({"path": logical_path_str(f, workspace, home), "reason": "excluded_history_or_db_file"})
                 continue
-            inv.doc_items.append(DiscoveredDocItem(cat, f.relative_to(dpth).as_posix(), dsc, f, f.read_bytes(), pp.profile))
+            rel_name = f.relative_to(dpth).as_posix()
+            sk_tag = "agent_nested" if (pp.profile == "antigravity" and cat == "agents" and f.name == "agent.md" and "/" in rel_name) else ""
+            inv.doc_items.append(DiscoveredDocItem(cat, rel_name, dsc, f, f.read_bytes(), pp.profile, subkind=sk_tag))
 
     if "hooks" in categories:
-        for hsc, hpth, aroot in (("project", pp.proj_hooks if wp else None, workspace), ("user", pp.user_hooks if wu else None, home)):
+        for hsc, hpth, aroot in (
+            ("project", pp.proj_hooks if wp else None, workspace),
+            ("user", pp.user_hooks if wu else None, pp.contained_root(pp.user_hooks, "user", workspace, home)),
+        ):
             if hpth is None or not (hpth.exists() or hpth.is_symlink()):
+                continue
+            if _record_broken_symlink(hpth, workspace, home, inv.excluded):
                 continue
             validate_contained(hpth, aroot, "hooks")
             if hpth.is_file():
                 if pp.profile == "claude-code":
                     doc = load_jsonc(hpth.read_text(encoding="utf-8"))
                     if isinstance(doc, dict) and doc.get("hooks"):
-                        inv.doc_items.append(DiscoveredDocItem("hooks", "claude-hooks.json", hsc, hpth, (json.dumps({"hooks": doc["hooks"]}, indent=2, ensure_ascii=False) + "\n").encode("utf-8"), pp.profile))
+                        inv.doc_items.append(DiscoveredDocItem("hooks", "claude-hooks.json", hsc, hpth, (json.dumps({"hooks": doc["hooks"]}, indent=2, ensure_ascii=False) + "\n").encode("utf-8"), pp.profile, subkind="claude_hooks_json"))
                 else:
                     inv.doc_items.append(DiscoveredDocItem("hooks", hpth.name, hsc, hpth, hpth.read_bytes(), pp.profile))
             elif hpth.is_dir():
                 for f in sorted(hpth.rglob("*")):
+                    if _record_broken_symlink(f, workspace, home, inv.excluded):
+                        continue
                     validate_contained(f, aroot, f"hook:{f.name}")
                     if f.is_file() and not is_excluded_asset(f, hpth):
                         inv.doc_items.append(DiscoveredDocItem("hooks", f.relative_to(hpth).as_posix(), hsc, f, f.read_bytes(), pp.profile,
                             executable=(os.name != "nt" and bool(f.stat().st_mode & stat.S_IXUSR))))
 
+    if pp.profile == "antigravity":
+        _discover_antigravity_extras(workspace, home, wp, wu, categories, inv)
+    elif pp.profile == "claude-code":
+        _discover_claude_extras(workspace, home, wp, wu, categories, inv)
+    elif pp.profile == "codex":
+        _discover_codex_extras(pp, workspace, home, wp, wu, categories, inv)
+
     if "env_secrets" in categories and wp and workspace.is_dir():
         for entry in sorted(workspace.iterdir()):
             if (entry.is_file() or entry.is_symlink()) and is_project_dotenv(entry.name):
+                if _record_broken_symlink(entry, workspace, home, inv.excluded):
+                    continue
                 validate_contained(entry, workspace, f"dotenv:{entry.name}")
                 raw_env = entry.read_text(encoding="utf-8")
                 inv.env_files.append(DiscoveredEnvFile(entry.name, "project", entry, raw_env, parse_dotenv_secrets(raw_env)[1]))
@@ -1721,6 +2334,8 @@ def apply_rule_to_target(
 
     if rule.kind == "always_on":
         dst = tpp.proj_doc if is_p else tpp.user_doc
+        if tp == "codex" and rule.is_override and dst is not None:
+            dst = dst.parent / "AGENTS.override.md"
         if dst is None:
             rdir = tpp.proj_rules if is_p else tpp.user_rules
             if rdir is None:
@@ -1762,6 +2377,11 @@ def apply_rule_to_target(
             dst, rendered = rdir / f"{rule.slug}.mdc", render_frontmatter({"globs": gval, "alwaysApply": False}, rule_body)
         elif tp == "windsurf" and is_p and tpp.proj_rules:
             dst, rendered = tpp.proj_rules / f"{rule.slug}.md", render_frontmatter({"trigger": "glob", "globs": ", ".join(rule.globs)}, rule_body)
+        elif tp == "antigravity" and rdir:
+            ag_meta: dict[str, Any] = {"trigger": "glob", "globs": ", ".join(rule.globs)}
+            if rule.description:
+                ag_meta["description"] = rule.description
+            dst, rendered = rdir / f"{rule.slug}.md", render_frontmatter(ag_meta, rule_body)
         elif allow_broaden_scope and (tpp.proj_doc if is_p else tpp.user_doc):
             ddoc = (tpp.proj_doc if is_p else tpp.user_doc)
             assert ddoc is not None
@@ -1790,6 +2410,8 @@ def apply_rule_to_target(
             dst, rendered = rdir / f"{rule.slug}.mdc", render_frontmatter({"description": rule.description, "alwaysApply": False}, rule_body)
         elif tp == "windsurf" and is_p and tpp.proj_rules:
             dst, rendered = tpp.proj_rules / f"{rule.slug}.md", render_frontmatter({"trigger": "model_decision", "description": rule.description}, rule_body)
+        elif tp == "antigravity" and rdir:
+            dst, rendered = rdir / f"{rule.slug}.md", render_frontmatter({"trigger": "model_decision", "description": rule.description or f"Rule {rule.slug}"}, rule_body)
         else:
             sdir = tpp.proj_skills if is_p else tpp.user_skills
             if sdir is None:
@@ -1802,6 +2424,20 @@ def apply_rule_to_target(
         return act("instructions", rule.slug, "migrated", dst, note="Converted model-selected rule to on-demand surface")
 
     # Manual rule -> manual-only Skill or explicit command (never always-on)
+    if tp == "antigravity":
+        rdir = tpp.proj_rules if is_p else tpp.user_rules
+        if rdir:
+            ag_manual: dict[str, Any] = {"trigger": "manual"}
+            if rule.description:
+                ag_manual["description"] = rule.description
+            dst = rdir / f"{rule.slug}.md"
+            rendered = render_frontmatter(ag_manual, rule_body)
+            root = target_root(dst)
+            if dst.exists():
+                return act("instructions", rule.slug, "noop" if dst.read_text(encoding="utf-8").strip() == rendered.strip() else "conflict", dst)
+            write_managed_file(dst, rendered.encode("utf-8"), has_secrets=_payload_has_secrets(rendered.encode("utf-8")), auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
+            return act("instructions", rule.slug, "migrated", dst, note="Mapped manual rule to Antigravity trigger: manual rule")
+
     if tp in ("claude-code", "cursor", "pi"):
         sdir = tpp.proj_skills if is_p else tpp.user_skills
         assert sdir is not None
@@ -1872,10 +2508,25 @@ def apply_skill_to_target(
         notes.append("Translated allowed-tools -> Qwen allowedTools; verify tool names")
     elif skill.source_profile == "qwen-code" and tpp.profile != "qwen-code" and "allowedTools" in skill.meta:
         return act("skills", skill.name, "deferred", dst_dir, reason="qwen_tool_restrictions_not_verified")
+    elif tpp.profile == "antigravity" and (
+        skill.meta.get("name") != skill.name or not str(skill.meta.get("description") or "").strip()
+    ):
+        nm = dict(skill.meta)
+        nm["name"] = skill.name
+        if not str(nm.get("description") or "").strip():
+            cand_line = next(
+                (ln.strip() for ln in skill.body.splitlines() if ln.strip() and not ln.strip().startswith("#")),
+                "",
+            ) or next((ln.lstrip("# ").strip() for ln in skill.body.splitlines() if ln.strip()), "")
+            nm["description"] = (cand_line[:160].strip() if cand_line else f"Skill {skill.name}")
+        alt_md = render_frontmatter(nm, skill.body).encode("utf-8")
+        notes.append("Added Antigravity-required SKILL.md frontmatter (name/description)")
 
     raw_files = dict(skill.verified_files) if skill.verified_files is not None else {}
     if skill.verified_files is None:
         for p in sorted(skill.directory.rglob("*")):
+            if p.is_symlink() and not p.exists():
+                continue
             validate_contained(p, auth_src, f"skill:{skill.name}")
             if p.is_file() and not is_excluded_asset(p, skill.directory):
                 rel = p.relative_to(skill.directory)
@@ -2101,33 +2752,485 @@ def checked_doc_name(value: str) -> str:
     return value
 
 
+ANTIGRAVITY_BUILTIN_AGENTS = frozenset({"self", "browser", "research", "image-generator"})
+CLAUDE_TO_ANTIGRAVITY_TOOLS: dict[str, list[str]] = {
+    "Read": ["read_file"], "Glob": ["read_file"], "Grep": ["read_file"],
+    "Edit": ["edit_file"], "MultiEdit": ["edit_file"],
+    "Write": ["write_file"],
+    "Bash": ["run_command", "manage_task"],
+    "WebSearch": ["search_web"], "WebFetch": ["search_web"],
+}
+ANTIGRAVITY_TO_CLAUDE_TOOLS: dict[str, list[str]] = {
+    "read_file": ["Read"], "view_file": ["Read"],
+    "grep_search": ["Grep"], "find_by_name": ["Glob"],
+    "edit_file": ["Edit"], "replace_file_content": ["Edit"], "multi_replace_file_content": ["Edit"],
+    "write_file": ["Write"], "write_to_file": ["Write"],
+    "run_command": ["Bash"],
+    "search_web": ["WebSearch"], "read_url_content": ["WebFetch"],
+}
+
+
+def _first_summary_line(body: str, fallback: str) -> str:
+    cand = next((ln.strip() for ln in body.splitlines() if ln.strip() and not ln.strip().startswith("#")), "")
+    if not cand:
+        cand = next((ln.lstrip("# ").strip() for ln in body.splitlines() if ln.strip()), "")
+    return (cand[:160].strip() if cand else fallback)
+
+
+def _translate_agent_markdown(doc_text: str, item_name: str, src_profile: str, dst_profile: str) -> tuple[str, list[str]]:
+    meta, body = parse_frontmatter(doc_text)
+    notes: list[str] = []
+    stem = Path(item_name).parent.name if (Path(item_name).name == "agent.md" and "/" in item_name) else Path(item_name).stem
+    name = str(meta.get("name") or stem).strip() or slugify(stem)
+    desc = str(meta.get("description") or "").strip() or _first_summary_line(body, f"Subagent {name}")
+
+    def _parse_tools_list(raw: Any) -> list[str]:
+        if isinstance(raw, list):
+            return [str(x).strip() for x in raw if str(x).strip()]
+        if isinstance(raw, str) and raw.strip():
+            return [x.strip() for x in re.split(r"[,\s]+", raw.strip()) if x.strip()]
+        return []
+
+    if dst_profile == "antigravity":
+        if name in ANTIGRAVITY_BUILTIN_AGENTS:
+            name = f"{src_profile.split('-')[0]}-{name}"
+            notes.append(f"Prefixed agent name '{name}' to avoid Antigravity built-in collision")
+        out_meta: dict[str, Any] = {"name": name, "description": desc, "subagent": True, "mainAgent": False}
+        src_tools = _parse_tools_list(meta.get("tools"))
+        if src_profile == "claude-code":
+            if not src_tools:
+                out_meta["tools"] = ["read_file", "edit_file", "write_file", "run_command", "manage_task", "search_web"]
+            else:
+                mapped: list[str] = []
+                unmapped: list[str] = []
+                for t in src_tools:
+                    if t in CLAUDE_TO_ANTIGRAVITY_TOOLS:
+                        for mt in CLAUDE_TO_ANTIGRAVITY_TOOLS[t]:
+                            if mt not in mapped:
+                                mapped.append(mt)
+                    else:
+                        unmapped.append(t)
+                out_meta["tools"] = mapped or ["read_file"]
+                if unmapped:
+                    notes.append(f"Dropped unmapped Claude tools: {', '.join(unmapped)}")
+            model = str(meta.get("model") or "").strip().lower()
+            if "haiku" in model:
+                out_meta["model"] = "flash"
+            elif "opus" in model:
+                out_meta["model"] = "pro"
+            if meta.get("color"):
+                notes.append("Dropped Claude-specific color field")
+        else:
+            if src_tools:
+                out_meta["tools"] = src_tools
+        return render_frontmatter(out_meta, body), notes
+
+    if dst_profile == "claude-code":
+        out_meta = {"name": name, "description": desc}
+        src_tools = _parse_tools_list(meta.get("tools"))
+        if src_profile == "antigravity" and src_tools:
+            mapped_c: list[str] = []
+            unmapped_c: list[str] = []
+            for t in src_tools:
+                if t in ANTIGRAVITY_TO_CLAUDE_TOOLS:
+                    for mt in ANTIGRAVITY_TO_CLAUDE_TOOLS[t]:
+                        if mt not in mapped_c:
+                            mapped_c.append(mt)
+                else:
+                    unmapped_c.append(t)
+            if mapped_c:
+                out_meta["tools"] = mapped_c
+            if unmapped_c:
+                notes.append(f"Dropped unmapped Antigravity tools: {', '.join(unmapped_c)}")
+        elif src_tools:
+            out_meta["tools"] = src_tools
+        model = str(meta.get("model") or "").strip().lower()
+        if model == "flash":
+            out_meta["model"] = "haiku"
+        elif model == "pro":
+            out_meta["model"] = "opus"
+        dropped = [k for k in ("subagent", "mainAgent", "commandExecutionPolicy", "skills") if k in meta]
+        if dropped:
+            notes.append(f"Dropped Antigravity-only fields: {', '.join(dropped)}")
+        return render_frontmatter(out_meta, body), notes
+
+    # Codex or other Markdown-agent targets
+    out_meta = {"name": name, "description": desc}
+    if meta.get("tools"):
+        notes.append("Preserved agent prompt; verify tool names for target harness")
+    return render_frontmatter(out_meta, body), notes
+
+
+def _merge_json_settings_file(
+    dst_path: Path, incoming: dict[str, Any], *, container_key: str | None = None,
+    cat: str, item_id: str, has_secrets: bool, allow_git_tracked_secrets: bool,
+    auth_root: Path, backups: BackupManager, warnings: list[dict[str, Any]], dry_run: bool,
+    replace_container: bool = False,
+) -> dict[str, Any]:
+    validate_contained(dst_path, auth_root, f"{cat}:{dst_path.name}")
+    doc: dict[str, Any] = {}
+    if dst_path.exists() and dst_path.is_file():
+        loaded = load_jsonc(dst_path.read_text(encoding="utf-8"))
+        if isinstance(loaded, dict):
+            doc = loaded
+    target = doc if container_key is None else dict(doc.get(container_key) or {})
+    if replace_container:
+        if container_key is None:
+            if doc == incoming:
+                return act(cat, item_id, "noop", dst_path, has_secrets=has_secrets)
+            if doc:
+                return act(cat, item_id, "conflict", dst_path, reason="existing_target_settings_differ", has_secrets=has_secrets)
+            doc = dict(incoming)
+        else:
+            existing_val = doc.get(container_key)
+            if existing_val == incoming:
+                return act(cat, item_id, "noop", dst_path, has_secrets=has_secrets)
+            if existing_val is not None:
+                return act(cat, item_id, "conflict", dst_path, reason=f"existing_{container_key}_differs", has_secrets=has_secrets)
+            doc[container_key] = incoming
+    else:
+        changed = False
+        conflicts: list[str] = []
+        for k, v in incoming.items():
+            if k not in target:
+                target[k] = v
+                changed = True
+            elif target[k] == v:
+                continue
+            elif isinstance(target[k], dict) and isinstance(v, dict):
+                sub = dict(target[k])
+                sub_changed = False
+                for sk, sv in v.items():
+                    if sk not in sub:
+                        sub[sk] = sv
+                        sub_changed = True
+                    elif sub[sk] != sv:
+                        conflicts.append(f"{k}.{sk}")
+                if sub_changed:
+                    target[k] = sub
+                    changed = True
+            else:
+                conflicts.append(k)
+        if not changed and conflicts:
+            return act(cat, item_id, "conflict", dst_path, reason=f"conflicting_keys: {', '.join(conflicts)}", has_secrets=has_secrets)
+        if not changed:
+            if not dry_run and has_secrets and dst_path.exists():
+                os.chmod(dst_path, 0o600)
+            return act(cat, item_id, "noop", dst_path, has_secrets=has_secrets)
+        if container_key is not None:
+            doc[container_key] = target
+        else:
+            doc = target
+    serialized = json.dumps(doc, indent=2, ensure_ascii=False) + "\n"
+    json.loads(serialized)
+    any_sec = has_secrets or _document_has_secrets(doc)
+    write_managed_file(
+        dst_path, serialized.encode("utf-8"), has_secrets=any_sec,
+        allow_git_tracked_secrets=allow_git_tracked_secrets, auth_root=auth_root,
+        backups=backups, warnings=warnings, dry_run=dry_run,
+    )
+    return act(cat, item_id, "migrated", dst_path, has_secrets=any_sec)
+
+
+def _insert_toml_scalars_and_tables(ex_text: str, scalar_lines: list[str], table_blocks: list[str]) -> str:
+    if not ex_text.strip():
+        parts = []
+        if scalar_lines:
+            parts.append("\n".join(scalar_lines))
+        if table_blocks:
+            parts.append("\n".join(b.rstrip("\n") for b in table_blocks))
+        return ("\n\n".join(parts) + "\n") if parts else ""
+    out_text = ex_text
+    if scalar_lines:
+        lines = out_text.splitlines(keepends=True)
+        insert_idx = len(lines)
+        in_triple: str | None = None
+        for idx, ln in enumerate(lines):
+            s = ln.strip()
+            if in_triple:
+                if in_triple in s:
+                    in_triple = None
+                continue
+            if '"""' in s and s.count('"""') % 2 == 1:
+                in_triple = '"""'
+                continue
+            if "'''" in s and s.count("'''") % 2 == 1:
+                in_triple = "'''"
+                continue
+            if s.startswith("["):
+                insert_idx = idx
+                break
+        prefix = "".join(lines[:insert_idx])
+        suffix = "".join(lines[insert_idx:])
+        sep_before = "" if (not prefix or prefix.endswith("\n")) else "\n"
+        sep_after = "\n" if (suffix and not suffix.startswith("\n")) else ""
+        out_text = prefix + sep_before + "\n".join(scalar_lines) + "\n" + sep_after + suffix
+    if table_blocks:
+        sep = "" if out_text.endswith("\n\n") else ("\n" if out_text.endswith("\n") else "\n\n")
+        out_text = out_text + sep + "\n".join(b.rstrip("\n") + "\n" for b in table_blocks)
+    return out_text
+
+
+def _merge_toml_settings_file(
+    dst_path: Path, incoming: dict[str, Any], *, cat: str, item_id: str,
+    has_secrets: bool, allow_git_tracked_secrets: bool, auth_root: Path,
+    backups: BackupManager, warnings: list[dict[str, Any]], dry_run: bool,
+) -> dict[str, Any]:
+    validate_contained(dst_path, auth_root, f"{cat}:{dst_path.name}")
+    ex_text = dst_path.read_text(encoding="utf-8") if dst_path.exists() else ""
+    ex_doc = tomllib.loads(ex_text) if ex_text.strip() else {}
+    scalar_lines: list[str] = []
+    table_blocks: list[str] = []
+    conflicts: list[str] = []
+    for k, v in incoming.items():
+        if v is None:
+            continue
+        if k in ex_doc:
+            if ex_doc[k] != v:
+                conflicts.append(k)
+            continue
+        if isinstance(v, dict):
+            blk = render_toml_document({k: v}).strip()
+            if blk:
+                table_blocks.append(blk)
+        elif isinstance(v, list) and v and all(isinstance(x, dict) for x in v):
+            blk = render_toml_document({k: v}).strip()
+            if blk:
+                table_blocks.append(blk)
+        else:
+            scalar_lines.append(f"{toml_key(k)} = {_toml_inline_value(v)}")
+    if not scalar_lines and not table_blocks:
+        if conflicts:
+            return act(cat, item_id, "conflict", dst_path, reason=f"conflicting_toml_keys: {', '.join(conflicts)}", has_secrets=has_secrets)
+        if not dry_run and has_secrets and dst_path.exists():
+            os.chmod(dst_path, 0o600)
+        return act(cat, item_id, "noop", dst_path, has_secrets=has_secrets)
+    final_toml = _insert_toml_scalars_and_tables(ex_text, scalar_lines, table_blocks)
+    parsed = tomllib.loads(final_toml)
+    any_sec = has_secrets or _document_has_secrets(parsed)
+    write_managed_file(
+        dst_path, final_toml.encode("utf-8"), has_secrets=any_sec,
+        allow_git_tracked_secrets=allow_git_tracked_secrets, auth_root=auth_root,
+        backups=backups, warnings=warnings, dry_run=dry_run,
+    )
+    note = f"Preserved conflicting target keys: {', '.join(conflicts)}" if conflicts else None
+    return act(cat, item_id, "migrated", dst_path, has_secrets=any_sec, note=note)
+
+
 def apply_doc_item_to_target(
     item: DiscoveredDocItem, tpp: ProfilePaths, *, workspace: Path, home: Path | None = None,
-    activate_hooks: bool, redact_secrets: bool = False,
+    activate_hooks: bool, redact_secrets: bool = False, allow_git_tracked_secrets: bool = False,
     backups: BackupManager, warnings: list[dict[str, Any]], dry_run: bool,
 ) -> dict[str, Any]:
     if item.scope not in ("project", "user"):
         raise SafetyRefusalError("invalid_document_scope", "Invalid document scope")
     checked_doc_name(item.name)
     is_p, tp = item.scope == "project", tpp.profile
+    eff_home = home or workspace
     name = item.name
     if item.source_profile == "vscode" and tp != "vscode":
         suffix = {"commands": ".prompt.md", "agents": ".agent.md"}.get(item.category)
         if suffix and name.endswith(suffix):
             name = name[:-len(suffix)] + ".md"
+    if item.category == "agents" and item.subkind == "agent_nested" and tp != "antigravity" and name.endswith("/agent.md"):
+        name = Path(name).parent.name + ".md"
+
+    def target_root(dst: Path) -> Path:
+        root = tpp.contained_root(dst, item.scope, workspace, eff_home)
+        validate_contained(dst, root, f"document:{dst.name}")
+        return root
+
+    if item.category == "plugins" and item.subkind == "plugin_file":
+        if tp != item.source_profile:
+            return act("plugins", item.name, "deferred", reason=f"cross_profile_plugin_requires_manual_or_unpack ({item.source_profile} -> {tp})")
+        pbase = (workspace / ".agents/plugins") if is_p else (eff_home / ".gemini/config/plugins")
+        dst = pbase / name
+        root = target_root(dst)
+        has_sec = _resource_contains_secrets(item.content)
+        data = _redact_resource(item.content) if (redact_secrets and has_sec) else item.content
+        if redact_secrets and has_sec:
+            has_sec = _resource_contains_secrets(data)
+        if dst.resolve(strict=False) == item.path.resolve(strict=False):
+            return act("plugins", item.name, "noop", dst, has_secrets=has_sec)
+        if dst.exists():
+            same = dst.is_file() and dst.read_bytes() == data
+            mode_ok = os.name == "nt" or (bool(dst.stat().st_mode & stat.S_IXUSR) == item.executable)
+            return act("plugins", item.name, "noop" if (same and mode_ok) else "conflict", dst, reason=None if (same and mode_ok) else "existing_target_plugin_file_differs")
+        write_managed_file(dst, data, has_secrets=has_sec, executable=item.executable, allow_git_tracked_secrets=allow_git_tracked_secrets, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
+        return act("plugins", item.name, "migrated", dst, has_secrets=has_sec)
+
+    if item.category == "plugins":
+        if tp != item.source_profile:
+            return act("plugins", item.name, "deferred", reason=f"cross_profile_plugin_requires_manual_or_unpack ({item.source_profile} -> {tp})")
+        if item.subkind == "antigravity_plugins_registry":
+            inc = load_jsonc(item.content.decode("utf-8"))
+            pmap = inc.get("plugins") if isinstance(inc, dict) else None
+            if not isinstance(pmap, dict):
+                return act("plugins", item.name, "deferred", reason="invalid_antigravity_plugins_registry")
+            return _merge_json_settings_file(
+                eff_home / ".gemini/config/config.json", pmap, container_key="plugins",
+                cat="plugins", item_id=item.name, has_secrets=False,
+                allow_git_tracked_secrets=allow_git_tracked_secrets, auth_root=eff_home,
+                backups=backups, warnings=warnings, dry_run=dry_run,
+            )
+        if item.subkind == "claude_plugin_registry":
+            dst = eff_home / ".claude/plugins" / item.name
+            validate_contained(dst, eff_home, f"claude_plugin:{item.name}")
+            if dst.resolve(strict=False) == item.path.resolve(strict=False):
+                return act("plugins", item.name, "noop", dst)
+            if dst.exists():
+                return act("plugins", item.name, "noop" if dst.read_bytes() == item.content else "conflict", dst)
+            write_managed_file(dst, item.content, has_secrets=False, auth_root=eff_home, backups=backups, warnings=warnings, dry_run=dry_run)
+            return act("plugins", item.name, "migrated", dst)
+
+    if item.category == "settings":
+        if tp != item.source_profile:
+            return act("settings", item.name, "deferred", reason=f"cross_profile_settings_not_portable ({item.source_profile} -> {tp})")
+        if item.subkind == "antigravity_config_settings":
+            inc = load_jsonc(item.content.decode("utf-8"))
+            us = inc.get("userSettings") if isinstance(inc, dict) else None
+            if not isinstance(us, dict):
+                return act("settings", item.name, "deferred", reason="invalid_antigravity_user_settings")
+            return _merge_json_settings_file(
+                eff_home / ".gemini/config/config.json", us, container_key="userSettings",
+                cat="settings", item_id=item.name, has_secrets=False,
+                allow_git_tracked_secrets=allow_git_tracked_secrets, auth_root=eff_home,
+                backups=backups, warnings=warnings, dry_run=dry_run,
+            )
+        if item.subkind in ("antigravity_cli_settings", "antigravity_cli_keybindings"):
+            fname = "settings.json" if item.subkind == "antigravity_cli_settings" else "keybindings.json"
+            dst = eff_home / ".gemini/antigravity-cli" / fname
+            inc = load_jsonc(item.content.decode("utf-8"))
+            if isinstance(inc, dict) and item.subkind == "antigravity_cli_settings":
+                return _merge_json_settings_file(
+                    dst, inc, container_key=None, cat="settings", item_id=item.name,
+                    has_secrets=False, allow_git_tracked_secrets=allow_git_tracked_secrets,
+                    auth_root=eff_home, backups=backups, warnings=warnings, dry_run=dry_run,
+                )
+            validate_contained(dst, eff_home, f"antigravity_cli:{fname}")
+            if dst.exists():
+                return act("settings", item.name, "noop" if dst.read_bytes() == item.content else "conflict", dst)
+            write_managed_file(dst, item.content, has_secrets=False, auth_root=eff_home, backups=backups, warnings=warnings, dry_run=dry_run)
+            return act("settings", item.name, "migrated", dst)
+        if item.subkind == "claude_settings":
+            inc = load_jsonc(item.content.decode("utf-8"))
+            if not isinstance(inc, dict):
+                return act("settings", item.name, "deferred", reason="invalid_claude_settings")
+            if redact_secrets and isinstance(inc.get("env"), dict):
+                inc = dict(inc)
+                inc["env"], _ = _scan_and_redact_dict_secrets(inc["env"], prefix="env", redact=True)
+            _, sec_found = _scan_and_redact_dict_secrets(inc.get("env", {}), prefix="env", redact=False)
+            has_sec = bool(sec_found) or _document_has_secrets(inc)
+            dst = (workspace / ".claude" / item.name) if is_p else (eff_home / ".claude" / item.name)
+            root = target_root(dst)
+            return _merge_json_settings_file(
+                dst, inc, container_key=None, cat="settings", item_id=item.name,
+                has_secrets=has_sec, allow_git_tracked_secrets=allow_git_tracked_secrets,
+                auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run,
+            )
+        if item.subkind == "codex_toml_settings":
+            inc = tomllib.loads(item.content.decode("utf-8"))
+            if redact_secrets:
+                inc, _ = _scan_and_redact_dict_secrets(inc, redact=True)
+            _, sec_found = _scan_and_redact_dict_secrets(inc, redact=False)
+            has_sec = bool(sec_found) or _document_has_secrets(inc)
+            dst = tpp.proj_mcp if is_p else tpp.user_mcp
+            assert dst is not None
+            root = target_root(dst)
+            return _merge_toml_settings_file(
+                dst, inc, cat="settings", item_id=item.name, has_secrets=has_sec,
+                allow_git_tracked_secrets=allow_git_tracked_secrets, auth_root=root,
+                backups=backups, warnings=warnings, dry_run=dry_run,
+            )
+
+    if item.category == "manifests":
+        if tp != "antigravity":
+            return act("manifests", item.name, "deferred", reason=f"antigravity_manifest_not_applicable_to_target ({tp})")
+        dst = (workspace / ".agents" / item.name) if is_p else (eff_home / ".gemini/config" / item.name)
+        root = target_root(dst)
+        if dst.resolve(strict=False) == item.path.resolve(strict=False):
+            return act("manifests", item.name, "noop", dst)
+        if dst.exists():
+            return act("manifests", item.name, "noop" if dst.read_bytes() == item.content else "conflict", dst)
+        write_managed_file(dst, item.content, has_secrets=False, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
+        return act("manifests", item.name, "migrated", dst)
+
     doc_text = item.content.decode("utf-8", errors="surrogateescape")
     if redact_secrets:
         doc_text = _redact_document_text(doc_text)
     doc_content = doc_text.encode("utf-8", errors="surrogateescape")
     doc_has_secrets = _document_text_has_secrets(doc_text)
 
-    def target_root(dst: Path) -> Path:
-        root = tpp.contained_root(dst, item.scope, workspace, home or workspace)
-        validate_contained(dst, root, f"document:{dst.name}")
-        return root
+    if item.category == "scripts":
+        if tp == item.source_profile and tp in ("antigravity", "codex"):
+            sbase = (eff_home / ".gemini/config/scripts") if tp == "antigravity" else ((tpp.user_mcp.parent if tpp.user_mcp else eff_home / ".codex") / "scripts")
+            dst = sbase / name
+            root = target_root(dst)
+            if dst.resolve(strict=False) == item.path.resolve(strict=False):
+                return act("scripts", item.name, "noop", dst)
+            if dst.exists():
+                same = dst.is_file() and dst.read_bytes() == doc_content
+                mode_ok = os.name == "nt" or (bool(dst.stat().st_mode & stat.S_IXUSR) == item.executable)
+                return act("scripts", item.name, "noop" if (same and mode_ok) else "conflict", dst)
+            write_managed_file(dst, doc_content, has_secrets=doc_has_secrets, executable=item.executable, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
+            return act("scripts", item.name, "migrated", dst, has_secrets=doc_has_secrets)
+        park_dir = workspace / ".migration-review" / "scripts" / tp
+        park = park_dir / name
+        validate_contained(park_dir, workspace, "parked_script_directory")
+        write_managed_file(park, doc_content, has_secrets=doc_has_secrets, auth_root=park_dir, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
+        return act("scripts", item.name, "parked_draft", park, reason="Helper scripts from another profile stay parked in .migration-review/scripts/")
+
+    if item.category == "sidecars":
+        if activate_hooks and tp == "antigravity" and item.source_profile == "antigravity":
+            dst = eff_home / ".gemini/config/sidecars" / name
+            root = target_root(dst)
+            if dst.resolve(strict=False) == item.path.resolve(strict=False):
+                return act("sidecars", item.name, "noop", dst)
+            if dst.exists():
+                same = dst.is_file() and dst.read_bytes() == doc_content
+                mode_ok = os.name == "nt" or (bool(dst.stat().st_mode & stat.S_IXUSR) == item.executable)
+                return act("sidecars", item.name, "noop" if (same and mode_ok) else "conflict", dst)
+            write_managed_file(dst, doc_content, has_secrets=doc_has_secrets, executable=item.executable, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
+            return act("sidecars", item.name, "migrated", dst, note="Activated sidecar via --activate-hooks")
+        park_dir = workspace / ".migration-review" / "sidecars" / tp
+        park = park_dir / name
+        validate_contained(park_dir, workspace, "parked_sidecar_directory")
+        write_managed_file(park, doc_content, has_secrets=doc_has_secrets, auth_root=park_dir, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
+        return act("sidecars", item.name, "parked_draft", park, reason="Background sidecars stay parked in .migration-review/ unless --activate-hooks is passed on same-profile")
 
     if item.category == "hooks":
+        if item.subkind == "codex_policy_rule":
+            if activate_hooks and tp == "codex" and item.source_profile == "codex":
+                rbase = (workspace / ".codex/rules") if is_p else ((tpp.user_mcp.parent if tpp.user_mcp else eff_home / ".codex") / "rules")
+                dst = rbase / name
+                root = target_root(dst)
+                if dst.exists():
+                    return act("hooks", item.name, "noop" if dst.read_bytes() == doc_content else "conflict", dst)
+                write_managed_file(dst, doc_content, has_secrets=doc_has_secrets, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
+                return act("hooks", item.name, "migrated", dst, note="Restored Codex command policy rule via --activate-hooks")
+            park_dir = workspace / ".migration-review" / "codex-rules" / tp / item.scope
+            park = park_dir / name
+            validate_contained(park_dir, workspace, "parked_codex_rule_dir")
+            write_managed_file(park, doc_content, has_secrets=doc_has_secrets, auth_root=park_dir, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
+            return act("hooks", item.name, "parked_draft", park, reason="Codex .rules command policies stay parked unless --activate-hooks on same-profile")
+
         if activate_hooks:
+            if tp == "claude-code" and item.source_profile == "claude-code":
+                hd = (workspace / ".claude/settings.local.json") if (is_p and item.subkind == "claude_local_hooks_json") else (tpp.proj_hooks if is_p else tpp.user_hooks)
+                if hd is not None:
+                    inc_h = load_jsonc(doc_text)
+                    hval = inc_h.get("hooks") if isinstance(inc_h, dict) else None
+                    if isinstance(hval, dict):
+                        root = target_root(hd)
+                        res = _merge_json_settings_file(
+                            hd, hval, container_key="hooks", cat="hooks", item_id=item.name,
+                            has_secrets=doc_has_secrets, allow_git_tracked_secrets=allow_git_tracked_secrets,
+                            auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run,
+                            replace_container=True,
+                        )
+                        if res["outcome"] == "migrated":
+                            res["note"] = "Activated Claude Code hooks via --activate-hooks"
+                        return res
             hd = tpp.proj_hooks if is_p else tpp.user_hooks
             if hd is not None and tp != "claude-code":
                 root = target_root(hd)
@@ -2150,12 +3253,13 @@ def apply_doc_item_to_target(
         park_dir = workspace / ".migration-review" / "hooks" / tp / item.scope
         park = park_dir / item.name
         validate_contained(park_dir, workspace, "parked_hook_directory")
-        if is_inside_autoload_dir(park, workspace, home or workspace):
+        if is_inside_autoload_dir(park, workspace, eff_home):
             raise SafetyRefusalError("unsafe_hook_parking", "Parked hook must stay outside live discovery paths")
         write_managed_file(park, doc_content, has_secrets=doc_has_secrets, auth_root=park_dir, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
         return act("hooks", item.name, "parked_draft", park, reason="Executable hooks stay parked in .migration-review/ until explicitly approved")
 
     dst_dir: Path | None = None
+    note_extra: str | None = None
     if item.category == "commands":
         dst_dir = tpp.proj_cmds if is_p else tpp.user_cmds
         if dst_dir is None or (tp == "gemini-cli" and not item.name.endswith(".toml")) or (item.source_profile == "gemini-cli" and tp != "gemini-cli"):
@@ -2167,7 +3271,8 @@ def apply_doc_item_to_target(
                 src_meta, body = parse_frontmatter(text)
                 carry = {k: v for k, v in src_meta.items() if k in COMMAND_ENFORCEABLE_KEYS}
                 lost = [k for k in src_meta if k not in carry and k not in ("name", "description")]
-                rnd = render_frontmatter({"name": cslug, "description": f"Command /{cslug}", "disable-model-invocation": True, **carry}, body).encode("utf-8")
+                cdesc = str(src_meta.get("description") or "").strip() or _first_summary_line(body, f"Command /{cslug}")
+                rnd = render_frontmatter({"name": cslug, "description": cdesc, "disable-model-invocation": True, **carry}, body).encode("utf-8")
                 if lost:
                     park = workspace / ".migration-review" / "commands" / tp / item.name
                     write_managed_file(park, doc_content, has_secrets=doc_has_secrets, auth_root=workspace, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
@@ -2182,21 +3287,57 @@ def apply_doc_item_to_target(
             return act("commands", item.name, "parked_draft", park, reason="Command schema differs across source/target")
     elif item.category == "agents":
         dst_dir = tpp.proj_agents if is_p else tpp.user_agents
+        if item.source_profile == "codex" and tp != "codex" and item.name.endswith(".toml"):
+            park = workspace / ".migration-review" / "agents" / tp / item.name
+            write_managed_file(park, doc_content, has_secrets=doc_has_secrets, auth_root=workspace, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
+            return act("agents", item.name, "parked_draft", park, reason="codex_toml_agent_requires_manual_translation")
+        if dst_dir is not None and item.source_profile != tp and name.endswith(".md"):
+            translated_text, tnotes = _translate_agent_markdown(doc_text, item.name, item.source_profile, tp)
+            doc_text = translated_text
+            doc_content = doc_text.encode("utf-8", errors="surrogateescape")
+            doc_has_secrets = _document_text_has_secrets(doc_text)
+            if tnotes:
+                note_extra = "; ".join(tnotes)
     elif item.category == "workflows":
         dst_dir = tpp.proj_workflows if is_p else tpp.user_workflows
         if dst_dir is None:
-            sdir = tpp.proj_skills if is_p else tpp.user_skills
-            if sdir is not None and item.name.endswith(".md"):
-                wslug = slugify(Path(item.name).stem)
-                dst = sdir / wslug / "SKILL.md"
-                _, body = parse_frontmatter(doc_text)
-                rnd = render_frontmatter({"name": wslug, "description": f"Workflow /{wslug}", "disable-model-invocation": True}, body).encode("utf-8")
-                root = target_root(dst)
-                if dst.exists():
-                    return act("workflows", item.name, "noop" if dst.read_bytes() == rnd else "conflict", dst)
-                write_managed_file(dst, rnd, has_secrets=doc_has_secrets, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
-                return act("workflows", item.name, "migrated", dst, note="Mapped workflow to manual-only Skill")
+            cdir = tpp.proj_cmds if is_p else tpp.user_cmds
+            if tp in ("claude-code", "codex") and cdir is not None and item.name.endswith(".md"):
+                dst_dir = cdir
+                note_extra = f"Mapped workflow to {'slash command' if tp == 'claude-code' else 'Codex prompt'}"
+            else:
+                sdir = tpp.proj_skills if is_p else tpp.user_skills
+                if sdir is not None and item.name.endswith(".md"):
+                    wslug = slugify(Path(item.name).stem)
+                    dst = sdir / wslug / "SKILL.md"
+                    wmeta, body = parse_frontmatter(doc_text)
+                    wdesc = str(wmeta.get("description") or "").strip() or _first_summary_line(body, f"Workflow /{wslug}")
+                    rnd = render_frontmatter({"name": wslug, "description": wdesc, "disable-model-invocation": True}, body).encode("utf-8")
+                    root = target_root(dst)
+                    if dst.exists():
+                        return act("workflows", item.name, "noop" if dst.read_bytes() == rnd else "conflict", dst)
+                    write_managed_file(dst, rnd, has_secrets=doc_has_secrets, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
+                    return act("workflows", item.name, "migrated", dst, note="Mapped workflow to manual-only Skill")
     elif item.category == "memory":
+        if item.subkind == "claude_project_memory":
+            if tp == "claude-code":
+                dst = eff_home / ".claude/projects" / claude_project_slug(workspace) / "memory" / name
+                validate_contained(dst, eff_home, f"claude_project_memory:{name}")
+                if dst.resolve(strict=False) == item.path.resolve(strict=False):
+                    return act("memory", item.name, "noop", dst)
+                if dst.exists():
+                    return act("memory", item.name, "noop" if dst.read_bytes() == doc_content else "conflict", dst)
+                write_managed_file(dst, doc_content, has_secrets=doc_has_secrets, auth_root=eff_home, backups=backups, warnings=warnings, dry_run=dry_run)
+                return act("memory", item.name, "migrated", dst)
+            if tpp.proj_doc is not None:
+                root = target_root(tpp.proj_doc)
+                ex = tpp.proj_doc.read_text(encoding="utf-8") if tpp.proj_doc.exists() else ""
+                merged, st = merge_markdown_section(ex, slugify(f"memory-{Path(item.name).stem}"), doc_text)
+                if st == "conflict":
+                    return act("memory", item.name, "conflict", tpp.proj_doc)
+                if st == "added":
+                    write_managed_file(tpp.proj_doc, merged.encode("utf-8"), has_secrets=_document_text_has_secrets(merged), auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
+                return act("memory", item.name, "noop" if st == "noop" else "migrated", tpp.proj_doc)
         dst_dir = tpp.user_memory
         if dst_dir is None and tpp.user_doc is not None:
             root = target_root(tpp.user_doc)
@@ -2225,7 +3366,7 @@ def apply_doc_item_to_target(
     if dst.exists():
         return act(item.category, item.name, "noop" if dst.read_bytes() == doc_content else "conflict", dst, reason=None if dst.read_bytes() == doc_content else "existing_target_file_differs")
     write_managed_file(dst, doc_content, has_secrets=doc_has_secrets, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
-    return act(item.category, item.name, "migrated", dst)
+    return act(item.category, item.name, "migrated", dst, note=note_extra)
 
 
 # --- Subcommands: inspect, migrate, export-device, import-device, patch-mcp ---
@@ -2238,25 +3379,83 @@ def select_profiles(raw: str, workspace: Path, home: Path, scope: str, categorie
     return [discover_profile(p, workspace, home, scope, categories) for p in chosen]
 
 
+def _build_action_totals(actions: list[dict[str, Any]]) -> dict[str, Any]:
+    by_cat: dict[str, dict[str, int]] = {}
+    for a in actions:
+        cat = str(a.get("category", "other"))
+        out = str(a.get("outcome", "other"))
+        bucket = by_cat.setdefault(cat, {})
+        bucket[out] = bucket.get(out, 0) + 1
+    return {
+        "total_actions": len(actions),
+        "by_outcome": {k: sum(1 for a in actions if a["outcome"] == k) for k in ("migrated", "noop", "conflict", "parked_draft", "deferred")},
+        "by_category": by_cat,
+    }
+
+
 def cmd_inspect(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
     ws, home = Path(args.workspace).expanduser().resolve(), Path(args.home).expanduser().resolve()
     invs = select_profiles(args.profiles, ws, home, args.scope, parse_categories(args.categories))
     profiles_out = []
+    totals_by_cat: dict[str, int] = {}
     for inv in invs:
         mcp_items = [
             {"name": s.name, "scope": sc, "transport": s.transport, "has_secrets": s.secret_summary()[0], "secrets": s.secret_summary()[1], "stripped_grants": s.stripped_grants}
             for sc in ("project", "user") for s in inv.mcp_servers[sc]
         ]
-        profiles_out.append({
-            "profile": inv.profile,
-            "instructions": [{"id": r.slug, "scope": r.scope, "kind": r.kind, "globs": r.globs, "source": logical_path_str(r.source_path, ws, home)} for r in inv.rules],
-            "skills": [{"name": s.name, "scope": s.scope, "sha256_prefix": s.digest[:8], "source": logical_path_str(s.directory, ws, home)} for s in inv.skills],
-            "mcp": mcp_items,
-            "other_items": [{"category": d.category, "name": d.name, "scope": d.scope, "source": logical_path_str(d.path, ws, home)} for d in inv.doc_items],
-            "env_secrets": [{"file": e.name, "scope": e.scope, "has_secrets": bool(e.secrets), "secrets": e.secrets} for e in inv.env_files],
-            "excluded": inv.excluded,
-        })
-    return {"ok": True, "command": "inspect", "version": SCHEMA_VERSION, "scope": args.scope, "profiles": profiles_out}, 0
+        other_counts: dict[str, int] = {}
+        for d in inv.doc_items:
+            other_counts[d.category] = other_counts.get(d.category, 0) + 1
+        counts = {
+            "instructions": len(inv.rules),
+            "skills": len(inv.skills),
+            "mcp": len(mcp_items),
+            "env_secrets": len(inv.env_files),
+            **other_counts,
+            "excluded": len(inv.excluded),
+        }
+        for k, v in counts.items():
+            if k != "excluded":
+                totals_by_cat[k] = totals_by_cat.get(k, 0) + v
+        if getattr(args, "summary", False):
+            secret_keys = [
+                *[f"mcp:{m['name']}:{s['name']}" for m in mcp_items for s in m["secrets"]],
+                *[f"env:{e.name}:{s['name']}" for e in inv.env_files for s in e.secrets],
+                *[f"{d.category}:{d.name}:{s['name']}" for d in inv.doc_items for s in d.secrets],
+            ]
+            profiles_out.append({
+                "profile": inv.profile,
+                "counts": counts,
+                "secret_keys": secret_keys,
+            })
+        else:
+            other_items = []
+            for d in inv.doc_items:
+                entry: dict[str, Any] = {
+                    "category": d.category, "name": d.name, "scope": d.scope,
+                    "source": logical_path_str(d.path, ws, home),
+                }
+                if d.subkind:
+                    entry["subkind"] = d.subkind
+                if d.secrets:
+                    entry["has_secrets"] = True
+                    entry["secrets"] = d.secrets
+                other_items.append(entry)
+            profiles_out.append({
+                "profile": inv.profile,
+                "counts": counts,
+                "instructions": [{"id": r.slug, "scope": r.scope, "kind": r.kind, "globs": r.globs, "source": logical_path_str(r.source_path, ws, home)} for r in inv.rules],
+                "skills": [{"name": s.name, "scope": s.scope, "sha256_prefix": s.digest[:8], "source": logical_path_str(s.directory, ws, home)} for s in inv.skills],
+                "mcp": mcp_items,
+                "other_items": other_items,
+                "env_secrets": [{"file": e.name, "scope": e.scope, "has_secrets": bool(e.secrets), "secrets": e.secrets} for e in inv.env_files],
+                "excluded": inv.excluded,
+            })
+    return {
+        "ok": True, "command": "inspect", "version": SCHEMA_VERSION, "scope": args.scope,
+        "totals": {"profiles": len(profiles_out), "by_category": totals_by_cat},
+        "profiles": profiles_out,
+    }, 0
 
 
 def execute_inventories_to_targets(
@@ -2342,7 +3541,11 @@ def execute_inventories_to_targets(
             if any((c.content, c.executable) != (item.content, item.executable) for c in candidates[1:]):
                 res = act(item.category, item.name, "conflict", reason="conflicting_documents_across_sources")
             else:
-                res = apply_doc_item_to_target(item, tpp, workspace=workspace, home=home, activate_hooks=activate_hooks, redact_secrets=redact_secrets, backups=backups, warnings=warnings, dry_run=dry_run)
+                res = apply_doc_item_to_target(
+                    item, tpp, workspace=workspace, home=home, activate_hooks=activate_hooks,
+                    redact_secrets=redact_secrets, allow_git_tracked_secrets=allow_git_tracked_secrets,
+                    backups=backups, warnings=warnings, dry_run=dry_run,
+                )
             res["target_profile"] = tprof
             actions.append(res)
 
@@ -2368,7 +3571,8 @@ def execute_inventories_to_targets(
     unresolved = [a for a in actions if a["outcome"] in ("conflict", "deferred", "parked_draft")]
     counts = {k: sum(1 for a in actions if a["outcome"] == k) for k in ("migrated", "noop", "conflict", "parked_draft", "deferred")}
     return {
-        "ok": True, "dry_run": dry_run, "redact_secrets": redact_secrets, "summary": counts,
+        "ok": True, "dry_run": dry_run, "redact_secrets": redact_secrets,
+        "totals": _build_action_totals(actions), "summary": counts,
         "actions": actions, "conflicts": [a for a in actions if a["outcome"] == "conflict"],
         "parked_or_deferred": [a for a in actions if a["outcome"] in ("parked_draft", "deferred")],
         "backups": [str(p) for p in backups.backed_up.values()], "warnings": warnings, "excluded": excluded_all,
@@ -2394,7 +3598,13 @@ def cmd_migrate(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
 
 def cmd_export_device(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
     ws, home = Path(args.workspace).expanduser().resolve(), Path(args.home).expanduser().resolve()
-    out_dir = Path(args.output).expanduser().resolve(strict=False)
+    if args.output:
+        out_dir = Path(args.output).expanduser().resolve(strict=False)
+    else:
+        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        out_dir = home / f"context-transfer-{ts}"
+        if out_dir.exists() or out_dir.is_symlink():
+            out_dir = home / f"context-transfer-{ts}-{os.getpid()}"
     if out_dir.exists() or out_dir.is_symlink():
         raise SafetyRefusalError("output_already_exists", f"Refusing to overwrite existing transfer path: {out_dir}")
     if is_inside_autoload_dir(out_dir, ws, home):
@@ -2432,15 +3642,20 @@ def cmd_export_device(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
             rule_bytes = r.body.encode("utf-8")
             rule_has_secrets = _resource_contains_secrets(rule_bytes)
             rule_data = _redact_resource(rule_bytes) if (args.redact_secrets and rule_has_secrets) else rule_bytes
-            _stage(f"files/{prof}/{r.scope}/instructions/{idx:02d}-{r.slug}-{r.source_path.name}", rule_data, {
+            rmeta: dict[str, Any] = {
                 "profile": prof, "category": "instructions", "scope": r.scope, "id": r.slug,
                 "rule_kind": r.kind, "normalized_body": True, "globs": r.globs, "description": r.description,
                 "logical_source": logical_path_str(r.source_path, ws, home),
                 "has_secrets": rule_has_secrets and not args.redact_secrets, "secrets": [],
-            })
+            }
+            if r.is_override:
+                rmeta["is_override"] = True
+            _stage(f"files/{prof}/{r.scope}/instructions/{idx:02d}-{r.slug}-{r.source_path.name}", rule_data, rmeta)
         for sk in inv.skills:
             auth_s = sk.auth_root or (ws if sk.scope == "project" else home)
             for p in sorted(sk.directory.rglob("*")):
+                if p.is_symlink() and not p.exists():
+                    continue
                 validate_contained(p, auth_s, f"skill:{sk.name}")
                 if p.is_file() and not is_excluded_asset(p, sk.directory):
                     irel = p.relative_to(sk.directory).as_posix()
@@ -2474,15 +3689,39 @@ def cmd_export_device(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
                 "server_names": [s.name for s in srvs], "has_secrets": any_s, "secrets": asec,
             })
         for d in inv.doc_items:
-            rel = f"review/hooks/{prof}-{d.scope}-{d.name}" if d.category == "hooks" else f"files/{prof}/{d.scope}/{d.category}/{d.name}"
-            doc_has_secrets = _resource_contains_secrets(d.content)
-            doc_data = _redact_resource(d.content) if (args.redact_secrets and doc_has_secrets) else d.content
-            _stage(rel, doc_data, {
+            if d.category == "hooks" and d.subkind == "codex_policy_rule":
+                rel = f"review/rules/{prof}-{d.scope}-{d.name}"
+            elif d.category == "hooks":
+                rel = f"review/hooks/{prof}-{d.scope}-{d.name}"
+            elif d.category == "sidecars":
+                rel = f"review/sidecars/{prof}-{d.scope}-{d.name}"
+            else:
+                rel = f"files/{prof}/{d.scope}/{d.category}/{d.name}"
+            doc_data = d.content
+            doc_has_secrets = bool(d.secrets) or _resource_contains_secrets(d.content)
+            if args.redact_secrets:
+                if d.subkind == "claude_settings":
+                    parsed_cs = load_jsonc(d.content.decode("utf-8"))
+                    if isinstance(parsed_cs, dict) and isinstance(parsed_cs.get("env"), dict):
+                        parsed_cs = dict(parsed_cs)
+                        parsed_cs["env"], _ = _scan_and_redact_dict_secrets(parsed_cs["env"], prefix="env", redact=True)
+                    doc_data = (json.dumps(parsed_cs, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+                elif d.subkind == "codex_toml_settings":
+                    parsed_ct = tomllib.loads(d.content.decode("utf-8"))
+                    parsed_ct, _ = _scan_and_redact_dict_secrets(parsed_ct, redact=True)
+                    doc_data = render_toml_document(parsed_ct).encode("utf-8")
+                elif doc_has_secrets:
+                    doc_data = _redact_resource(d.content)
+                doc_has_secrets = _resource_contains_secrets(doc_data)
+            dmeta: dict[str, Any] = {
                 "profile": prof, "category": d.category, "scope": d.scope, "id": d.name,
                 "logical_source": logical_path_str(d.path, ws, home),
-                "executable": d.executable if d.category == "hooks" else False,
-                "has_secrets": doc_has_secrets and not args.redact_secrets, "secrets": [],
-            })
+                "executable": bool(d.executable),
+                "has_secrets": doc_has_secrets and not args.redact_secrets, "secrets": list(d.secrets),
+            }
+            if d.subkind:
+                dmeta["subkind"] = d.subkind
+            _stage(rel, doc_data, dmeta)
         for ef in inv.env_files:
             if ef.name not in seen_env:
                 seen_env.add(ef.name)
@@ -2492,6 +3731,10 @@ def cmd_export_device(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
                     "logical_source": f"$WORKSPACE/{ef.name}", "has_secrets": bool(sl) and not args.redact_secrets, "secrets": sl,
                 })
 
+    by_cat: dict[str, int] = {}
+    for m in entries:
+        by_cat[m["category"]] = by_cat.get(m["category"], 0) + 1
+
     md = [
         "# Context transfer", "",
         "This folder contains reviewed AI coding context, not an installer or auto-run script.",
@@ -2500,7 +3743,13 @@ def cmd_export_device(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
         f"- Schema version: `{SCHEMA_VERSION}`",
         f"- Source profiles: `{', '.join(i.profile for i in invs) or 'none'}`",
         f"- Requested scope: `{args.scope}`",
+        f"- Exported files: `{len(entries)}` ({', '.join(f'{k}={v}' for k, v in sorted(by_cat.items())) or 'none'})",
         f"- Secret policy: `{'redacted (--redact-secrets)' if args.redact_secrets else 'out-of-band in 0600 files (fingerprinted below)'}`", "",
+        "## Restore on new machine", "",
+        "```bash",
+        f'python3 "<SKILL_DIR>/scripts/migrate_context.py" import-device --input "{out_dir}" --target same --workspace .',
+        "# Add --activate-hooks if you have reviewed hooks/sidecars/rules and want them restored live.",
+        "```", "",
         "## Included items", "",
         "| Bundle file | Profile / Scope | Category | Secret keys (SHA-256[:8] only) |",
         "| --- | --- | --- | --- |",
@@ -2528,6 +3777,7 @@ def cmd_export_device(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
     return {
         "ok": True, "command": "export-device", "version": SCHEMA_VERSION, "dry_run": args.dry_run,
         "redact_secrets": args.redact_secrets, "output_dir": str(out_dir), "exported_count": len(entries),
+        "totals": {"profiles": len(invs), "exported_count": len(entries), "excluded_count": len(excluded_all), "by_category": by_cat},
         "profiles": [i.profile for i in invs],
         "entries": [{"bundle_path": m["bundle_path"], "profile": m["profile"], "category": m["category"], "scope": m["scope"], "has_secrets": m["has_secrets"], "secrets": m["secrets"], "sha256_prefix": m["sha256"][:8]} for m in entries],
         "excluded": excluded_all,
@@ -2584,7 +3834,11 @@ def cmd_import_device(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
             txt = data.decode("utf-8")
             _, bdy = parse_frontmatter(txt) if (e.get("normalized_body") is not True and (
                 e.get("rule_kind") != "always_on" or txt.startswith("---"))) else ({}, txt)
-            pinv.rules.append(DiscoveredRule(name, esc, str(e.get("rule_kind", "always_on")), bdy if bdy.strip() else txt, list(e.get("globs") or []), str(e.get("description") or ""), bp, prof))
+            pinv.rules.append(DiscoveredRule(
+                name, esc, str(e.get("rule_kind", "always_on")), bdy if bdy.strip() else txt,
+                list(e.get("globs") or []), str(e.get("description") or ""), bp, prof,
+                is_override=bool(e.get("is_override")),
+            ))
         elif cat == "skills":
             rel = checked_doc_name(str(e.get("skill_rel_path", "")))
             if "/" in name or resolve_profile(prof) != prof or brel != f"files/{prof}/{esc}/skills/{name}/{rel}":
@@ -2603,8 +3857,12 @@ def cmd_import_device(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
                 srv.bundle_import = True
                 pinv.mcp_servers[esc].append(srv)
         else:
-            pinv.doc_items.append(DiscoveredDocItem(cat, name, esc, bp, data, prof,
-                executable=(cat == "hooks" and e.get("executable") is True)))
+            pinv.doc_items.append(DiscoveredDocItem(
+                cat, name, esc, bp, data, prof,
+                executable=(e.get("executable") is True),
+                subkind=str(e.get("subkind") or ""),
+                secrets=list(e.get("secrets") or []),
+            ))
 
     for (prof, esc, sname), files in sorted(skill_groups.items()):
         if Path("SKILL.md") not in files:
@@ -2637,7 +3895,8 @@ def cmd_import_device(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
         counts = {k: sum(1 for a in comb_act if a["outcome"] == k) for k in ("migrated", "noop", "conflict", "parked_draft", "deferred")}
         return {
             "ok": True, "command": "import-device", "version": SCHEMA_VERSION, "dry_run": args.dry_run,
-            "target": "same", "redact_secrets": args.redact_secrets, "summary": counts, "actions": comb_act,
+            "target": "same", "redact_secrets": args.redact_secrets,
+            "totals": _build_action_totals(comb_act), "summary": counts, "actions": comb_act,
             "conflicts": [a for a in comb_act if a["outcome"] == "conflict"],
             "parked_or_deferred": [a for a in comb_act if a["outcome"] in ("parked_draft", "deferred")],
             "backups": comb_bak, "warnings": comb_warn,
@@ -2730,12 +3989,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = p.add_subparsers(dest="subcommand", required=True)
 
-    pi = sub.add_parser("inspect", help="Bounded discovery of profiles, context objects, secret key fingerprints, and exclusions.", epilog="Example:\n  python3 scripts/migrate_context.py inspect --workspace . --profiles cursor,claude-code\n\n" + EPILOG_COMMON, formatter_class=fmt_cls)
+    pi = sub.add_parser("inspect", help="Bounded discovery of profiles, context objects, secret key fingerprints, and exclusions.", epilog="Example:\n  python3 scripts/migrate_context.py inspect --workspace . --profiles anti,claude,codex --summary\n\n" + EPILOG_COMMON, formatter_class=fmt_cls)
     pi.add_argument("--workspace", default=".", help="Workspace project directory (default: .).")
     pi.add_argument("--home", default=str(Path.home()), help="User home directory (default: ~).")
-    pi.add_argument("--profiles", default="all", help="Comma-separated profile names or 'all'.")
+    pi.add_argument("--profiles", default="all", help="Comma-separated profile names or 'all' (shortcuts: anti, claude, codex).")
     pi.add_argument("--scope", choices=("project", "user", "all"), default="all", help="Scope filter.")
     pi.add_argument("--categories", default="all", help="Comma-separated categories or 'all'.")
+    pi.add_argument("--summary", action="store_true", help="Return compact category counts and secret key names instead of every item.")
     pi.set_defaults(func=cmd_inspect)
 
     pm = sub.add_parser("migrate", help="Migrate context (and secrets out-of-band in 0600 mode by default) between profiles.", epilog="Example:\n  python3 scripts/migrate_context.py migrate --source cursor --target claude-code --scope project\n\n" + EPILOG_COMMON, formatter_class=fmt_cls)
@@ -2754,8 +4014,8 @@ def build_parser() -> argparse.ArgumentParser:
     pm.add_argument("--dry-run", action="store_true", help="Preview actions with zero filesystem writes.")
     pm.set_defaults(func=cmd_migrate)
 
-    pe = sub.add_parser("export-device", help="Prepare a 0700/0600 plain-folder device-transfer bundle plus redacted MIGRATION.md.", epilog="Example:\n  python3 scripts/migrate_context.py export-device --output ~/context-transfer --profiles all\n\n" + EPILOG_COMMON, formatter_class=fmt_cls)
-    pe.add_argument("--output", required=True, help="New output folder path (refuses overwrite).")
+    pe = sub.add_parser("export-device", help="Prepare a 0700/0600 plain-folder device-transfer bundle plus redacted MIGRATION.md.", epilog="Example:\n  python3 scripts/migrate_context.py export-device --profiles anti,claude,codex\n\n" + EPILOG_COMMON, formatter_class=fmt_cls)
+    pe.add_argument("--output", default=None, help="New output folder path (default: ~/context-transfer-<UTC>; refuses overwrite).")
     pe.add_argument("--workspace", default=".", help="Workspace project directory.")
     pe.add_argument("--home", default=str(Path.home()), help="User home directory.")
     pe.add_argument("--profiles", default="all", help="Comma-separated profile names or 'all'.")
