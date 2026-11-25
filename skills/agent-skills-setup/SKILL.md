@@ -4,10 +4,12 @@ description: >-
   Migrates, exports, restores, or syncs AI coding context — rules/instructions,
   Agent Skills, MCP servers, prompts, commands, workflows, custom agents, hooks,
   plugins, portable settings, scripts, user-authored memory, and .env secrets —
-  across Antigravity, Claude Code, Codex, Cursor, VS Code, Gemini CLI, and 75+
-  tools without exposing secret values to LLM context. Use when exporting all IDE
-  settings for a new computer, restoring a transfer bundle, or converting context
-  across IDEs (导出全部配置, 换电脑迁移, 迁移上下文, 等价迁移, 规则转换, MCP/密钥迁移).
+  across Antigravity, Claude Code, Codex, Trae CN, Cursor, VS Code, Gemini CLI,
+  and 74+ tools without exposing secret values to LLM context. Make sure to use
+  this skill whenever the user wants to export or back up IDE settings for a new
+  computer, restore a transfer bundle, copy Skills or MCP across IDEs/CLIs, or
+  convert rules (导出全部配置, 换电脑迁移, 迁移上下文, 技能迁移, 等价迁移,
+  规则转换, MCP/密钥迁移).
 license: MIT
 metadata:
   version: "0.11.0-dev"
@@ -15,68 +17,50 @@ metadata:
 
 # Migrate AI Coding Context Safely
 
-Moves selected user-authored context — prompts, commands, agents, hooks, workflows,
-plugins, portable settings, scripts, manifests, user-authored memory, and (unless told
-otherwise) `.env` / MCP credentials out-of-band on disk — across IDEs or computers.
-Resolve `<SKILL_DIR>` relative to this `SKILL.md`.
+Use this skill to move prompts, commands, agents, hooks, workflows, plugins, portable
+settings, scripts, manifests, rules, Skills, MCP configs, user-authored memory, and
+`.env` / MCP credentials out-of-band on disk. Resolve `<SKILL_DIR>` relative to this
+`SKILL.md` and run `python3 "<SKILL_DIR>/scripts/migrate_context.py"`.
 
-## Use the helper script as a black box
+## 1. Capability Tiers (pick the right path immediately)
 
-Run `python3 "<SKILL_DIR>/scripts/migrate_context.py" --help` (auto-bootstraps Python
-3.11+ or `uv`; zero dependencies) instead of reading the script source or raw secrets:
+| Tier | Tools | Supported actions |
+| --- | --- | --- |
+| **Deep full-sync** | `antigravity` (`anti`/`agy`), `claude-code` (`claude`/`cc`), `codex` (`cx`) | All categories + 3-way equivalent translation (`rules`, `SKILL.md`, workflows/commands/prompts, subagents, MCP, portable settings, `scripts/`, `plugins/`, manifests, memory). |
+| **Standard built-in (16 total)** | Adds `trae-cn`, `cursor`, `vscode`, `copilot-cli`, `gemini-cli`, `windsurf`, `cline`, `kilocode`, `zed`, `opencode`, `kimi-code`, `qwen-code`, `pi` | Direct `inspect`, `migrate`, `export-device`, `import-device` across rules, Skills, commands/prompts, agents, hooks, MCP, and `.env` secrets. |
+| **Other 74+ cataloged tools** | `codebuddy`, `qoder`, `kiro`, `trae`, `trae-work`, `junie`, `goose`, `warp`, etc. | Load only the matching `references/products/<family>.md`; use `sync-skills` for any `SKILL.md` dir and `patch-mcp` for any JSON/JSONC/TOML MCP map. |
 
-- **Never read raw secret files into LLM context**: Do **not** `cat`, view, or print
-  `.env*`, credential-bearing `mcp.json`, `mcp_config.json`, `~/.claude.json`,
-  `~/.claude/settings.json`, or `~/.codex/config.toml` when migrating secrets. To pack,
-  export, or import credentials, run `migrate_context.py` — never open the secret
-  files yourself to move them (`0700` dirs, `0600` files, `sha256[:8]` stdout only).
-- **Refresh before use**: pull the latest `skills/agent-skills-setup/` from upstream
-  and check `metadata.version`; a stale copy misses path and schema fixes.
-- Pass `--redact-secrets` when told not to copy keys.
-  Preview requests make no target changes (`--dry-run`). For native commands/old CLI logs read
-  [CLI workflow](references/cli-workflow.md); for archived claims read
-  [Registry v2 interpretation](references/registry-v2.md).
+## 2. Execution Loop (4 steps)
 
-## Decision tree (run directly)
+1. **Refresh & use the script as a black box**: Always pull the latest `skills/agent-skills-setup/`
+   before running, and run `--help` instead of reading `migrate_context.py` source.
+   Never open the secret files (`.env*`, credential-bearing `mcp*.json`, `~/.claude.json`,
+   `~/.claude/settings.json`, `~/.codex/config.toml`) into LLM context — let the script transfer
+   them in `0700`/`0600` mode (`sha256[:8]` stdout only) because raw keys poison prompt logs.
+2. **Inspect & preview before mutating**: Run `inspect --summary` when inventory is unclear;
+   add `--dry-run` whenever the user asks for a preview (preview requests make no target changes).
+   Add `--redact-secrets` when told not to copy API keys.
+3. **Run the exact subcommand from the Decision Tree**:
 
-| Task | Command (replace `<SKILL_DIR>` and paths) |
+| Task | Command (`migrate` / `sync-skills` / `patch-mcp` write by default; add `--dry-run` to preview) |
 | --- | --- |
-| **Inspect** (`--summary` for compact counts) | `python3 "<SKILL_DIR>/scripts/migrate_context.py" inspect --workspace . --profiles anti,claude,codex --summary` |
-| **Export for new computer** (`--output` optional) | `python3 "<SKILL_DIR>/scripts/migrate_context.py" export-device --profiles anti,claude,codex --scope all --workspace . --output ~/context-transfer` |
-| **Restore on new computer** (`--activate-hooks` if approved) | `python3 "<SKILL_DIR>/scripts/migrate_context.py" import-device --input ~/context-transfer --target same --workspace .` |
-| **3-way / cross-IDE migration** (`anti`, `claude`, `codex`, `cursor`, `vscode`, `gemini`, `windsurf`, `cline`, `kilo`, `zed`, `opencode`, `kimi`, `qwen`, `pi`) | `python3 "<SKILL_DIR>/scripts/migrate_context.py" migrate --source anti --target claude,codex --workspace . --scope all` |
-| **Other cataloged MCP client** | `python3 "<SKILL_DIR>/scripts/migrate_context.py" patch-mcp --src-file ~/.junie/mcp/mcp.json --src-key-path mcpServers --dst-file .vscode/mcp.json --dst-key-path servers` |
+| **Inspect** | `python3 "<SKILL_DIR>/scripts/migrate_context.py" inspect --workspace . --profiles anti,claude,codex --summary` |
+| **Export computer** (`--output` optional) | `python3 "<SKILL_DIR>/scripts/migrate_context.py" export-device --profiles anti,claude,codex --scope all --workspace . --output ~/context-transfer` |
+| **Restore computer** | `python3 "<SKILL_DIR>/scripts/migrate_context.py" import-device --input ~/context-transfer --target same --workspace .` |
+| **Cross-IDE migrate** | `python3 "<SKILL_DIR>/scripts/migrate_context.py" migrate --source claude --target trae-cn --workspace . --scope all` |
+| **Copy Skills to any tool** | `python3 "<SKILL_DIR>/scripts/migrate_context.py" sync-skills --src-profile claude --scope user --dst-dir ~/.trae-cn/skills` |
+| **Copy MCP to any tool** | `python3 "<SKILL_DIR>/scripts/migrate_context.py" patch-mcp --src-file ~/.claude.json --src-key-path mcpServers --dst-file ~/Library/Application\ Support/Trae\ CN/User/mcp.json --dst-key-path mcpServers` |
 
-## Semantic & safety invariants
+4. **Check exit codes & verify honestly**: Exit `0` prints `totals` (`migrated`/`noop`/`conflict`/`parked_draft`/`deferred`) plus `excluded` — never stop on an isolated `conflict` or `deferred`, report both clearly. Exit `2` means invalid flags or a safety refusal (stop and explain). Exit `3` occurs only with `--strict-conflicts`. Report Syntax / Native discovery / Activation / Runtime separately via [verification](references/verification.md).
 
-- Re-read authorized source/target before writing; verify syntax, discovery, activation,
-  and runtime separately via [verification](references/verification.md).
-- **Preserve activation & scope**: Keep `always_on`, file-glob rules (Antigravity
-  `trigger: glob`, Claude `paths`, Cursor `globs`, VS Code `applyTo`), model-selected
-  rules (`trigger: model_decision` <-> on-demand `SKILL.md`), and manual rules
-  (`trigger: manual` <-> `disable-model-invocation: true` / prompts) distinct. Never
-  silently widen a file-scoped or manual rule into unconditional instructions.
-- **3-way equivalence (`Antigravity <-> Claude Code <-> Codex`)**: Translates rules,
-  Skills (synthesizing Antigravity `name`/`description` frontmatter when missing),
-  workflows <-> commands <-> manual Skills, custom agent frontmatter/tools, and MCP
-  (`serverUrl` / `timeoutSeconds` / `enabledTools` <-> `url` <-> TOML `[mcp_servers]`,
-  deferring legacy SSE on Antigravity and renamed `env_vars` on Codex).
-- **Isolate conflicts & keep untrusted code inactive**: Identical targets are `noop`;
-  divergent targets record `conflict` per object while preserving siblings (`theme`,
-  `approval_policy`, `permissions`, comments). Park hooks, sidecars, and Codex `.rules`
-  in `.migration-review/` unless `--activate-hooks` is passed. Always exclude chat
-  histories, `*.jsonl` transcripts, SQLite/LevelDB DBs, caches, OAuth tokens, and
-  `alwaysAllow`/`trust`/`permissions` grants.
+## 3. Safety & Semantic Guardrails
 
-## Load only the reference needed (1-hop progressive disclosure)
+- Re-read [CLI workflow](references/cli-workflow.md) for retired engine boundaries and [Registry v2](references/registry-v2.md) before citing archived claims.
+- **Keep scope intact**: Never widen file-glob or `@Rule`/manual triggers into always-on rules (`--allow-broaden-scope` only if user asks). Park hooks, sidecars, and Codex `.rules` in `.migration-review/` unless `--activate-hooks` is authorized.
+- **Always exclude**: Chat histories, `*.jsonl` transcripts, SQLite/LevelDB DBs, caches, OAuth/JWT tokens, built-in system skills, and `alwaysAllow`/`trust`/`permissions` grants.
+
+## 4. On-Demand References (1-hop progressive disclosure)
 
 - Core guides: [products.md](references/products.md), [discovery.md](references/discovery.md), [instructions.md](references/instructions.md), [mcp.md](references/mcp.md), [other-context.md](references/other-context.md), [device-transfer.md](references/device-transfer.md), [verification.md](references/verification.md).
 - Templates: [device-readme.md](assets/device-readme.md), [migration-report.md](assets/migration-report.md).
-- Product families (load only the requested source/target):
-  - [Claude](references/products/anthropic.md), [Codex/ChatGPT](references/products/openai.md), [Cursor](references/products/cursor.md), [Copilot/VS Code](references/products/copilot.md).
-  - [Gemini CLI/Assist](references/products/google-cli-assist.md), [Google IDE/cloud](references/products/google-ide-cloud.md), [JetBrains/Xcode](references/products/jetbrains-xcode.md), [AWS/Kiro](references/products/aws.md).
-  - [Cline/Kilo/Roo](references/products/cline-kilo-roo.md), [Devin/Windsurf](references/products/devin-windsurf.md), [Continue/Zed](references/products/continue-zed.md), [OpenCode](references/products/opencode.md).
-  - [Alibaba/Qwen/Qoder](references/products/alibaba.md), [Tencent](references/products/tencent.md), [TRAE](references/products/trae.md), [China coding tools](references/products/china-coding.md), [China identity checks](references/products/china-discovery.md).
-  - [Terminal agents](references/products/terminal-agents.md), [Factory/Augment](references/products/factory-augment.md), [Amp/OpenHands](references/products/amp-openhands.md), [Warp](references/products/warp.md).
-  - [OpenClaw/Hermes](references/products/openclaw-hermes.md), [Letta](references/products/letta.md), [Enterprise clients](references/products/enterprise.md), [Zencoder](references/products/zencoder.md).
-  - [Cloud builders](references/products/cloud-builders.md), [Blackbox/Pieces](references/products/blackbox-pieces.md), [Editor plugins](references/products/editor-plugins.md), [Legacy tools](references/products/legacy.md), [New clients](references/products/new-clients.md).
+- Product families (load only requested source/target): [Claude](references/products/anthropic.md), [Codex/ChatGPT](references/products/openai.md), [Cursor](references/products/cursor.md), [Copilot/VS Code](references/products/copilot.md), [Gemini CLI/Assist](references/products/google-cli-assist.md), [Google IDE/cloud](references/products/google-ide-cloud.md), [JetBrains/Xcode](references/products/jetbrains-xcode.md), [AWS/Kiro](references/products/aws.md), [Cline/Kilo/Roo](references/products/cline-kilo-roo.md), [Devin/Windsurf](references/products/devin-windsurf.md), [Continue/Zed](references/products/continue-zed.md), [OpenCode](references/products/opencode.md), [Alibaba/Qwen/Qoder](references/products/alibaba.md), [Tencent](references/products/tencent.md), [TRAE](references/products/trae.md), [China coding tools](references/products/china-coding.md), [China identity checks](references/products/china-discovery.md), [Terminal agents](references/products/terminal-agents.md), [Factory/Augment](references/products/factory-augment.md), [Amp/OpenHands](references/products/amp-openhands.md), [Warp](references/products/warp.md), [OpenClaw/Hermes](references/products/openclaw-hermes.md), [Letta](references/products/letta.md), [Enterprise clients](references/products/enterprise.md), [Zencoder](references/products/zencoder.md), [Cloud builders](references/products/cloud-builders.md), [Blackbox/Pieces](references/products/blackbox-pieces.md), [Editor plugins](references/products/editor-plugins.md), [Legacy tools](references/products/legacy.md), [New clients](references/products/new-clients.md).

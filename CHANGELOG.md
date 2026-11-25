@@ -22,6 +22,11 @@
   Antigravity rule `trigger` conversion (`glob`/`model_decision`/`manual`), Antigravity
   `SKILL.md` frontmatter synthesis, workflow <-> command <-> manual Skill mapping, and
   custom agent frontmatter/tool translation across all three IDEs.
+- **Built-in `trae-cn`, composable `sync-skills`, & AI-first `SKILL.md`**: Add `trae-cn`
+  as the 16th built-in profile (project `.trae/*`, user `~/.trae-cn/*`, OS-aware global
+  MCP `User/mcp.json`, token/builtin exclusions), add generic `sync-skills` subcommand
+  (`--src-profile` or `--src-dir` to any tool `--dst-dir`), optimize `SKILL.md` into
+  3 capability tiers + a 4-step AI execution loop, and add `tests/test_ai_ergonomics_and_trae.py`.
 
 ## Unreleased — workflow, evidence and delivery review (2026-11-14)
 

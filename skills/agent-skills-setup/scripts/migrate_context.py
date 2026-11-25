@@ -81,6 +81,7 @@ PROFILE_ALIASES: dict[str, str] = {
     "kilocode": "kilocode", "kilo": "kilocode", "zed": "zed", "opencode": "opencode",
     "kimi-code": "kimi-code", "kimiai": "kimi-code", "qwen-code": "qwen-code",
     "qwen": "qwen-code", "pi": "pi",
+    "trae-cn": "trae-cn", "trae_cn": "trae-cn", "traecn": "trae-cn",
 }
 CANONICAL_PROFILES = tuple(dict.fromkeys(PROFILE_ALIASES.values()))
 ALL_CATEGORIES = (
@@ -182,6 +183,8 @@ AUTOLOAD_PARTS = (
     (".opencode", "commands"), (".opencode", "agents"),
     (".cline", "workflows"),
     (".pi", "prompts"),
+    (".trae", "rules"), (".trae", "skills"), (".trae", "commands"), (".trae", "agents"),
+    (".trae-cn", "rules"), (".trae-cn", "skills"), (".trae-cn", "commands"), (".trae-cn", "agents"),
 )
 
 
@@ -1232,6 +1235,12 @@ def get_profile_paths(profile: str, ws: Path, home: Path) -> ProfilePaths:
     chome = (configured if p == "codex" else None) or (home / ".codex")
     khome = (configured if p == "kimi-code" else None) or (home / ".kimi-code")
     ag_sk = (configured if p == "antigravity" else None) or (home / ".gemini/config/skills")
+    if sys.platform == "darwin":
+        trae_cn_mcp = home / "Library/Application Support/Trae CN/User/mcp.json"
+    elif os.name == "nt":
+        trae_cn_mcp = home / "AppData/Roaming/Trae CN/User/mcp.json"
+    else:
+        trae_cn_mcp = home / ".config/Trae CN/User/mcp.json"
 
     table: dict[str, ProfilePaths] = {
         "cursor": ProfilePaths(
@@ -1372,6 +1381,20 @@ def get_profile_paths(profile: str, ws: Path, home: Path) -> ProfilePaths:
             proj_mcp=ws / ".pi/mcp.json", proj_mcp_style="pi",
             user_mcp=home / ".pi/agent/mcp.json", user_mcp_style="pi",
         ),
+        "trae-cn": ProfilePaths(
+            p, proj_rules=ws / ".trae/rules",
+            user_doc=home / ".trae-cn/user_rules.md", user_rules=home / ".trae-cn/rules",
+            proj_skills=ws / ".trae/skills", user_skills=home / ".trae-cn/skills",
+            proj_cmds=ws / ".trae/commands", user_cmds=home / ".trae-cn/commands",
+            proj_agents=ws / ".trae/agents", user_agents=home / ".trae-cn/agents",
+            proj_hooks=ws / ".trae/hooks.json", user_hooks=home / ".trae-cn/hooks.json",
+            proj_mcp=ws / ".trae/mcp.json", user_mcp=trae_cn_mcp,
+            legacy=[
+                ("skills", "project", ws / ".agents/skills"),
+                ("instructions", "user", home / ".trae/user_rules.md"),
+                ("instructions", "user", home / ".trae/user_rules"),
+            ],
+        ),
     }
     paths = table[p]
     paths.user_product_root = configured
@@ -1492,7 +1515,7 @@ def parse_rule_files(path: Path, scope: str, profile: str, *, native_rule: bool 
             break
     slug = slugify(bname)
     is_override = (path.name == "AGENTS.override.md")
-    root_names = {"AGENTS.md", "AGENTS.override.md", "CLAUDE.md", "CLAUDE.local.md", "GEMINI.md", "QWEN.md", "copilot-instructions.md", ".cursorrules", ".windsurfrules", "global_rules.md"}
+    root_names = {"AGENTS.md", "AGENTS.override.md", "CLAUDE.md", "CLAUDE.local.md", "GEMINI.md", "QWEN.md", "copilot-instructions.md", ".cursorrules", ".windsurfrules", "global_rules.md", "user_rules.md", "user_rules"}
     zed_native = profile == "zed" and path.name in {".rules", "AGENT.md"}
     claude_rule = profile == "claude-code" and native_rule
     if not claude_rule and (path.name in root_names or zed_native or (path.name == ".clinerules" and path.is_file())):
@@ -2030,6 +2053,30 @@ def _discover_codex_extras(
                 ))
 
 
+def _discover_trae_cn_extras(
+    workspace: Path, home: Path, wp: bool, wu: bool, categories: set[str], inv: ProfileInventory,
+) -> None:
+    if not wu:
+        return
+    for rel_p, reason in (
+        (".trae-cn/trae-jwt-token", "excluded_auth_token"),
+        (".trae-cn/builtin_skills", "excluded_builtin_assets"),
+        (".trae-cn/builtin", "excluded_builtin_assets"),
+        (".trae-cn/hub_event_cache", "excluded_state_or_history_dir"),
+        (".trae-cn/permission", "excluded_state_or_history_dir"),
+        (".trae-cn/memory", "excluded_state_or_history_dir"),
+    ):
+        cand = home / rel_p
+        if cand.exists() or cand.is_symlink():
+            _append_excluded(inv.excluded, cand, workspace, home, reason)
+    if "hooks" in categories and not (home / ".trae-cn/hooks.json").exists():
+        legacy_hk = home / ".trae/hooks.json"
+        if (legacy_hk.exists() or legacy_hk.is_symlink()) and not _record_broken_symlink(legacy_hk, workspace, home, inv.excluded):
+            validate_contained(legacy_hk, home, "trae_legacy_hooks")
+            if legacy_hk.is_file():
+                inv.doc_items.append(DiscoveredDocItem("hooks", legacy_hk.name, "user", legacy_hk, legacy_hk.read_bytes(), "trae-cn"))
+
+
 def discover_profile(profile: str, workspace: Path, home: Path, scope: str, categories: set[str]) -> ProfileInventory:
     pp = get_profile_paths(profile, workspace, home)
     inv = ProfileInventory(profile=pp.profile)
@@ -2046,6 +2093,10 @@ def discover_profile(profile: str, workspace: Path, home: Path, scope: str, cate
         scan_dirs.append(pp.user_mcp.parent)
     if pp.profile == "antigravity":
         scan_dirs.extend([home / ".gemini/antigravity", home / ".gemini/config"])
+    if pp.profile == "trae-cn":
+        scan_dirs.append(home / ".trae-cn")
+        if pp.user_mcp is not None:
+            scan_dirs.append(pp.user_mcp.parent)
     for sdir in scan_dirs:
         is_w = sdir.is_relative_to(workspace)
         if (wp and is_w) or (wu and not is_w):
@@ -2265,6 +2316,8 @@ def discover_profile(profile: str, workspace: Path, home: Path, scope: str, cate
         _discover_claude_extras(workspace, home, wp, wu, categories, inv)
     elif pp.profile == "codex":
         _discover_codex_extras(pp, workspace, home, wp, wu, categories, inv)
+    elif pp.profile == "trae-cn":
+        _discover_trae_cn_extras(workspace, home, wp, wu, categories, inv)
 
     if "env_secrets" in categories and wp and workspace.is_dir():
         for entry in sorted(workspace.iterdir()):
@@ -2375,6 +2428,9 @@ def apply_rule_to_target(
         elif tp == "cursor" and rdir:
             gval: Any = rule.globs[0] if len(rule.globs) == 1 else ", ".join(rule.globs)
             dst, rendered = rdir / f"{rule.slug}.mdc", render_frontmatter({"globs": gval, "alwaysApply": False}, rule_body)
+        elif tp == "trae-cn" and rdir:
+            gval = rule.globs[0] if len(rule.globs) == 1 else ", ".join(rule.globs)
+            dst, rendered = rdir / f"{rule.slug}.md", render_frontmatter({"globs": gval, "alwaysApply": False}, rule_body)
         elif tp == "windsurf" and is_p and tpp.proj_rules:
             dst, rendered = tpp.proj_rules / f"{rule.slug}.md", render_frontmatter({"trigger": "glob", "globs": ", ".join(rule.globs)}, rule_body)
         elif tp == "antigravity" and rdir:
@@ -2408,6 +2464,8 @@ def apply_rule_to_target(
         rdir = tpp.proj_rules if is_p else tpp.user_rules
         if tp == "cursor" and rdir:
             dst, rendered = rdir / f"{rule.slug}.mdc", render_frontmatter({"description": rule.description, "alwaysApply": False}, rule_body)
+        elif tp == "trae-cn" and rdir:
+            dst, rendered = rdir / f"{rule.slug}.md", render_frontmatter({"description": rule.description or f"Rule {rule.slug}", "alwaysApply": False}, rule_body)
         elif tp == "windsurf" and is_p and tpp.proj_rules:
             dst, rendered = tpp.proj_rules / f"{rule.slug}.md", render_frontmatter({"trigger": "model_decision", "description": rule.description}, rule_body)
         elif tp == "antigravity" and rdir:
@@ -2483,6 +2541,63 @@ def _redact_resource(content: bytes) -> bytes:
     return _redact_document_text(redacted).encode("utf-8", errors="surrogateescape")
 
 
+def _synthesize_skill_frontmatter(skill: DiscoveredSkill) -> tuple[bytes | None, list[str]]:
+    """Fill missing SKILL.md name/description frontmatter when required."""
+    if skill.meta.get("name") == skill.name and str(skill.meta.get("description") or "").strip():
+        return None, []
+    nm = dict(skill.meta)
+    nm["name"] = skill.name
+    if not str(nm.get("description") or "").strip():
+        cand_line = next(
+            (ln.strip() for ln in skill.body.splitlines() if ln.strip() and not ln.strip().startswith("#")),
+            "",
+        ) or next((ln.lstrip("# ").strip() for ln in skill.body.splitlines() if ln.strip()), "")
+        nm["description"] = (cand_line[:160].strip() if cand_line else f"Skill {skill.name}")
+    return render_frontmatter(nm, skill.body).encode("utf-8"), ["Synthesized SKILL.md frontmatter (name/description)"]
+
+
+def _write_skill_to_directory(
+    skill: DiscoveredSkill, dst_dir: Path, sroot: Path, *,
+    alt_md: bytes | None, notes: list[str], auth_src: Path,
+    allow_git_tracked_secrets: bool, backups: BackupManager, warnings: list[dict[str, Any]],
+    dry_run: bool, redact_secrets: bool,
+) -> dict[str, Any]:
+    raw_files = dict(skill.verified_files) if skill.verified_files is not None else {}
+    if skill.verified_files is None:
+        for p in sorted(skill.directory.rglob("*")):
+            if p.is_symlink() and not p.exists():
+                continue
+            validate_contained(p, auth_src, f"skill:{skill.name}")
+            if p.is_file() and not is_excluded_asset(p, skill.directory):
+                rel = p.relative_to(skill.directory)
+                executable = bool(p.stat().st_mode & stat.S_IXUSR) or (
+                    "scripts" in rel.parts and p.suffix in (".py", ".sh"))
+                raw_files[rel] = (p.read_bytes(), executable)
+    if alt_md is not None:
+        path = Path("SKILL.md")
+        raw_files[path] = (alt_md, raw_files.get(path, (b"", False))[1])
+
+    src_map: dict[Path, tuple[bytes, bool, bool]] = {}
+    for rel, (content, executable) in raw_files.items():
+        has_secrets = _resource_contains_secrets(content)
+        data = _redact_resource(content) if redact_secrets and has_secrets else content
+        src_map[rel] = (data, executable, has_secrets)
+
+    if dst_dir.exists():
+        dst_map: dict[Path, bytes] = {}
+        for p in sorted(dst_dir.rglob("*")):
+            validate_contained(p, sroot, "target_skill_resource")
+            if p.is_file():
+                dst_map[p.relative_to(dst_dir)] = p.read_bytes()
+        if {k: v[0] for k, v in src_map.items()} == dst_map:
+            return act("skills", skill.name, "noop", dst_dir)
+        return act("skills", skill.name, "conflict", dst_dir, reason="existing_skill_has_different_content")
+
+    for rel, (data, is_ex, has_sec) in src_map.items():
+        write_managed_file(dst_dir / rel, data, has_secrets=has_sec, executable=is_ex, allow_git_tracked_secrets=allow_git_tracked_secrets, auth_root=sroot, backups=backups, warnings=warnings, dry_run=dry_run)
+    return act("skills", skill.name, "migrated", dst_dir, note="; ".join(notes) if notes else None)
+
+
 def apply_skill_to_target(
     skill: DiscoveredSkill, tpp: ProfilePaths, *, workspace: Path, home: Path,
     allow_git_tracked_secrets: bool, backups: BackupManager, warnings: list[dict[str, Any]], dry_run: bool,
@@ -2508,54 +2623,14 @@ def apply_skill_to_target(
         notes.append("Translated allowed-tools -> Qwen allowedTools; verify tool names")
     elif skill.source_profile == "qwen-code" and tpp.profile != "qwen-code" and "allowedTools" in skill.meta:
         return act("skills", skill.name, "deferred", dst_dir, reason="qwen_tool_restrictions_not_verified")
-    elif tpp.profile == "antigravity" and (
-        skill.meta.get("name") != skill.name or not str(skill.meta.get("description") or "").strip()
-    ):
-        nm = dict(skill.meta)
-        nm["name"] = skill.name
-        if not str(nm.get("description") or "").strip():
-            cand_line = next(
-                (ln.strip() for ln in skill.body.splitlines() if ln.strip() and not ln.strip().startswith("#")),
-                "",
-            ) or next((ln.lstrip("# ").strip() for ln in skill.body.splitlines() if ln.strip()), "")
-            nm["description"] = (cand_line[:160].strip() if cand_line else f"Skill {skill.name}")
-        alt_md = render_frontmatter(nm, skill.body).encode("utf-8")
-        notes.append("Added Antigravity-required SKILL.md frontmatter (name/description)")
+    elif tpp.profile == "antigravity":
+        alt_md, notes = _synthesize_skill_frontmatter(skill)
 
-    raw_files = dict(skill.verified_files) if skill.verified_files is not None else {}
-    if skill.verified_files is None:
-        for p in sorted(skill.directory.rglob("*")):
-            if p.is_symlink() and not p.exists():
-                continue
-            validate_contained(p, auth_src, f"skill:{skill.name}")
-            if p.is_file() and not is_excluded_asset(p, skill.directory):
-                rel = p.relative_to(skill.directory)
-                executable = bool(p.stat().st_mode & stat.S_IXUSR) or (
-                    "scripts" in rel.parts and p.suffix in (".py", ".sh"))
-                raw_files[rel] = (p.read_bytes(), executable)
-    if alt_md is not None:
-        path = Path("SKILL.md")
-        raw_files[path] = (alt_md, raw_files[path][1])
-
-    src_map: dict[Path, tuple[bytes, bool, bool]] = {}
-    for rel, (content, executable) in raw_files.items():
-        has_secrets = _resource_contains_secrets(content)
-        data = _redact_resource(content) if redact_secrets and has_secrets else content
-        src_map[rel] = (data, executable, has_secrets)
-
-    if dst_dir.exists():
-        dst_map: dict[Path, bytes] = {}
-        for p in sorted(dst_dir.rglob("*")):
-            validate_contained(p, sroot, "target_skill_resource")
-            if p.is_file():
-                dst_map[p.relative_to(dst_dir)] = p.read_bytes()
-        if {k: v[0] for k, v in src_map.items()} == dst_map:
-            return act("skills", skill.name, "noop", dst_dir)
-        return act("skills", skill.name, "conflict", dst_dir, reason="existing_skill_has_different_content")
-
-    for rel, (data, is_ex, has_sec) in src_map.items():
-        write_managed_file(dst_dir / rel, data, has_secrets=has_sec, executable=is_ex, allow_git_tracked_secrets=allow_git_tracked_secrets, auth_root=sroot, backups=backups, warnings=warnings, dry_run=dry_run)
-    return act("skills", skill.name, "migrated", dst_dir, note="; ".join(notes) if notes else None)
+    return _write_skill_to_directory(
+        skill, dst_dir, sroot, alt_md=alt_md, notes=notes, auth_src=auth_src,
+        allow_git_tracked_secrets=allow_git_tracked_secrets, backups=backups,
+        warnings=warnings, dry_run=dry_run, redact_secrets=redact_secrets,
+    )
 
 
 def _document_has_secrets(doc: Any) -> bool:
@@ -3958,10 +4033,88 @@ def cmd_patch_mcp(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
     bad = [r for r in res if r["outcome"] in ("conflict", "deferred")]
     return {
         "ok": True, "command": "patch-mcp", "version": SCHEMA_VERSION, "dry_run": args.dry_run,
-        "redact_secrets": args.redact_secrets, "actions": res,
+        "redact_secrets": args.redact_secrets, "totals": _build_action_totals(res), "actions": res,
         "conflicts": [r for r in res if r["outcome"] == "conflict"],
         "backups": [str(p) for p in backups.backed_up.values()], "warnings": warnings,
     }, (3 if (args.strict_conflicts and bad) else 0)
+
+
+def cmd_sync_skills(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
+    """Copy verified SKILL.md folders from any profile or directory to any tool's skills dir."""
+    if (args.src_dir is None) == (args.src_profile is None):
+        raise SafetyRefusalError("invalid_skill_source", "Provide exactly one of --src-dir or --src-profile.")
+    ws, home = Path(args.workspace).expanduser().resolve(), Path(args.home).expanduser().resolve()
+    dst_root = Path(args.dst_dir).expanduser().resolve(strict=False)
+    if dst_root == Path(dst_root.anchor):
+        raise SafetyRefusalError("invalid_destination", "Destination skills directory cannot be filesystem root.")
+    dst_auth_root = ws if dst_root.is_relative_to(ws) else (home if dst_root.is_relative_to(home) else dst_root)
+    validate_contained(dst_root, dst_auth_root, "sync_skills_dst")
+
+    excluded: list[dict[str, str]] = []
+    skills: list[DiscoveredSkill] = []
+    if args.src_dir is not None:
+        src_root = Path(args.src_dir).expanduser().resolve()
+        if not src_root.is_dir():
+            raise SafetyRefusalError("missing_src_dir", f"Source skills directory does not exist: {src_root}")
+        src_auth = ws if src_root.is_relative_to(ws) else (home if src_root.is_relative_to(home) else src_root)
+        validate_contained(src_root, src_auth, "sync_skills_src")
+        for entry in sorted(src_root.iterdir()):
+            if _record_broken_symlink(entry, ws, home, excluded):
+                continue
+            validate_contained(entry, src_auth, f"skill:{entry.name}")
+            if entry.name.startswith(".") or entry.name == "agent-skills-setup":
+                continue
+            smd = entry / "SKILL.md"
+            if _record_broken_symlink(smd, ws, home, excluded):
+                continue
+            if not entry.is_dir() or not (smd.exists() or smd.is_symlink()):
+                continue
+            validate_contained(smd, src_auth, f"skill_md:{entry.name}")
+            meta, body = parse_frontmatter(smd.read_text(encoding="utf-8"))
+            skills.append(DiscoveredSkill(entry.name, "custom", entry, meta, body, compute_skill_digest(entry, src_auth), "custom", auth_root=src_auth))
+    else:
+        inv = discover_profile(args.src_profile, ws, home, args.scope, {"skills"})
+        skills = inv.skills
+        excluded.extend(inv.excluded)
+
+    actions: list[dict[str, Any]] = []
+    if args.skills:
+        wanted = [x.strip() for x in args.skills.split(",") if x.strip()]
+        by_name = {s.name: s for s in skills}
+        selected = [by_name[w] for w in wanted if w in by_name]
+        for w in wanted:
+            if w not in by_name:
+                actions.append(act("skills", w, "deferred", dst_root / w, reason="skill_not_found"))
+    else:
+        selected = skills
+
+    backups = BackupManager(Path(args.backup_dir) if args.backup_dir else None, home=home, workspace=ws, dry_run=args.dry_run)
+    warnings: list[dict[str, Any]] = []
+    for sk in selected:
+        dst_dir = dst_root / sk.name
+        validate_contained(dst_dir, dst_auth_root, f"target_skill:{sk.name}")
+        if dst_dir.resolve(strict=False) == sk.directory.resolve(strict=False):
+            actions.append(act("skills", sk.name, "noop", dst_dir))
+            continue
+        alt_md: bytes | None = None
+        notes: list[str] = []
+        if args.synthesize_frontmatter:
+            alt_md, notes = _synthesize_skill_frontmatter(sk)
+        auth_src = sk.auth_root or (ws if sk.scope == "project" else home)
+        actions.append(_write_skill_to_directory(
+            sk, dst_dir, dst_auth_root, alt_md=alt_md, notes=notes, auth_src=auth_src,
+            allow_git_tracked_secrets=args.allow_git_tracked_secrets, backups=backups,
+            warnings=warnings, dry_run=args.dry_run, redact_secrets=args.redact_secrets,
+        ))
+
+    unresolved = [a for a in actions if a["outcome"] in ("conflict", "deferred")]
+    return {
+        "ok": True, "command": "sync-skills", "version": SCHEMA_VERSION, "dry_run": args.dry_run,
+        "redact_secrets": args.redact_secrets, "totals": _build_action_totals(actions),
+        "actions": actions, "conflicts": [a for a in actions if a["outcome"] == "conflict"],
+        "deferred": [a for a in actions if a["outcome"] == "deferred"], "excluded": excluded,
+        "backups": [str(p) for p in backups.backed_up.values()], "warnings": warnings,
+    }, (3 if (args.strict_conflicts and unresolved) else 0)
 
 
 EPILOG_COMMON = """Exit codes:
@@ -3983,11 +4136,13 @@ def build_parser() -> argparse.ArgumentParser:
             "  python3 scripts/migrate_context.py migrate --source cursor --target codex --redact-secrets --dry-run\n"
             "  python3 scripts/migrate_context.py export-device --output ~/context-transfer --profiles all\n"
             "  python3 scripts/migrate_context.py import-device --input ~/context-transfer --target same\n"
+            "  python3 scripts/migrate_context.py sync-skills --src-profile claude --dst-dir ~/.trae-cn/skills\n"
             "  python3 scripts/migrate_context.py patch-mcp --src-file ~/.junie/mcp/mcp.json --src-key-path mcpServers --dst-file .vscode/mcp.json --dst-key-path servers\n\n"
             + EPILOG_COMMON
         ),
     )
     sub = p.add_subparsers(dest="subcommand", required=True)
+
 
     pi = sub.add_parser("inspect", help="Bounded discovery of profiles, context objects, secret key fingerprints, and exclusions.", epilog="Example:\n  python3 scripts/migrate_context.py inspect --workspace . --profiles anti,claude,codex --summary\n\n" + EPILOG_COMMON, formatter_class=fmt_cls)
     pi.add_argument("--workspace", default=".", help="Workspace project directory (default: .).")
@@ -4056,6 +4211,22 @@ def build_parser() -> argparse.ArgumentParser:
     pp.add_argument("--backup-dir", default=None, help="Private 0700 backup directory.")
     pp.add_argument("--dry-run", action="store_true", help="Preview patch actions with zero writes.")
     pp.set_defaults(func=cmd_patch_mcp)
+
+    ps = sub.add_parser("sync-skills", help="Composable SKILL.md folder copier from any profile or directory to any tool's skills dir.", epilog="Example:\n  python3 scripts/migrate_context.py sync-skills --src-profile claude --dst-dir ~/.trae-cn/skills\n\n" + EPILOG_COMMON, formatter_class=fmt_cls)
+    ps.add_argument("--src-dir", default=None, help="Source directory containing <skill>/SKILL.md folders.")
+    ps.add_argument("--src-profile", default=None, help="Alternative: discover skills from a built-in profile (e.g. claude, anti, codex, trae-cn).")
+    ps.add_argument("--scope", choices=("project", "user", "all"), default="user", help="Scope filter when --src-profile is used (default: user).")
+    ps.add_argument("--dst-dir", required=True, help="Destination skills directory for any cataloged tool.")
+    ps.add_argument("--skills", default=None, help="Optional comma-separated skill names to sync.")
+    ps.add_argument("--synthesize-frontmatter", action="store_true", help="Synthesize name/description frontmatter when missing in SKILL.md.")
+    ps.add_argument("--workspace", default=".", help="Workspace project directory (default: .).")
+    ps.add_argument("--home", default=str(Path.home()), help="User home directory (default: ~).")
+    ps.add_argument("--redact-secrets", action="store_true", help="Replace secret values inside skill assets with env placeholders.")
+    ps.add_argument("--allow-git-tracked-secrets", action="store_true", help="Allow writing literal secrets into Git-tracked files.")
+    ps.add_argument("--strict-conflicts", action="store_true", help="Exit with code 3 when conflicts or deferred skills remain.")
+    ps.add_argument("--backup-dir", default=None, help="Private 0700 backup directory.")
+    ps.add_argument("--dry-run", action="store_true", help="Preview skill sync actions with zero writes.")
+    ps.set_defaults(func=cmd_sync_skills)
     return p
 
 
