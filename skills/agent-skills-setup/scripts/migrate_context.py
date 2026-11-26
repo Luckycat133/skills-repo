@@ -68,7 +68,7 @@ def _ensure_python_311() -> None:
 _ensure_python_311()
 import tomllib
 
-D = chr(36)  # "$" 占位符前缀，避免在源码里写出会被外层模板吃掉的花括号
+D = chr(36)  # "$" placeholder prefix to keep template syntax intact
 SCHEMA_VERSION = "0.11.0-dev"
 
 PROFILE_ALIASES: dict[str, str] = {
@@ -82,6 +82,16 @@ PROFILE_ALIASES: dict[str, str] = {
     "kimi-code": "kimi-code", "kimiai": "kimi-code", "qwen-code": "qwen-code",
     "qwen": "qwen-code", "pi": "pi",
     "trae-cn": "trae-cn", "trae_cn": "trae-cn", "traecn": "trae-cn",
+    "trae": "trae",
+    "kiro": "kiro", "kiro-cli": "kiro",
+    "junie": "junie",
+    "codebuddy": "codebuddy", "tencent-codebuddy": "codebuddy",
+    "codebuddy-ide": "codebuddy-ide", "tencent-codebuddy-ide": "codebuddy-ide",
+    "qoder": "qoder",
+    "qoder-cn": "qoder-cn", "tongyi-lingma": "qoder-cn", "lingma": "qoder-cn",
+    "roo-code": "roo-code", "roo": "roo-code",
+    "augment-code": "augment-code", "augment": "augment-code", "auggie": "augment-code",
+    "factory-droid": "factory-droid", "droid": "factory-droid", "factory": "factory-droid",
 }
 CANONICAL_PROFILES = tuple(dict.fromkeys(PROFILE_ALIASES.values()))
 ALL_CATEGORIES = (
@@ -185,6 +195,14 @@ AUTOLOAD_PARTS = (
     (".pi", "prompts"),
     (".trae", "rules"), (".trae", "skills"), (".trae", "commands"), (".trae", "agents"),
     (".trae-cn", "rules"), (".trae-cn", "skills"), (".trae-cn", "commands"), (".trae-cn", "agents"),
+    (".kiro", "steering"), (".kiro", "skills"), (".kiro", "agents"), (".kiro", "hooks"),
+    (".junie", "skills"), (".junie", "agents"),
+    (".codebuddy", "rules"), (".codebuddy", "skills"), (".codebuddy", "commands"), (".codebuddy", "agents"),
+    (".qoder", "rules"), (".qoder", "skills"), (".qoder", "commands"), (".qoder", "agents"),
+    (".lingma", "rules"), (".lingma", "skills"),
+    (".roo", "rules"), (".roo", "skills"),
+    (".augment", "rules"), (".augment", "skills"), (".augment", "commands"), (".augment", "agents"),
+    (".factory", "skills"), (".factory", "commands"), (".factory", "droids"),
 )
 
 
@@ -216,6 +234,25 @@ def act(cat: str, item_id: str, outcome: str, dst: Path | str | None = None, **e
     if dst is not None:
         d["destination"] = str(dst)
     d.update({k: v for k, v in extra.items() if v is not None})
+    return d
+
+
+def _handoff(
+    cat: str, item_id: str, *, src_profile: str, dst_profile: str,
+    src_path: Path | str | None, intended_target: Path | str | None,
+    reason: str, guidance: str, has_secrets: bool = False,
+) -> dict[str, Any]:
+    d: dict[str, Any] = {
+        "category": cat, "id": item_id, "outcome": "agent_handoff",
+        "source_profile": src_profile, "target_profile": dst_profile,
+        "reason": reason, "guidance": guidance,
+    }
+    if src_path is not None:
+        d["source_path"] = str(src_path)
+    if intended_target is not None:
+        d["intended_target"] = str(intended_target)
+    if has_secrets:
+        d["has_secrets"] = True
     return d
 
 
@@ -252,8 +289,8 @@ def validate_contained(path: Path, root: Path, label: str = "path") -> None:
     try:
         rel = path.relative_to(root)
     except ValueError:
-        # 未解析路径可能只因中间环节有符号链接而前缀不同（如 macOS /var -> /private/var），
-        # 此时按解析后的真实路径再判包含关系。
+        # Unresolved paths may differ across intermediate symlinks (e.g. macOS /var -> /private/var);
+        # re-check containment after resolving both paths.
         try:
             rel = path.resolve(strict=False).relative_to(root_res)
         except ValueError as exc:
@@ -343,18 +380,22 @@ def git_path_status(target: Path) -> str:
 
 class BackupManager:
     def __init__(self, backup_dir: Path | None, home: Path, workspace: Path, dry_run: bool, product_roots: tuple[Path, ...] = ()) -> None:
-        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        self.root = backup_dir.expanduser().resolve(strict=False) if backup_dir else (home / ".agent-skills-setup-backups" / f"{ts}-{os.getpid()}")
-        if is_inside_autoload_dir(self.root, workspace, home, product_roots):
-            raise SafetyRefusalError("unsafe_backup_dir", f"Backup dir sits inside an auto-loaded context path: {self.root}")
-        if git_path_status(self.root) == "tracked":
-            raise SafetyRefusalError("unsafe_backup_dir", f"Backup dir must not be Git-tracked: {self.root}")
         self.home = home.resolve(strict=False)
         self.workspace = workspace.resolve(strict=False)
         self.dry_run = dry_run
         self.backed_up: dict[Path, Path] = {}
+        if backup_dir is None:
+            self.root: Path | None = None
+            return
+        self.root = backup_dir.expanduser().resolve(strict=False)
+        if is_inside_autoload_dir(self.root, workspace, home, product_roots):
+            raise SafetyRefusalError("unsafe_backup_dir", f"Backup dir sits inside an auto-loaded context path: {self.root}")
+        if git_path_status(self.root) == "tracked":
+            raise SafetyRefusalError("unsafe_backup_dir", f"Backup dir must not be Git-tracked: {self.root}")
 
     def backup_if_exists(self, target: Path) -> str | None:
+        if self.root is None:
+            return None
         resolved = target.resolve(strict=False)
         if not target.exists() or target.is_dir():
             return None
@@ -1221,7 +1262,10 @@ class ProfilePaths:
 def get_profile_paths(profile: str, ws: Path, home: Path) -> ProfilePaths:
     p = resolve_profile(profile)
     use_env = home == Path.home().resolve()
-    overrides = {"codex": "CODEX_HOME", "kimi-code": "KIMI_CODE_HOME", "antigravity": "ANTIGRAVITY_SKILLS_DIR"}
+    overrides = {
+        "codex": "CODEX_HOME", "kimi-code": "KIMI_CODE_HOME",
+        "antigravity": "ANTIGRAVITY_SKILLS_DIR", "codebuddy": "CODEBUDDY_CONFIG_DIR",
+    }
     var = overrides.get(p)
     configured = None
     raw = os.environ.get(var) if (use_env and var) else None
@@ -1234,13 +1278,17 @@ def get_profile_paths(profile: str, ws: Path, home: Path) -> ProfilePaths:
             raise SafetyRefusalError("invalid_product_root", f"{var} must be an absolute product directory")
     chome = (configured if p == "codex" else None) or (home / ".codex")
     khome = (configured if p == "kimi-code" else None) or (home / ".kimi-code")
+    cbhome = (configured if p == "codebuddy" else None) or (home / ".codebuddy")
     ag_sk = (configured if p == "antigravity" else None) or (home / ".gemini/config/skills")
     if sys.platform == "darwin":
         trae_cn_mcp = home / "Library/Application Support/Trae CN/User/mcp.json"
+        trae_intl_mcp = home / "Library/Application Support/Trae/User/mcp.json"
     elif os.name == "nt":
         trae_cn_mcp = home / "AppData/Roaming/Trae CN/User/mcp.json"
+        trae_intl_mcp = home / "AppData/Roaming/Trae/User/mcp.json"
     else:
         trae_cn_mcp = home / ".config/Trae CN/User/mcp.json"
+        trae_intl_mcp = home / ".config/Trae/User/mcp.json"
 
     table: dict[str, ProfilePaths] = {
         "cursor": ProfilePaths(
@@ -1395,6 +1443,83 @@ def get_profile_paths(profile: str, ws: Path, home: Path) -> ProfilePaths:
                 ("instructions", "user", home / ".trae/user_rules"),
             ],
         ),
+        "trae": ProfilePaths(
+            p, proj_rules=ws / ".trae/rules",
+            user_doc=home / ".trae/user_rules.md", user_rules=home / ".trae/rules",
+            proj_skills=ws / ".trae/skills", user_skills=home / ".trae/skills",
+            proj_cmds=ws / ".trae/commands", user_cmds=home / ".trae/commands",
+            proj_agents=ws / ".trae/agents", user_agents=home / ".trae/agents",
+            proj_hooks=ws / ".trae/hooks.json", user_hooks=home / ".trae/hooks.json",
+            proj_mcp=ws / ".trae/mcp.json", user_mcp=trae_intl_mcp,
+            legacy=[
+                ("skills", "project", ws / ".agents/skills"),
+                ("instructions", "user", home / ".trae/user_rules"),
+            ],
+        ),
+        "kiro": ProfilePaths(
+            p, proj_doc=ws / "AGENTS.md", proj_rules=ws / ".kiro/steering",
+            user_rules=home / ".kiro/steering",
+            proj_skills=ws / ".kiro/skills", user_skills=home / ".kiro/skills",
+            proj_agents=ws / ".kiro/agents", user_agents=home / ".kiro/agents",
+            proj_hooks=ws / ".kiro/hooks",
+            proj_mcp=ws / ".kiro/settings/mcp.json", user_mcp=home / ".kiro/settings/mcp.json",
+        ),
+        "junie": ProfilePaths(
+            p, proj_doc=ws / ".junie/guidelines.md",
+            proj_skills=ws / ".junie/skills", user_skills=home / ".junie/skills",
+            proj_agents=ws / ".junie/agents", user_agents=home / ".junie/agents",
+            proj_mcp=ws / ".junie/mcp/mcp.json", user_mcp=home / ".junie/mcp/mcp.json",
+            legacy=[("instructions", "project", ws / "AGENTS.md")],
+        ),
+        "codebuddy": ProfilePaths(
+            p, proj_doc=ws / "CODEBUDDY.md", proj_rules=ws / ".codebuddy/rules",
+            user_doc=cbhome / "CODEBUDDY.md", user_rules=cbhome / "rules",
+            proj_skills=ws / ".codebuddy/skills", user_skills=cbhome / "skills",
+            proj_cmds=ws / ".codebuddy/commands", user_cmds=cbhome / "commands",
+            proj_agents=ws / ".codebuddy/agents", user_agents=cbhome / "agents",
+            proj_hooks=ws / ".codebuddy/settings.json", user_hooks=cbhome / "settings.json",
+            proj_mcp=ws / ".codebuddy/.mcp.json", user_mcp=cbhome / ".mcp.json",
+            legacy=[("instructions", "project", ws / "AGENTS.md"), ("mcp", "project", ws / ".mcp.json")],
+        ),
+        "codebuddy-ide": ProfilePaths(
+            p, proj_rules=ws / ".codebuddy/rules", user_rules=home / ".codebuddy/rules",
+            proj_skills=ws / ".codebuddy/skills", user_skills=home / ".codebuddy/skills",
+            proj_cmds=ws / ".codebuddy/commands", user_cmds=home / ".codebuddy/commands",
+            proj_agents=ws / ".codebuddy/agents", user_agents=home / ".codebuddy/agents",
+            proj_mcp=ws / ".codebuddy/mcp.json", user_mcp=home / ".codebuddy/mcp.json",
+        ),
+        "qoder": ProfilePaths(
+            p, proj_doc=ws / "AGENTS.md", proj_rules=ws / ".qoder/rules", user_rules=home / ".qoder/rules",
+            proj_skills=ws / ".qoder/skills", user_skills=home / ".qoder/skills",
+            proj_cmds=ws / ".qoder/commands", user_cmds=home / ".qoder/commands",
+            proj_agents=ws / ".qoder/agents", user_agents=home / ".qoder/agents",
+            proj_mcp=ws / ".qoder/settings.json", user_mcp=home / ".qoder/settings.json",
+        ),
+        "qoder-cn": ProfilePaths(
+            p, proj_rules=ws / ".lingma/rules", user_rules=home / ".lingma/rules",
+            proj_skills=ws / ".lingma/skills", user_skills=home / ".lingma/skills",
+            proj_mcp=ws / ".lingma/mcp.json", user_mcp=home / ".lingma/mcp.json",
+            legacy=[("skills", "project", ws / ".agents/skills")],
+        ),
+        "roo-code": ProfilePaths(
+            p, proj_rules=ws / ".roo/rules", user_rules=home / ".roo/rules",
+            proj_skills=ws / ".roo/skills", user_skills=home / ".roo/skills",
+            proj_mcp=ws / ".roo/mcp.json",
+        ),
+        "augment-code": ProfilePaths(
+            p, proj_rules=ws / ".augment/rules", user_rules=home / ".augment/rules",
+            proj_skills=ws / ".augment/skills", user_skills=home / ".augment/skills",
+            proj_cmds=ws / ".augment/commands", proj_agents=ws / ".augment/agents",
+            user_mcp=home / ".augment/settings.json",
+            legacy=[("instructions", "project", ws / ".augment-guidelines")],
+        ),
+        "factory-droid": ProfilePaths(
+            p, proj_doc=ws / "AGENTS.md",
+            proj_skills=ws / ".factory/skills", user_skills=home / ".factory/skills",
+            proj_cmds=ws / ".factory/commands", user_cmds=home / ".factory/commands",
+            proj_agents=ws / ".factory/droids", user_agents=home / ".factory/droids",
+            proj_mcp=ws / ".factory/mcp.json", user_mcp=home / ".factory/mcp.json",
+        ),
     }
     paths = table[p]
     paths.user_product_root = configured
@@ -1515,7 +1640,7 @@ def parse_rule_files(path: Path, scope: str, profile: str, *, native_rule: bool 
             break
     slug = slugify(bname)
     is_override = (path.name == "AGENTS.override.md")
-    root_names = {"AGENTS.md", "AGENTS.override.md", "CLAUDE.md", "CLAUDE.local.md", "GEMINI.md", "QWEN.md", "copilot-instructions.md", ".cursorrules", ".windsurfrules", "global_rules.md", "user_rules.md", "user_rules"}
+    root_names = {"AGENTS.md", "AGENTS.override.md", "CLAUDE.md", "CLAUDE.local.md", "GEMINI.md", "QWEN.md", "CODEBUDDY.md", "guidelines.md", "copilot-instructions.md", ".cursorrules", ".windsurfrules", ".augment-guidelines", "global_rules.md", "user_rules.md", "user_rules"}
     zed_native = profile == "zed" and path.name in {".rules", "AGENT.md"}
     claude_rule = profile == "claude-code" and native_rule
     if not claude_rule and (path.name in root_names or zed_native or (path.name == ".clinerules" and path.is_file())):
@@ -1539,6 +1664,15 @@ def parse_rule_files(path: Path, scope: str, profile: str, *, native_rule: bool 
         kind = "glob_scoped" if globs else "always_on"
         return [DiscoveredRule(slug, scope, kind, body if body.strip() else text, globs=globs,
                                source_path=path, source_profile=profile)]
+    if profile == "kiro" and native_rule:
+        inc = str(meta.get("inclusion") or "").strip().lower()
+        fpat = split_globs(meta.get("fileMatchPattern"))
+        if inc == "filematch" and fpat:
+            return [DiscoveredRule(slug, scope, "glob_scoped", body if body.strip() else text, globs=fpat, source_path=path, source_profile=profile)]
+        if inc == "manual":
+            return [DiscoveredRule(slug, scope, "manual", body if body.strip() else text, source_path=path, source_profile=profile)]
+        if inc == "always":
+            return [DiscoveredRule(slug, scope, "always_on", body if body.strip() else text, source_path=path, source_profile=profile)]
     always = meta.get("alwaysApply") is True or str(meta.get("trigger", "")).lower() == "always_on"
     globs = split_globs(meta.get("globs") or meta.get("glob") or meta.get("paths") or meta.get("applyTo"))
     desc = str(meta.get("description") or "").strip()
@@ -2053,23 +2187,24 @@ def _discover_codex_extras(
                 ))
 
 
-def _discover_trae_cn_extras(
-    workspace: Path, home: Path, wp: bool, wu: bool, categories: set[str], inv: ProfileInventory,
+def _discover_trae_family_extras(
+    profile: str, workspace: Path, home: Path, wp: bool, wu: bool, categories: set[str], inv: ProfileInventory,
 ) -> None:
     if not wu:
         return
+    dotdir = ".trae-cn" if profile == "trae-cn" else ".trae"
     for rel_p, reason in (
-        (".trae-cn/trae-jwt-token", "excluded_auth_token"),
-        (".trae-cn/builtin_skills", "excluded_builtin_assets"),
-        (".trae-cn/builtin", "excluded_builtin_assets"),
-        (".trae-cn/hub_event_cache", "excluded_state_or_history_dir"),
-        (".trae-cn/permission", "excluded_state_or_history_dir"),
-        (".trae-cn/memory", "excluded_state_or_history_dir"),
+        (f"{dotdir}/trae-jwt-token", "excluded_auth_token"),
+        (f"{dotdir}/builtin_skills", "excluded_builtin_assets"),
+        (f"{dotdir}/builtin", "excluded_builtin_assets"),
+        (f"{dotdir}/hub_event_cache", "excluded_state_or_history_dir"),
+        (f"{dotdir}/permission", "excluded_state_or_history_dir"),
+        (f"{dotdir}/memory", "excluded_state_or_history_dir"),
     ):
         cand = home / rel_p
         if cand.exists() or cand.is_symlink():
             _append_excluded(inv.excluded, cand, workspace, home, reason)
-    if "hooks" in categories and not (home / ".trae-cn/hooks.json").exists():
+    if profile == "trae-cn" and "hooks" in categories and not (home / ".trae-cn/hooks.json").exists():
         legacy_hk = home / ".trae/hooks.json"
         if (legacy_hk.exists() or legacy_hk.is_symlink()) and not _record_broken_symlink(legacy_hk, workspace, home, inv.excluded):
             validate_contained(legacy_hk, home, "trae_legacy_hooks")
@@ -2093,10 +2228,14 @@ def discover_profile(profile: str, workspace: Path, home: Path, scope: str, cate
         scan_dirs.append(pp.user_mcp.parent)
     if pp.profile == "antigravity":
         scan_dirs.extend([home / ".gemini/antigravity", home / ".gemini/config"])
-    if pp.profile == "trae-cn":
-        scan_dirs.append(home / ".trae-cn")
+    if pp.profile in ("trae-cn", "trae"):
+        scan_dirs.extend([home / ".trae-cn", home / ".trae"])
         if pp.user_mcp is not None:
             scan_dirs.append(pp.user_mcp.parent)
+    if pp.profile == "qoder-cn":
+        scan_dirs.extend([workspace / ".lingma", home / ".lingma"])
+    if pp.profile == "codebuddy" and pp.user_doc is not None:
+        scan_dirs.append(pp.user_doc.parent)
     for sdir in scan_dirs:
         is_w = sdir.is_relative_to(workspace)
         if (wp and is_w) or (wu and not is_w):
@@ -2295,10 +2434,14 @@ def discover_profile(profile: str, workspace: Path, home: Path, scope: str, cate
                 continue
             validate_contained(hpth, aroot, "hooks")
             if hpth.is_file():
-                if pp.profile == "claude-code":
+                if pp.profile in ("claude-code", "codebuddy") and hpth.name.startswith("settings"):
                     doc = load_jsonc(hpth.read_text(encoding="utf-8"))
                     if isinstance(doc, dict) and doc.get("hooks"):
-                        inv.doc_items.append(DiscoveredDocItem("hooks", "claude-hooks.json", hsc, hpth, (json.dumps({"hooks": doc["hooks"]}, indent=2, ensure_ascii=False) + "\n").encode("utf-8"), pp.profile, subkind="claude_hooks_json"))
+                        inv.doc_items.append(DiscoveredDocItem(
+                            "hooks", f"{pp.profile.split('-')[0]}-hooks.json", hsc, hpth,
+                            (json.dumps({"hooks": doc["hooks"]}, indent=2, ensure_ascii=False) + "\n").encode("utf-8"),
+                            pp.profile, subkind=f"{pp.profile.split('-')[0]}_hooks_json",
+                        ))
                 else:
                     inv.doc_items.append(DiscoveredDocItem("hooks", hpth.name, hsc, hpth, hpth.read_bytes(), pp.profile))
             elif hpth.is_dir():
@@ -2316,8 +2459,8 @@ def discover_profile(profile: str, workspace: Path, home: Path, scope: str, cate
         _discover_claude_extras(workspace, home, wp, wu, categories, inv)
     elif pp.profile == "codex":
         _discover_codex_extras(pp, workspace, home, wp, wu, categories, inv)
-    elif pp.profile == "trae-cn":
-        _discover_trae_cn_extras(workspace, home, wp, wu, categories, inv)
+    elif pp.profile in ("trae-cn", "trae"):
+        _discover_trae_family_extras(pp.profile, workspace, home, wp, wu, categories, inv)
 
     if "env_secrets" in categories and wp and workspace.is_dir():
         for entry in sorted(workspace.iterdir()):
@@ -2428,7 +2571,14 @@ def apply_rule_to_target(
         elif tp == "cursor" and rdir:
             gval: Any = rule.globs[0] if len(rule.globs) == 1 else ", ".join(rule.globs)
             dst, rendered = rdir / f"{rule.slug}.mdc", render_frontmatter({"globs": gval, "alwaysApply": False}, rule_body)
-        elif tp == "trae-cn" and rdir:
+        elif tp == "kiro" and rdir:
+            fpat: Any = rule.globs[0] if len(rule.globs) == 1 else ", ".join(rule.globs)
+            dst, rendered = rdir / f"{rule.slug}.md", render_frontmatter({"inclusion": "fileMatch", "fileMatchPattern": fpat}, rule_body)
+        elif (
+            tp in ("trae-cn", "trae", "codebuddy", "codebuddy-ide", "qoder", "qoder-cn", "roo-code", "augment-code")
+            and rdir
+            and not (tp == "augment-code" and not is_p)
+        ):
             gval = rule.globs[0] if len(rule.globs) == 1 else ", ".join(rule.globs)
             dst, rendered = rdir / f"{rule.slug}.md", render_frontmatter({"globs": gval, "alwaysApply": False}, rule_body)
         elif tp == "windsurf" and is_p and tpp.proj_rules:
@@ -2450,9 +2600,18 @@ def apply_rule_to_target(
                 write_managed_file(ddoc, merged.encode("utf-8"), has_secrets=_payload_has_secrets(merged.encode("utf-8")), auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
             return act("instructions", rule.slug, "noop" if st == "noop" else "migrated", ddoc, note="Broadened glob rule (--allow-broaden-scope)")
         else:
-            pdst = workspace / ".migration-review" / "rules" / tp / f"{rule.slug}.md"
-            write_managed_file(pdst, render_frontmatter({"source_globs": rule.globs, "target": tp}, rule_body).encode("utf-8"), has_secrets=_payload_has_secrets(render_frontmatter({"source_globs": rule.globs, "target": tp}, rule_body).encode("utf-8")), auth_root=workspace, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
-            return act("instructions", rule.slug, "parked_draft", pdst, reason=f"{tp} lacks file-glob rule frontmatter; parked instead of widening scope")
+            intended = (rdir / f"{rule.slug}.md") if rdir else (tpp.proj_doc if is_p else tpp.user_doc)
+            reason = (
+                "augment_user_rules_always_apply_cannot_scope_globs"
+                if (tp == "augment-code" and not is_p)
+                else f"{tp} lacks verified file-glob rule frontmatter; handed off instead of widening scope"
+            )
+            return _handoff(
+                "instructions", rule.slug, src_profile=rule.source_profile, dst_profile=tp,
+                src_path=rule.source_path, intended_target=intended, reason=reason,
+                guidance=f"Read references/instructions.md; adapt glob pattern {rule.globs} manually (or convert into an on-demand Skill) without widening into unconditional rules unless intended.",
+                has_secrets=_payload_has_secrets(rule_body.encode("utf-8")),
+            )
         assert dst is not None and rendered is not None
         root = target_root(dst)
         if dst.exists():
@@ -2464,7 +2623,10 @@ def apply_rule_to_target(
         rdir = tpp.proj_rules if is_p else tpp.user_rules
         if tp == "cursor" and rdir:
             dst, rendered = rdir / f"{rule.slug}.mdc", render_frontmatter({"description": rule.description, "alwaysApply": False}, rule_body)
-        elif tp == "trae-cn" and rdir:
+        elif (
+            tp in ("trae-cn", "trae", "codebuddy", "codebuddy-ide", "qoder", "qoder-cn", "roo-code")
+            and rdir
+        ):
             dst, rendered = rdir / f"{rule.slug}.md", render_frontmatter({"description": rule.description or f"Rule {rule.slug}", "alwaysApply": False}, rule_body)
         elif tp == "windsurf" and is_p and tpp.proj_rules:
             dst, rendered = tpp.proj_rules / f"{rule.slug}.md", render_frontmatter({"trigger": "model_decision", "description": rule.description}, rule_body)
@@ -2481,7 +2643,18 @@ def apply_rule_to_target(
         write_managed_file(dst, rendered.encode("utf-8"), has_secrets=_payload_has_secrets(rendered.encode("utf-8")), auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
         return act("instructions", rule.slug, "migrated", dst, note="Converted model-selected rule to on-demand surface")
 
-    # Manual rule -> manual-only Skill or explicit command (never always-on)
+    # Manual rule -> manual-only Skill, Kiro inclusion: manual, or explicit command (never always-on)
+    if tp == "kiro":
+        rdir = tpp.proj_rules if is_p else tpp.user_rules
+        if rdir:
+            dst = rdir / f"{rule.slug}.md"
+            rendered = render_frontmatter({"inclusion": "manual"}, rule_body)
+            root = target_root(dst)
+            if dst.exists():
+                return act("instructions", rule.slug, "noop" if dst.read_text(encoding="utf-8").strip() == rendered.strip() else "conflict", dst)
+            write_managed_file(dst, rendered.encode("utf-8"), has_secrets=_payload_has_secrets(rendered.encode("utf-8")), auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
+            return act("instructions", rule.slug, "migrated", dst, note="Mapped manual rule to Kiro inclusion: manual steering file")
+
     if tp == "antigravity":
         rdir = tpp.proj_rules if is_p else tpp.user_rules
         if rdir:
@@ -2517,13 +2690,17 @@ def apply_rule_to_target(
         write_managed_file(dst, rendered.encode("utf-8"), has_secrets=_payload_has_secrets(rendered.encode("utf-8")), auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
         return act("instructions", rule.slug, "migrated", dst, note="Converted manual rule to explicit command/prompt")
 
-    pdst = workspace / ".migration-review" / "manual-rules" / tp / f"{rule.slug}.md"
-    write_managed_file(pdst, (rule_body.strip() + "\n").encode("utf-8"), has_secrets=_payload_has_secrets((rule_body.strip() + "\n").encode("utf-8")), auth_root=workspace, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
-    return act("instructions", rule.slug, "parked_draft", pdst, reason=f"{tp} lacks verified manual-only flag; parked instead of making always-on")
+    return _handoff(
+        "instructions", rule.slug, src_profile=rule.source_profile, dst_profile=tp,
+        src_path=rule.source_path, intended_target=(tpp.proj_rules if is_p else tpp.user_rules),
+        reason=f"{tp} lacks verified manual-only rule flag; handed off instead of making always-on",
+        guidance=f"Read references/instructions.md; rewrite as an explicit slash command or manual-only Skill rather than placing in {tp} always-on rules.",
+        has_secrets=_payload_has_secrets(rule_body.encode("utf-8")),
+    )
 
 
 def _payload_has_secrets(data: bytes) -> bool:
-    """写入前判断这份内容里是否还留着凭据（token / Bearer / 认证头）。"""
+    """Return True if serialized content still contains a credential literal."""
     return _document_text_has_secrets(data.decode("utf-8", errors="replace"))
 
 
@@ -2654,7 +2831,7 @@ def _document_has_secrets(doc: Any) -> bool:
 
 
 def _document_text_has_secrets(text: str) -> bool:
-    # 凭据是否仍然留在文本里：token / Bearer 字面量 / 认证头三种形态。
+    # Check whether credential literals remain as tokens, Bearer headers, or auth headers.
     if INLINE_SECRET_RE.search(text):
         return True
     if BEARER_LITERAL_RE.search(text):
@@ -2669,7 +2846,7 @@ def _document_text_has_secrets(text: str) -> bool:
 
 
 def _redact_document_text(text: str) -> str:
-    # 把文本里的凭据换成占位符。
+    # Replace credential literals inside free-form document text with env placeholders.
     out = INLINE_SECRET_RE.sub(D + "{REDACTED_SECRET}", text)
     out = BEARER_LITERAL_RE.sub("Bearer " + D + "{REDACTED_SECRET}", out)
 
@@ -2852,12 +3029,23 @@ def _first_summary_line(body: str, fallback: str) -> str:
     return (cand[:160].strip() if cand else fallback)
 
 
-def _translate_agent_markdown(doc_text: str, item_name: str, src_profile: str, dst_profile: str) -> tuple[str, list[str]]:
+AGENT_UNREPRESENTABLE_KEYS = frozenset({
+    "isolation", "permissionMode", "context", "disallowedTools", "maxTurns",
+    "hooks", "mcpServers", "skills", "commandExecutionPolicy", "toolsSettings",
+})
+
+
+def _translate_agent_markdown(doc_text: str, item_name: str, src_profile: str, dst_profile: str) -> tuple[str, list[str], list[str]]:
     meta, body = parse_frontmatter(doc_text)
     notes: list[str] = []
+    lossy: list[str] = []
     stem = Path(item_name).parent.name if (Path(item_name).name == "agent.md" and "/" in item_name) else Path(item_name).stem
     name = str(meta.get("name") or stem).strip() or slugify(stem)
     desc = str(meta.get("description") or "").strip() or _first_summary_line(body, f"Subagent {name}")
+
+    for k in sorted(AGENT_UNREPRESENTABLE_KEYS):
+        if k in meta:
+            lossy.append(f"unrepresentable_agent_key:{k}")
 
     def _parse_tools_list(raw: Any) -> list[str]:
         if isinstance(raw, list):
@@ -2887,7 +3075,7 @@ def _translate_agent_markdown(doc_text: str, item_name: str, src_profile: str, d
                         unmapped.append(t)
                 out_meta["tools"] = mapped or ["read_file"]
                 if unmapped:
-                    notes.append(f"Dropped unmapped Claude tools: {', '.join(unmapped)}")
+                    lossy.append(f"unmapped_tools:{','.join(unmapped)}")
             model = str(meta.get("model") or "").strip().lower()
             if "haiku" in model:
                 out_meta["model"] = "flash"
@@ -2898,7 +3086,7 @@ def _translate_agent_markdown(doc_text: str, item_name: str, src_profile: str, d
         else:
             if src_tools:
                 out_meta["tools"] = src_tools
-        return render_frontmatter(out_meta, body), notes
+        return render_frontmatter(out_meta, body), notes, lossy
 
     if dst_profile == "claude-code":
         out_meta = {"name": name, "description": desc}
@@ -2916,7 +3104,7 @@ def _translate_agent_markdown(doc_text: str, item_name: str, src_profile: str, d
             if mapped_c:
                 out_meta["tools"] = mapped_c
             if unmapped_c:
-                notes.append(f"Dropped unmapped Antigravity tools: {', '.join(unmapped_c)}")
+                lossy.append(f"unmapped_tools:{','.join(unmapped_c)}")
         elif src_tools:
             out_meta["tools"] = src_tools
         model = str(meta.get("model") or "").strip().lower()
@@ -2924,16 +3112,13 @@ def _translate_agent_markdown(doc_text: str, item_name: str, src_profile: str, d
             out_meta["model"] = "haiku"
         elif model == "pro":
             out_meta["model"] = "opus"
-        dropped = [k for k in ("subagent", "mainAgent", "commandExecutionPolicy", "skills") if k in meta]
-        if dropped:
-            notes.append(f"Dropped Antigravity-only fields: {', '.join(dropped)}")
-        return render_frontmatter(out_meta, body), notes
+        return render_frontmatter(out_meta, body), notes, lossy
 
     # Codex or other Markdown-agent targets
     out_meta = {"name": name, "description": desc}
     if meta.get("tools"):
         notes.append("Preserved agent prompt; verify tool names for target harness")
-    return render_frontmatter(out_meta, body), notes
+    return render_frontmatter(out_meta, body), notes, lossy
 
 
 def _merge_json_settings_file(
@@ -3249,11 +3434,13 @@ def apply_doc_item_to_target(
                 return act("scripts", item.name, "noop" if (same and mode_ok) else "conflict", dst)
             write_managed_file(dst, doc_content, has_secrets=doc_has_secrets, executable=item.executable, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
             return act("scripts", item.name, "migrated", dst, has_secrets=doc_has_secrets)
-        park_dir = workspace / ".migration-review" / "scripts" / tp
-        park = park_dir / name
-        validate_contained(park_dir, workspace, "parked_script_directory")
-        write_managed_file(park, doc_content, has_secrets=doc_has_secrets, auth_root=park_dir, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
-        return act("scripts", item.name, "parked_draft", park, reason="Helper scripts from another profile stay parked in .migration-review/scripts/")
+        return _handoff(
+            "scripts", item.name, src_profile=item.source_profile, dst_profile=tp,
+            src_path=item.path, intended_target=None,
+            reason="cross_profile_helper_script_requires_agent_review",
+            guidance=f"Review script '{item.name}' from {item.source_profile} and re-bind to a Skill scripts/ dir or manual workflow on {tp} without silently copying unverified executables.",
+            has_secrets=doc_has_secrets,
+        )
 
     if item.category == "sidecars":
         if activate_hooks and tp == "antigravity" and item.source_profile == "antigravity":
@@ -3267,11 +3454,13 @@ def apply_doc_item_to_target(
                 return act("sidecars", item.name, "noop" if (same and mode_ok) else "conflict", dst)
             write_managed_file(dst, doc_content, has_secrets=doc_has_secrets, executable=item.executable, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
             return act("sidecars", item.name, "migrated", dst, note="Activated sidecar via --activate-hooks")
-        park_dir = workspace / ".migration-review" / "sidecars" / tp
-        park = park_dir / name
-        validate_contained(park_dir, workspace, "parked_sidecar_directory")
-        write_managed_file(park, doc_content, has_secrets=doc_has_secrets, auth_root=park_dir, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
-        return act("sidecars", item.name, "parked_draft", park, reason="Background sidecars stay parked in .migration-review/ unless --activate-hooks is passed on same-profile")
+        return _handoff(
+            "sidecars", item.name, src_profile=item.source_profile, dst_profile=tp,
+            src_path=item.path, intended_target=(eff_home / ".gemini/config/sidecars" / name if tp == "antigravity" else None),
+            reason="background_sidecar_requires_explicit_activation",
+            guidance="Pass --activate-hooks on same-profile Antigravity restore, or review references/other-context.md before porting background sidecars.",
+            has_secrets=doc_has_secrets,
+        )
 
     if item.category == "hooks":
         if item.subkind == "codex_policy_rule":
@@ -3283,15 +3472,17 @@ def apply_doc_item_to_target(
                     return act("hooks", item.name, "noop" if dst.read_bytes() == doc_content else "conflict", dst)
                 write_managed_file(dst, doc_content, has_secrets=doc_has_secrets, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
                 return act("hooks", item.name, "migrated", dst, note="Restored Codex command policy rule via --activate-hooks")
-            park_dir = workspace / ".migration-review" / "codex-rules" / tp / item.scope
-            park = park_dir / name
-            validate_contained(park_dir, workspace, "parked_codex_rule_dir")
-            write_managed_file(park, doc_content, has_secrets=doc_has_secrets, auth_root=park_dir, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
-            return act("hooks", item.name, "parked_draft", park, reason="Codex .rules command policies stay parked unless --activate-hooks on same-profile")
+            return _handoff(
+                "hooks", item.name, src_profile=item.source_profile, dst_profile=tp,
+                src_path=item.path, intended_target=(workspace / ".codex/rules" / name if tp == "codex" else None),
+                reason="codex_policy_rule_requires_explicit_activation",
+                guidance="Pass --activate-hooks on same-profile Codex restore, or translate allow/prompt/forbid command policies manually using references/other-context.md.",
+                has_secrets=doc_has_secrets,
+            )
 
         if activate_hooks:
-            if tp == "claude-code" and item.source_profile == "claude-code":
-                hd = (workspace / ".claude/settings.local.json") if (is_p and item.subkind == "claude_local_hooks_json") else (tpp.proj_hooks if is_p else tpp.user_hooks)
+            if tp in ("claude-code", "codebuddy") and item.source_profile == tp:
+                hd = (workspace / ".claude/settings.local.json") if (tp == "claude-code" and is_p and item.subkind == "claude_local_hooks_json") else (tpp.proj_hooks if is_p else tpp.user_hooks)
                 if hd is not None:
                     inc_h = load_jsonc(doc_text)
                     hval = inc_h.get("hooks") if isinstance(inc_h, dict) else None
@@ -3304,10 +3495,10 @@ def apply_doc_item_to_target(
                             replace_container=True,
                         )
                         if res["outcome"] == "migrated":
-                            res["note"] = "Activated Claude Code hooks via --activate-hooks"
+                            res["note"] = f"Activated {tp} hooks via --activate-hooks"
                         return res
             hd = tpp.proj_hooks if is_p else tpp.user_hooks
-            if hd is not None and tp != "claude-code":
+            if hd is not None and tp not in ("claude-code", "codebuddy"):
                 root = target_root(hd)
                 directory_hook = (hd.exists() and hd.is_dir()) or not hd.suffix
                 dst = (hd / item.name) if directory_hook else hd
@@ -3325,13 +3516,13 @@ def apply_doc_item_to_target(
                     return act("hooks", item.name, "noop" if same and mode_matches else "conflict", dst)
                 write_managed_file(dst, doc_content, has_secrets=doc_has_secrets, executable=executable, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
                 return act("hooks", item.name, "migrated", dst, note="Activated hook via --activate-hooks")
-        park_dir = workspace / ".migration-review" / "hooks" / tp / item.scope
-        park = park_dir / item.name
-        validate_contained(park_dir, workspace, "parked_hook_directory")
-        if is_inside_autoload_dir(park, workspace, eff_home):
-            raise SafetyRefusalError("unsafe_hook_parking", "Parked hook must stay outside live discovery paths")
-        write_managed_file(park, doc_content, has_secrets=doc_has_secrets, auth_root=park_dir, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
-        return act("hooks", item.name, "parked_draft", park, reason="Executable hooks stay parked in .migration-review/ until explicitly approved")
+        return _handoff(
+            "hooks", item.name, src_profile=item.source_profile, dst_profile=tp,
+            src_path=item.path, intended_target=(tpp.proj_hooks if is_p else tpp.user_hooks),
+            reason="executable_hooks_require_explicit_activation_or_translation",
+            guidance=f"Pass --activate-hooks for safe same-schema hooks, or translate lifecycle hook events/matchers manually for {tp} via references/other-context.md.",
+            has_secrets=doc_has_secrets,
+        )
 
     dst_dir: Path | None = None
     note_extra: str | None = None
@@ -3349,25 +3540,45 @@ def apply_doc_item_to_target(
                 cdesc = str(src_meta.get("description") or "").strip() or _first_summary_line(body, f"Command /{cslug}")
                 rnd = render_frontmatter({"name": cslug, "description": cdesc, "disable-model-invocation": True, **carry}, body).encode("utf-8")
                 if lost:
-                    park = workspace / ".migration-review" / "commands" / tp / item.name
-                    write_managed_file(park, doc_content, has_secrets=doc_has_secrets, auth_root=workspace, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
-                    return act("commands", item.name, "parked_draft", park, reason=f"command restrictions not representable as Skill: {', '.join(sorted(lost))}")
+                    return _handoff(
+                        "commands", item.name, src_profile=item.source_profile, dst_profile=tp,
+                        src_path=item.path, intended_target=dst,
+                        reason=f"command restrictions not representable as Skill: {', '.join(sorted(lost))}",
+                        guidance=f"Read references/other-context.md; adapt command restrictions ({', '.join(sorted(lost))}) semantically for {tp} instead of dropping them.",
+                        has_secrets=doc_has_secrets,
+                    )
                 root = target_root(dst)
                 if dst.exists():
                     return act("commands", item.name, "noop" if dst.read_bytes() == rnd else "conflict", dst)
                 write_managed_file(dst, rnd, has_secrets=doc_has_secrets, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
                 return act("commands", item.name, "migrated", dst, note="Mapped command to manual-only Skill")
-            park = workspace / ".migration-review" / "commands" / tp / item.name
-            write_managed_file(park, doc_content, has_secrets=doc_has_secrets, auth_root=workspace, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
-            return act("commands", item.name, "parked_draft", park, reason="Command schema differs across source/target")
+            return _handoff(
+                "commands", item.name, src_profile=item.source_profile, dst_profile=tp,
+                src_path=item.path, intended_target=dst_dir,
+                reason="command_schema_differs_across_source_and_target",
+                guidance=f"Convert '{item.name}' manually (e.g. Gemini TOML <-> Markdown Skill/command) using references/other-context.md.",
+                has_secrets=doc_has_secrets,
+            )
     elif item.category == "agents":
         dst_dir = tpp.proj_agents if is_p else tpp.user_agents
         if item.source_profile == "codex" and tp != "codex" and item.name.endswith(".toml"):
-            park = workspace / ".migration-review" / "agents" / tp / item.name
-            write_managed_file(park, doc_content, has_secrets=doc_has_secrets, auth_root=workspace, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
-            return act("agents", item.name, "parked_draft", park, reason="codex_toml_agent_requires_manual_translation")
+            return _handoff(
+                "agents", item.name, src_profile=item.source_profile, dst_profile=tp,
+                src_path=item.path, intended_target=dst_dir,
+                reason="codex_toml_agent_requires_agent_translation",
+                guidance=f"Read TOML agent '{item.name}' and adapt prompt, model, and tool constraints to {tp} markdown agent schema via references/other-context.md.",
+                has_secrets=doc_has_secrets,
+            )
         if dst_dir is not None and item.source_profile != tp and name.endswith(".md"):
-            translated_text, tnotes = _translate_agent_markdown(doc_text, item.name, item.source_profile, tp)
+            translated_text, tnotes, tlossy = _translate_agent_markdown(doc_text, item.name, item.source_profile, tp)
+            if tlossy:
+                return _handoff(
+                    "agents", item.name, src_profile=item.source_profile, dst_profile=tp,
+                    src_path=item.path, intended_target=(dst_dir / name),
+                    reason="; ".join(tlossy),
+                    guidance=f"Adapt agent '{item.name}' semantically for {tp} using references/other-context.md without dropping tool/isolation constraints.",
+                    has_secrets=doc_has_secrets,
+                )
             doc_text = translated_text
             doc_content = doc_text.encode("utf-8", errors="surrogateescape")
             doc_has_secrets = _document_text_has_secrets(doc_text)
@@ -3425,9 +3636,13 @@ def apply_doc_item_to_target(
             return act("memory", item.name, "noop" if st == "noop" else "migrated", tpp.user_doc)
 
     if dst_dir is None:
-        park = workspace / ".migration-review" / item.category / tp / item.name
-        write_managed_file(park, doc_content, has_secrets=doc_has_secrets, auth_root=workspace, private_parent=True, backups=backups, warnings=warnings, dry_run=dry_run)
-        return act(item.category, item.name, "parked_draft", park, reason=f"No direct {item.category} directory on {tp}")
+        return _handoff(
+            item.category, item.name, src_profile=item.source_profile, dst_profile=tp,
+            src_path=item.path, intended_target=None,
+            reason=f"no_direct_{item.category}_directory_on_{tp}",
+            guidance=f"{tp} has no verified {item.scope} {item.category} directory; read references/other-context.md and translate or omit intentionally.",
+            has_secrets=doc_has_secrets,
+        )
 
     dst_name = name
     if tp == "vscode" and dst_name.endswith(".md"):
@@ -3463,7 +3678,7 @@ def _build_action_totals(actions: list[dict[str, Any]]) -> dict[str, Any]:
         bucket[out] = bucket.get(out, 0) + 1
     return {
         "total_actions": len(actions),
-        "by_outcome": {k: sum(1 for a in actions if a["outcome"] == k) for k in ("migrated", "noop", "conflict", "parked_draft", "deferred")},
+        "by_outcome": {k: sum(1 for a in actions if a["outcome"] == k) for k in ("migrated", "noop", "conflict", "agent_handoff", "deferred")},
         "by_category": by_cat,
     }
 
@@ -3643,13 +3858,14 @@ def execute_inventories_to_targets(
                 write_managed_file(dst_env, out_env.encode("utf-8"), has_secrets=hs, allow_git_tracked_secrets=allow_git_tracked_secrets, auth_root=workspace, backups=backups, warnings=warnings, dry_run=dry_run)
                 actions.append(act("env_secrets", ef.name, "migrated", dst_env, has_secrets=hs, secrets=sec_list))
 
-    unresolved = [a for a in actions if a["outcome"] in ("conflict", "deferred", "parked_draft")]
-    counts = {k: sum(1 for a in actions if a["outcome"] == k) for k in ("migrated", "noop", "conflict", "parked_draft", "deferred")}
+    unresolved = [a for a in actions if a["outcome"] in ("conflict", "deferred", "agent_handoff")]
+    counts = {k: sum(1 for a in actions if a["outcome"] == k) for k in ("migrated", "noop", "conflict", "agent_handoff", "deferred")}
     return {
         "ok": True, "dry_run": dry_run, "redact_secrets": redact_secrets,
         "totals": _build_action_totals(actions), "summary": counts,
         "actions": actions, "conflicts": [a for a in actions if a["outcome"] == "conflict"],
-        "parked_or_deferred": [a for a in actions if a["outcome"] in ("parked_draft", "deferred")],
+        "agent_handoff": [a for a in actions if a["outcome"] == "agent_handoff"],
+        "parked_or_deferred": [a for a in actions if a["outcome"] in ("agent_handoff", "deferred")],
         "backups": [str(p) for p in backups.backed_up.values()], "warnings": warnings, "excluded": excluded_all,
         "verification": {"level": "structural_and_syntax_only", "native_ide_runtime": "not-run"},
     }, (3 if (strict_conflicts and unresolved) else 0)
@@ -3887,6 +4103,10 @@ def cmd_import_device(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
             raise SafetyRefusalError("checksum_mismatch", f"SHA-256 mismatch for transfer file '{brel}'", {"bundle_path": brel})
         verified[brel] = data
 
+    raw_profs = (getattr(args, "profiles", "all") or "all").strip()
+    wanted_profiles: set[str] | None = (
+        None if raw_profs.lower() in ("", "all") else {resolve_profile(p) for p in raw_profs.split(",") if p.strip()}
+    )
     inv_by_prof: dict[str, ProfileInventory] = {}
     skill_groups: dict[tuple[str, str, str], dict[Path, tuple[bytes, bool]]] = {}
     default_prof = manifest["profiles"][0] if manifest.get("profiles") else "cursor"
@@ -3897,6 +4117,12 @@ def cmd_import_device(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
             raise SafetyRefusalError("invalid_entry_scope", "Invalid manifest entry scope")
         if args.scope != "all" and esc != args.scope:
             continue
+        if wanted_profiles is not None:
+            if cat == "env_secrets":
+                if default_prof not in wanted_profiles:
+                    continue
+            elif prof not in wanted_profiles:
+                continue
         bp, data = in_dir / brel, verified[brel]
         if cat == "env_secrets":
             if esc != "project" or not is_project_dotenv(name):
@@ -3967,13 +4193,14 @@ def cmd_import_device(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
             comb_warn.extend(sp["warnings"])
             comb_bak.extend(b for b in sp["backups"] if b not in comb_bak)
             fcode = max(fcode, sc)
-        counts = {k: sum(1 for a in comb_act if a["outcome"] == k) for k in ("migrated", "noop", "conflict", "parked_draft", "deferred")}
+        counts = {k: sum(1 for a in comb_act if a["outcome"] == k) for k in ("migrated", "noop", "conflict", "agent_handoff", "deferred")}
         return {
             "ok": True, "command": "import-device", "version": SCHEMA_VERSION, "dry_run": args.dry_run,
             "target": "same", "redact_secrets": args.redact_secrets,
             "totals": _build_action_totals(comb_act), "summary": counts, "actions": comb_act,
             "conflicts": [a for a in comb_act if a["outcome"] == "conflict"],
-            "parked_or_deferred": [a for a in comb_act if a["outcome"] in ("parked_draft", "deferred")],
+            "agent_handoff": [a for a in comb_act if a["outcome"] == "agent_handoff"],
+            "parked_or_deferred": [a for a in comb_act if a["outcome"] in ("agent_handoff", "deferred")],
             "backups": comb_bak, "warnings": comb_warn,
             "verification": {"manifest_sha256": "verified", "native_ide_runtime": "not-run"},
         }, fcode
@@ -4118,10 +4345,10 @@ def cmd_sync_skills(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
 
 
 EPILOG_COMMON = """Exit codes:
-  0  Success (isolated conflicts, if any, are reported in stdout JSON).
+  0  Success (isolated conflicts or agent_handoff items are reported in stdout JSON).
   2  Invalid CLI usage or safety refusal (symlink escape, existing output path,
      unsafe backup path, or Git-tracked secret target refusal).
-  3  Unresolved conflicts or deferred items when --strict-conflicts is passed.
+  3  Unresolved conflicts, agent_handoff, or deferred items when --strict-conflicts is passed.
 """
 
 
@@ -4161,11 +4388,11 @@ def build_parser() -> argparse.ArgumentParser:
     pm.add_argument("--scope", choices=("project", "user", "all"), default="all", help="Scope to migrate.")
     pm.add_argument("--categories", default="all", help="Comma-separated categories or 'all'.")
     pm.add_argument("--redact-secrets", action="store_true", help="Replace secrets with env placeholders instead of copying out-of-band.")
-    pm.add_argument("--activate-hooks", action="store_true", help="Activate hooks instead of parking in .migration-review/.")
+    pm.add_argument("--activate-hooks", action="store_true", help="Activate compatible hooks instead of returning agent_handoff.")
     pm.add_argument("--allow-broaden-scope", action="store_true", help="Merge glob rules into root instructions when target lacks file-glob rules.")
     pm.add_argument("--allow-git-tracked-secrets", action="store_true", help="Allow writing literal secrets into Git-tracked files.")
-    pm.add_argument("--strict-conflicts", action="store_true", help="Exit with code 3 when conflicts or parked drafts remain.")
-    pm.add_argument("--backup-dir", default=None, help="Private 0700 backup directory.")
+    pm.add_argument("--strict-conflicts", action="store_true", help="Exit with code 3 when conflicts, deferred, or agent_handoff items remain.")
+    pm.add_argument("--backup-dir", default=None, help="Opt-in private 0700 backup directory before overwriting existing files (none created by default).")
     pm.add_argument("--dry-run", action="store_true", help="Preview actions with zero filesystem writes.")
     pm.set_defaults(func=cmd_migrate)
 
@@ -4183,15 +4410,16 @@ def build_parser() -> argparse.ArgumentParser:
     pimp = sub.add_parser("import-device", help="Verify SHA-256 checksums and restore or cross-migrate a device-transfer folder.", epilog="Example:\n  python3 scripts/migrate_context.py import-device --input ~/context-transfer --target same\n\n" + EPILOG_COMMON, formatter_class=fmt_cls)
     pimp.add_argument("--input", required=True, help="Transfer folder created by export-device.")
     pimp.add_argument("--target", default="same", help="'same' (default) or comma-separated target profile(s).")
+    pimp.add_argument("--profiles", default="all", help="Comma-separated source profiles from the bundle to restore, or 'all'.")
     pimp.add_argument("--workspace", default=".", help="Destination workspace directory.")
     pimp.add_argument("--home", default=str(Path.home()), help="Destination home directory.")
     pimp.add_argument("--scope", choices=("project", "user", "all"), default="all", help="Scope filter.")
     pimp.add_argument("--redact-secrets", action="store_true", help="Redact secrets during import.")
-    pimp.add_argument("--activate-hooks", action="store_true", help="Activate hooks instead of parking in .migration-review/.")
+    pimp.add_argument("--activate-hooks", action="store_true", help="Activate compatible hooks instead of returning agent_handoff.")
     pimp.add_argument("--allow-broaden-scope", action="store_true", help="Allow broadening glob rules on cross-product import.")
     pimp.add_argument("--allow-git-tracked-secrets", action="store_true", help="Allow writing literal secrets into Git-tracked files.")
-    pimp.add_argument("--strict-conflicts", action="store_true", help="Exit with code 3 when conflicts remain.")
-    pimp.add_argument("--backup-dir", default=None, help="Private 0700 backup directory.")
+    pimp.add_argument("--strict-conflicts", action="store_true", help="Exit with code 3 when conflicts or agent_handoff items remain.")
+    pimp.add_argument("--backup-dir", default=None, help="Opt-in private 0700 backup directory (none created by default).")
     pimp.add_argument("--dry-run", action="store_true", help="Preview restore actions with zero writes.")
     pimp.set_defaults(func=cmd_import_device)
 

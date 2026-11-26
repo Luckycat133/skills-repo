@@ -197,11 +197,12 @@ class TriIdeCompleteTests(unittest.TestCase):
             self.assertEqual(restored_mcp["mcpServers"]["remote-api"]["timeoutSeconds"], 600)
             self.assertEqual(restored_mcp["mcpServers"]["remote-api"]["enabledTools"], ["search"])
 
-            # Hooks and sidecars stayed parked on default import; excluded state not copied
+            # Hooks and sidecars are handed off cleanly (no stray .migration-review folder); excluded state not copied
             self.assertFalse((new_cfg / "hooks.json").exists())
             self.assertFalse((new_cfg / "sidecars").exists())
             self.assertFalse((new_home / ".gemini" / "jetski-standalone-oauth-token").exists())
-            self.assertTrue((new_ws / ".migration-review" / "sidecars" / "antigravity" / "watcher" / "sidecar.json").is_file())
+            self.assertFalse((new_ws / ".migration-review").exists())
+            self.assertTrue(any(a["category"] == "sidecars" and a["outcome"] == "agent_handoff" for a in out_i.get("agent_handoff", [])))
 
             # Re-import with --activate-hooks activates hooks & sidecars cleanly
             code_act, out_act, _ = run_cli(
@@ -396,7 +397,8 @@ class TriIdeCompleteTests(unittest.TestCase):
             self.assertTrue((new_codex / "agents" / "helper.md").is_file())
             self.assertTrue((new_codex / "scripts" / "lint.py").is_file())
             self.assertFalse((new_codex / "rules" / "safe.rules").exists())
-            self.assertTrue((new_ws / ".migration-review" / "codex-rules" / "codex" / "user" / "safe.rules").is_file())
+            self.assertFalse((new_ws / ".migration-review").exists())
+            self.assertTrue(any(a["id"] == "safe.rules" and a["outcome"] == "agent_handoff" for a in out_i.get("agent_handoff", [])))
 
             raw_toml = (new_codex / "config.toml").read_text(encoding="utf-8")
             self.assertIn("# Keep target policy", raw_toml)

@@ -23,12 +23,14 @@ prompt context**.
   leaks, and prints **only** variable names, `has_secrets`, and 8-char SHA-256 prefixes
   (`sha256[:8]`) on `stdout`. Pass `--redact-secrets` whenever you want placeholders
   instead of copying keys.
-- **90-Profile On-Demand Catalog**: Routes 16 built-in profiles (`antigravity`,
-  `claude-code`, `codex`, `trae-cn`, `cursor`, `vscode`, `copilot-cli`, `gemini-cli`,
-  `windsurf`, `cline`, `kilocode`, `zed`, `opencode`, `kimi-code`, `qwen-code`, `pi`)
-  plus 74+ cataloged clients via `sync-skills`, `patch-mcp`, and progressive
-  `references/products/*.md` files (review date: 2026-11-07). Listing a product is
-  documentation routing, **not** runtime certification.
+- **90-Profile Built-In & On-Demand Catalog**: Routes **26** built-in profiles
+  (`antigravity`, `claude-code`, `codex`, `trae-cn`, `trae`, `kiro`, `junie`,
+  `codebuddy`, `codebuddy-ide`, `qoder`, `qoder-cn`, `roo-code`, `augment-code`,
+  `factory-droid`, `cursor`, `vscode`, `copilot-cli`, `gemini-cli`, `windsurf`,
+  `cline`, `kilocode`, `zed`, `opencode`, `kimi-code`, `qwen-code`, `pi`) plus
+  64+ cataloged clients via `sync-skills`, `patch-mcp`, and self-contained mapping
+  tables inside `references/`. Listing a product is documentation routing, **not**
+  runtime certification.
 
 ## Install
 

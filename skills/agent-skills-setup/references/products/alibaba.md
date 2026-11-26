@@ -15,13 +15,13 @@ Official sources: [1](https://qwenlm.github.io/qwen-code-docs/en/users/features/
 
 **Qoder International IDE, CLI, JetBrains, Work, cloud and Wake** · Evidence: `documented-subset` · Runtime: `not-run`.
 
-Separate CLI (`~/.qoder/settings.json`, `.qoder/settings.json`, `.qoder/settings.local.json`, `.qoder/skills`, `.qoder/rules`, `.qoder/agents`) from IDE, Work, Wake, and cloud UI storage. Patch only selected `mcpServers` subobjects via `patch-mcp`, keep local grants out of shared `.qoder/settings.json`, preserve plugin component namespaces, and exclude Quest/autonomous task artifacts from persistent rules.
+Separate CLI (`~/.qoder/settings.json`, `.qoder/settings.json`, `.qoder/settings.local.json`, `.qoder/skills`, `.qoder/rules`, `.qoder/commands`, `.qoder/agents`; built-in profile: `qoder`) from IDE, Work, Wake, and cloud UI storage. Patch only selected `mcpServers` subobjects, keep local grants out of shared `.qoder/settings.json`, preserve plugin component namespaces, and exclude Quest/autonomous task artifacts from persistent rules.
 
 Official sources: [1](https://docs.qoder.com/product-series/what-is-qoder) · [2](https://docs.qoder.com/cli/config-scope) · [3](https://docs.qoder.com/extensions/plugins) · [4](https://docs.qoder.com/qoder/custom-agents)
 
 ## qoder-cn
 
-**Qoder CN / Tongyi Lingma** · Evidence: `version-sensitive` · Runtime: `not-run`.
+**Qoder CN / Tongyi Lingma** · Evidence: `version-sensitive` · Runtime: `not-run` · Built-in profile: `qoder-cn` (`lingma`).
 
 Brand rename to Qoder CN did not rename every path: current CN IDE docs still use `.lingma/skills/<name>/SKILL.md`, `~/.lingma/skills/<name>/SKILL.md`, and `.lingma/rules` (`.agents/skills` compatibility is version-dependent). Do not overwrite CN IDE paths with International `.qoder` CLI paths; inspect CN IDE vs CN CLI vs Work settings locally and check duplicate Skill names across `.lingma` and `.agents`.
 

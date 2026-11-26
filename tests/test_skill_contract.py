@@ -253,7 +253,9 @@ class RepoConsistency(unittest.TestCase):
             self.assertLessEqual(len(fm["description"]), 1024)
 
         pub_desc = self._parse_simple_frontmatter((SKILL / "SKILL.md").read_text(encoding="utf-8"))["description"]
-        self.assertIn("迁移上下文", pub_desc)
+        self.assertIn("\u2014", pub_desc)
+        pub_text = (SKILL / "SKILL.md").read_text(encoding="utf-8")
+        self.assertFalse(any("\u4e00" <= ch <= "\u9fff" for ch in pub_text), "Published SKILL.md must be pure English")
 
         # Simulate Windows / C-locale default read_text() without explicit encoding when PYTHONUTF8=1 is active.
         env = {**os.environ, "LC_ALL": "C", "LANG": "C", "PYTHONUTF8": "1"}
@@ -261,7 +263,7 @@ class RepoConsistency(unittest.TestCase):
             [
                 sys.executable,
                 "-c",
-                "from pathlib import Path; t = Path('skills/agent-skills-setup/SKILL.md').read_text(); assert '\\u8fc1\\u79fb\\u4e0a\\u4e0b\\u6587' in t",
+                "from pathlib import Path; t = Path('skills/agent-skills-setup/SKILL.md').read_text(); assert '\\u2014' in t",
             ],
             cwd=ROOT,
             env=env,

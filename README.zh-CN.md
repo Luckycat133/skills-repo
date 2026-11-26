@@ -17,11 +17,13 @@
   文件与私有备份 `0600`）迁移 MCP `env`/`headers` 与 `.env*` 密钥，拦截向 Git 已追踪文件静默写入明文密钥，
   并在 `stdout` / `MIGRATION.md` 中**仅输出变量名、`has_secrets` 与 8 位 SHA-256 指纹前缀（`sha256[:8]`）**。
   若用户要求不复制密钥，传入 `--redact-secrets` 即可自动转为环境变量占位符。
-- **90 个产品档案按需路由目录**：内置 16 个常用档案（`antigravity`、`claude-code`、`codex`、
-  `trae-cn`、`cursor`、`vscode`、`copilot-cli`、`gemini-cli`、`windsurf`、`cline`、
-  `kilocode`、`zed`、`opencode`、`kimi-code`、`qwen-code`、`pi`），并通过 `sync-skills`、
-  `patch-mcp` 与 30 份产品族参考文档覆盖 74+ 其他客户端（文档核查日期：2026-11-07；目录收录
-  仅代表文档路由，**不等同于真机运行时认证**）。
+- **90 个产品档案与内置完整映射表**：内置 **26** 个主流编程工具档案（`antigravity`、
+  `claude-code`、`codex`、`trae-cn`、`trae`、`kiro`、`junie`、`codebuddy`、
+  `codebuddy-ide`、`qoder`、`qoder-cn`、`roo-code`、`augment-code`、`factory-droid`、
+  `cursor`、`vscode`、`copilot-cli`、`gemini-cli`、`windsurf`、`cline`、`kilocode`、
+  `zed`、`opencode`、`kimi-code`、`qwen-code`、`pi`），并在 `references/` 内置完整映射表，
+  配合 `sync-skills` 与 `patch-mcp` 覆盖其余 64+ 客户端（文档核查日期：2026-11-07；
+  目录收录仅代表文档路由，**不等同于真机运行时认证**）。
 
 ## 安装方式
 

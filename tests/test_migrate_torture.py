@@ -62,6 +62,7 @@ class MigrateTortureTests(unittest.TestCase):
                 '// Existing Zed config\n{"vim_mode": true, "theme": "One Dark",}\n',
                 encoding="utf-8",
             )
+            backup_dir = base / "explicit-backups"
             code, out, _ = run_cli(
                 "patch-mcp",
                 "--src-file", str(src_mcp),
@@ -69,6 +70,7 @@ class MigrateTortureTests(unittest.TestCase):
                 "--src-format", "jsonc",
                 "--dst-file", str(dst_zed),
                 "--dst-key-path", "context_servers",
+                "--backup-dir", str(backup_dir),
                 "--workspace", str(ws),
                 "--home", str(home),
             )
@@ -150,11 +152,12 @@ class MigrateTortureTests(unittest.TestCase):
             model_sk = (ws / ".claude" / "skills" / "sql-review" / "SKILL.md").read_text(encoding="utf-8")
             self.assertNotIn("disable-model-invocation: true", model_sk)
 
-            # Codex checks: scoped rules must be parked in .migration-review/rules/codex, NOT widened into AGENTS.md!
+            # Codex checks: scoped rules must NOT widen into AGENTS.md and must NOT create .migration-review/!
             agents_md = (ws / "AGENTS.md").read_text(encoding="utf-8")
             self.assertIn("Keep responses concise.", agents_md)
             self.assertNotIn("Prefer pathlib over os.path.", agents_md)
-            self.assertTrue((ws / ".migration-review" / "rules" / "codex" / "py-only.md").is_file())
+            self.assertFalse((ws / ".migration-review").exists())
+            self.assertTrue(any(a.get("id") == "py-only" and a.get("outcome") == "agent_handoff" for a in out.get("agent_handoff", [])))
 
             # Immediate re-run must be 100% idempotent (migrated == 0, noop > 0)
             code2, out2, _ = run_cli(
@@ -828,14 +831,12 @@ class MigrateTortureTests(unittest.TestCase):
             self.assertIn("disable-model-invocation: true", deploy_text)
             self.assertIn("allowed-tools: Read", deploy_text)
 
-            # Unrepresentable restrictions park the command instead of installing a weaker Skill.
+            # Unrepresentable restrictions hand off to Agent cleanly instead of installing a weaker Skill or creating .migration-review/.
             self.assertFalse((ws / ".agents" / "skills" / "audit").exists())
-            park = ws / ".migration-review" / "commands" / "codex" / "audit.md"
-            self.assertTrue(park.is_file())
-            self.assertIn("context: fork", park.read_text(encoding="utf-8"))
+            self.assertFalse((ws / ".migration-review").exists())
             audited = [a for a in out["actions"] if a.get("id") == "audit.md"]
             self.assertTrue(audited)
-            self.assertEqual(audited[0]["outcome"], "parked_draft")
+            self.assertEqual(audited[0]["outcome"], "agent_handoff")
             self.assertIn("context", audited[0].get("reason", ""))
 
     def test_zed_mcp_serialization_keeps_disabled_state(self):
@@ -1053,15 +1054,15 @@ class MigrateTortureTests(unittest.TestCase):
                 "#!/bin/sh\ncurl -H 'Authorization: Bearer CANARY_HOOK_TOKEN' https://api.test\n",
                 encoding="utf-8",
             )
-            code, out, _ = run_cli(
+            code, out, err = run_cli(
                 "migrate", "--source", "cline", "--target", "cursor",
                 "--workspace", str(ws), "--home", str(home), "--scope", "project",
                 "--redact-secrets",
             )
             self.assertEqual(code, 0, out)
-            parked = list((ws / ".migration-review").rglob("guard.sh"))
-            self.assertTrue(parked, out)
-            self.assertNotIn("CANARY_HOOK_TOKEN", parked[0].read_text(encoding="utf-8"))
+            self.assertFalse((ws / ".migration-review").exists())
+            self.assertNotIn("CANARY_HOOK_TOKEN", json.dumps(out) + err)
+            self.assertTrue(any(a.get("id") == "guard.sh" and a.get("outcome") == "agent_handoff" for a in out.get("agent_handoff", [])))
 
     def test_hook_directory_skips_cache_and_history_assets(self) -> None:
         """Hook directory traversal must not copy cache/history artifacts into the target."""
@@ -1079,9 +1080,10 @@ class MigrateTortureTests(unittest.TestCase):
                 "--workspace", str(ws), "--home", str(home), "--scope", "project",
             )
             self.assertEqual(code, 0, out)
-            parked = {p.name for p in (ws / ".migration-review").rglob("*") if p.is_file()}
-            self.assertIn("guard.sh", parked, out)
-            self.assertNotIn("history.jsonl", parked, out)
+            self.assertFalse((ws / ".migration-review").exists())
+            handoff_ids = {a.get("id") for a in out.get("agent_handoff", [])}
+            self.assertIn("guard.sh", handoff_ids, out)
+            self.assertNotIn("history.jsonl", handoff_ids, out)
 
     def test_rule_document_credential_is_redacted_on_migration(self) -> None:
         """An always-on rule carrying a bearer token must not land verbatim in the target instructions."""

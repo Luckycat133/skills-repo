@@ -183,11 +183,10 @@ class MigrationReviewSafety(unittest.TestCase):
 
         parked = self.root / "parked"
         parked.mkdir()
-        self.run_cli("import-device", "--input", str(transfer), "--scope", "project", workspace=parked)
+        res_handoff = self.run_cli("import-device", "--input", str(transfer), "--scope", "project", workspace=parked)
         self.assertFalse((parked / ".cline/hooks/TaskStart").exists())
-        draft = parked / ".migration-review/hooks/cline/project/TaskStart"
-        self.assertEqual(draft.read_bytes(), source.read_bytes())
-        self.assertFalse(draft.stat().st_mode & stat.S_IXUSR)
+        self.assertFalse((parked / ".migration-review").exists())
+        self.assertTrue(any(a["id"] == "TaskStart" and a["outcome"] == "agent_handoff" for a in res_handoff["agent_handoff"]))
 
         active = self.root / "explicit"
         active.mkdir()

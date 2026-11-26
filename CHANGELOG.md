@@ -23,10 +23,14 @@
   `SKILL.md` frontmatter synthesis, workflow <-> command <-> manual Skill mapping, and
   custom agent frontmatter/tool translation across all three IDEs.
 - **Built-in `trae-cn`, composable `sync-skills`, & AI-first `SKILL.md`**: Add `trae-cn`
-  as the 16th built-in profile (project `.trae/*`, user `~/.trae-cn/*`, OS-aware global
-  MCP `User/mcp.json`, token/builtin exclusions), add generic `sync-skills` subcommand
-  (`--src-profile` or `--src-dir` to any tool `--dst-dir`), optimize `SKILL.md` into
-  3 capability tiers + a 4-step AI execution loop, and add `tests/test_ai_ergonomics_and_trae.py`.
+  as a built-in profile, add generic `sync-skills`, and expand built-in coverage to
+  **26** mainstream IDEs/CLIs (`trae`, `kiro`, `junie`, `codebuddy`, `codebuddy-ide`,
+  `qoder`, `qoder-cn`, `roo-code`, `augment-code`, `factory-droid`, plus the prior 16).
+- **Zero stray folders, `agent_handoff`, & self-contained English references**:
+  Rewrite `SKILL.md` in pure standard English; embed complete 26-IDE rules/MCP/agents
+  mapping tables inside `references/`; replace default `~/.agent-skills-setup-backups/`
+  and `.migration-review/` parking with opt-in `--backup-dir`, `--profiles` filtering on
+  `import-device`, and structured `agent_handoff` stdout items for lossy translations.
 
 ## Unreleased — workflow, evidence and delivery review (2026-11-14)
 

@@ -10,10 +10,11 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 SKILL = ROOT / "skills" / "agent-skills-setup"
 # Explicit reviewable allowlist; no filesystem-glob admission into the package.
-# 281 KB covered the initial helper, catalog, and usage contract; 365 KB covers
+# 281 KB covered the initial helper, catalog, and usage contract; 390 KB covers
 # full Antigravity/Claude Code/Codex export/restore, 3-way equivalence translation,
-# built-in trae-cn profile, composable sync-skills, and AI-first SKILL.md guidance.
-MAX_PACKAGE_BYTES = 365_000
+# 26 built-in profiles, composable sync-skills, zero-stray-dir agent_handoff,
+# and self-contained 26-IDE English mapping tables in SKILL.md & references/.
+MAX_PACKAGE_BYTES = 390_000
 EXECUTABLE_REL_PATHS = frozenset({
     "scripts/migrate_context.py",
 })

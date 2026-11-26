@@ -102,9 +102,10 @@ class EndToEndWorkflowTests(unittest.TestCase):
             self.assertTrue((ws / ".claude" / "rules" / "testing.md").is_file())
             self.assertTrue((ws / ".claude" / "commands" / "release-notes.md").is_file())
             self.assertTrue((ws / ".claude" / "agents" / "security-reviewer.md").is_file())
-            # Hooks parked in .migration-review/hooks/, NOT live .claude/settings.json!
+            # Hooks handed off via stdout (NOT live .claude/settings.json and NO .migration-review folder!)
             self.assertFalse((ws / ".claude" / "settings.json").exists())
-            self.assertTrue((ws / ".migration-review" / "hooks" / "claude-code" / "project" / "hooks.json").is_file())
+            self.assertFalse((ws / ".migration-review").exists())
+            self.assertTrue(any(a["category"] == "hooks" and a["outcome"] == "agent_handoff" for a in out.get("agent_handoff", [])))
             # Secret MCP written in 0600 mode on both targets:
             if os.name != "nt":
                 self.assertEqual(os.stat(ws / ".mcp.json").st_mode & 0o777, 0o600)

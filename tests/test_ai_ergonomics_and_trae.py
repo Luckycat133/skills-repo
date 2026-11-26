@@ -122,9 +122,11 @@ class TraeCnAndSyncSkillsTests(unittest.TestCase):
             self.assertIn("alwaysApply: false", rule_txt)
             # User instruction mapped to ~/.trae-cn/user_rules.md
             self.assertIn("Global Claude guidelines.", (home / ".trae-cn" / "user_rules.md").read_text(encoding="utf-8"))
-            # Hooks parked rather than activated
+            # Hooks handed off cleanly (NO live .trae/hooks.json and NO stray .migration-review/ folder)
             self.assertFalse((ws / ".trae" / "hooks.json").exists())
-            self.assertTrue((ws / ".migration-review" / "hooks" / "trae-cn" / "project" / "claude-hooks.json").is_file())
+            self.assertFalse((ws / ".migration-review").exists())
+            self.assertFalse((home / ".agent-skills-setup-backups").exists())
+            self.assertTrue(any(a["category"] == "hooks" and a["outcome"] == "agent_handoff" for a in mig.get("agent_handoff", [])))
             # Commands & agents copied to Trae CN user dirs
             self.assertTrue((home / ".trae-cn" / "commands" / "review.md").is_file())
             self.assertTrue((home / ".trae-cn" / "agents" / "auditor.md").is_file())
@@ -142,15 +144,14 @@ class TraeCnAndSyncSkillsTests(unittest.TestCase):
             mcp_doc = json.loads(expected_mcp.read_text(encoding="utf-8"))
             self.assertEqual(mcp_doc["mcpServers"]["context7"]["env"]["API_KEY"], canary)
 
-            # Repeat run must be noop (no conflicts)
+            # Repeat run must be noop / agent_handoff (no conflicts)
             code2, mig2, err2 = run_cli(
                 "migrate", "--source", "claude-code", "--target", "trae-cn",
                 "--workspace", str(ws), "--home", str(home), "--scope", "all",
             )
             self.assertEqual(code2, 0, err2)
             self.assertEqual(mig2["conflicts"], [])
-            # Every action in repeat run must be noop or parked_draft (hooks stay parked)
-            self.assertTrue(all(a["outcome"] in ("noop", "parked_draft") for a in mig2["actions"]))
+            self.assertTrue(all(a["outcome"] in ("noop", "agent_handoff") for a in mig2["actions"]))
 
             # Inspect trae-cn confirms excluded built-in & jwt token
             code3, insp, err3 = run_cli(
@@ -226,11 +227,12 @@ class TraeCnAndSyncSkillsTests(unittest.TestCase):
             self.assertEqual(r3["conflicts"][0]["id"], "plain-skill")
             self.assertEqual((dst_dir / "plain-skill" / "SKILL.md").read_text(encoding="utf-8"), "modified locally\n")
 
-    def test_all_16_builtin_profiles_smoke_roundtrip(self) -> None:
+    def test_all_26_builtin_profiles_smoke_roundtrip(self) -> None:
         mod = load_script_module()
         profiles = list(mod.CANONICAL_PROFILES)
-        self.assertEqual(len(profiles), 16)
-        self.assertIn("trae-cn", profiles)
+        self.assertEqual(len(profiles), 26)
+        for p in ("trae-cn", "trae", "kiro", "junie", "codebuddy", "codebuddy-ide", "qoder", "qoder-cn", "roo-code", "augment-code", "factory-droid"):
+            self.assertIn(p, profiles)
 
         for prof in profiles:
             with self.subTest(profile=prof), tempfile.TemporaryDirectory() as tmp:
@@ -242,7 +244,7 @@ class TraeCnAndSyncSkillsTests(unittest.TestCase):
                 ws2.mkdir()
                 home2.mkdir()
 
-                # Seed minimal Claude Code source project+user Skill, rule, MCP
+                # Seed minimal Claude Code source project Skill, rule, MCP
                 (ws1 / "CLAUDE.md").write_text("Shared root note.\n", encoding="utf-8")
                 sk = ws1 / ".claude" / "skills" / "smoke-skill"
                 sk.mkdir(parents=True)
@@ -263,6 +265,8 @@ class TraeCnAndSyncSkillsTests(unittest.TestCase):
                 self.assertEqual(c_m, 0, f"{prof} migrate failed: {e_m}")
                 self.assertTrue(d_m["ok"])
                 self.assertEqual(d_m["conflicts"], [])
+                self.assertFalse((ws1 / ".migration-review").exists())
+                self.assertFalse((home1 / ".agent-skills-setup-backups").exists())
 
                 c_i, d_i, e_i = run_cli(
                     "inspect", "--profiles", prof, "--workspace", str(ws1), "--home", str(home1), "--summary",
@@ -285,6 +289,135 @@ class TraeCnAndSyncSkillsTests(unittest.TestCase):
                 self.assertEqual(c_im, 0, f"{prof} import-device failed: {e_im}")
                 self.assertTrue(d_im["ok"])
                 self.assertEqual(d_im["conflicts"], [])
+                self.assertFalse((ws2 / ".migration-review").exists())
+                self.assertFalse((home2 / ".agent-skills-setup-backups").exists())
+                # Verify full-copy (zero symlinks anywhere under migrated targets)
+                for created in (*ws2.rglob("*"), *home2.rglob("*")):
+                    self.assertFalse(created.is_symlink(), f"Unexpected symlink created for {prof}: {created}")
+
+    def test_strict_boundary_no_stray_dirs_and_agent_handoff(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            ws, home = base / "ws", base / "home"
+            ws.mkdir()
+            home.mkdir()
+
+            # Untouched sibling IDEs (cursor + codex) must NEVER be modified when targeting trae-cn or importing --profiles claude-code
+            (home / ".cursor" / "rules").mkdir(parents=True)
+            cursor_sentinel = home / ".cursor" / "rules" / "keep.mdc"
+            cursor_sentinel.write_text("---\nalwaysApply: true\n---\nUntouched Cursor.\n", encoding="utf-8")
+            (home / ".codex").mkdir(parents=True)
+            codex_sentinel = home / ".codex" / "config.toml"
+            codex_sentinel.write_text('model = "gpt-5.4"\n', encoding="utf-8")
+
+            # Seed Claude Code with a restricted agent (isolation + permissionMode) that must emit agent_handoff cleanly
+            (home / ".claude" / "skills" / "ok-skill").mkdir(parents=True)
+            (home / ".claude" / "skills" / "ok-skill" / "SKILL.md").write_text(
+                "---\nname: ok-skill\ndescription: Clean skill.\n---\nRun clean.\n", encoding="utf-8",
+            )
+            (home / ".claude" / "agents").mkdir(parents=True)
+            (home / ".claude" / "agents" / "isolated.md").write_text(
+                "---\nname: isolated\ndescription: Isolated agent.\nisolation: worktree\npermissionMode: acceptEdits\ntools: Read, CustomMCP\n---\nIsolate.\n",
+                encoding="utf-8",
+            )
+
+            c, out, err = run_cli(
+                "migrate", "--source", "claude-code", "--target", "trae-cn",
+                "--workspace", str(ws), "--home", str(home), "--scope", "all",
+            )
+            self.assertEqual(c, 0, err)
+            self.assertTrue((home / ".trae-cn" / "skills" / "ok-skill" / "SKILL.md").is_file())
+            self.assertFalse((home / ".trae-cn" / "agents" / "isolated.md").exists())
+            handoffs = [a for a in out["agent_handoff"] if a["id"] == "isolated.md"]
+            self.assertEqual(len(handoffs), 1)
+            self.assertEqual(handoffs[0]["target_profile"], "trae-cn")
+            self.assertIn("source_path", handoffs[0])
+            self.assertIn("guidance", handoffs[0])
+
+            # Export multi-profile bundle, then import --profiles claude-code into fresh home: codex/cursor must stay absent
+            bundle = base / "multi-bundle"
+            c_ex, _, e_ex = run_cli(
+                "export-device", "--profiles", "claude-code,cursor,codex",
+                "--workspace", str(ws), "--home", str(home), "--scope", "user", "--output", str(bundle),
+            )
+            self.assertEqual(c_ex, 0, e_ex)
+
+            new_ws, new_home = base / "new_ws", base / "new_home"
+            new_ws.mkdir()
+            new_home.mkdir()
+            c_im, d_im, e_im = run_cli(
+                "import-device", "--input", str(bundle), "--target", "same",
+                "--profiles", "claude-code", "--workspace", str(new_ws), "--home", str(new_home),
+            )
+            self.assertEqual(c_im, 0, e_im)
+            self.assertTrue((new_home / ".claude" / "skills" / "ok-skill" / "SKILL.md").is_file())
+            self.assertFalse((new_home / ".cursor").exists())
+            self.assertFalse((new_home / ".codex").exists())
+            self.assertFalse((new_ws / ".migration-review").exists())
+            self.assertFalse((new_home / ".agent-skills-setup-backups").exists())
+            self.assertEqual(cursor_sentinel.read_text(encoding="utf-8"), "---\nalwaysApply: true\n---\nUntouched Cursor.\n")
+            self.assertEqual(codex_sentinel.read_text(encoding="utf-8"), 'model = "gpt-5.4"\n')
+
+    def test_kiro_junie_codebuddy_qoder_augment_trae_rules_and_skills(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            ws, home = base / "ws", base / "home"
+            ws.mkdir()
+            home.mkdir()
+
+            # 1) Kiro steering <-> Claude paths & manual steering
+            (ws / ".kiro" / "steering").mkdir(parents=True)
+            (ws / ".kiro" / "steering" / "api.md").write_text(
+                '---\ninclusion: fileMatch\nfileMatchPattern: "src/api/*.ts"\n---\nValidate DTOs.\n',
+                encoding="utf-8",
+            )
+            (ws / ".kiro" / "steering" / "release.md").write_text(
+                "---\ninclusion: manual\n---\nTag release.\n",
+                encoding="utf-8",
+            )
+            c1, _, e1 = run_cli(
+                "migrate", "--source", "kiro", "--target", "claude-code",
+                "--workspace", str(ws), "--home", str(home), "--scope", "project",
+            )
+            self.assertEqual(c1, 0, e1)
+            self.assertIn('"src/api/*.ts"', (ws / ".claude" / "rules" / "api.md").read_text(encoding="utf-8"))
+            self.assertIn("disable-model-invocation: true", (ws / ".claude" / "skills" / "release" / "SKILL.md").read_text(encoding="utf-8"))
+
+            # Round-trip Claude -> Kiro renders fileMatch
+            (ws / ".claude" / "rules" / "py.md").write_text('---\npaths:\n  - "*.py"\n---\nUse ruff.\n', encoding="utf-8")
+            c2, _, e2 = run_cli(
+                "migrate", "--source", "claude-code", "--target", "kiro",
+                "--workspace", str(ws), "--home", str(home), "--scope", "project",
+            )
+            self.assertEqual(c2, 0, e2)
+            self.assertIn("inclusion: fileMatch", (ws / ".kiro" / "steering" / "py.md").read_text(encoding="utf-8"))
+            self.assertIn("fileMatchPattern:", (ws / ".kiro" / "steering" / "py.md").read_text(encoding="utf-8"))
+
+            # 2) Augment user-scope glob MUST emit agent_handoff (user rules always apply!)
+            (home / ".claude" / "rules").mkdir(parents=True)
+            (home / ".claude" / "rules" / "sql.md").write_text('---\npaths:\n  - "*.sql"\n---\nCheck SQL.\n', encoding="utf-8")
+            c3, d3, e3 = run_cli(
+                "migrate", "--source", "claude-code", "--target", "augment-code",
+                "--workspace", str(ws), "--home", str(home), "--scope", "user",
+            )
+            self.assertEqual(c3, 0, e3)
+            self.assertFalse((home / ".augment" / "rules" / "sql.md").exists())
+            self.assertTrue(any(a["id"] == "sql" and a["outcome"] == "agent_handoff" and "augment_user_rules" in a["reason"] for a in d3["agent_handoff"]))
+
+            # 3) Qoder CN (.lingma), Junie, CodeBuddy, TRAE International Skill migration
+            (home / ".claude" / "skills" / "shared-sk").mkdir(parents=True)
+            (home / ".claude" / "skills" / "shared-sk" / "SKILL.md").write_text(
+                "---\nname: shared-sk\ndescription: Cross IDE.\n---\nRun.\n", encoding="utf-8",
+            )
+            c4, _, e4 = run_cli(
+                "migrate", "--source", "claude-code", "--target", "qoder-cn,junie,codebuddy,trae",
+                "--workspace", str(ws), "--home", str(home), "--scope", "user", "--categories", "skills",
+            )
+            self.assertEqual(c4, 0, e4)
+            self.assertTrue((home / ".lingma" / "skills" / "shared-sk" / "SKILL.md").is_file())
+            self.assertTrue((home / ".junie" / "skills" / "shared-sk" / "SKILL.md").is_file())
+            self.assertTrue((home / ".codebuddy" / "skills" / "shared-sk" / "SKILL.md").is_file())
+            self.assertTrue((home / ".trae" / "skills" / "shared-sk" / "SKILL.md").is_file())
 
 
 if __name__ == "__main__":
