@@ -52,8 +52,6 @@ if [[ -n "$skills_ref_bin" ]]; then
   "$skills_ref_bin" validate skills/agent-skills-setup
   "$skills_ref_bin" validate dev/skills/maintain-agent-skills-setup
 elif [[ "${REQUIRE_SKILLS_REF:-0}" == "1" ]]; then
-  echo "ERROR: skills-ref is required in CI" >&2
+  echo "ERROR: skills-ref is required when REQUIRE_SKILLS_REF=1" >&2
   exit 1
-else
-  echo "NOTE: skills-ref not installed locally; CI runs REQUIRE_SKILLS_REF=1." >&2
 fi

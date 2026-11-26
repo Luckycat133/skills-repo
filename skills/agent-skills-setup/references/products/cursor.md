@@ -1,8 +1,6 @@
-# Cursor
+# cursor
 
 Review: 2026-11-07 · Client checks: not run · Contract: [products.md](../products.md).
-
-## cursor
 
 **Cursor IDE, CLI and cloud agents** · Evidence: `documented-subset` · Runtime: `not-run`.
 

@@ -17,13 +17,19 @@
   文件与私有备份 `0600`）迁移 MCP `env`/`headers` 与 `.env*` 密钥，拦截向 Git 已追踪文件静默写入明文密钥，
   并在 `stdout` / `MIGRATION.md` 中**仅输出变量名、`has_secrets` 与 8 位 SHA-256 指纹前缀（`sha256[:8]`）**。
   若用户要求不复制密钥，传入 `--redact-secrets` 即可自动转为环境变量占位符。
-- **90 个产品档案与内置完整映射表**：内置 **26** 个主流编程工具档案（`antigravity`、
-  `claude-code`、`codex`、`trae-cn`、`trae`、`kiro`、`junie`、`codebuddy`、
-  `codebuddy-ide`、`qoder`、`qoder-cn`、`roo-code`、`augment-code`、`factory-droid`、
-  `cursor`、`vscode`、`copilot-cli`、`gemini-cli`、`windsurf`、`cline`、`kilocode`、
-  `zed`、`opencode`、`kimi-code`、`qwen-code`、`pi`），并在 `references/` 内置完整映射表，
-  配合 `sync-skills` 与 `patch-mcp` 覆盖其余 64+ 客户端（文档核查日期：2026-11-07；
-  目录收录仅代表文档路由，**不等同于真机运行时认证**）。
+- **90 个独立分体 IDE 参考文档 + 40 个声明式内置档案**：将全部 90 个 IDE/CLI
+  的路径与迁移注意事项拆分为一一对应的独立文档（`references/products/<id>.md`），
+  在脚本中以声明式配置驱动 **40** 个主流工具档案（通过 `inspect --list-profiles`
+  实时查看，包含 `antigravity`、`claude-code`、`codex`、`trae-cn`、`trae`、`kiro`、
+  `junie`、`codebuddy`、`codebuddy-ide`、`qoder`、`qoder-cn`、`roo-code`、`augment-code`、
+  `factory-droid`、`cursor`、`vscode`、`copilot-cli`、`gemini-cli`、`windsurf`、`cline`、
+  `kilocode`、`zed`、`opencode`、`kimi-code`、`qwen-code`、`pi`、`continue`、`amp`、
+  `goose`、`devin`、`warp`、`openhands`、`aider`、`comate`、`minimax-code`、
+  `mistral-vibe`、`crush`、`forge`、`codely`、`zcode`），并配以通用原语 `sync-skills`、
+  `patch-mcp`、`copy-files` 覆盖其余全部产品（目录收录仅代表文档路由，**不等同于真机运行时认证**）。
+- **默认完整复制与零边界污染**：默认按值完整拷贝文件和目录（除非用户明确要求，绝不创建软链接），
+  严格隔离未指定的 IDE，不自动生成 `.migration-review/` 或默认备份目录；对无法无损直转的
+  配置输出 `agent_handoff` 交给宿主 Agent 结合对应 IDE 参考文档语义改写。
 
 ## 安装方式
 
@@ -43,8 +49,8 @@ cp -R skills-repo/skills/agent-skills-setup /path/to/your-skills-dir/agent-skill
 
 ## 验证与当前状态
 
-运行 `bash validate-all.sh` 执行本地契约、极端边界、金丝雀密钥零泄漏、端到端工作流、打包边界及官方
-`skills-ref validate` 校验。候选版本 `0.11.0-dev` 尚未发布；原生 GUI/IDE 真机验收队列见
-[docs/validation-status.md](docs/validation-status.md)。
+运行 `bash validate-all.sh` 执行本地契约、极端边界、金丝雀密钥零泄漏、端到端工作流及打包边界校验
+（`skills-ref` 仅为维护者 CI 的 SKILL 规范检查工具，终端用户无需安装）。候选版本 `0.11.0-dev`
+尚未发布；原生 GUI/IDE 真机验收队列见 [docs/validation-status.md](docs/validation-status.md)。
 
 [贡献](CONTRIBUTING.md) · [安全](SECURITY.md) · [许可证 (MIT)](LICENSE)

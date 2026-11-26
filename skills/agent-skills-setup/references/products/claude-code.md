@@ -1,0 +1,11 @@
+# claude-code
+
+Review: 2026-11-07 · Client checks: not run · Contract: [products.md](../products.md).
+
+**Claude Code CLI, IDE integration, Desktop Code** · Evidence: `documented-subset` · Runtime: `not-run`.
+
+- **Candidate paths & schemas**: Instructions `CLAUDE.md`, `.claude/CLAUDE.md`, local `CLAUDE.local.md`, user `~/.claude/CLAUDE.md`, `@path` imports, and scoped `.claude/rules/*.md` / `~/.claude/rules/*.md` (`paths: ["glob", ...]`); Skills `.claude/skills/<name>/SKILL.md`, `~/.claude/skills/<name>/SKILL.md` (`disable-model-invocation`, `allowed-tools`, `context: fork`); Legacy commands `.claude/commands/*.md`, `~/.claude/commands/*.md`; Agents `.claude/agents/*.md`, `~/.claude/agents/*.md`; Hooks `hooks` subobject in `.claude/settings.json` / `.claude/settings.local.json` / `~/.claude/settings.json`; Portable settings (excluding `permissions`, `hooks`, `apiKeyHelper`) & `env` in `settings.json`; Plugin registries `~/.claude/plugins/{installed_plugins,known_marketplaces}.json`; Authored memory `~/.claude/memory/*.md` and workspace-encoded `~/.claude/projects/<ws-slug>/memory/*.md` (exclude `*.jsonl` & `plugins/{cache,store}`); MCP project `.mcp.json` (`mcpServers`), local project override `~/.claude.json` -> `projects[<workspace>].mcpServers`, user `~/.claude.json` -> `mcpServers` (`${VAR}` interpolation, `type: "http"|"sse"` + `url`). Built-in profile: `claude-code` (`claude`/`cc`).
+- **Migration cautions**: Never write literal secrets into a Git-tracked `.mcp.json` (`migrate_context.py` routes secret-bearing project MCP to untracked `~/.claude.json` `projects[ws].mcpServers` in `0600` mode). Preserve arguments, invocation controls, and `context: fork`; never copy `permissions` grants or session transcripts. Desktop's **Code** tab must still have its sandbox/filesystem checked independently.
+- **Check**: Skill discovery by name, matching vs non-matching path loading for `.claude/rules/*.md`, resolved `@` imports, and intact sibling keys in `~/.claude.json` / `settings.json`.
+
+Official sources: [1](https://code.claude.com/docs/en/features-overview) · [2](https://code.claude.com/docs/en/memory) · [3](https://code.claude.com/docs/en/skills) · [4](https://code.claude.com/docs/en/mcp)

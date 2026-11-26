@@ -1,8 +1,6 @@
-# OpenCode version boundary
+# opencode
 
 Review: 2026-11-07 · Client checks: not run · Contract: [products.md](../products.md).
-
-## opencode
 
 **OpenCode V1 and V2** · Evidence: `version-sensitive` · Runtime: `not-run`.
 

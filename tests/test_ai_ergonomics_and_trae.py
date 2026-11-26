@@ -227,11 +227,16 @@ class TraeCnAndSyncSkillsTests(unittest.TestCase):
             self.assertEqual(r3["conflicts"][0]["id"], "plain-skill")
             self.assertEqual((dst_dir / "plain-skill" / "SKILL.md").read_text(encoding="utf-8"), "modified locally\n")
 
-    def test_all_26_builtin_profiles_smoke_roundtrip(self) -> None:
+    def test_all_builtin_profiles_smoke_roundtrip(self) -> None:
         mod = load_script_module()
         profiles = list(mod.CANONICAL_PROFILES)
-        self.assertEqual(len(profiles), 26)
-        for p in ("trae-cn", "trae", "kiro", "junie", "codebuddy", "codebuddy-ide", "qoder", "qoder-cn", "roo-code", "augment-code", "factory-droid"):
+        self.assertEqual(len(profiles), 40)
+        for p in (
+            "trae-cn", "trae", "kiro", "junie", "codebuddy", "codebuddy-ide", "qoder", "qoder-cn",
+            "roo-code", "augment-code", "factory-droid", "continue", "amp", "goose", "devin",
+            "warp", "openhands", "aider", "comate", "minimax-code", "mistral-vibe", "crush",
+            "forge", "codely", "zcode",
+        ):
             self.assertIn(p, profiles)
 
         for prof in profiles:
@@ -418,6 +423,59 @@ class TraeCnAndSyncSkillsTests(unittest.TestCase):
             self.assertTrue((home / ".junie" / "skills" / "shared-sk" / "SKILL.md").is_file())
             self.assertTrue((home / ".codebuddy" / "skills" / "shared-sk" / "SKILL.md").is_file())
             self.assertTrue((home / ".trae" / "skills" / "shared-sk" / "SKILL.md").is_file())
+
+    def test_inspect_list_profiles_and_copy_files_primitive(self) -> None:
+        canary = "sk-copy-CANARY-77889900"
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            ws, home = base / "ws", base / "home"
+            ws.mkdir()
+            home.mkdir()
+
+            c_lp, d_lp, e_lp = run_cli("inspect", "--list-profiles")
+            self.assertEqual(c_lp, 0, e_lp)
+            self.assertEqual(len(d_lp["canonical_profiles"]), 40)
+            self.assertIn("anti", d_lp["aliases"])
+            self.assertIn("trae-cn", d_lp["canonical_profiles"])
+
+            src_dir = base / "forge-cmds"
+            src_dir.mkdir()
+            (src_dir / "deploy.md").write_text(f"API_KEY={canary}\nRun deploy.\n", encoding="utf-8")
+            (src_dir / "run.sh").write_text("#!/bin/sh\necho ok\n", encoding="utf-8")
+            os.chmod(src_dir / "run.sh", 0o755)
+            dst_dir = home / ".qoder" / "commands"
+
+            # 1) Full-copy directory out-of-band (0600 secret file, zero stdout secret leak, zero symlinks)
+            c_cp, d_cp, e_cp = run_cli(
+                "copy-files", "--src", str(src_dir), "--dst", str(dst_dir),
+                "--workspace", str(ws), "--home", str(home),
+            )
+            self.assertEqual(c_cp, 0, e_cp)
+            self.assertNotIn(canary, json.dumps(d_cp) + e_cp)
+            deploy_dst = dst_dir / "deploy.md"
+            self.assertTrue(deploy_dst.is_file() and not deploy_dst.is_symlink())
+            self.assertIn(canary, deploy_dst.read_text(encoding="utf-8"))
+            self.assertEqual(deploy_dst.stat().st_mode & 0o777, 0o600)
+            self.assertTrue((dst_dir / "run.sh").stat().st_mode & 0o100)
+
+            # 2) Divergent file causes conflict without overwriting; identical is noop
+            deploy_dst.write_text("custom\n", encoding="utf-8")
+            c_cf, d_cf, e_cf = run_cli(
+                "copy-files", "--src", str(src_dir / "deploy.md"), "--dst", str(deploy_dst),
+                "--workspace", str(ws), "--home", str(home), "--strict-conflicts",
+            )
+            self.assertEqual(c_cf, 3, e_cf)
+            self.assertEqual(d_cf["conflicts"][0]["outcome"], "conflict")
+            self.assertEqual(deploy_dst.read_text(encoding="utf-8"), "custom\n")
+
+            # 3) --redact-secrets strips canary cleanly
+            redacted_dst = home / ".qoder" / "deploy-redacted.md"
+            c_rd, d_rd, e_rd = run_cli(
+                "copy-files", "--src", str(src_dir / "deploy.md"), "--dst", str(redacted_dst),
+                "--workspace", str(ws), "--home", str(home), "--redact-secrets",
+            )
+            self.assertEqual(c_rd, 0, e_rd)
+            self.assertNotIn(canary, redacted_dst.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

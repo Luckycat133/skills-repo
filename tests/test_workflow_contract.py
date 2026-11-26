@@ -22,15 +22,16 @@ class WorkflowContract(unittest.TestCase):
         self.assertLess(len(entry.splitlines()), 150)
 
     def test_package_admits_guidance_and_the_explicit_helper_only(self):
-        module = ast.parse(text(ROOT / "scripts/package_skill.py"))
-        assignment = next(n for n in module.body if isinstance(n, ast.Assign)
-                          and any(isinstance(t, ast.Name) and t.id == "ALLOWED" for t in n.targets))
-        allowed = ast.literal_eval(assignment.value.args[0])
-        self.assertIn("scripts/migrate_context.py", allowed)
-        guidance = allowed - {"scripts/migrate_context.py"}
-        self.assertEqual(len(guidance), 43)
+        import sys
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import package_skill as package  # noqa: PLC0415
+        admitted = {p.relative_to(SKILL).as_posix() for p in package.package_files()}
+        self.assertIn("scripts/migrate_context.py", admitted)
+        self.assertEqual([p for p in admitted if p.endswith(".py")], ["scripts/migrate_context.py"])
+        guidance = admitted - {"scripts/migrate_context.py"}
         for name in ("references/cli-workflow.md", "references/registry-v2.md"):
-            self.assertIn(name, allowed)
+            self.assertIn(name, guidance)
+        self.assertEqual(len([p for p in guidance if p.startswith("references/products/")]), 90)
         self.assertTrue(all(p.endswith(".md") or p == "LICENSE" for p in guidance))
         self.assertFalse(any(p.startswith(("dev/", "evals/", "scripts/", "docs/history/")) for p in guidance))
 

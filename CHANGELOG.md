@@ -22,13 +22,24 @@
   Antigravity rule `trigger` conversion (`glob`/`model_decision`/`manual`), Antigravity
   `SKILL.md` frontmatter synthesis, workflow <-> command <-> manual Skill mapping, and
   custom agent frontmatter/tool translation across all three IDEs.
-- **Built-in `trae-cn`, composable `sync-skills`, & AI-first `SKILL.md`**: Add `trae-cn`
-  as a built-in profile, add generic `sync-skills`, and expand built-in coverage to
-  **26** mainstream IDEs/CLIs (`trae`, `kiro`, `junie`, `codebuddy`, `codebuddy-ide`,
-  `qoder`, `qoder-cn`, `roo-code`, `augment-code`, `factory-droid`, plus the prior 16).
+- **Standalone 90-IDE references & declarative 40-profile generic CLI**:
+  - Split all 30 merged family docs into 90 standalone per-IDE reference files
+    (`references/products/<id>.md`), indexed via `references/products.md`, so an Agent
+    loads only `<a>.md` and `<b>.md` on demand without re-checking external docs.
+  - Slimmed `SKILL.md` (<100 lines pure English) and generic translation guides
+    (`references/instructions.md`, `references/mcp.md`, `references/other-context.md`).
+  - Expanded built-in profiles declaratively from 26 to **40** (adding `continue`, `amp`,
+    `goose`, `devin`, `warp`, `openhands`, `aider`, `comate`, `minimax-code`,
+    `mistral-vibe`, `crush`, `forge`, `codely`, `zcode`), replaced per-IDE helper branches
+    with `ProfilePaths` behavior fields, added `inspect --list-profiles`, and added
+    the generic out-of-band full-copy `copy-files` primitive alongside `sync-skills` and
+    `patch-mcp`.
+  - Replaced brittle hardcoded `ALLOWED`/`MAX_PACKAGE_BYTES`/prose-lock checks in
+    `scripts/package_skill.py` and contract tests with rule-based hygiene validation;
+    `validate-all.sh` stays silent when maintainer CI's optional `skills-ref` linter is
+    not installed locally.
 - **Zero stray folders, `agent_handoff`, & self-contained English references**:
-  Rewrite `SKILL.md` in pure standard English; embed complete 26-IDE rules/MCP/agents
-  mapping tables inside `references/`; replace default `~/.agent-skills-setup-backups/`
+  Rewrite `SKILL.md` in pure standard English; replace default `~/.agent-skills-setup-backups/`
   and `.migration-review/` parking with opt-in `--backup-dir`, `--profiles` filtering on
   `import-device`, and structured `agent_handoff` stdout items for lossy translations.
 

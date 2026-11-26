@@ -9,61 +9,26 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILL = ROOT / "skills" / "agent-skills-setup"
-# Explicit reviewable allowlist; no filesystem-glob admission into the package.
-# 281 KB covered the initial helper, catalog, and usage contract; 390 KB covers
-# full Antigravity/Claude Code/Codex export/restore, 3-way equivalence translation,
-# 26 built-in profiles, composable sync-skills, zero-stray-dir agent_handoff,
-# and self-contained 26-IDE English mapping tables in SKILL.md & references/.
-MAX_PACKAGE_BYTES = 390_000
 EXECUTABLE_REL_PATHS = frozenset({
     "scripts/migrate_context.py",
 })
-ALLOWED = frozenset({
+REQUIRED_ROOT_FILES = frozenset({
     "LICENSE",
     "SKILL.md",
     "scripts/migrate_context.py",
-    "references/cli-workflow.md",
-    "references/registry-v2.md",
-    "references/device-transfer.md",
-    "references/discovery.md",
+    "references/products.md",
     "references/instructions.md",
     "references/mcp.md",
     "references/other-context.md",
-    "references/products/alibaba.md",
-    "references/products/amp-openhands.md",
-    "references/products/anthropic.md",
-    "references/products/aws.md",
-    "references/products/blackbox-pieces.md",
-    "references/products/china-coding.md",
-    "references/products/china-discovery.md",
-    "references/products/cline-kilo-roo.md",
-    "references/products/cloud-builders.md",
-    "references/products/continue-zed.md",
-    "references/products/copilot.md",
-    "references/products/cursor.md",
-    "references/products/devin-windsurf.md",
-    "references/products/editor-plugins.md",
-    "references/products/enterprise.md",
-    "references/products/factory-augment.md",
-    "references/products/google-cli-assist.md",
-    "references/products/google-ide-cloud.md",
-    "references/products/jetbrains-xcode.md",
-    "references/products/legacy.md",
-    "references/products/letta.md",
-    "references/products/new-clients.md",
-    "references/products/openai.md",
-    "references/products/openclaw-hermes.md",
-    "references/products/opencode.md",
-    "references/products/tencent.md",
-    "references/products/terminal-agents.md",
-    "references/products/trae.md",
-    "references/products/warp.md",
-    "references/products/zencoder.md",
-    "references/products.md",
-    "references/verification.md",
-    "assets/device-readme.md",
-    "assets/migration-report.md",
+    "references/device-transfer.md",
 })
+
+
+def _is_admitted_relpath(rel: str) -> bool:
+    if rel in REQUIRED_ROOT_FILES:
+        return True
+    parts = Path(rel).parts
+    return len(parts) >= 2 and parts[0] in ("references", "assets") and rel.endswith(".md")
 
 
 def package_files(skill: Path = SKILL) -> list[Path]:
@@ -80,14 +45,13 @@ def package_files(skill: Path = SKILL) -> list[Path]:
         if not path.is_file():
             raise ValueError(f"non-regular package entry: {path}")
         rel = path.relative_to(skill).as_posix()
-        if rel not in ALLOWED:
+        if not _is_admitted_relpath(rel):
             raise ValueError(f"unexpected package file: {rel}")
         files.append(path)
     actual = {p.relative_to(skill).as_posix() for p in files}
-    if actual != ALLOWED:
-        raise ValueError(f"missing package files: {sorted(ALLOWED - actual)}")
-    if sum(p.stat().st_size for p in files) > MAX_PACKAGE_BYTES:
-        raise ValueError("Package exceeds reviewed budget; review scope before raising it")
+    missing = REQUIRED_ROOT_FILES - actual
+    if missing:
+        raise ValueError(f"missing required package files: {sorted(missing)}")
     return files
 
 

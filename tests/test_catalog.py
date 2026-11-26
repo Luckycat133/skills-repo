@@ -52,10 +52,11 @@ class CatalogContract(unittest.TestCase):
             else:
                 self.assertTrue(queue_by_id[r["id"]].get("evidence_paths") or queue_by_id[r["id"]].get("block_reason"))
             self.assertTrue(r["evidence"])
-            path, anchor = r["reference"].split("#", 1)
+            path = r["reference"]
+            self.assertTrue(path.startswith("references/products/") and path.endswith(".md"), path)
             text = (SKILL / path).read_text(encoding="utf-8")
-            section = text.split("## " + anchor + "\n", 1)[1].split("\n## ", 1)[0]
-            sources = re.findall(r"\]\((https://[^)]+)\)", section)
+            self.assertIn(f"# {r['id']}\n", text)
+            sources = re.findall(r"\]\((https://[^)]+)\)", text)
             self.assertTrue(sources)
             for source in sources:
                 parsed = urlparse(source)
@@ -65,12 +66,13 @@ class CatalogContract(unittest.TestCase):
     def test_reference_anchors_and_index_routes_exist(self):
         index = (SKILL / "references/products.md").read_text(encoding="utf-8")
         for r in self.records:
-            name, anchor = r["reference"].split("#", 1)
+            name = r["reference"]
             p = SKILL / name
             self.assertTrue(p.is_file(), name)
             text = p.read_text(encoding="utf-8")
-            self.assertIn("## " + anchor + "\n", text)
+            self.assertIn(f"# {r['id']}\n", text)
             self.assertIn(r["id"], index)
+            self.assertIn(f"(products/{r['id']}.md)", index)
             for label in r["aliases"]:
                 self.assertIn(label, index)
             m = ISO_DATE_RE.search(text)
@@ -81,12 +83,14 @@ class CatalogContract(unittest.TestCase):
 
     def test_only_selected_family_documents_need_loading(self):
         entry = (SKILL / "SKILL.md").read_text(encoding="utf-8")
-        families = {r["reference"].split("#")[0] for r in self.records}
+        index = (SKILL / "references/products.md").read_text(encoding="utf-8")
+        products = {r["reference"] for r in self.records}
         actual = {p.relative_to(SKILL).as_posix() for p in (SKILL / "references/products").glob("*.md")}
-        self.assertEqual(families, actual)
-        self.assertEqual(len(actual), 30)
+        self.assertEqual(products, actual)
+        self.assertEqual(len(actual), 90)
+        self.assertIn("references/products.md", entry)
         for path in actual:
-            self.assertIn(path, entry)
+            self.assertIn("products/" + Path(path).name, index)
 
     def test_client_queue_covers_every_record_without_fabricated_results(self):
         rows = self.queue["rows"]

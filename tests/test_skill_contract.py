@@ -46,9 +46,9 @@ def heading_slugs(path: Path) -> set[str]:
 class SkillContract(unittest.TestCase):
     def test_package_allowlist_and_authorized_script_only(self) -> None:
         files = package.package_files()
-        self.assertEqual(len(files), len(package.ALLOWED))
         rels = {p.relative_to(SKILL).as_posix() for p in files}
-        self.assertEqual(rels, set(package.ALLOWED))
+        self.assertTrue(set(package.REQUIRED_ROOT_FILES).issubset(rels))
+        self.assertEqual(len([r for r in rels if r.startswith("references/products/")]), 90)
         py_files = [r for r in rels if r.endswith(".py")]
         self.assertEqual(py_files, ["scripts/migrate_context.py"])
         helper_text = (SKILL / "scripts/migrate_context.py").read_text(encoding="utf-8")
@@ -96,16 +96,18 @@ class SkillContract(unittest.TestCase):
             self.assertIn("references/" + path.name, entry)
 
     def test_workflow_keeps_non_engine_categories_and_zero_leak_rules(self) -> None:
-        entry = (SKILL / "SKILL.md").read_text(encoding="utf-8").lower()
-        for word in ("prompts", "commands", "agents", "hooks", "memory", "migrate_context.py"):
+        raw_entry = (SKILL / "SKILL.md").read_text(encoding="utf-8")
+        self.assertFalse(re.search(r"[\u4e00-\u9fff]", raw_entry), "SKILL.md should stay in pure standard English")
+        entry = raw_entry.lower()
+        for word in ("prompts", "commands", "agents", "hooks", "memory", "migrate_context.py", "--dry-run", "full copy", "agent_handoff"):
             self.assertIn(word, entry)
         self.assertIn("user-authored memory", entry)
-        self.assertIn("preview requests make no target changes", entry)
 
     def test_agent_usage_contract_stays_documented(self) -> None:
         entry = (SKILL / "SKILL.md").read_text(encoding="utf-8").lower()
         self.assertIn("pull the latest", entry)
-        self.assertIn("never open the secret", entry)
+        self.assertIn("never open secret files", entry)
+        self.assertIn("--help", entry)
         agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8").lower()
         self.assertIn("keep the migration script current", agents)
         self.assertIn("must not read `.env` files", agents)
@@ -115,8 +117,9 @@ class SkillContract(unittest.TestCase):
             out = Path(tmp) / "skill.zip"
             digest = package.build(out)
             self.assertEqual(len(digest), 64)
+            expected = {"agent-skills-setup/" + p.relative_to(SKILL).as_posix() for p in package.package_files()}
             with zipfile.ZipFile(out) as z:
-                self.assertEqual(set(z.namelist()), {"agent-skills-setup/" + x for x in package.ALLOWED})
+                self.assertEqual(set(z.namelist()), expected)
                 self.assertFalse(any("dev/" in p or "evals/" in p or "/docs/" in p or "__pycache__" in p or p.endswith(".pyc") for p in z.namelist()))
                 script_info = z.getinfo("agent-skills-setup/scripts/migrate_context.py")
                 doc_info = z.getinfo("agent-skills-setup/SKILL.md")

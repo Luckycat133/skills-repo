@@ -23,14 +23,21 @@ prompt context**.
   leaks, and prints **only** variable names, `has_secrets`, and 8-char SHA-256 prefixes
   (`sha256[:8]`) on `stdout`. Pass `--redact-secrets` whenever you want placeholders
   instead of copying keys.
-- **90-Profile Built-In & On-Demand Catalog**: Routes **26** built-in profiles
-  (`antigravity`, `claude-code`, `codex`, `trae-cn`, `trae`, `kiro`, `junie`,
-  `codebuddy`, `codebuddy-ide`, `qoder`, `qoder-cn`, `roo-code`, `augment-code`,
-  `factory-droid`, `cursor`, `vscode`, `copilot-cli`, `gemini-cli`, `windsurf`,
-  `cline`, `kilocode`, `zed`, `opencode`, `kimi-code`, `qwen-code`, `pi`) plus
-  64+ cataloged clients via `sync-skills`, `patch-mcp`, and self-contained mapping
-  tables inside `references/`. Listing a product is documentation routing, **not**
-  runtime certification.
+- **90 Per-IDE Reference Files & 40 Declarative Profiles**: Splits per-IDE paths and
+  cautions into 90 standalone files (`skills/agent-skills-setup/references/products/<id>.md`),
+  drives **40** built-in profiles declaratively (`inspect --list-profiles` lists all
+  canonical IDs and shortcuts including `antigravity`, `claude-code`, `codex`, `trae-cn`,
+  `trae`, `kiro`, `junie`, `codebuddy`, `codebuddy-ide`, `qoder`, `qoder-cn`, `roo-code`,
+  `augment-code`, `factory-droid`, `cursor`, `vscode`, `copilot-cli`, `gemini-cli`,
+  `windsurf`, `cline`, `kilocode`, `zed`, `opencode`, `kimi-code`, `qwen-code`, `pi`,
+  `continue`, `amp`, `goose`, `devin`, `warp`, `openhands`, `aider`, `comate`,
+  `minimax-code`, `mistral-vibe`, `crush`, `forge`, `codely`, `zcode`), and pairs them
+  with generic `sync-skills`, `patch-mcp`, and `copy-files` primitives for all 90+
+  cataloged clients. Listing a product is documentation routing, **not** runtime certification.
+- **Full Copy Default & Zero Stray Dirs**: Copies complete files/folders by value (never
+  creates symlinks unless requested), enforces strict `--source`/`--target`/`--profiles`
+  boundaries, creates no default backup or `.migration-review/` folders, and emits
+  structured `agent_handoff` items when lossy config files need semantic adaptation.
 
 ## Install
 
@@ -71,9 +78,10 @@ bash validate-all.sh
 ```
 
 See [docs/validation-status.md](docs/validation-status.md) for what has been verified
-locally (unit, torture, canary zero-leak, end-to-end CLI workflows, `package_skill.py`,
-and official `skills-ref validate`) versus pending live native-IDE runtime checks
-(`evals/client-matrix.json`). Candidate version `0.11.0-dev` is unpublished.
+locally (unit, torture, canary zero-leak, end-to-end CLI workflows, and `package_skill.py`;
+`skills-ref validate` runs in maintainer CI and is optional locally unless `REQUIRE_SKILLS_REF=1`)
+versus pending live native-IDE runtime checks (`evals/client-matrix.json`). Candidate version
+`0.11.0-dev` is unpublished.
 
 ## License
 
