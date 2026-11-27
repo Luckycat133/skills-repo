@@ -1,4 +1,4 @@
-name: Verify Agent Skills Setup v0.11.1 packaging
+name: Publish Agent Skills Setup v0.11.1 once
 on:
   push:
     branches: ['dots/release-v0.11.1-once']
@@ -10,6 +10,7 @@ env:
   TREE: 27b87baf37cc4cb9e1fa57307ef798d0d7519d31
   INSTALL: agent-skills-setup-0.11.1.zip
   BUNDLE: skills-repo-v0.11.1-bundle.zip
+  EXPECTED_INSTALL: 129e4f5a8d3ab0d8e42a870bd141ae28c85f19b7f1efb8caa3841e65fbc4fb03
   EXPECTED_BUNDLE: fd9a4887ed353eb30ac2d0734d9477fa51d9c88f308dc4a3d044acc2bd0eb930
 jobs:
   verify:
@@ -58,6 +59,7 @@ jobs:
           done
           diff -qr "$work/out-a" "$work/out-b"
           test "$(sha256sum "$work/out-a/$BUNDLE" | cut -d' ' -f1)" = "$EXPECTED_BUNDLE"
+          test "$(sha256sum "$work/out-a/$INSTALL" | cut -d' ' -f1)" = "$EXPECTED_INSTALL"
           mkdir "$RUNNER_TEMP/dist"
           cp "$work/out-a/"* "$RUNNER_TEMP/dist/"
           (cd "$RUNNER_TEMP/dist" && sha256sum --strict -c SHA256SUMS)
@@ -67,3 +69,47 @@ jobs:
           path: ${{ runner.temp }}/dist/*
           if-no-files-found: error
           retention-days: 1
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: verified-distribution
+          path: dist
+      - name: Publish against the original tag only, then download again
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "Luckycat133/skills-repo"
+          test "$GITHUB_REF" = "refs/heads/dots/release-v0.11.1-once"
+          test "$TAG" = "v0.11.1"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq .object.sha)" = "$TARGET"
+          existing="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases" --jq '.[].tag_name')"
+          if grep -Fxq "$TAG" <<< "$existing"; then echo "Refusing to replace an existing release"; exit 1; fi
+          (cd dist && sha256sum --strict -c SHA256SUMS)
+          test "$(sha256sum "dist/$BUNDLE" | cut -d' ' -f1)" = "$EXPECTED_BUNDLE"
+          test "$(sha256sum "dist/$INSTALL" | cut -d' ' -f1)" = "$EXPECTED_INSTALL"
+          gh release create "$TAG" "dist/$INSTALL" "dist/$BUNDLE" dist/SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" --verify-tag --draft --title "Agent Skills Setup $TAG" \
+            --notes 'Backfill for immutable source commit 0d8449810fe0fd857598840258aecc73e7c604f6. The install ZIP contains only the canonical Skill. The release bundle includes the same Skill files, llms.txt, source provenance, and per-file SHA-256; the accompanying SHA256SUMS covers both ZIPs. Two isolated builds matched. No user configuration or live IDE acceptance is included.'
+          draft_dir="$(mktemp -d)"
+          for filename in "$INSTALL" "$BUNDLE" SHA256SUMS; do
+            id="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases" \
+              --jq ".[] | select(.draft and .tag_name == \"$TAG\") | .assets[] | select(.name == \"$filename\") | .id")"
+            [[ "$id" =~ ^[0-9]+$ ]]
+            gh api -H 'Accept: application/octet-stream' "repos/$GITHUB_REPOSITORY/releases/assets/$id" > "$draft_dir/$filename"
+          done
+          cmp dist/SHA256SUMS "$draft_dir/SHA256SUMS"
+          (cd "$draft_dir" && sha256sum --strict -c SHA256SUMS)
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false
+          test "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets,isDraft,isPrerelease --jq '.isDraft == false and .isPrerelease == false and (.assets | length) == 3')" = true
+          download_dir="$(mktemp -d)"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir "$download_dir"
+          cmp dist/SHA256SUMS "$download_dir/SHA256SUMS"
+          (cd "$download_dir" && sha256sum --strict -c SHA256SUMS)
