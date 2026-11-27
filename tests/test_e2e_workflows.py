@@ -186,9 +186,9 @@ class EndToEndWorkflowTests(unittest.TestCase):
             self.assertIn("stream-api", oc["mcp"]["servers"])
             self.assertEqual(oc["mcp"]["servers"]["stream-api"]["type"], "remote")
 
-            # Verify Antigravity used `serverUrl` and Gemini used `httpUrl`:
+            # Verify Antigravity used canonical `url` and Gemini used `httpUrl`:
             ag = json.loads((new_ws / ".agents" / "mcp_config.json").read_text(encoding="utf-8"))
-            self.assertEqual(ag["mcpServers"]["stream-api"]["serverUrl"], "https://api.example.com/mcp")
+            self.assertEqual(ag["mcpServers"]["stream-api"]["url"], "https://api.example.com/mcp")
             gm = json.loads((new_ws / ".gemini" / "settings.json").read_text(encoding="utf-8"))
             self.assertEqual(gm["mcpServers"]["stream-api"]["httpUrl"], "https://api.example.com/mcp")
 

@@ -3,9 +3,9 @@
 ## Unreleased — Antigravity / Claude Code / Codex completeness & 3-way equivalence (2026-11-25)
 
 - **macOS & CLI ergonomics**: Auto-detect Python 3.11+ or `uv` in `validate-all.sh` and
-  add a Python 3.11+ self-bootstrap in `migrate_context.py`; add `anti`/`agy`/`cc`/`cx`
-  profile shortcuts, `inspect --summary`, top-level `totals`, optional `--output` on
-  `export-device`, and graceful broken-symlink exclusion.
+  add a Python 3.11+ self-bootstrap in `migrate_context.py`; add `inspect --summary`,
+  top-level `totals`, optional `--output` on `export-device`, and graceful broken-symlink
+  exclusion (using canonical product names without invented shorthand aliases).
 - **Complete Antigravity, Claude Code & Codex coverage**:
   - **Antigravity**: Align primary user paths to `~/.gemini/config/` (`AGENTS.md`,
     `rules/*.md`, `skills/`, `agents/`, `workflows/`, `hooks.json`, `mcp_config.json`),
@@ -22,26 +22,31 @@
   Antigravity rule `trigger` conversion (`glob`/`model_decision`/`manual`), Antigravity
   `SKILL.md` frontmatter synthesis, workflow <-> command <-> manual Skill mapping, and
   custom agent frontmatter/tool translation across all three IDEs.
-- **Standalone 90-IDE references & declarative 40-profile generic CLI**:
+- **Standalone 90-IDE references, progressive sub-files & official-doc alignment**:
   - Split all 30 merged family docs into 90 standalone per-IDE reference files
-    (`references/products/<id>.md`), indexed via `references/products.md`, so an Agent
-    loads only `<a>.md` and `<b>.md` on demand without re-checking external docs.
-  - Slimmed `SKILL.md` (<100 lines pure English) and generic translation guides
-    (`references/instructions.md`, `references/mcp.md`, `references/other-context.md`).
+    (`references/products/<id>.md`) plus **25** progressive category sub-files across
+    11 major multi-surface IDEs (`references/products/<id>/<topic>.md`) verified against
+    official vendor documentation.
+  - Aligned `migrate_context.py` with official vendor docs: Antigravity canonical `url`
+    (with `serverUrl` read compatibility), Claude Code `CLAUDE_CONFIG_DIR`, VS Code /
+    Copilot `.github/hooks` + `.agents/skills`, Windsurf `.devin/` legacy paths, Cline
+    `.cline/rules` default + `.clinerules` legacy + `CLINE_MCP_SETTINGS_PATH`, Kiro
+    `inclusion: auto` round-trip, Junie `.junie/AGENTS.md` + `.junie/rules` primary &
+    `.junie/guidelines.md` legacy, Roo Code unconditional rules without silent glob
+    widening, Qoder & Gemini CLI `hooks` in `settings.json`, Augment `.augment/settings.json`,
+    Factory Droid `hooks.json` + `.agents/skills`, and OpenCode `.opencode/opencode.json`.
   - Expanded built-in profiles declaratively from 26 to **40** (adding `continue`, `amp`,
     `goose`, `devin`, `warp`, `openhands`, `aider`, `comate`, `minimax-code`,
-    `mistral-vibe`, `crush`, `forge`, `codely`, `zcode`), replaced per-IDE helper branches
-    with `ProfilePaths` behavior fields, added `inspect --list-profiles`, and added
-    the generic out-of-band full-copy `copy-files` primitive alongside `sync-skills` and
-    `patch-mcp`.
-  - Replaced brittle hardcoded `ALLOWED`/`MAX_PACKAGE_BYTES`/prose-lock checks in
-    `scripts/package_skill.py` and contract tests with rule-based hygiene validation;
-    `validate-all.sh` stays silent when maintainer CI's optional `skills-ref` linter is
-    not installed locally.
-- **Zero stray folders, `agent_handoff`, & self-contained English references**:
-  Rewrite `SKILL.md` in pure standard English; replace default `~/.agent-skills-setup-backups/`
-  and `.migration-review/` parking with opt-in `--backup-dir`, `--profiles` filtering on
-  `import-device`, and structured `agent_handoff` stdout items for lossy translations.
+    `mistral-vibe`, `crush`, `forge`, `codely`, `zcode`), added `inspect --list-profiles`,
+    and added the generic out-of-band full-copy `copy-files` primitive alongside
+    `sync-skills` and `patch-mcp`.
+  - Removed `skills-ref` completely from `validate-all.sh`, `.github/workflows/validate.yml`,
+    and active tests/docs, and replaced hardcoded `ALLOWED`/`MAX_PACKAGE_BYTES`/prose-lock
+    checks with rule-based package hygiene validation.
+- **Zero stray folders, `agent_handoff`, & clean entrypoint**:
+  Streamlined `SKILL.md` (<100 lines) and removed default `~/.agent-skills-setup-backups/`
+  and `.migration-review/` parking in favor of opt-in `--backup-dir`, `--profiles` filtering
+  on `import-device`, and structured `agent_handoff` stdout items for lossy translations.
 
 ## Unreleased — workflow, evidence and delivery review (2026-11-14)
 

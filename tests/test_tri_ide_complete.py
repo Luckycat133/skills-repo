@@ -147,7 +147,7 @@ class TriIdeCompleteTests(unittest.TestCase):
 
             bundle = base / "agy-bundle"
             code_e, out_e, err_e = run_cli(
-                "export-device", "--profiles", "anti", "--workspace", str(ws), "--home", str(home), "--output", str(bundle)
+                "export-device", "--profiles", "antigravity", "--workspace", str(ws), "--home", str(home), "--output", str(bundle)
             )
             self.assertEqual(code_e, 0, out_e)
             self.assertNotIn(canary, json.dumps(out_e) + err_e + (bundle / "MIGRATION.md").read_text(encoding="utf-8"))
@@ -270,7 +270,7 @@ class TriIdeCompleteTests(unittest.TestCase):
 
             bundle = base / "cc-bundle"
             code_e, out_e, err_e = run_cli(
-                "export-device", "--profiles", "cc", "--workspace", str(ws), "--home", str(home), "--output", str(bundle)
+                "export-device", "--profiles", "claude-code", "--workspace", str(ws), "--home", str(home), "--output", str(bundle)
             )
             self.assertEqual(code_e, 0, out_e)
             leaked_blob = json.dumps(out_e) + err_e + (bundle / "MIGRATION.md").read_text(encoding="utf-8")
@@ -309,7 +309,7 @@ class TriIdeCompleteTests(unittest.TestCase):
             # Verify --redact-secrets on export strips canary_env & canary_mcp in bundle
             redacted_bundle = base / "cc-redacted"
             code_r, _, _ = run_cli(
-                "export-device", "--profiles", "cc", "--workspace", str(ws), "--home", str(home),
+                "export-device", "--profiles", "claude-code", "--workspace", str(ws), "--home", str(home),
                 "--redact-secrets", "--output", str(redacted_bundle),
             )
             self.assertEqual(code_r, 0)
@@ -367,7 +367,7 @@ class TriIdeCompleteTests(unittest.TestCase):
 
             bundle = base / "cx-bundle"
             code_e, out_e, err_e = run_cli(
-                "export-device", "--profiles", "cx", "--workspace", str(ws), "--home", str(home), "--output", str(bundle)
+                "export-device", "--profiles", "codex", "--workspace", str(ws), "--home", str(home), "--output", str(bundle)
             )
             self.assertEqual(code_e, 0, out_e)
             self.assertNotIn(canary, json.dumps(out_e) + err_e + (bundle / "MIGRATION.md").read_text(encoding="utf-8"))
@@ -442,7 +442,7 @@ class TriIdeCompleteTests(unittest.TestCase):
             )
 
             code, out, err = run_cli(
-                "migrate", "--source", "anti", "--target", "cc,cx", "--workspace", str(ws), "--home", str(home), "--scope", "project", "--allow-git-tracked-secrets"
+                "migrate", "--source", "antigravity", "--target", "claude-code,codex", "--workspace", str(ws), "--home", str(home), "--scope", "project", "--allow-git-tracked-secrets"
             )
             self.assertEqual(code, 0, out)
             self.assertNotIn(canary, json.dumps(out) + err)
@@ -469,7 +469,7 @@ class TriIdeCompleteTests(unittest.TestCase):
 
             # Repeat run must be noop for converted items
             code2, out2, _ = run_cli(
-                "migrate", "--source", "anti", "--target", "cc,cx", "--workspace", str(ws), "--home", str(home), "--scope", "project"
+                "migrate", "--source", "antigravity", "--target", "claude-code,codex", "--workspace", str(ws), "--home", str(home), "--scope", "project"
             )
             self.assertEqual(code2, 0, out2)
             self.assertGreater(out2["summary"]["noop"], 0)
@@ -504,7 +504,7 @@ class TriIdeCompleteTests(unittest.TestCase):
             )
 
             code, out, _ = run_cli(
-                "migrate", "--source", "claude", "--target", "anti,cx", "--workspace", str(ws), "--home", str(home), "--scope", "project"
+                "migrate", "--source", "claude-code", "--target", "antigravity,codex", "--workspace", str(ws), "--home", str(home), "--scope", "project"
             )
             self.assertEqual(code, 0, out)
             self.assertIn("trigger: glob", (ws / ".agents" / "rules" / "api.md").read_text(encoding="utf-8"))
@@ -530,13 +530,13 @@ class TriIdeCompleteTests(unittest.TestCase):
             home.mkdir()
             (ws / ".agents" / "skills" / "broken-link").symlink_to(ws / ".agents" / "skills" / "missing-target")
 
-            code_i, out_i, _ = run_cli("inspect", "--workspace", str(ws), "--home", str(home), "--profiles", "agy", "--summary")
+            code_i, out_i, _ = run_cli("inspect", "--workspace", str(ws), "--home", str(home), "--profiles", "antigravity", "--summary")
             self.assertEqual(code_i, 0, out_i)
             self.assertIn("totals", out_i)
             self.assertEqual(out_i["profiles"][0]["counts"]["excluded"], 1)
 
             # Default --output on export-device creates ~/context-transfer-<UTC>
-            code_e, out_e, _ = run_cli("export-device", "--workspace", str(ws), "--home", str(home), "--profiles", "agy")
+            code_e, out_e, _ = run_cli("export-device", "--workspace", str(ws), "--home", str(home), "--profiles", "antigravity")
             self.assertEqual(code_e, 0, out_e)
             self.assertTrue(Path(out_e["output_dir"]).is_dir())
             self.assertIn("totals", out_e)

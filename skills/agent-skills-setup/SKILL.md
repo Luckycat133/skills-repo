@@ -33,9 +33,11 @@ so you can migrate between any of 90+ AI coding tools cleanly without searching 
    Pass `--backup-dir <dir>` only when backups of overwritten targets are wanted.
 4. **Progressive per-IDE loading**: For any task `A -> B`, look up canonical IDs in
    [products.md](references/products.md) and read ONLY `references/products/<a>.md` and
-   `references/products/<b>.md` (do NOT load all 90 files). Use `inspect --list-profiles`
-   to see which declarative built-in profiles `migrate` supports directly, and combine
-   generic `sync-skills`, `patch-mcp`, and `copy-files` for every other cataloged client.
+   `references/products/<b>.md` first (do NOT load all 90 files). Major multi-surface IDEs
+   link category sub-files (`references/products/<id>/<topic>.md`) from `<id>.md` — open
+   only the sub-file matching the category being translated. Use `inspect --list-profiles`
+   to see all declarative built-in profiles supported by `migrate`, and combine generic
+   `sync-skills`, `patch-mcp`, and `copy-files` for every other cataloged client.
 5. **Script for lossless, Agent for lossy**: Run the script first; preview requests pass
    `--dry-run` (zero target changes). Whenever stdout reports `agent_handoff` items
    (non-1:1 rule triggers, restricted/TOML agents, hooks, incompatible commands), read the
@@ -57,6 +59,6 @@ so you can migrate between any of 90+ AI coding tools cleanly without searching 
 
 ## 3. References (1-hop)
 
-- **Product catalog (90 standalone per-IDE files)**: [products.md](references/products.md) -> `references/products/<id>.md`.
+- **Product catalog (90 per-IDE entry docs + progressive category sub-files)**: [products.md](references/products.md) -> `references/products/<id>.md` (and `references/products/<id>/<topic>.md` when present).
 - **Generic semantics**: [instructions.md](references/instructions.md), [mcp.md](references/mcp.md), [other-context.md](references/other-context.md), [device-transfer.md](references/device-transfer.md), [discovery.md](references/discovery.md), [verification.md](references/verification.md), [CLI workflow](references/cli-workflow.md), [Registry v2](references/registry-v2.md).
 - **Report templates**: [device-readme.md](assets/device-readme.md), [migration-report.md](assets/migration-report.md).

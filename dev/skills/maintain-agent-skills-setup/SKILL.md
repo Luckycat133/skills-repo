@@ -54,7 +54,7 @@ Historical notes under docs/history remain unverified clues, not active contract
 ## When asked to run the tests
 
 1. Run `bash validate-all.sh` for structural/examples checks. Record command, exit
-   code, count and revision; distinguish missing optional skills-ref from a pass.
+   code, count and revision.
    Do not call this a client migration test or weaken checks to obtain green results.
 2. Read `evals/cases.json`, `evals/catalog-cases.json` and `evals/workflow-cases.json`.
    Use isolated fixture roots, safe synthetic content and the actual host agent

@@ -28,33 +28,24 @@ class ValidationCI(unittest.TestCase):
 
     def test_each_validator_has_its_own_unconditional_step(self):
         text = WORKFLOW.read_text(encoding='utf-8')
-        commands = re.findall(r'^        run: (skills-ref validate .+)$', text, re.M)
-        self.assertEqual(commands, [
-            'skills-ref validate skills/agent-skills-setup',
-            'skills-ref validate dev/skills/maintain-agent-skills-setup'])
+        self.assertNotIn('skills-ref', text)
+        self.assertIn('python -B -m unittest discover -s tests -p \'test_*.py\' -v', text)
+        self.assertIn('python -B skills/agent-skills-setup/scripts/migrate_context.py --help', text)
         self.assertNotIn('continue-on-error:', text)
         self.assertNotIn('if: always()', text)
 
     def test_individual_commands_preserve_failure_exit_codes(self):
         shell = shutil.which('pwsh' if os.name == 'nt' else 'bash')
         self.assertIsNotNone(shell, 'The CI runner must provide its native workflow shell')
-        commands = re.findall(r'^        run: (skills-ref validate .+)$',
-                              WORKFLOW.read_text(encoding='utf-8'), re.M)
-        self.assertEqual(len(commands), 2)
-        # A stub validates the CI command shape/exit status, not Skill semantics.
+        commands = [
+            f'"{sys.executable}" -c "import os, sys; sys.exit(int(os.environ[\'VALIDATOR_STATUS\']))"'
+        ]
         with tempfile.TemporaryDirectory() as temp:
-            validator = Path(temp) / ('skills-ref.cmd' if os.name == 'nt' else 'skills-ref')
-            validator.write_text(
-                '@exit /b %VALIDATOR_STATUS%\n' if os.name == 'nt'
-                else '#!/bin/sh\nexit "$VALIDATOR_STATUS"\n', encoding='utf-8')
-            validator.chmod(0o755)
             for command in commands:
                 for status in (0, 7):
                     with self.subTest(command=command, status=status):
-                        env = dict(os.environ, PATH=temp+os.pathsep+os.environ['PATH'],
-                                   VALIDATOR_STATUS=str(status))
+                        env = dict(os.environ, VALIDATOR_STATUS=str(status))
                         if os.name == 'nt':
-                            # Match the Actions pwsh wrapper, including native exit propagation.
                             script = Path(temp) / 'step.ps1'
                             script.write_text(
                                 '$ErrorActionPreference = \'stop\'\n' + command + '\n'

@@ -72,17 +72,16 @@ D = chr(36)  # "$" placeholder prefix to keep template syntax intact
 SCHEMA_VERSION = "0.11.0-dev"
 
 PROFILE_ALIASES: dict[str, str] = {
-    "claude": "claude-code", "claude-code": "claude-code", "cc": "claude-code", "cursor": "cursor",
-    "codex": "codex", "cx": "codex", "vscode": "vscode", "copilot": "copilot-cli",
+    "claude": "claude-code", "claude-code": "claude-code", "cursor": "cursor",
+    "codex": "codex", "vscode": "vscode", "copilot": "copilot-cli",
     "copilot-app": "copilot-cli", "copilot-cli": "copilot-cli",
     "gemini": "gemini-cli", "gemini-cli": "gemini-cli",
-    "antigravity": "antigravity", "anti": "antigravity", "agy": "antigravity",
+    "antigravity": "antigravity",
     "windsurf": "windsurf", "codeium": "windsurf", "cline": "cline",
     "kilocode": "kilocode", "kilo": "kilocode", "zed": "zed", "opencode": "opencode",
     "kimi-code": "kimi-code", "kimiai": "kimi-code", "qwen-code": "qwen-code",
     "qwen": "qwen-code", "pi": "pi",
-    "trae-cn": "trae-cn", "trae_cn": "trae-cn", "traecn": "trae-cn",
-    "trae": "trae",
+    "trae-cn": "trae-cn", "trae": "trae",
     "kiro": "kiro", "kiro-cli": "kiro",
     "junie": "junie",
     "codebuddy": "codebuddy", "tencent-codebuddy": "codebuddy",
@@ -187,7 +186,7 @@ AUTOLOAD_PARTS = (
     (".agents", "skills"), (".agents", "rules"), (".agents", "workflows"),
     (".agents", "agents"), (".agents", "plugins"),
     (".github", "instructions"), (".github", "skills"),
-    (".github", "prompts"), (".github", "agents"),
+    (".github", "prompts"), (".github", "agents"), (".github", "hooks"),
     (".windsurf", "rules"), (".windsurf", "skills"), (".windsurf", "workflows"),
     (".copilot", "agents"),
     (".gemini", "skills"), (".gemini", "commands"), (".gemini", "agents"),
@@ -203,7 +202,7 @@ AUTOLOAD_PARTS = (
     (".trae", "rules"), (".trae", "skills"), (".trae", "commands"), (".trae", "agents"),
     (".trae-cn", "rules"), (".trae-cn", "skills"), (".trae-cn", "commands"), (".trae-cn", "agents"),
     (".kiro", "steering"), (".kiro", "skills"), (".kiro", "agents"), (".kiro", "hooks"),
-    (".junie", "skills"), (".junie", "agents"),
+    (".junie", "rules"), (".junie", "skills"), (".junie", "agents"),
     (".codebuddy", "rules"), (".codebuddy", "skills"), (".codebuddy", "commands"), (".codebuddy", "agents"),
     (".qoder", "rules"), (".qoder", "skills"), (".qoder", "commands"), (".qoder", "agents"),
     (".lingma", "rules"), (".lingma", "skills"),
@@ -1041,7 +1040,7 @@ def serialize_mcp_for_json_style(srv: NormalizedMcp, target_style: str, redact_s
             entry["url"] = url
         elif target_style == "gemini-cli":
             entry["url" if srv.transport == "sse" else "httpUrl"] = url
-        elif target_style in ("antigravity", "windsurf"):
+        elif target_style == "windsurf":
             entry["serverUrl"] = url
         else:
             entry["url"] = url
@@ -1283,6 +1282,7 @@ def get_profile_paths(profile: str, ws: Path, home: Path) -> ProfilePaths:
     p = resolve_profile(profile)
     use_env = home == Path.home().resolve()
     overrides = {
+        "claude-code": "CLAUDE_CONFIG_DIR",
         "codex": "CODEX_HOME", "kimi-code": "KIMI_CODE_HOME",
         "antigravity": "ANTIGRAVITY_SKILLS_DIR", "codebuddy": "CODEBUDDY_CONFIG_DIR",
     }
@@ -1296,10 +1296,21 @@ def get_profile_paths(profile: str, ws: Path, home: Path) -> ProfilePaths:
         physical = configured.resolve(strict=False)
         if physical == Path(physical.anchor) or (physical.exists() and not physical.is_dir()):
             raise SafetyRefusalError("invalid_product_root", f"{var} must be an absolute product directory")
+    cchome = (configured if p == "claude-code" else None) or (home / ".claude")
+    claude_user_mcp = (cchome / ".claude.json") if (p == "claude-code" and configured) else (home / ".claude.json")
     chome = (configured if p == "codex" else None) or (home / ".codex")
     khome = (configured if p == "kimi-code" else None) or (home / ".kimi-code")
     cbhome = (configured if p == "codebuddy" else None) or (home / ".codebuddy")
     ag_sk = (configured if p == "antigravity" else None) or (home / ".gemini/config/skills")
+    cline_user_mcp = home / ".cline/data/settings/cline_mcp_settings.json"
+    if use_env and p == "cline" and os.environ.get("CLINE_MCP_SETTINGS_PATH"):
+        cm = Path(os.environ["CLINE_MCP_SETTINGS_PATH"]).expanduser()
+        if not cm.is_absolute() or ".." in cm.parts:
+            raise SafetyRefusalError("invalid_product_root", "CLINE_MCP_SETTINGS_PATH must be an absolute file path")
+        cline_user_mcp = cm
+    cline_has_legacy_rules = (ws / ".clinerules").exists() or (ws / ".clinerules").is_symlink()
+    cline_proj_rules = (ws / ".clinerules") if cline_has_legacy_rules else (ws / ".cline/rules")
+    cline_alt_rules = (ws / ".cline/rules") if cline_has_legacy_rules else (ws / ".clinerules")
     if sys.platform == "darwin":
         trae_cn_mcp = home / "Library/Application Support/Trae CN/User/mcp.json"
         trae_intl_mcp = home / "Library/Application Support/Trae/User/mcp.json"
@@ -1323,14 +1334,14 @@ def get_profile_paths(profile: str, ws: Path, home: Path) -> ProfilePaths:
         ),
         "claude-code": ProfilePaths(
             p, proj_doc=ws / "CLAUDE.md", proj_rules=ws / ".claude/rules",
-            user_doc=home / ".claude/CLAUDE.md", user_rules=home / ".claude/rules",
-            proj_skills=ws / ".claude/skills", user_skills=home / ".claude/skills",
-            proj_cmds=ws / ".claude/commands", user_cmds=home / ".claude/commands",
-            proj_agents=ws / ".claude/agents", user_agents=home / ".claude/agents",
-            proj_hooks=ws / ".claude/settings.json", user_hooks=home / ".claude/settings.json",
+            user_doc=cchome / "CLAUDE.md", user_rules=cchome / "rules",
+            proj_skills=ws / ".claude/skills", user_skills=cchome / "skills",
+            proj_cmds=ws / ".claude/commands", user_cmds=cchome / "commands",
+            proj_agents=ws / ".claude/agents", user_agents=cchome / "agents",
+            proj_hooks=ws / ".claude/settings.json", user_hooks=cchome / "settings.json",
             proj_mcp=ws / ".mcp.json", proj_mcp_style="claude-code",
-            user_mcp=home / ".claude.json", user_mcp_style="claude-code",
-            user_memory=home / ".claude/memory",
+            user_mcp=claude_user_mcp, user_mcp_style="claude-code",
+            user_memory=cchome / "memory",
             legacy=[("instructions", "project", ws / ".claude/CLAUDE.md"), ("instructions", "project", ws / "CLAUDE.local.md")],
             rule_glob_style="paths", rule_manual_style="manual_skill", hooks_in_settings=True,
         ),
@@ -1349,7 +1360,9 @@ def get_profile_paths(profile: str, ws: Path, home: Path) -> ProfilePaths:
             p, proj_doc=ws / ".github/copilot-instructions.md", proj_rules=ws / ".github/instructions",
             proj_skills=ws / ".github/skills", user_skills=home / ".copilot/skills",
             proj_cmds=ws / ".github/prompts", proj_agents=ws / ".github/agents",
+            proj_hooks=ws / ".github/hooks",
             proj_mcp=ws / ".vscode/mcp.json", proj_mcp_key="servers", proj_mcp_style="vscode",
+            legacy=[("skills", "project", ws / ".agents/skills")],
             rule_glob_style="apply_to",
         ),
         "copilot-cli": ProfilePaths(
@@ -1357,7 +1370,9 @@ def get_profile_paths(profile: str, ws: Path, home: Path) -> ProfilePaths:
             user_doc=home / ".copilot/copilot-instructions.md",
             proj_skills=ws / ".github/skills", user_skills=home / ".copilot/skills",
             proj_agents=ws / ".github/agents", user_agents=home / ".copilot/agents",
+            proj_hooks=ws / ".github/hooks",
             user_mcp=home / ".copilot/mcp-config.json", user_mcp_style="copilot-cli",
+            legacy=[("skills", "project", ws / ".agents/skills")],
             rule_glob_style="apply_to",
         ),
         "gemini-cli": ProfilePaths(
@@ -1365,8 +1380,11 @@ def get_profile_paths(profile: str, ws: Path, home: Path) -> ProfilePaths:
             proj_skills=ws / ".gemini/skills", user_skills=home / ".gemini/skills",
             proj_cmds=ws / ".gemini/commands", user_cmds=home / ".gemini/commands",
             proj_agents=ws / ".gemini/agents", user_agents=home / ".gemini/agents",
+            proj_hooks=ws / ".gemini/settings.json", user_hooks=home / ".gemini/settings.json",
             proj_mcp=ws / ".gemini/settings.json", proj_mcp_style="gemini-cli",
             user_mcp=home / ".gemini/settings.json", user_mcp_style="gemini-cli",
+            legacy=[("skills", "user", home / ".agents/skills")],
+            hooks_in_settings=True,
         ),
         "antigravity": ProfilePaths(
             p, proj_doc=ws / "AGENTS.md", proj_rules=ws / ".agents/rules",
@@ -1402,16 +1420,25 @@ def get_profile_paths(profile: str, ws: Path, home: Path) -> ProfilePaths:
             proj_skills=ws / ".windsurf/skills", user_skills=home / ".codeium/windsurf/skills",
             proj_workflows=ws / ".windsurf/workflows", user_workflows=home / ".codeium/windsurf/workflows",
             user_mcp=home / ".codeium/windsurf/mcp_config.json", user_mcp_style="windsurf",
-            legacy=[("instructions", "project", ws / ".windsurfrules")],
+            legacy=[
+                ("instructions", "project", ws / ".windsurfrules"),
+                ("instructions", "project", ws / ".devin/rules"),
+                ("mcp", "project", ws / ".devin/mcp_config.json"),
+            ],
             rule_glob_style="trigger_glob", rule_model_style="trigger_model",
         ),
         "cline": ProfilePaths(
-            p, proj_rules=ws / ".clinerules", user_rules=home / ".cline/rules",
+            p, proj_rules=cline_proj_rules, user_rules=home / ".cline/rules",
             proj_skills=ws / ".cline/skills", user_skills=home / ".cline/skills",
             proj_workflows=ws / ".cline/workflows", user_workflows=home / ".cline/workflows",
             proj_hooks=ws / ".cline/hooks", user_hooks=home / ".cline/hooks",
-            user_mcp=home / ".cline/data/settings/cline_mcp_settings.json", user_mcp_style="cline",
-            legacy=[("instructions", "project", ws / ".cline/rules")],
+            user_mcp=cline_user_mcp, user_mcp_style="cline",
+            legacy=[
+                ("instructions", "project", cline_alt_rules),
+                ("workflows", "project", ws / ".clinerules/workflows"),
+                ("hooks", "project", ws / ".clinerules/hooks"),
+                ("skills", "project", ws / ".agents/skills"),
+            ],
         ),
         "kilocode": ProfilePaths(
             p, proj_doc=ws / "AGENTS.md", proj_rules=ws / ".kilo/rules", user_rules=home / ".kilo/rules",
@@ -1434,6 +1461,7 @@ def get_profile_paths(profile: str, ws: Path, home: Path) -> ProfilePaths:
             proj_agents=ws / ".opencode/agents", user_agents=home / ".config/opencode/agents",
             proj_mcp=ws / "opencode.json", proj_mcp_key="mcp", proj_mcp_style="opencode",
             user_mcp=home / ".config/opencode/opencode.json", user_mcp_key="mcp", user_mcp_style="opencode",
+            legacy=[("mcp", "project", ws / ".opencode/opencode.json")],
         ),
         "kimi-code": ProfilePaths(
             p, proj_doc=ws / "AGENTS.md", user_doc=khome / "AGENTS.md",
@@ -1510,14 +1538,14 @@ def get_profile_paths(profile: str, ws: Path, home: Path) -> ProfilePaths:
             proj_agents=ws / ".kiro/agents", user_agents=home / ".kiro/agents",
             proj_hooks=ws / ".kiro/hooks",
             proj_mcp=ws / ".kiro/settings/mcp.json", user_mcp=home / ".kiro/settings/mcp.json",
-            rule_glob_style="kiro_filematch", rule_manual_style="kiro_manual",
+            rule_glob_style="kiro_filematch", rule_model_style="kiro_auto", rule_manual_style="kiro_manual",
         ),
         "junie": ProfilePaths(
-            p, proj_doc=ws / ".junie/guidelines.md",
+            p, proj_doc=ws / ".junie/AGENTS.md", proj_rules=ws / ".junie/rules",
             proj_skills=ws / ".junie/skills", user_skills=home / ".junie/skills",
             proj_agents=ws / ".junie/agents", user_agents=home / ".junie/agents",
             proj_mcp=ws / ".junie/mcp/mcp.json", user_mcp=home / ".junie/mcp/mcp.json",
-            legacy=[("instructions", "project", ws / "AGENTS.md")],
+            legacy=[("instructions", "project", ws / "AGENTS.md"), ("instructions", "project", ws / ".junie/guidelines.md")],
         ),
         "codebuddy": ProfilePaths(
             p, proj_doc=ws / "CODEBUDDY.md", proj_rules=ws / ".codebuddy/rules",
@@ -1543,8 +1571,9 @@ def get_profile_paths(profile: str, ws: Path, home: Path) -> ProfilePaths:
             proj_skills=ws / ".qoder/skills", user_skills=home / ".qoder/skills",
             proj_cmds=ws / ".qoder/commands", user_cmds=home / ".qoder/commands",
             proj_agents=ws / ".qoder/agents", user_agents=home / ".qoder/agents",
+            proj_hooks=ws / ".qoder/settings.json", user_hooks=home / ".qoder/settings.json",
             proj_mcp=ws / ".qoder/settings.json", user_mcp=home / ".qoder/settings.json",
-            rule_glob_style="globs_md", rule_model_style="desc_md",
+            rule_glob_style="globs_md", rule_model_style="desc_md", hooks_in_settings=True,
         ),
         "qoder-cn": ProfilePaths(
             p, proj_rules=ws / ".lingma/rules", user_rules=home / ".lingma/rules",
@@ -1557,13 +1586,14 @@ def get_profile_paths(profile: str, ws: Path, home: Path) -> ProfilePaths:
             p, proj_rules=ws / ".roo/rules", user_rules=home / ".roo/rules",
             proj_skills=ws / ".roo/skills", user_skills=home / ".roo/skills",
             proj_mcp=ws / ".roo/mcp.json",
-            rule_glob_style="globs_md", rule_model_style="desc_md",
+            legacy=[("instructions", "project", ws / ".roorules")],
         ),
         "augment-code": ProfilePaths(
             p, proj_rules=ws / ".augment/rules", user_rules=home / ".augment/rules",
             proj_skills=ws / ".augment/skills", user_skills=home / ".augment/skills",
-            proj_cmds=ws / ".augment/commands", proj_agents=ws / ".augment/agents",
-            user_mcp=home / ".augment/settings.json",
+            proj_cmds=ws / ".augment/commands", user_cmds=home / ".augment/commands",
+            proj_agents=ws / ".augment/agents",
+            proj_mcp=ws / ".augment/settings.json", user_mcp=home / ".augment/settings.json",
             legacy=[("instructions", "project", ws / ".augment-guidelines")],
             rule_glob_style="globs_md", user_rules_always_apply=True,
         ),
@@ -1572,7 +1602,9 @@ def get_profile_paths(profile: str, ws: Path, home: Path) -> ProfilePaths:
             proj_skills=ws / ".factory/skills", user_skills=home / ".factory/skills",
             proj_cmds=ws / ".factory/commands", user_cmds=home / ".factory/commands",
             proj_agents=ws / ".factory/droids", user_agents=home / ".factory/droids",
+            proj_hooks=ws / ".factory/hooks.json", user_hooks=home / ".factory/hooks.json",
             proj_mcp=ws / ".factory/mcp.json", user_mcp=home / ".factory/mcp.json",
+            legacy=[("skills", "project", ws / ".agents/skills"), ("skills", "user", home / ".agents/skills")],
         ),
         "continue": ProfilePaths(
             p, proj_rules=ws / ".continue/rules", proj_cmds=ws / ".continue/prompts",
@@ -1803,12 +1835,15 @@ def parse_rule_files(path: Path, scope: str, profile: str, *, native_rule: bool 
     if profile == "kiro" and native_rule:
         inc = str(meta.get("inclusion") or "").strip().lower()
         fpat = split_globs(meta.get("fileMatchPattern"))
+        kdesc = str(meta.get("description") or "").strip()
         if inc == "filematch" and fpat:
-            return [DiscoveredRule(slug, scope, "glob_scoped", body if body.strip() else text, globs=fpat, source_path=path, source_profile=profile)]
+            return [DiscoveredRule(slug, scope, "glob_scoped", body if body.strip() else text, globs=fpat, description=kdesc, source_path=path, source_profile=profile)]
+        if inc == "auto":
+            return [DiscoveredRule(slug, scope, "model_selected", body if body.strip() else text, description=kdesc, source_path=path, source_profile=profile)]
         if inc == "manual":
-            return [DiscoveredRule(slug, scope, "manual", body if body.strip() else text, source_path=path, source_profile=profile)]
+            return [DiscoveredRule(slug, scope, "manual", body if body.strip() else text, description=kdesc, source_path=path, source_profile=profile)]
         if inc == "always":
-            return [DiscoveredRule(slug, scope, "always_on", body if body.strip() else text, source_path=path, source_profile=profile)]
+            return [DiscoveredRule(slug, scope, "always_on", body if body.strip() else text, description=kdesc, source_path=path, source_profile=profile)]
     always = meta.get("alwaysApply") is True or str(meta.get("trigger", "")).lower() == "always_on"
     globs = split_globs(meta.get("globs") or meta.get("glob") or meta.get("paths") or meta.get("applyTo"))
     desc = str(meta.get("description") or "").strip()
@@ -2169,13 +2204,15 @@ def _discover_antigravity_extras(
 
 
 def _discover_claude_extras(
-    workspace: Path, home: Path, wp: bool, wu: bool, categories: set[str], inv: ProfileInventory,
+    pp: ProfilePaths, workspace: Path, home: Path, wp: bool, wu: bool, categories: set[str], inv: ProfileInventory,
 ) -> None:
+    cchome = pp.user_product_root or (home / ".claude")
+    croot = pp.contained_root(cchome, "user", workspace, home)
     if wu:
         for ex_p, ex_r in (
-            (home / ".claude/plugins/cache", "excluded_state_or_history_dir"),
-            (home / ".claude/plugins/store", "excluded_state_or_history_dir"),
-            (home / ".claude/plugins/plugin-directory-cache-v2.json", "excluded_cache_file"),
+            (cchome / "plugins/cache", "excluded_state_or_history_dir"),
+            (cchome / "plugins/store", "excluded_state_or_history_dir"),
+            (cchome / "plugins/plugin-directory-cache-v2.json", "excluded_cache_file"),
         ):
             if ex_p.exists():
                 _append_excluded(inv.excluded, ex_p, workspace, home, ex_r)
@@ -2197,7 +2234,7 @@ def _discover_claude_extras(
         st_cands = [
             ("project", workspace / ".claude/settings.json" if wp else None, workspace),
             ("project", workspace / ".claude/settings.local.json" if wp else None, workspace),
-            ("user", home / ".claude/settings.json" if wu else None, home),
+            ("user", cchome / "settings.json" if wu else None, croot),
         ]
         for ssc, spth, sroot in st_cands:
             if spth is None or not (spth.exists() or spth.is_symlink()):
@@ -2225,19 +2262,19 @@ def _discover_claude_extras(
 
     if "plugins" in categories and wu:
         for fname in ("installed_plugins.json", "known_marketplaces.json"):
-            pp = home / ".claude/plugins" / fname
-            if (pp.exists() or pp.is_symlink()) and not _record_broken_symlink(pp, workspace, home, inv.excluded):
-                validate_contained(pp, home, f"claude_plugin:{fname}")
-                if pp.is_file():
+            plug_p = cchome / "plugins" / fname
+            if (plug_p.exists() or plug_p.is_symlink()) and not _record_broken_symlink(plug_p, workspace, home, inv.excluded):
+                validate_contained(plug_p, croot, f"claude_plugin:{fname}")
+                if plug_p.is_file():
                     inv.doc_items.append(DiscoveredDocItem(
-                        "plugins", fname, "user", pp, pp.read_bytes(),
+                        "plugins", fname, "user", plug_p, plug_p.read_bytes(),
                         "claude-code", subkind="claude_plugin_registry",
                     ))
 
     if "memory" in categories and wp:
-        mem_dir = home / ".claude/projects" / claude_project_slug(workspace) / "memory"
+        mem_dir = cchome / "projects" / claude_project_slug(workspace) / "memory"
         if (mem_dir.exists() or mem_dir.is_symlink()) and not _record_broken_symlink(mem_dir, workspace, home, inv.excluded):
-            validate_contained(mem_dir, home, "claude_project_memory")
+            validate_contained(mem_dir, croot, "claude_project_memory")
             if mem_dir.is_dir():
                 for f in sorted(mem_dir.rglob("*")):
                     if _record_broken_symlink(f, workspace, home, inv.excluded):
@@ -2591,7 +2628,7 @@ def discover_profile(profile: str, workspace: Path, home: Path, scope: str, cate
     if pp.profile == "antigravity":
         _discover_antigravity_extras(workspace, home, wp, wu, categories, inv)
     elif pp.profile == "claude-code":
-        _discover_claude_extras(workspace, home, wp, wu, categories, inv)
+        _discover_claude_extras(pp, workspace, home, wp, wu, categories, inv)
     elif pp.profile == "codex":
         _discover_codex_extras(pp, workspace, home, wp, wu, categories, inv)
 
@@ -2751,6 +2788,7 @@ def apply_rule_to_target(
             "desc_mdc": (".mdc", {"description": rule.description, "alwaysApply": False}),
             "desc_md": (".md", {"description": desc, "alwaysApply": False}),
             "trigger_model": (".md", {"trigger": "model_decision", "description": desc if tp == "antigravity" else rule.description}),
+            "kiro_auto": (".md", {"inclusion": "auto", "description": desc}),
         }
         if tpp.rule_model_style in model_styles and rdir:
             ext, fm_meta = model_styles[tpp.rule_model_style]
@@ -3446,13 +3484,14 @@ def apply_doc_item_to_target(
                 backups=backups, warnings=warnings, dry_run=dry_run,
             )
         if item.subkind == "claude_plugin_registry":
-            dst = eff_home / ".claude/plugins" / item.name
-            validate_contained(dst, eff_home, f"claude_plugin:{item.name}")
+            cchome = tpp.user_product_root or (eff_home / ".claude")
+            dst = cchome / "plugins" / item.name
+            root = target_root(dst)
             if dst.resolve(strict=False) == item.path.resolve(strict=False):
                 return act("plugins", item.name, "noop", dst)
             if dst.exists():
                 return act("plugins", item.name, "noop" if dst.read_bytes() == item.content else "conflict", dst)
-            write_managed_file(dst, item.content, has_secrets=False, auth_root=eff_home, backups=backups, warnings=warnings, dry_run=dry_run)
+            write_managed_file(dst, item.content, has_secrets=False, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
             return act("plugins", item.name, "migrated", dst)
 
     if item.category == "settings":
@@ -3493,7 +3532,7 @@ def apply_doc_item_to_target(
                 inc["env"], _ = _scan_and_redact_dict_secrets(inc["env"], prefix="env", redact=True)
             _, sec_found = _scan_and_redact_dict_secrets(inc.get("env", {}), prefix="env", redact=False)
             has_sec = bool(sec_found) or _document_has_secrets(inc)
-            dst = (workspace / ".claude" / item.name) if is_p else (eff_home / ".claude" / item.name)
+            dst = (workspace / ".claude" / item.name) if is_p else ((tpp.user_product_root or (eff_home / ".claude")) / item.name)
             root = target_root(dst)
             return _merge_json_settings_file(
                 dst, inc, container_key=None, cat="settings", item_id=item.name,
@@ -3719,13 +3758,15 @@ def apply_doc_item_to_target(
     elif item.category == "memory":
         if item.subkind == "claude_project_memory":
             if tp == "claude-code":
-                dst = eff_home / ".claude/projects" / claude_project_slug(workspace) / "memory" / name
-                validate_contained(dst, eff_home, f"claude_project_memory:{name}")
+                cchome = tpp.user_product_root or (eff_home / ".claude")
+                root = eff_home if cchome.is_relative_to(eff_home) else cchome
+                dst = cchome / "projects" / claude_project_slug(workspace) / "memory" / name
+                validate_contained(dst, root, f"claude_project_memory:{name}")
                 if dst.resolve(strict=False) == item.path.resolve(strict=False):
                     return act("memory", item.name, "noop", dst)
                 if dst.exists():
                     return act("memory", item.name, "noop" if dst.read_bytes() == doc_content else "conflict", dst)
-                write_managed_file(dst, doc_content, has_secrets=doc_has_secrets, auth_root=eff_home, backups=backups, warnings=warnings, dry_run=dry_run)
+                write_managed_file(dst, doc_content, has_secrets=doc_has_secrets, auth_root=root, backups=backups, warnings=warnings, dry_run=dry_run)
                 return act("memory", item.name, "migrated", dst)
             if tpp.proj_doc is not None:
                 root = target_root(tpp.proj_doc)
@@ -4562,10 +4603,10 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="subcommand", required=True)
 
 
-    pi = sub.add_parser("inspect", help="Bounded discovery of profiles, context objects, secret key fingerprints, and exclusions.", epilog="Example:\n  python3 scripts/migrate_context.py inspect --workspace . --profiles anti,claude,codex --summary\n\n" + EPILOG_COMMON, formatter_class=fmt_cls)
+    pi = sub.add_parser("inspect", help="Bounded discovery of profiles, context objects, secret key fingerprints, and exclusions.", epilog="Example:\n  python3 scripts/migrate_context.py inspect --workspace . --profiles antigravity,claude-code,codex --summary\n\n" + EPILOG_COMMON, formatter_class=fmt_cls)
     pi.add_argument("--workspace", default=".", help="Workspace project directory (default: .).")
     pi.add_argument("--home", default=str(Path.home()), help="User home directory (default: ~).")
-    pi.add_argument("--profiles", default="all", help="Comma-separated profile names or 'all' (shortcuts: anti, claude, codex).")
+    pi.add_argument("--profiles", default="all", help="Comma-separated profile names or 'all' (run inspect --list-profiles to view all 40).")
     pi.add_argument("--scope", choices=("project", "user", "all"), default="all", help="Scope filter.")
     pi.add_argument("--categories", default="all", help="Comma-separated categories or 'all'.")
     pi.add_argument("--summary", action="store_true", help="Return compact category counts and secret key names instead of every item.")
@@ -4588,7 +4629,7 @@ def build_parser() -> argparse.ArgumentParser:
     pm.add_argument("--dry-run", action="store_true", help="Preview actions with zero filesystem writes.")
     pm.set_defaults(func=cmd_migrate)
 
-    pe = sub.add_parser("export-device", help="Prepare a 0700/0600 plain-folder device-transfer bundle plus redacted MIGRATION.md.", epilog="Example:\n  python3 scripts/migrate_context.py export-device --profiles anti,claude,codex\n\n" + EPILOG_COMMON, formatter_class=fmt_cls)
+    pe = sub.add_parser("export-device", help="Prepare a 0700/0600 plain-folder device-transfer bundle plus redacted MIGRATION.md.", epilog="Example:\n  python3 scripts/migrate_context.py export-device --profiles antigravity,claude-code,codex\n\n" + EPILOG_COMMON, formatter_class=fmt_cls)
     pe.add_argument("--output", default=None, help="New output folder path (default: ~/context-transfer-<UTC>; refuses overwrite).")
     pe.add_argument("--workspace", default=".", help="Workspace project directory.")
     pe.add_argument("--home", default=str(Path.home()), help="User home directory.")
@@ -4632,9 +4673,9 @@ def build_parser() -> argparse.ArgumentParser:
     pp.add_argument("--dry-run", action="store_true", help="Preview patch actions with zero writes.")
     pp.set_defaults(func=cmd_patch_mcp)
 
-    ps = sub.add_parser("sync-skills", help="Composable SKILL.md folder copier from any profile or directory to any tool's skills dir.", epilog="Example:\n  python3 scripts/migrate_context.py sync-skills --src-profile claude --dst-dir ~/.trae-cn/skills\n\n" + EPILOG_COMMON, formatter_class=fmt_cls)
+    ps = sub.add_parser("sync-skills", help="Composable SKILL.md folder copier from any profile or directory to any tool's skills dir.", epilog="Example:\n  python3 scripts/migrate_context.py sync-skills --src-profile claude-code --dst-dir ~/.trae-cn/skills\n\n" + EPILOG_COMMON, formatter_class=fmt_cls)
     ps.add_argument("--src-dir", default=None, help="Source directory containing <skill>/SKILL.md folders.")
-    ps.add_argument("--src-profile", default=None, help="Alternative: discover skills from a built-in profile (e.g. claude, anti, codex, trae-cn).")
+    ps.add_argument("--src-profile", default=None, help="Alternative: discover skills from a built-in profile (e.g. claude-code, antigravity, codex, trae-cn).")
     ps.add_argument("--scope", choices=("project", "user", "all"), default="user", help="Scope filter when --src-profile is used (default: user).")
     ps.add_argument("--dst-dir", required=True, help="Destination skills directory for any cataloged tool.")
     ps.add_argument("--skills", default=None, help="Optional comma-separated skill names to sync.")

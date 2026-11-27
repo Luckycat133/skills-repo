@@ -435,8 +435,10 @@ class TraeCnAndSyncSkillsTests(unittest.TestCase):
             c_lp, d_lp, e_lp = run_cli("inspect", "--list-profiles")
             self.assertEqual(c_lp, 0, e_lp)
             self.assertEqual(len(d_lp["canonical_profiles"]), 40)
-            self.assertIn("anti", d_lp["aliases"])
+            self.assertIn("antigravity", d_lp["canonical_profiles"])
             self.assertIn("trae-cn", d_lp["canonical_profiles"])
+            for invented in ("anti", "agy", "cc", "cx", "traecn"):
+                self.assertNotIn(invented, d_lp["aliases"])
 
             src_dir = base / "forge-cmds"
             src_dir.mkdir()
@@ -476,6 +478,84 @@ class TraeCnAndSyncSkillsTests(unittest.TestCase):
             )
             self.assertEqual(c_rd, 0, e_rd)
             self.assertNotIn(canary, redacted_dst.read_text(encoding="utf-8"))
+
+    def test_official_doc_path_and_semantic_fixes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            ws, home = base / "ws", base / "home"
+            ws.mkdir()
+            home.mkdir()
+
+            # 1) Kiro inclusion: auto round-trip (model_selected <-> Kiro auto)
+            (ws / ".kiro" / "steering").mkdir(parents=True)
+            (ws / ".kiro" / "steering" / "perf.md").write_text(
+                "---\ninclusion: auto\ndescription: Performance budgets\n---\nAvoid N+1 queries.\n",
+                encoding="utf-8",
+            )
+            c1, _, e1 = run_cli(
+                "migrate", "--source", "kiro", "--target", "claude-code",
+                "--workspace", str(ws), "--home", str(home), "--scope", "project",
+            )
+            self.assertEqual(c1, 0, e1)
+            self.assertTrue((ws / ".claude" / "skills" / "perf" / "SKILL.md").is_file())
+
+            (ws / ".cursor" / "rules").mkdir(parents=True)
+            (ws / ".cursor" / "rules" / "db.mdc").write_text(
+                "---\ndescription: DB index tips\nalwaysApply: false\n---\nUse partial indexes.\n",
+                encoding="utf-8",
+            )
+            c2, _, e2 = run_cli(
+                "migrate", "--source", "cursor", "--target", "kiro",
+                "--workspace", str(ws), "--home", str(home), "--scope", "project",
+            )
+            self.assertEqual(c2, 0, e2)
+            db_kiro = (ws / ".kiro" / "steering" / "db.md").read_text(encoding="utf-8")
+            self.assertIn("inclusion: auto", db_kiro)
+            self.assertIn("description: DB index tips", db_kiro)
+
+            # 2) Roo Code glob-scoped rules emit agent_handoff (never widen silently into always-on)
+            (ws / ".claude" / "rules").mkdir(parents=True)
+            (ws / ".claude" / "rules" / "go.md").write_text(
+                '---\npaths:\n  - "*.go"\n---\nUse errwrap.\n', encoding="utf-8",
+            )
+            c3, d3, e3 = run_cli(
+                "migrate", "--source", "claude-code", "--target", "roo-code",
+                "--workspace", str(ws), "--home", str(home), "--scope", "project", "--categories", "instructions",
+            )
+            self.assertEqual(c3, 0, e3)
+            self.assertFalse((ws / ".roo" / "rules" / "go.md").exists())
+            self.assertTrue(any(a["id"] == "go" and a["outcome"] == "agent_handoff" for a in d3["agent_handoff"]))
+
+            # 3) Junie primary .junie/AGENTS.md + legacy .junie/guidelines.md discovery
+            (ws / "CLAUDE.md").write_text("Root project standard.\n", encoding="utf-8")
+            c4, _, e4 = run_cli(
+                "migrate", "--source", "claude-code", "--target", "junie",
+                "--workspace", str(ws), "--home", str(home), "--scope", "project", "--categories", "instructions",
+            )
+            self.assertEqual(c4, 0, e4)
+            self.assertTrue((ws / ".junie" / "AGENTS.md").is_file())
+            (ws / ".junie" / "guidelines.md").write_text("Legacy Junie note.\n", encoding="utf-8")
+            c5, d5, e5 = run_cli(
+                "inspect", "--profiles", "junie", "--workspace", str(ws), "--home", str(home), "--scope", "project",
+            )
+            self.assertEqual(c5, 0, e5)
+            instr_sources = [r["source"] for r in d5["profiles"][0]["instructions"]]
+            self.assertTrue(any(".junie/AGENTS.md" in s for s in instr_sources))
+            self.assertTrue(any(".junie/guidelines.md" in s for s in instr_sources))
+
+            # 4) Antigravity reads legacy serverUrl and writes canonical url
+            (ws / ".mcp.json").write_text(
+                json.dumps({"mcpServers": {"legacy-ag": {"serverUrl": "https://ag.example.com/mcp"}}}),
+                encoding="utf-8",
+            )
+            c6, _, e6 = run_cli(
+                "migrate", "--source", "claude-code", "--target", "antigravity",
+                "--workspace", str(ws), "--home", str(home), "--scope", "project", "--categories", "mcp",
+            )
+            self.assertEqual(c6, 0, e6)
+            ag_mcp = json.loads((ws / ".agents" / "mcp_config.json").read_text(encoding="utf-8"))
+            self.assertEqual(ag_mcp["mcpServers"]["legacy-ag"]["url"], "https://ag.example.com/mcp")
+            self.assertNotIn("serverUrl", ag_mcp["mcpServers"]["legacy-ag"])
 
 
 if __name__ == "__main__":

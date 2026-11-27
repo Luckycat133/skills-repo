@@ -58,7 +58,6 @@ A process exit is not runtime proof or an atomic rollback guarantee.
 
 In a checked-out repository, `bash validate-all.sh` checks structure and examples;
 `python3 -m unittest discover -s tests -p 'test_*.py' -v` is its Python test entry.
-The optional official `skills-ref` validation is reported separately when absent.
 `python3 scripts/package_skill.py --output <new-path.zip>` creates a guidance package,
 not a user-context backup. These tools are not included in the installed Skill.
 

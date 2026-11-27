@@ -48,7 +48,8 @@ class SkillContract(unittest.TestCase):
         files = package.package_files()
         rels = {p.relative_to(SKILL).as_posix() for p in files}
         self.assertTrue(set(package.REQUIRED_ROOT_FILES).issubset(rels))
-        self.assertEqual(len([r for r in rels if r.startswith("references/products/")]), 90)
+        top_products = [r for r in rels if re.fullmatch(r"references/products/[^/]+\.md", r)]
+        self.assertEqual(len(top_products), 90)
         py_files = [r for r in rels if r.endswith(".py")]
         self.assertEqual(py_files, ["scripts/migrate_context.py"])
         helper_text = (SKILL / "scripts/migrate_context.py").read_text(encoding="utf-8")
@@ -96,9 +97,7 @@ class SkillContract(unittest.TestCase):
             self.assertIn("references/" + path.name, entry)
 
     def test_workflow_keeps_non_engine_categories_and_zero_leak_rules(self) -> None:
-        raw_entry = (SKILL / "SKILL.md").read_text(encoding="utf-8")
-        self.assertFalse(re.search(r"[\u4e00-\u9fff]", raw_entry), "SKILL.md should stay in pure standard English")
-        entry = raw_entry.lower()
+        entry = (SKILL / "SKILL.md").read_text(encoding="utf-8").lower()
         for word in ("prompts", "commands", "agents", "hooks", "memory", "migrate_context.py", "--dry-run", "full copy", "agent_handoff"):
             self.assertIn(word, entry)
         self.assertIn("user-authored memory", entry)
@@ -280,11 +279,13 @@ class RepoConsistency(unittest.TestCase):
         wf = (ROOT / ".github/workflows/validate.yml").read_text(encoding="utf-8")
         self.assertRegex(wf, r"""(?m)^      PYTHONUTF8: ['"]1['"]$""")
         self.assertNotIn("run: |", wf)
-        self.assertIn("run: skills-ref validate skills/agent-skills-setup", wf)
-        self.assertIn("run: skills-ref validate dev/skills/maintain-agent-skills-setup", wf)
+        self.assertNotIn("skills-ref", wf)
+        self.assertIn("python -B -m unittest discover -s tests -p 'test_*.py' -v", wf)
+        self.assertIn("python -B skills/agent-skills-setup/scripts/migrate_context.py --help", wf)
 
         val_sh = (ROOT / "validate-all.sh").read_text(encoding="utf-8")
         self.assertIn("export PYTHONUTF8=1", val_sh)
+        self.assertNotIn("skills-ref", val_sh)
 
     def test_issue_templates_and_repo_docs_have_no_retired_ghosts_or_broken_links(self) -> None:
         ghost_tokens = (

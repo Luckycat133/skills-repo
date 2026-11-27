@@ -22,6 +22,7 @@ class WorkflowContract(unittest.TestCase):
         self.assertLess(len(entry.splitlines()), 150)
 
     def test_package_admits_guidance_and_the_explicit_helper_only(self):
+        import re
         import sys
         sys.path.insert(0, str(ROOT / "scripts"))
         import package_skill as package  # noqa: PLC0415
@@ -31,7 +32,7 @@ class WorkflowContract(unittest.TestCase):
         guidance = admitted - {"scripts/migrate_context.py"}
         for name in ("references/cli-workflow.md", "references/registry-v2.md"):
             self.assertIn(name, guidance)
-        self.assertEqual(len([p for p in guidance if p.startswith("references/products/")]), 90)
+        self.assertEqual(len([p for p in guidance if re.fullmatch(r"references/products/[^/]+\.md", p)]), 90)
         self.assertTrue(all(p.endswith(".md") or p == "LICENSE" for p in guidance))
         self.assertFalse(any(p.startswith(("dev/", "evals/", "scripts/", "docs/history/")) for p in guidance))
 

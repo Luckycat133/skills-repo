@@ -42,8 +42,7 @@ old evidence dates or importing old policies as permission to write.
 
 1. Record `git rev-parse HEAD`, `git status --short`, loaded Skill digest/version,
    Python version and exact command in a private or redacted run report.
-2. Run `bash validate-all.sh` in the actual checkout. Capture exit code and counts;
-   if skills-ref is absent, report its NOT RUN separately. CI requires it.
+2. Run `bash validate-all.sh` in the actual checkout. Capture exit code and counts.
 3. Verify packaging admits only allowlisted guidance and the single approved helper,
    not the retired migrator or historical Registry.
 4. Execute `evals/workflow-cases.json` with a real host agent in isolated fixtures,

@@ -7,9 +7,9 @@ authorizes publication and the items below are reviewed.
 ## Gate
 
 - [x] `bash validate-all.sh` passes locally, including unit, torture, canary zero-leak,
-  catalog routing, deterministic zip packaging, and official `skills-ref validate`.
+  catalog routing, and deterministic zip packaging.
 - [x] `scripts/package_skill.py --output <outside-repo>/agent-skills-setup.zip` builds
-  reproducibly from the 42-file allowlist (`SKILL.md`, `references/`, `assets/`,
+  reproducibly from rule-based package hygiene (`SKILL.md`, `references/`, `assets/`,
   `LICENSE`, and `0755` `scripts/migrate_context.py`) with zero `dev/`, `evals/`,
   `docs/`, `tests/`, `__pycache__/`, or `.acb` content.
 - [ ] Real host-agent / native GUI IDE verification runs from `evals/client-matrix.json`

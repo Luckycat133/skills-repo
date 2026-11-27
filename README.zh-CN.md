@@ -17,11 +17,12 @@
   文件与私有备份 `0600`）迁移 MCP `env`/`headers` 与 `.env*` 密钥，拦截向 Git 已追踪文件静默写入明文密钥，
   并在 `stdout` / `MIGRATION.md` 中**仅输出变量名、`has_secrets` 与 8 位 SHA-256 指纹前缀（`sha256[:8]`）**。
   若用户要求不复制密钥，传入 `--redact-secrets` 即可自动转为环境变量占位符。
-- **90 个独立分体 IDE 参考文档 + 40 个声明式内置档案**：将全部 90 个 IDE/CLI
-  的路径与迁移注意事项拆分为一一对应的独立文档（`references/products/<id>.md`），
-  在脚本中以声明式配置驱动 **40** 个主流工具档案（通过 `inspect --list-profiles`
-  实时查看，包含 `antigravity`、`claude-code`、`codex`、`trae-cn`、`trae`、`kiro`、
-  `junie`、`codebuddy`、`codebuddy-ide`、`qoder`、`qoder-cn`、`roo-code`、`augment-code`、
+- **90 个独立分体 IDE 参考文档 + 按类别渐进加载子文档（40 个声明式内置档案）**：将全部 90 个 IDE/CLI
+  的路径与注意事项拆分为独立文档（`references/products/<id>.md`），并为主要多面体 IDE
+  进一步拆分按类别按需读取的子文档（`references/products/<id>/<topic>.md`）；在脚本中以
+  声明式配置驱动 **40** 个主流工具档案（通过 `inspect --list-profiles` 实时查看，
+  包含 `antigravity`、`claude-code`、`codex`、`trae-cn`、`trae`、`kiro`、`junie`、
+  `codebuddy`、`codebuddy-ide`、`qoder`、`qoder-cn`、`roo-code`、`augment-code`、
   `factory-droid`、`cursor`、`vscode`、`copilot-cli`、`gemini-cli`、`windsurf`、`cline`、
   `kilocode`、`zed`、`opencode`、`kimi-code`、`qwen-code`、`pi`、`continue`、`amp`、
   `goose`、`devin`、`warp`、`openhands`、`aider`、`comate`、`minimax-code`、
@@ -49,8 +50,7 @@ cp -R skills-repo/skills/agent-skills-setup /path/to/your-skills-dir/agent-skill
 
 ## 验证与当前状态
 
-运行 `bash validate-all.sh` 执行本地契约、极端边界、金丝雀密钥零泄漏、端到端工作流及打包边界校验
-（`skills-ref` 仅为维护者 CI 的 SKILL 规范检查工具，终端用户无需安装）。候选版本 `0.11.0-dev`
-尚未发布；原生 GUI/IDE 真机验收队列见 [docs/validation-status.md](docs/validation-status.md)。
+运行 `bash validate-all.sh` 执行本地契约、极端边界、金丝雀密钥零泄漏、端到端工作流及打包边界校验。
+候选版本 `0.11.0-dev` 尚未发布；原生 GUI/IDE 真机验收队列见 [docs/validation-status.md](docs/validation-status.md)。
 
 [贡献](CONTRIBUTING.md) · [安全](SECURITY.md) · [许可证 (MIT)](LICENSE)

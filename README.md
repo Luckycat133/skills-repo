@@ -23,17 +23,20 @@ prompt context**.
   leaks, and prints **only** variable names, `has_secrets`, and 8-char SHA-256 prefixes
   (`sha256[:8]`) on `stdout`. Pass `--redact-secrets` whenever you want placeholders
   instead of copying keys.
-- **90 Per-IDE Reference Files & 40 Declarative Profiles**: Splits per-IDE paths and
-  cautions into 90 standalone files (`skills/agent-skills-setup/references/products/<id>.md`),
-  drives **40** built-in profiles declaratively (`inspect --list-profiles` lists all
-  canonical IDs and shortcuts including `antigravity`, `claude-code`, `codex`, `trae-cn`,
-  `trae`, `kiro`, `junie`, `codebuddy`, `codebuddy-ide`, `qoder`, `qoder-cn`, `roo-code`,
-  `augment-code`, `factory-droid`, `cursor`, `vscode`, `copilot-cli`, `gemini-cli`,
-  `windsurf`, `cline`, `kilocode`, `zed`, `opencode`, `kimi-code`, `qwen-code`, `pi`,
-  `continue`, `amp`, `goose`, `devin`, `warp`, `openhands`, `aider`, `comate`,
-  `minimax-code`, `mistral-vibe`, `crush`, `forge`, `codely`, `zcode`), and pairs them
-  with generic `sync-skills`, `patch-mcp`, and `copy-files` primitives for all 90+
-  cataloged clients. Listing a product is documentation routing, **not** runtime certification.
+- **90 Per-IDE Reference Files & Progressive Category Sub-files (40 Declarative Profiles)**:
+  Splits per-IDE paths and cautions into 90 standalone files
+  (`skills/agent-skills-setup/references/products/<id>.md`), with focused category
+  sub-files (`references/products/<id>/<topic>.md`) for major multi-surface IDEs so
+  agents load only what each task needs. Drives **40** built-in profiles declaratively
+  (`inspect --list-profiles` lists canonical IDs including `antigravity`, `claude-code`,
+  `codex`, `trae-cn`, `trae`, `kiro`, `junie`, `codebuddy`, `codebuddy-ide`, `qoder`,
+  `qoder-cn`, `roo-code`, `augment-code`, `factory-droid`, `cursor`, `vscode`,
+  `copilot-cli`, `gemini-cli`, `windsurf`, `cline`, `kilocode`, `zed`, `opencode`,
+  `kimi-code`, `qwen-code`, `pi`, `continue`, `amp`, `goose`, `devin`, `warp`,
+  `openhands`, `aider`, `comate`, `minimax-code`, `mistral-vibe`, `crush`, `forge`,
+  `codely`, `zcode`) alongside generic `sync-skills`, `patch-mcp`, and `copy-files`
+  primitives for all 90+ cataloged clients. Listing a product is documentation routing,
+  **not** runtime certification.
 - **Full Copy Default & Zero Stray Dirs**: Copies complete files/folders by value (never
   creates symlinks unless requested), enforces strict `--source`/`--target`/`--profiles`
   boundaries, creates no default backup or `.migration-review/` folders, and emits
@@ -65,9 +68,9 @@ Ask your host agent in natural language:
 Or run the deterministic helper directly (`--dry-run` previews with zero writes):
 
 ```bash
-python3 skills/agent-skills-setup/scripts/migrate_context.py inspect --workspace . --profiles anti,claude,codex --summary
-python3 skills/agent-skills-setup/scripts/migrate_context.py migrate --source anti --target claude,codex --workspace . --dry-run
-python3 skills/agent-skills-setup/scripts/migrate_context.py export-device --profiles anti,claude,codex --output ~/context-transfer
+python3 skills/agent-skills-setup/scripts/migrate_context.py inspect --workspace . --profiles antigravity,claude-code,codex --summary
+python3 skills/agent-skills-setup/scripts/migrate_context.py migrate --source antigravity --target claude-code,codex --workspace . --dry-run
+python3 skills/agent-skills-setup/scripts/migrate_context.py export-device --profiles antigravity,claude-code,codex --output ~/context-transfer
 python3 skills/agent-skills-setup/scripts/migrate_context.py import-device --input ~/context-transfer --target same
 ```
 
@@ -78,8 +81,7 @@ bash validate-all.sh
 ```
 
 See [docs/validation-status.md](docs/validation-status.md) for what has been verified
-locally (unit, torture, canary zero-leak, end-to-end CLI workflows, and `package_skill.py`;
-`skills-ref validate` runs in maintainer CI and is optional locally unless `REQUIRE_SKILLS_REF=1`)
+locally (unit, torture, canary zero-leak, end-to-end CLI workflows, and `package_skill.py`)
 versus pending live native-IDE runtime checks (`evals/client-matrix.json`). Candidate version
 `0.11.0-dev` is unpublished.
 

@@ -24,6 +24,6 @@
    root, `windsurf`/Devin Local harness, `kiro` CLI v2 vs v3, `opencode` v1 vs v2,
    active VS Code harness, `kimi-code` `KIMI_CODE_HOME`, `ibm-bob` IDE vs Shell).
 4. Run native Windows/WSL/SSH-remote home and cloud/UI cases on real machines.
-5. Before any separately authorized release, recheck vendor URLs, run `validate-all.sh`
-   including `skills-ref`, build and inspect the zip archive, and obtain explicit owner
-   approval for tagging or marketplace upload.
+5. Before any separately authorized release, recheck vendor URLs, run `validate-all.sh`,
+   build and inspect the zip archive, and obtain explicit owner approval for tagging or
+   marketplace upload.

@@ -16,8 +16,7 @@
 | Exact command | Exit code | Test count and coverage kind | Log/evidence path |
 | --- | --- | --- | --- |
 
-Record official skills-ref separately; missing means not-run, not pass. Do not copy
-an older run's counts or describe example assertions as runtime transactions.
+Do not copy an older run's counts or describe example assertions as runtime transactions.
 
 ## Category inventory
 

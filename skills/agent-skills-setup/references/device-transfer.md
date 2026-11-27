@@ -12,7 +12,7 @@ files, a SHA-256 `manifest.json`, and a completely redacted `MIGRATION.md`:
 
 ```bash
 python3 "<SKILL_DIR>/scripts/migrate_context.py" export-device \
-  --profiles anti,claude,codex --scope all --workspace . --output ~/context-transfer
+  --profiles antigravity,claude-code,codex --scope all --workspace . --output ~/context-transfer
 ```
 
 - **Optional `--output` & clobber refusal**: Defaults to `~/context-transfer-<UTC>` if omitted; exits with code `2` if `--output` already exists or sits inside an auto-loaded Skills/rules directory.
@@ -36,7 +36,7 @@ every file's SHA-256 against `manifest.json` before writing:
 ```bash
 # Restore only selected tools on the new machine (rebinds $HOME and $WORKSPACE):
 python3 "<SKILL_DIR>/scripts/migrate_context.py" import-device \
-  --input ~/context-transfer --target same --profiles anti,claude,codex --workspace .
+  --input ~/context-transfer --target same --profiles antigravity,claude-code,codex --workspace .
 
 # Or cross-migrate exported context directly into different tools on the new machine:
 python3 "<SKILL_DIR>/scripts/migrate_context.py" import-device \
