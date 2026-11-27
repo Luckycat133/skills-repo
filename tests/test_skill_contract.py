@@ -110,6 +110,15 @@ class SkillContract(unittest.TestCase):
         self.assertIn("keep the migration script current", agents)
         self.assertIn("must not read `.env` files", agents)
 
+    def test_source_version_matches_cli_and_indexes(self) -> None:
+        frontmatter = (SKILL / "SKILL.md").read_text(encoding="utf-8").split("---", 2)[1]
+        version, = re.findall(r'^  version: "(0\.\d+\.\d+)"$', frontmatter, re.MULTILINE)
+        helper = (SKILL / "scripts/migrate_context.py").read_text(encoding="utf-8")
+        self.assertIn(f'SCHEMA_VERSION = "{version}"\n', helper)
+        self.assertIn(f"Source version: {version}.", (ROOT / "llms.txt").read_text(encoding="utf-8"))
+        self.assertIn(f"**Source version**: {version} ", (ROOT / "llms-full.txt").read_text(encoding="utf-8"))
+        self.assertIn(f"## [{version}]", (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"))
+
     def test_publication_excludes_development_and_preserves_script_exec_bit(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "skill.zip"

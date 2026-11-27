@@ -1,10 +1,13 @@
 # Changelog
 
-## Unpublished — `0.11.0-rc.1`
+## [0.11.1]
 
-- Version the updated refresh-before-use and safe credential migration guidance. Archive schema is unchanged.
+- Require a fresh published Skill copy before use and route credential movements through the migration helper so agents never open raw secret files.
+- Keep the Skill descriptor, CLI and documentation entry points on the same version. The device-transfer manifest schema remains 1.
 
-## Unreleased — workflow, evidence and delivery review (2026-11-14)
+## [0.11.0]
+
+### Workflow, evidence and delivery review (2026-11-14)
 
 - Clarify native CLI use and retired runtime commands without restoring an engine.
 - Add Registry v2 interpretation rules: archived policies are evidence to recheck,
@@ -14,11 +17,11 @@
 - Require checkout/version provenance when reporting local validation; retain older
   logs as user-reported until their source revision and evidence are available.
 - Add 10 pending workflow scenarios and 10 structural/rubric regression checks.
-  These are not new native-client passes; this review predates `0.11.0-rc.1`.
+  These are not new native-client passes.
 - Publish only two additional on-demand Markdown references; no runtime or dependency
   is added and no historical product evidence date is refreshed by this review.
 
-## Prior development baseline — `0.11.0-dev` (Agent-First + Zero-Context-Leak Script)
+### Agent-First + Zero-Context-Leak Script
 
 - **Agent-First Skill reset**: Retire the standalone `.acb` archive engine, signing/key
   CLI, SQLite transaction store, background sync, and generated compatibility claims;
@@ -35,6 +38,9 @@
   zero-leak, E2E workflow, and repo-consistency checks; pin GitHub Actions by SHA;
   enforce `PYTHONUTF8=1` and unmasked single-command CI steps (including separate
   official `skills-ref validate` steps) across Linux, macOS, and Windows.
+
+- Document the lossless OpenCode working-directory migration and explicit deferred
+  status for unsupported Zed or unrepresentable entries.
 
 Earlier release history is preserved in
 [the historical changelog](docs/history/CHANGELOG-before-agent-first.md).

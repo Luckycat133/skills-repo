@@ -23,7 +23,7 @@ secretos en el contexto del modelo (LLM)**.
   cobertura documental, no certificación de ejecución en todos los IDE).
 
 Instala únicamente `skills/agent-skills-setup/` en el directorio de Skills de tu
-cliente. Consulta el estado actual (`0.11.0-rc.1`, aún sin publicar) en
+cliente. Consulta el estado actual (código fuente `0.11.1`) en
 [docs/validation-status.md](docs/validation-status.md).
 
 [Contribuir](CONTRIBUTING.md) · [Seguridad](SECURITY.md) · [Licencia (MIT)](LICENSE)

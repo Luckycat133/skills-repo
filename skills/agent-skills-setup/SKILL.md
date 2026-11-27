@@ -10,7 +10,7 @@ description: >-
   secret values to LLM context.
 license: MIT
 metadata:
-  version: "0.11.0-rc.1"
+  version: "0.11.1"
 ---
 
 # Migrate AI Coding Context Safely

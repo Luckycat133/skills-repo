@@ -1,6 +1,6 @@
 # Release and publication gate
 
-Target candidate: **`0.11.0-rc.1` (unpublished)**. Do not tag, create a GitHub release,
+Target source version: **`0.11.1`**. Do not tag, create a GitHub release,
 upload a marketplace archive, or announce compatibility until the owner separately
 authorizes publication and the items below are reviewed.
 

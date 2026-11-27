@@ -3,6 +3,8 @@
 
 `agent-skills-setup` helps an existing coding agent migrate rules/instructions, Agent Skills, MCP server definitions, commands, agents, parked hooks, authored memory, and out-of-band `0600` `.env`/MCP secrets across tools or plain device-transfer folders without exposing raw secret values to LLM context (`--redact-secrets` available on request). No proprietary `.acb` archive engine, signing service, or background daemon is used.
 
+Source version: 0.11.1.
+
 ## Documentation
 - [README](https://raw.githubusercontent.com/Luckycat133/skills-repo/main/README.md): Overview, installation, single-sentence workflows, and validation status.
 - [Canonical Skill Descriptor](https://raw.githubusercontent.com/Luckycat133/skills-repo/main/skills/agent-skills-setup/SKILL.md): Agent Skills entry point, zero-context-leak rules, and `migrate_context.py` CLI recipes.

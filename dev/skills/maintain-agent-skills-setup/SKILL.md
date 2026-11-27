@@ -83,7 +83,7 @@ Historical notes under docs/history remain unverified clues, not active contract
   mapping, package identity and target neighbors. Keep explicitly in-scope credentials out-of-band only; never transfer trust
   grants, raw history or generated state. Executable content stays parked unless
   explicitly authorized. Do not run imported content.
-- Product references are progressively loaded. Keep the main Skill under 140 lines and the package within 280,000 bytes;
+- Product references are progressively loaded. Keep the main Skill under 140 lines and the package within 281,000 bytes;
   do not make agents read the entire catalog. New family docs require package
   allowlist, routing, source/evidence and coverage tests in the same change.
 - The sole runtime helper is the reviewed stdlib script; additional helpers require
