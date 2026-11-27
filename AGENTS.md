@@ -23,8 +23,9 @@ chat histories, transcripts, databases, caches, indexes, and approval/trust gran
 Keep the migration script current. When a client adds a new profile, a path, or a
 conversion, fix `scripts/migrate_context.py` in the same change instead of
 describing the workaround in prose, and bump `metadata.version` in the published
-Skill when published behavior changes. Users are told to pull the latest version
-before use, so a stale published Skill is a support burden.
+Skill when published behavior changes. Users should verify the latest stable,
+reviewed release and its immutable revision before use. Never run a migrator from
+an unverified checkout.
 
 Agents must not read `.env` files or other secret-bearing sources themselves. To
 pack a device archive or migrate context on this machine, run

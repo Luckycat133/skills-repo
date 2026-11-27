@@ -2,7 +2,7 @@
 
 ## [0.11.1]
 
-- Require a fresh published Skill copy before use and route credential movements through the migration helper so agents never open raw secret files.
+- Verify the latest stable, reviewed Skill release before use and route credential movements through the pinned migration helper so agents never open raw secret files.
 - Keep the Skill descriptor, CLI and documentation entry points on the same version. The device-transfer manifest schema remains 1.
 
 ## [0.11.0]

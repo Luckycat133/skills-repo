@@ -34,10 +34,11 @@ Resolve paths relative to this `SKILL.md` directory (`<SKILL_DIR>`).
   or `~/.codex/config.toml` `[mcp_servers.*.env]` when migrating secrets. To pack,
   export, or import credentials, run the script below — never open the secret
   files yourself to move them.
-- **Refresh before use**: pull the latest `skills/agent-skills-setup/` from the
-  upstream repository (`git pull` in the clone, or re-copy the directory) before
-  running anything, and check `metadata.version` in this file. The migration
-  script changes often and a stale copy silently misses fixes.
+- **Verify the latest stable release before use**: use the official
+  `Luckycat133/skills-repo` release/tag reviewed for this version. Check the pinned
+  commit SHA or archive digest against a trusted release record and confirm
+  `metadata.version`. Do not run code from an unverified checkout or branch head;
+  if provenance cannot be verified, stop without opening or migrating secrets.
 - **Run `<SKILL_DIR>/scripts/migrate_context.py`** (Python 3.11+ stdlib, zero external
   deps): Copies or converts secret-bearing configs strictly disk-to-disk using `0700`
   directories and `0600` files, backs up modified files to `~/.agent-skills-setup-backups/`

@@ -104,7 +104,11 @@ class SkillContract(unittest.TestCase):
 
     def test_agent_usage_contract_stays_documented(self) -> None:
         entry = (SKILL / "SKILL.md").read_text(encoding="utf-8").lower()
-        self.assertIn("pull the latest", entry)
+        self.assertIn("verify the latest stable release", entry)
+        self.assertIn("pinned", entry)
+        self.assertIn("unverified checkout", entry)
+        self.assertIn("stop without opening or migrating secrets", entry)
+        self.assertNotIn("`git pull`", entry)
         self.assertIn("never open the secret", entry)
         agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8").lower()
         self.assertIn("keep the migration script current", agents)
