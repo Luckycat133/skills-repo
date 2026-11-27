@@ -1,0 +1,69 @@
+name: Verify Agent Skills Setup v0.11.1 packaging
+on:
+  push:
+    branches: ['dots/release-v0.11.1-once']
+    paths: ['.github/workflows/publish-v0.11.1-once.yml']
+permissions: {}
+env:
+  TAG: v0.11.1
+  TARGET: 0d8449810fe0fd857598840258aecc73e7c604f6
+  TREE: 27b87baf37cc4cb9e1fa57307ef798d0d7519d31
+  INSTALL: agent-skills-setup-0.11.1.zip
+  BUNDLE: skills-repo-v0.11.1-bundle.zip
+  EXPECTED_BUNDLE: fd9a4887ed353eb30ac2d0734d9477fa51d9c88f308dc4a3d044acc2bd0eb930
+jobs:
+  verify:
+    if: github.repository == 'Luckycat133/skills-repo'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.TARGET }}
+          path: source
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          path: recipe
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: '3.12'
+      - name: Install pinned official Skill validator
+        run: python -m pip install 'git+https://github.com/agentskills/agentskills.git@69ef37e9424c0a7ea9dd2293b559e43ec8176379#subdirectory=skills-ref'
+      - name: Verify exact source and synthetic validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C source rev-parse HEAD)" = "$TARGET"
+          test "$(git -C source rev-parse HEAD^{tree})" = "$TREE"
+          test -z "$(git -C source status --porcelain)"
+          test "$(git -C source ls-remote --exit-code origin "refs/tags/$TAG" | cut -f1)" = "$TARGET"
+          test "$(git -C source ls-tree "$TARGET" -- llms.txt | cut -d' ' -f1)" = 100644
+          fixture_home="$(mktemp -d)"
+          HOME="$fixture_home" XDG_CONFIG_HOME="$fixture_home/config" REQUIRE_SKILLS_REF=1 bash source/validate-all.sh
+      - name: Rebuild twice from independent Git archives and verify nested checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d)"
+          mkdir "$work"/{src-a,src-b,out-a,out-b}
+          for copy in a b; do
+            git -C source archive "$TARGET" scripts/package_skill.py skills/agent-skills-setup llms.txt |
+              tar -xf - -C "$work/src-$copy"
+            python -B recipe/.github/release/bundle-v0.11.1-once.py build "$work/src-$copy" "$work/out-$copy"
+          done
+          diff -qr "$work/out-a" "$work/out-b"
+          test "$(sha256sum "$work/out-a/$BUNDLE" | cut -d' ' -f1)" = "$EXPECTED_BUNDLE"
+          mkdir "$RUNNER_TEMP/dist"
+          cp "$work/out-a/"* "$RUNNER_TEMP/dist/"
+          (cd "$RUNNER_TEMP/dist" && sha256sum --strict -c SHA256SUMS)
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: verified-distribution
+          path: ${{ runner.temp }}/dist/*
+          if-no-files-found: error
+          retention-days: 1
