@@ -71,7 +71,7 @@ bash validate-all.sh
 See [docs/validation-status.md](docs/validation-status.md) for what has been verified
 locally (unit, torture, canary zero-leak, end-to-end CLI workflows, `package_skill.py`,
 and official `skills-ref validate`) versus pending live native-IDE runtime checks
-(`evals/client-matrix.json`). Source version: `0.11.0`.
+(`evals/client-matrix.json`). Source version: `0.11.1`.
 
 ## License
 

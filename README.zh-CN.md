@@ -41,7 +41,7 @@ cp -R skills-repo/skills/agent-skills-setup /path/to/your-skills-dir/agent-skill
 ## 验证与当前状态
 
 运行 `bash validate-all.sh` 执行本地契约、极端边界、金丝雀密钥零泄漏、端到端工作流、打包边界及官方
-`skills-ref validate` 校验。源码版本为 `0.11.0`；原生 GUI/IDE 真机验收队列见
+`skills-ref validate` 校验。源码版本为 `0.11.1`；原生 GUI/IDE 真机验收队列见
 [docs/validation-status.md](docs/validation-status.md)。
 
 [贡献](CONTRIBUTING.md) · [安全](SECURITY.md) · [许可证 (MIT)](LICENSE)

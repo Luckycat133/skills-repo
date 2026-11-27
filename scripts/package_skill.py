@@ -10,8 +10,9 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 SKILL = ROOT / "skills" / "agent-skills-setup"
 # Explicit reviewable allowlist; no filesystem-glob admission into the package.
-# 280 KB accommodates the existing helper/catalog plus the two reviewed #35 references.
-MAX_PACKAGE_BYTES = 280_000
+# 280 KB accommodated the existing helper/catalog plus the two reviewed #35
+# references; 281 KB adds the reviewed agent-usage contract in SKILL.md.
+MAX_PACKAGE_BYTES = 281_000
 EXECUTABLE_REL_PATHS = frozenset({
     "scripts/migrate_context.py",
 })

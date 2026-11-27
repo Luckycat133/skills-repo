@@ -2,7 +2,7 @@
 
 Research date: 2026-11-07. Agent-first baseline:
 `2a65abed5cd0e80aeca2413dd1d183c01deabf42`.
-Current source metadata: `0.11.0`. The checks below are evidence snapshots, not a native-client certification.
+Current source metadata: `0.11.1`. The checks below are evidence snapshots, not a native-client certification.
 
 | Level | Status |
 | --- | --- |

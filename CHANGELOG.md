@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.11.1]
+
+- Verify the latest stable, reviewed Skill release before use and route credential movements through the pinned migration helper so agents never open raw secret files.
+- Keep the Skill descriptor, CLI and documentation entry points on the same version. The device-transfer manifest schema remains 1.
+
 ## [0.11.0]
 
 ### Workflow, evidence and delivery review (2026-11-14)
