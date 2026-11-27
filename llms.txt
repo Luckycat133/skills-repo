@@ -10,5 +10,6 @@
 - [Full Documentation](https://raw.githubusercontent.com/Luckycat133/skills-repo/main/llms-full.txt): Extended architectural summary and safety invariants.
 
 ## Optional
+- [MCP working-directory contract](https://raw.githubusercontent.com/Luckycat133/skills-repo/main/skills/agent-skills-setup/references/mcp.md): Preserve representable stdio working directories and defer rather than silently drop them.
 - [Validation Status](https://raw.githubusercontent.com/Luckycat133/skills-repo/main/docs/validation-status.md): Honest record of local checks vs pending native IDE acceptance runs.
 - [Release Changelog](https://raw.githubusercontent.com/Luckycat133/skills-repo/main/CHANGELOG.md): Version history.
