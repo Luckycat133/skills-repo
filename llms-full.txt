@@ -28,6 +28,8 @@
 
 75+ additional clients are routed on demand via `references/products.md` and `migrate_context.py patch-mcp`.
 
+For stdio MCP, the helper retains literal absolute working directories in OpenCode and preserves relative paths from native OpenCode configuration; unsupported variable, home-relative, or other unverified relative paths are deferred. Zed entries with any explicit working directory are deferred because its native schema cannot retain the field. Verify the destination client version and actual path separately.
+
 ---
 
 ## 2. Installation & Usage
