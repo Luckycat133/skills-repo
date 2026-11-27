@@ -21,7 +21,7 @@ import tomllib
 from typing import Any, Iterable
 
 D = chr(36)  # "$" 占位符前缀，避免在源码里写出会被外层模板吃掉的花括号
-SCHEMA_VERSION = "0.11.0-dev"
+SCHEMA_VERSION = "0.11.0"
 
 PROFILE_ALIASES: dict[str, str] = {
     "claude": "claude-code", "claude-code": "claude-code", "cursor": "cursor",

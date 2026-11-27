@@ -2,7 +2,7 @@
 
 Research date: 2026-11-07. Agent-first baseline:
 `2a65abed5cd0e80aeca2413dd1d183c01deabf42`.
-Candidate metadata remains `0.11.0-dev` (unreleased).
+Current source metadata: `0.11.0`. The checks below are evidence snapshots, not a native-client certification.
 
 | Level | Status |
 | --- | --- |
@@ -41,7 +41,7 @@ no native-client queue entry was promoted. See
 [review scope and reproduction](reviews/2026-11-14-workflow-review.md).
 
 
-## 0.11.0-dev helper scope
+## 0.11.0 helper scope
 
 - **Native IDE / GUI runtime loading (`evals/client-matrix.json`)**: `not-run` in this
   headless Linux container. Structural/parser/script tests prove generated file syntax,

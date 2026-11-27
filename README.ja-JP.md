@@ -23,6 +23,6 @@ IDE・CLI・PC 間で移行・変換します。
   ドキュメント上の整理であり、全 IDE の実機動作保証ではありません）。
 
 クライアントの公式 Skills ディレクトリには `skills/agent-skills-setup/` のみを配置してください。
-未公開の `0.11.0-dev` の検証状況は [docs/validation-status.md](docs/validation-status.md) を参照してください。
+ソース版 `0.11.0` の検証状況は [docs/validation-status.md](docs/validation-status.md) を参照してください。
 
 [コントリビュート](CONTRIBUTING.md) · [セキュリティ](SECURITY.md) · [ライセンス (MIT)](LICENSE)
