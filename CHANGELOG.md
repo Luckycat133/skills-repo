@@ -1,5 +1,9 @@
 # Changelog
 
+## Unpublished — `0.11.0-rc.1`
+
+- Version the updated refresh-before-use and safe credential migration guidance. Archive schema is unchanged.
+
 ## Unreleased — workflow, evidence and delivery review (2026-11-14)
 
 - Clarify native CLI use and retired runtime commands without restoring an engine.
@@ -10,11 +14,11 @@
 - Require checkout/version provenance when reporting local validation; retain older
   logs as user-reported until their source revision and evidence are available.
 - Add 10 pending workflow scenarios and 10 structural/rubric regression checks.
-  These are not new native-client passes; candidate remains `0.11.0-dev`.
+  These are not new native-client passes; this review predates `0.11.0-rc.1`.
 - Publish only two additional on-demand Markdown references; no runtime or dependency
   is added and no historical product evidence date is refreshed by this review.
 
-## Unreleased — `0.11.0-dev` (Agent-First + Zero-Context-Leak Script)
+## Prior development baseline — `0.11.0-dev` (Agent-First + Zero-Context-Leak Script)
 
 - **Agent-First Skill reset**: Retire the standalone `.acb` archive engine, signing/key
   CLI, SQLite transaction store, background sync, and generated compatibility claims;

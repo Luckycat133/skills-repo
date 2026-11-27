@@ -4,7 +4,7 @@
 
 - **Repository**: https://github.com/Luckycat133/skills-repo
 - **Author**: Luckycat133
-- **Candidate Version**: 0.11.0-dev (unpublished; native client runtime matrix `not-run`)
+- **Candidate Version**: 0.11.0-rc.1 (unpublished; native client runtime matrix `not-run`)
 - **License**: MIT
 
 ---
